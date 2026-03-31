@@ -8834,4 +8834,109 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get microphone => 'Microphone';
+
+  @override
+  String get whyAreYouCanceling => 'Pourquoi annulez-vous ?';
+
+  @override
+  String get cancelReasonSubtitle => 'Pouvez-vous nous dire pourquoi vous partez ?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Trop cher';
+
+  @override
+  String get cancelReasonNotUsing => 'Je ne l\'utilise pas assez';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Fonctionnalités manquantes';
+
+  @override
+  String get cancelReasonAudioQuality => 'Qualité audio/transcription';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Préoccupations de batterie';
+
+  @override
+  String get cancelReasonFoundAlternative => 'J\'ai trouvé une alternative';
+
+  @override
+  String get cancelReasonOther => 'Autre';
+
+  @override
+  String get tellUsMore => 'Dites-nous en plus (optionnel)';
+
+  @override
+  String get cancelReasonDetailHint => 'Nous apprécions tout commentaire...';
+
+  @override
+  String get justAMoment => 'Un instant, s\'il vous plaît';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Nous vous recommandons vivement d\'explorer vos autres options au lieu d\'annuler.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Votre plan restera actif jusqu\'au $date. Après cela, vous serez basculé vers la version gratuite avec des fonctionnalités limitées.';
+  }
+
+  @override
+  String get ifYouCancel => 'Si vous annulez :';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Plus d\'accès illimité à la fin de votre période de facturation.';
+
+  @override
+  String get cancelConsequenceBattery => '7x plus de consommation de batterie (traitement sur l\'appareil)';
+
+  @override
+  String get cancelConsequenceQuality => '30% de qualité de transcription en moins (modèles sur l\'appareil)';
+
+  @override
+  String get cancelConsequenceDelay => 'Délai de traitement de 5-7 secondes (modèles sur l\'appareil)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Impossible d\'identifier les intervenants.';
+
+  @override
+  String get confirmAndCancel => 'Confirmer et annuler';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Pas de transcription d\'appels en temps réel';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Quel prix vous conviendrait ?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Quelles fonctionnalités vous manquent ?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Quels problèmes avez-vous rencontré ?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Parlez-nous des problèmes de batterie';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Vers quoi passez-vous ?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Qu\'est-ce qui vous ferait utiliser Omi davantage ?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Vos commentaires nous aident à trouver le bon équilibre.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Nous construisons toujours — cela nous aide à prioriser.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Nous aimerions comprendre ce qui n\'a pas fonctionné.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Cela aide notre équipe matériel à s\'améliorer.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Nous aimerions savoir ce qui a attiré votre attention.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Nous voulons rendre Omi plus utile pour vous.';
 }

@@ -8764,4 +8764,109 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Mengapa Anda membatalkan?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bisakah Anda memberi tahu kami mengapa Anda pergi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Terlalu mahal';
+
+  @override
+  String get cancelReasonNotUsing => 'Tidak cukup menggunakannya';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Fitur yang hilang';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kualitas audio/transkripsi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Kekhawatiran pengurasan baterai';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Menemukan alternatif';
+
+  @override
+  String get cancelReasonOther => 'Lainnya';
+
+  @override
+  String get tellUsMore => 'Ceritakan lebih lanjut (opsional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Kami menghargai umpan balik apa pun...';
+
+  @override
+  String get justAMoment => 'Sebentar, silakan';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Kami sangat menyarankan untuk menjelajahi opsi lain Anda daripada membatalkan.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Paket Anda akan tetap aktif hingga $date. Setelah itu, Anda akan dipindahkan ke versi gratis dengan fitur terbatas.';
+  }
+
+  @override
+  String get ifYouCancel => 'Jika Anda membatalkan:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Tidak lagi memiliki akses tak terbatas di akhir periode penagihan Anda.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lebih banyak penggunaan baterai (pemrosesan di perangkat)';
+
+  @override
+  String get cancelConsequenceQuality => 'Kualitas transkripsi 30% lebih rendah (model di perangkat)';
+
+  @override
+  String get cancelConsequenceDelay => 'Penundaan pemrosesan 5-7 detik (model di perangkat)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Tidak dapat mengidentifikasi pembicara.';
+
+  @override
+  String get confirmAndCancel => 'Konfirmasi dan batalkan';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Tidak ada transkripsi panggilan telepon real-time';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Harga berapa yang cocok untuk Anda?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Fitur apa yang Anda butuhkan?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Masalah apa yang Anda alami?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Ceritakan tentang masalah baterai';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Anda beralih ke apa?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Apa yang membuat Anda menggunakan Omi lebih banyak?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Umpan balik Anda membantu kami menemukan keseimbangan yang tepat.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Kami selalu membangun — ini membantu kami memprioritaskan.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Kami ingin memahami apa yang salah.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ini membantu tim perangkat keras kami meningkatkan.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Kami ingin tahu apa yang menarik perhatian Anda.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Kami ingin membuat Omi lebih berguna untuk Anda.';
 }

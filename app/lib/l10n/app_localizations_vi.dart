@@ -8756,4 +8756,108 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get microphone => 'Micrô';
+
+  @override
+  String get whyAreYouCanceling => 'Tại sao bạn hủy?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bạn có thể cho chúng tôi biết tại sao bạn rời đi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Quá đắt';
+
+  @override
+  String get cancelReasonNotUsing => 'Không sử dụng đủ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Thiếu tính năng';
+
+  @override
+  String get cancelReasonAudioQuality => 'Chất lượng âm thanh/phiên âm';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Lo ngại về tiêu hao pin';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Đã tìm thấy giải pháp thay thế';
+
+  @override
+  String get cancelReasonOther => 'Khác';
+
+  @override
+  String get tellUsMore => 'Cho chúng tôi biết thêm (tùy chọn)';
+
+  @override
+  String get cancelReasonDetailHint => 'Chúng tôi đánh giá cao mọi phản hồi...';
+
+  @override
+  String get justAMoment => 'Một chút thôi';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Chúng tôi khuyên bạn nên khám phá các lựa chọn khác thay vì hủy.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Gói của bạn sẽ vẫn hoạt động đến $date. Sau đó, bạn sẽ được chuyển sang phiên bản miễn phí với tính năng hạn chế.';
+  }
+
+  @override
+  String get ifYouCancel => 'Nếu bạn hủy:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Không còn truy cập không giới hạn khi kết thúc kỳ thanh toán.';
+
+  @override
+  String get cancelConsequenceBattery => 'Tiêu thụ pin gấp 7 lần (xử lý trên thiết bị)';
+
+  @override
+  String get cancelConsequenceQuality => 'Chất lượng phiên âm thấp hơn 30% (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceDelay => 'Độ trễ xử lý 5-7 giây (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Không thể nhận dạng người nói.';
+
+  @override
+  String get confirmAndCancel => 'Xác nhận và hủy';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Không có phiên âm cuộc gọi thời gian thực';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Mức giá nào phù hợp với bạn?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Bạn thiếu tính năng gì?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Bạn gặp vấn đề gì?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Hãy cho chúng tôi biết về vấn đề pin';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Bạn chuyển sang gì?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Điều gì sẽ khiến bạn sử dụng Omi nhiều hơn?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Phản hồi của bạn giúp chúng tôi tìm sự cân bằng.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Chúng tôi luôn xây dựng — điều này giúp ưu tiên.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chúng tôi muốn hiểu điều gì đã sai.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Điều này giúp đội ngũ phần cứng cải thiện.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chúng tôi muốn biết điều gì thu hút bạn.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
 }

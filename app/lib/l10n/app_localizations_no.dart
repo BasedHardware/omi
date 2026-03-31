@@ -8749,4 +8749,109 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Hvorfor avbestiller du?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kan du fortelle oss hvorfor du forlater?';
+
+  @override
+  String get cancelReasonTooExpensive => 'For dyrt';
+
+  @override
+  String get cancelReasonNotUsing => 'Bruker det ikke nok';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Manglende funksjoner';
+
+  @override
+  String get cancelReasonAudioQuality => 'Lyd-/transkripsjonskvalitet';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Bekymringer om batteriforbruk';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Fant et alternativ';
+
+  @override
+  String get cancelReasonOther => 'Annet';
+
+  @override
+  String get tellUsMore => 'Fortell oss mer (valgfritt)';
+
+  @override
+  String get cancelReasonDetailHint => 'Vi setter pris på all tilbakemelding...';
+
+  @override
+  String get justAMoment => 'Et øyeblikk';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Vi anbefaler sterkt at du utforsker andre alternativer i stedet for å avbestille.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planen din forblir aktiv til $date. Etter det vil du bli flyttet til gratisversjonen med begrensede funksjoner.';
+  }
+
+  @override
+  String get ifYouCancel => 'Hvis du avbestiller:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Ikke lenger ubegrenset tilgang ved slutten av faktureringsperioden.';
+
+  @override
+  String get cancelConsequenceBattery => '7x mer batteribruk (behandling på enheten)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lavere transkripsjonskvalitet (modeller på enheten)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekunders behandlingsforsinkelse (modeller på enheten)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Kan ikke identifisere talere.';
+
+  @override
+  String get confirmAndCancel => 'Bekreft og avbestill';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Ingen sanntids transkripsjon av telefonsamtaler';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Hvilken pris ville passet deg?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Hvilke funksjoner savner du?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Hvilke problemer opplevde du?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Fortell oss om batteriproblemene';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Hva bytter du til?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Hva ville fått deg til å bruke Omi mer?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Tilbakemeldingen din hjelper oss å finne riktig balanse.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Vi bygger alltid — dette hjelper oss å prioritere.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Vi vil gjerne forstå hva som gikk galt.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Dette hjelper maskinvareteamet vårt med å forbedre seg.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Vi vil gjerne vite hva som fanget oppmerksomheten din.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Vi ønsker å gjøre Omi mer nyttig for deg.';
 }

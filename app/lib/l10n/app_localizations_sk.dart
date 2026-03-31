@@ -8742,4 +8742,108 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofón';
+
+  @override
+  String get whyAreYouCanceling => 'Prečo rušíte?';
+
+  @override
+  String get cancelReasonSubtitle => 'Môžete nám povedať, prečo odchádzate?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Príliš drahé';
+
+  @override
+  String get cancelReasonNotUsing => 'Nepoužívam to dosť';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Chýbajúce funkcie';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kvalita zvuku/prepisu';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obavy z vyčerpania batérie';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Našiel som alternatívu';
+
+  @override
+  String get cancelReasonOther => 'Iné';
+
+  @override
+  String get tellUsMore => 'Povedzte nám viac (voliteľné)';
+
+  @override
+  String get cancelReasonDetailHint => 'Oceníme akúkoľvek spätnú väzbu...';
+
+  @override
+  String get justAMoment => 'Moment, prosím';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Dôrazne odporúčame preskúmať vaše ďalšie možnosti namiesto zrušenia.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Váš plán zostane aktívny do $date. Potom budete presunutý na bezplatnú verziu s obmedzenými funkciami.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ak zrušíte:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Na konci fakturačného obdobia už nebudete mať neobmedzený prístup.';
+
+  @override
+  String get cancelConsequenceBattery => '7x väčšia spotreba batérie (spracovanie na zariadení)';
+
+  @override
+  String get cancelConsequenceQuality => 'O 30% nižšia kvalita prepisu (modely na zariadení)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundové oneskorenie spracovania (modely na zariadení)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nedokáže identifikovať rečníkov.';
+
+  @override
+  String get confirmAndCancel => 'Potvrdiť a zrušiť';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Žiadny prepis telefonátov v reálnom čase';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Aká cena by vám vyhovovala?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Aké funkcie vám chýbajú?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Aké problémy ste zaznamenali?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Povedzte nám o problémoch s batériou';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na čo prechádzate?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Čo by vás primälo používať Omi viac?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Vaša spätná väzba nám pomáha nájsť správnu rovnováhu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Stále budujeme — to nám pomáha stanoviť priority.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Radi by sme pochopili, čo sa pokazilo.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomáha nášmu hardvérovému tímu zlepšiť sa.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Radi by sme sa dozvedeli, čo vás zaujalo.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chceme, aby bol Omi pre vás užitočnejší.';
 }

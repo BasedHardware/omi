@@ -8818,4 +8818,109 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get microphone => 'Μικρόφωνο';
+
+  @override
+  String get whyAreYouCanceling => 'Γιατί ακυρώνετε;';
+
+  @override
+  String get cancelReasonSubtitle => 'Μπορείτε να μας πείτε γιατί φεύγετε;';
+
+  @override
+  String get cancelReasonTooExpensive => 'Πολύ ακριβό';
+
+  @override
+  String get cancelReasonNotUsing => 'Δεν το χρησιμοποιώ αρκετά';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Λειτουργίες που λείπουν';
+
+  @override
+  String get cancelReasonAudioQuality => 'Ποιότητα ήχου/μεταγραφής';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Ανησυχίες για εξάντληση μπαταρίας';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Βρήκα εναλλακτική';
+
+  @override
+  String get cancelReasonOther => 'Άλλο';
+
+  @override
+  String get tellUsMore => 'Πείτε μας περισσότερα (προαιρετικό)';
+
+  @override
+  String get cancelReasonDetailHint => 'Εκτιμούμε κάθε σχόλιο...';
+
+  @override
+  String get justAMoment => 'Μια στιγμή, παρακαλώ';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Συνιστούμε ανεπιφύλακτα να εξερευνήσετε τις άλλες επιλογές σας αντί να ακυρώσετε.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Το πλάνο σας θα παραμείνει ενεργό μέχρι τις $date. Μετά, θα μεταφερθείτε στη δωρεάν έκδοση με περιορισμένες λειτουργίες.';
+  }
+
+  @override
+  String get ifYouCancel => 'Αν ακυρώσετε:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Δεν θα έχετε πλέον απεριόριστη πρόσβαση στο τέλος της περιόδου τιμολόγησης.';
+
+  @override
+  String get cancelConsequenceBattery => '7x περισσότερη κατανάλωση μπαταρίας (επεξεργασία στη συσκευή)';
+
+  @override
+  String get cancelConsequenceQuality => '30% χαμηλότερη ποιότητα μεταγραφής (μοντέλα στη συσκευή)';
+
+  @override
+  String get cancelConsequenceDelay => 'Καθυστέρηση επεξεργασίας 5-7 δευτερόλεπτα (μοντέλα στη συσκευή)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Δεν μπορεί να αναγνωρίσει ομιλητές.';
+
+  @override
+  String get confirmAndCancel => 'Επιβεβαίωση και ακύρωση';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Χωρίς μεταγραφή τηλεφωνικών κλήσεων σε πραγματικό χρόνο';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Ποια τιμή θα σας ταίριαζε;';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Ποιες λειτουργίες σας λείπουν;';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Τι προβλήματα αντιμετωπίσατε;';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Πείτε μας για τα προβλήματα μπαταρίας';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Σε τι αλλάζετε;';
+
+  @override
+  String get feedbackTitleNotUsing => 'Τι θα σας έκανε να χρησιμοποιείτε το Omi περισσότερο;';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Τα σχόλιά σας μας βοηθούν να βρούμε τη σωστή ισορροπία.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Πάντα χτίζουμε — αυτό μας βοηθά να ιεραρχήσουμε.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Θα θέλαμε να καταλάβουμε τι πήγε στραβά.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Αυτό βοηθά την ομάδα υλικού μας να βελτιωθεί.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Θα θέλαμε να μάθουμε τι τράβηξε το μάτι σας.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Θέλουμε να κάνουμε το Omi πιο χρήσιμο για εσάς.';
 }

@@ -358,11 +358,23 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         raise HTTPException(status_code=500, detail="Failed to schedule subscription upgrade. Please try again.")
 
 
+class CancelSubscriptionRequest(BaseModel):
+    reason: Optional[str] = None
+    reason_details: Optional[str] = None
+
+
 @router.delete('/v1/payments/subscription')
-def cancel_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def cancel_subscription_endpoint(
+    request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     subscription = users_db.get_user_subscription(uid)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
+
+    # Store cancellation reason
+    if request.reason:
+        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
     try:
         # First, check if the subscription is managed by a subscription schedule

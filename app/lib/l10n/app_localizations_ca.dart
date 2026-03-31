@@ -8806,4 +8806,108 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get microphone => 'Micròfon';
+
+  @override
+  String get whyAreYouCanceling => 'Per què cancel·les?';
+
+  @override
+  String get cancelReasonSubtitle => 'Ens pots dir per què marxes?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Massa car';
+
+  @override
+  String get cancelReasonNotUsing => 'No l\'utilitzo prou';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Funcions que falten';
+
+  @override
+  String get cancelReasonAudioQuality => 'Qualitat d\'àudio/transcripció';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Preocupacions sobre el consum de bateria';
+
+  @override
+  String get cancelReasonFoundAlternative => 'He trobat una alternativa';
+
+  @override
+  String get cancelReasonOther => 'Altres';
+
+  @override
+  String get tellUsMore => 'Explica\'ns més (opcional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Agraïm qualsevol comentari...';
+
+  @override
+  String get justAMoment => 'Un moment, si us plau';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Recomanem explorar les teves altres opcions en lloc de cancel·lar.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'El teu pla romandrà actiu fins al $date. Després, seràs traslladat a la versió gratuïta amb funcions limitades.';
+  }
+
+  @override
+  String get ifYouCancel => 'Si cancel·les:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Ja no tindràs accés il·limitat al final del teu període de facturació.';
+
+  @override
+  String get cancelConsequenceBattery => '7x més consum de bateria (processament al dispositiu)';
+
+  @override
+  String get cancelConsequenceQuality => '30% menys qualitat de transcripció (models al dispositiu)';
+
+  @override
+  String get cancelConsequenceDelay => 'Retard de processament de 5-7 segons (models al dispositiu)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'No pot identificar parlants.';
+
+  @override
+  String get confirmAndCancel => 'Confirma i cancel·la';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Sense transcripció de trucades en temps real';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Quin preu funcionaria per a tu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Quines funcions trobes a faltar?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Quins problemes has experimentat?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Explica\'ns els problemes de bateria';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'A què estàs canviant?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Què et faria utilitzar Omi més?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Els teus comentaris ens ajuden a trobar l\'equilibri correcte.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Sempre estem construint — això ens ajuda a prioritzar.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Ens encantaria entendre què va anar malament.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Això ajuda el nostre equip de maquinari a millorar.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Ens encantaria saber què t\'ha cridat l\'atenció.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Volem fer Omi més útil per a tu.';
 }

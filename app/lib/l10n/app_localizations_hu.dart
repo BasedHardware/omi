@@ -8792,4 +8792,109 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miért mondod le?';
+
+  @override
+  String get cancelReasonSubtitle => 'El tudod mondani, miért távozol?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Túl drága';
+
+  @override
+  String get cancelReasonNotUsing => 'Nem használom eleget';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Hiányzó funkciók';
+
+  @override
+  String get cancelReasonAudioQuality => 'Hang/átírási minőség';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Akkumerülési aggodalmak';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Találtam alternatívát';
+
+  @override
+  String get cancelReasonOther => 'Egyéb';
+
+  @override
+  String get tellUsMore => 'Mondj el többet (opcionális)';
+
+  @override
+  String get cancelReasonDetailHint => 'Minden visszajelzést értékelünk...';
+
+  @override
+  String get justAMoment => 'Egy pillanat, kérlek';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Erősen javasoljuk, hogy a lemondás helyett fedezd fel a többi lehetőségedet.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'A csomagod aktív marad $date-ig. Ezután az ingyenes verzióra leszel átállítva korlátozott funkciókkal.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ha lemondod:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'A számlázási időszak végén már nem lesz korlátlan hozzáférésed.';
+
+  @override
+  String get cancelConsequenceBattery => '7x több akkuhasználat (eszközön történő feldolgozás)';
+
+  @override
+  String get cancelConsequenceQuality => '30%-kal alacsonyabb átírási minőség (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 másodperces feldolgozási késleltetés (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nem tudja azonosítani a beszélőket.';
+
+  @override
+  String get confirmAndCancel => 'Megerősítés és lemondás';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nincs valós idejű telefonhívás átírás';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milyen ár lenne megfelelő számodra?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milyen funkciók hiányoznak?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milyen problémákat tapasztaltál?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Mesélj az akkuproblémákról';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Mire váltasz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mi késztetne arra, hogy többet használd az Omit?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Visszajelzésed segít megtalálni a megfelelő egyensúlyt.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mindig építünk — ez segít a prioritások meghatározásában.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Szeretnénk megérteni, mi ment rosszul.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ez segít hardvercsapatunknak fejlődni.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Szeretnénk tudni, mi ragadta meg a figyelmedet.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
 }

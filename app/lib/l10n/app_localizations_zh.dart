@@ -8593,4 +8593,108 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get microphone => '麦克风';
+
+  @override
+  String get whyAreYouCanceling => '您为什么要取消？';
+
+  @override
+  String get cancelReasonSubtitle => '能告诉我们您为什么要离开吗？';
+
+  @override
+  String get cancelReasonTooExpensive => '太贵了';
+
+  @override
+  String get cancelReasonNotUsing => '使用不够多';
+
+  @override
+  String get cancelReasonMissingFeatures => '缺少功能';
+
+  @override
+  String get cancelReasonAudioQuality => '音频/转录质量';
+
+  @override
+  String get cancelReasonBatteryDrain => '电池消耗问题';
+
+  @override
+  String get cancelReasonFoundAlternative => '找到了替代品';
+
+  @override
+  String get cancelReasonOther => '其他';
+
+  @override
+  String get tellUsMore => '告诉我们更多（可选）';
+
+  @override
+  String get cancelReasonDetailHint => '我们感谢任何反馈...';
+
+  @override
+  String get justAMoment => '请稍等';
+
+  @override
+  String get cancelConsequencesSubtitle => '我们强烈建议您探索其他选项而不是取消。';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return '您的计划将在 $date 之前保持活跃。之后，您将被转移到功能有限的免费版本。';
+  }
+
+  @override
+  String get ifYouCancel => '如果您取消：';
+
+  @override
+  String get cancelConsequenceNoAccess => '计费周期结束后将无法享受无限访问。';
+
+  @override
+  String get cancelConsequenceBattery => '7倍电池消耗（设备端处理）';
+
+  @override
+  String get cancelConsequenceQuality => '转录质量降低30%（设备端模型）';
+
+  @override
+  String get cancelConsequenceDelay => '5-7秒处理延迟（设备端模型）';
+
+  @override
+  String get cancelConsequenceSpeakers => '无法识别说话者。';
+
+  @override
+  String get confirmAndCancel => '确认并取消';
+
+  @override
+  String get cancelConsequencePhoneCalls => '无实时电话转录';
+
+  @override
+  String get feedbackTitleTooExpensive => '什么价格适合您？';
+
+  @override
+  String get feedbackTitleMissingFeatures => '您缺少什么功能？';
+
+  @override
+  String get feedbackTitleAudioQuality => '您遇到了什么问题？';
+
+  @override
+  String get feedbackTitleBatteryDrain => '告诉我们电池问题';
+
+  @override
+  String get feedbackTitleFoundAlternative => '您要换成什么？';
+
+  @override
+  String get feedbackTitleNotUsing => '什么会让您更多地使用 Omi？';
+
+  @override
+  String get feedbackSubtitleTooExpensive => '您的反馈帮助我们找到正确的平衡。';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '我们一直在构建——这有助于我们确定优先级。';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '我们想了解出了什么问题。';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => '这有助于我们的硬件团队改进。';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '我们想了解什么吸引了您。';
+
+  @override
+  String get feedbackSubtitleNotUsing => '我们想让 Omi 对您更有用。';
 }

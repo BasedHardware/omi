@@ -8709,4 +8709,108 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get microphone => 'ไมโครโฟน';
+
+  @override
+  String get whyAreYouCanceling => 'ทำไมคุณถึงยกเลิก?';
+
+  @override
+  String get cancelReasonSubtitle => 'คุณบอกเราได้ไหมว่าทำไมถึงจากไป?';
+
+  @override
+  String get cancelReasonTooExpensive => 'แพงเกินไป';
+
+  @override
+  String get cancelReasonNotUsing => 'ไม่ได้ใช้มากพอ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'ขาดฟีเจอร์';
+
+  @override
+  String get cancelReasonAudioQuality => 'คุณภาพเสียง/การถอดเสียง';
+
+  @override
+  String get cancelReasonBatteryDrain => 'ความกังวลเรื่องแบตเตอรี่หมด';
+
+  @override
+  String get cancelReasonFoundAlternative => 'พบทางเลือกอื่น';
+
+  @override
+  String get cancelReasonOther => 'อื่นๆ';
+
+  @override
+  String get tellUsMore => 'บอกเราเพิ่มเติม (ไม่บังคับ)';
+
+  @override
+  String get cancelReasonDetailHint => 'เราขอบคุณทุกความคิดเห็น...';
+
+  @override
+  String get justAMoment => 'สักครู่';
+
+  @override
+  String get cancelConsequencesSubtitle => 'เราแนะนำอย่างยิ่งให้สำรวจตัวเลือกอื่นแทนการยกเลิก';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'แผนของคุณจะยังคงใช้งานได้จนถึง $date หลังจากนั้นคุณจะถูกย้ายไปเวอร์ชันฟรีที่มีฟีเจอร์จำกัด';
+  }
+
+  @override
+  String get ifYouCancel => 'หากคุณยกเลิก:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'ไม่มีการเข้าถึงแบบไม่จำกัดเมื่อสิ้นสุดรอบการเรียกเก็บเงิน';
+
+  @override
+  String get cancelConsequenceBattery => 'ใช้แบตเตอรี่มากขึ้น 7 เท่า (ประมวลผลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceQuality => 'คุณภาพการถอดเสียงต่ำลง 30% (โมเดลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceDelay => 'หน่วงเวลาประมวลผล 5-7 วินาที (โมเดลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'ไม่สามารถระบุผู้พูดได้';
+
+  @override
+  String get confirmAndCancel => 'ยืนยันและยกเลิก';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'ไม่มีการถอดเสียงโทรศัพท์แบบเรียลไทม์';
+
+  @override
+  String get feedbackTitleTooExpensive => 'ราคาเท่าไหร่จึงจะเหมาะกับคุณ?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'คุณขาดฟีเจอร์อะไร?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'คุณพบปัญหาอะไรบ้าง?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'บอกเราเกี่ยวกับปัญหาแบตเตอรี่';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'คุณเปลี่ยนไปใช้อะไร?';
+
+  @override
+  String get feedbackTitleNotUsing => 'อะไรจะทำให้คุณใช้ Omi มากขึ้น?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'ความคิดเห็นของคุณช่วยเราหาจุดสมดุลที่เหมาะสม';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'เราสร้างอยู่เสมอ — สิ่งนี้ช่วยจัดลำดับความสำคัญ';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'เราอยากเข้าใจว่าอะไรผิดพลาด';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'สิ่งนี้ช่วยทีมฮาร์ดแวร์ปรับปรุง';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'เราอยากรู้ว่าอะไรดึงดูดคุณ';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'เราต้องการทำให้ Omi มีประโยชน์มากขึ้นสำหรับคุณ';
 }

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -86,7 +87,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('HomePageWrapper', boundDeviceOnly: true);
       }
-      if (SharedPreferencesUtil().notificationsEnabled) {
+      // Check actual system permission state — the SharedPreferences flag may
+      // be stale (e.g. user granted via Settings > Permissions, or reinstall).
+      final notifGranted = await Permission.notification.isGranted;
+      if (notifGranted) {
+        SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
 

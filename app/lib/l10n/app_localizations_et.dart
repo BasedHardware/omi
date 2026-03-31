@@ -8752,4 +8752,108 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miks tühistate?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kas saate meile öelda, miks lahkute?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Liiga kallis';
+
+  @override
+  String get cancelReasonNotUsing => 'Ei kasuta piisavalt';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Puuduvad funktsioonid';
+
+  @override
+  String get cancelReasonAudioQuality => 'Heli/transkriptsiooni kvaliteet';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Aku tühjenemise mured';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Leidsin alternatiivi';
+
+  @override
+  String get cancelReasonOther => 'Muu';
+
+  @override
+  String get tellUsMore => 'Rääkige meile rohkem (valikuline)';
+
+  @override
+  String get cancelReasonDetailHint => 'Hindame igasugust tagasisidet...';
+
+  @override
+  String get justAMoment => 'Üks hetk, palun';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Soovitame tungivalt uurida oma teisi võimalusi tühistamise asemel.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda viiakse teid üle tasuta versioonile piiratud funktsioonidega.';
+  }
+
+  @override
+  String get ifYouCancel => 'Kui tühistate:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Arveldusperioodi lõpus ei ole teil enam piiramatut juurdepääsu.';
+
+  @override
+  String get cancelConsequenceBattery => '7x suurem akukasutus (seadmes töötlemine)';
+
+  @override
+  String get cancelConsequenceQuality => '30% madalam transkriptsiooni kvaliteet (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundit töötlemisviivitust (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Ei suuda kõnelejaid tuvastada.';
+
+  @override
+  String get confirmAndCancel => 'Kinnita ja tühista';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Puudub reaalajas telefonikõnede transkriptsioon';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milline hind sobiks teile?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milliseid funktsioone teil puudu on?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milliseid probleeme kogesite?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Rääkige meile akuprobleemidest';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Millele lähete üle?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mis paneks teid Omi rohkem kasutama?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Teie tagasiside aitab meil leida õige tasakaalu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Ehitame alati — see aitab meil prioriteete seada.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Tahaksime mõista, mis läks valesti.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'See aitab meie riistvarameeskonnal paraneda.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Tahaksime teada, mis teie tähelepanu köitis.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
 }

@@ -8797,4 +8797,108 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get microphone => 'Microfon';
+
+  @override
+  String get whyAreYouCanceling => 'De ce anulezi?';
+
+  @override
+  String get cancelReasonSubtitle => 'Ne poți spune de ce pleci?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Prea scump';
+
+  @override
+  String get cancelReasonNotUsing => 'Nu-l folosesc suficient';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Funcții lipsă';
+
+  @override
+  String get cancelReasonAudioQuality => 'Calitatea audio/transcrierii';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Preocupări privind consumul bateriei';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Am găsit o alternativă';
+
+  @override
+  String get cancelReasonOther => 'Altele';
+
+  @override
+  String get tellUsMore => 'Spune-ne mai multe (opțional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Apreciem orice feedback...';
+
+  @override
+  String get justAMoment => 'O clipă, te rog';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Recomandăm cu tărie să explorați alte opțiuni în loc să anulați.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planul tău va rămâne activ până la $date. După aceea, vei fi trecut la versiunea gratuită cu funcții limitate.';
+  }
+
+  @override
+  String get ifYouCancel => 'Dacă anulezi:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Nu vei mai avea acces nelimitat la sfârșitul perioadei de facturare.';
+
+  @override
+  String get cancelConsequenceBattery => '7x mai mult consum de baterie (procesare pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceQuality => '30% calitate mai scăzută a transcrierii (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceDelay => 'Întârziere de procesare de 5-7 secunde (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nu poate identifica vorbitorii.';
+
+  @override
+  String get confirmAndCancel => 'Confirmă și anulează';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Fără transcriere apeluri telefonice în timp real';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Ce preț ar fi potrivit pentru tine?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Ce funcții îți lipsesc?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ce probleme ai întâmpinat?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Spune-ne despre problemele cu bateria';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'La ce treci?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Ce te-ar face să folosești Omi mai mult?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Feedback-ul tău ne ajută să găsim echilibrul potrivit.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Construim mereu — acest lucru ne ajută să stabilim priorități.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Am dori să înțelegem ce a mers prost.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Acest lucru ajută echipa noastră hardware să se îmbunătățească.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Am dori să aflăm ce v-a atras atenția.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
 }

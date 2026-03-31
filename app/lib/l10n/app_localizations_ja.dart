@@ -8605,4 +8605,108 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get microphone => 'マイク';
+
+  @override
+  String get whyAreYouCanceling => 'キャンセルの理由は？';
+
+  @override
+  String get cancelReasonSubtitle => '退会の理由を教えていただけますか？';
+
+  @override
+  String get cancelReasonTooExpensive => '高すぎる';
+
+  @override
+  String get cancelReasonNotUsing => '十分に使っていない';
+
+  @override
+  String get cancelReasonMissingFeatures => '機能が不足';
+
+  @override
+  String get cancelReasonAudioQuality => '音声/文字起こしの品質';
+
+  @override
+  String get cancelReasonBatteryDrain => 'バッテリー消費の懸念';
+
+  @override
+  String get cancelReasonFoundAlternative => '代替品を見つけた';
+
+  @override
+  String get cancelReasonOther => 'その他';
+
+  @override
+  String get tellUsMore => '詳しく教えてください（任意）';
+
+  @override
+  String get cancelReasonDetailHint => 'フィードバックをお待ちしています...';
+
+  @override
+  String get justAMoment => '少しお待ちください';
+
+  @override
+  String get cancelConsequencesSubtitle => 'キャンセルの代わりに、他のオプションを検討されることを強くお勧めします。';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'プランは$dateまで有効です。その後、機能が制限された無料版に移行されます。';
+  }
+
+  @override
+  String get ifYouCancel => 'キャンセルすると：';
+
+  @override
+  String get cancelConsequenceNoAccess => '請求期間終了後、無制限アクセスがなくなります。';
+
+  @override
+  String get cancelConsequenceBattery => '7倍のバッテリー消費（デバイス上の処理）';
+
+  @override
+  String get cancelConsequenceQuality => '30%低い文字起こし品質（デバイス上のモデル）';
+
+  @override
+  String get cancelConsequenceDelay => '5-7秒の処理遅延（デバイス上のモデル）';
+
+  @override
+  String get cancelConsequenceSpeakers => '話者を識別できません。';
+
+  @override
+  String get confirmAndCancel => '確認してキャンセル';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'リアルタイム通話文字起こしなし';
+
+  @override
+  String get feedbackTitleTooExpensive => 'どの価格帯が適切ですか？';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'どの機能が不足していますか？';
+
+  @override
+  String get feedbackTitleAudioQuality => 'どのような問題がありましたか？';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'バッテリーの問題について教えてください';
+
+  @override
+  String get feedbackTitleFoundAlternative => '何に乗り換えますか？';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omiをもっと使うきっかけは何ですか？';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'フィードバックは適切なバランスを見つけるのに役立ちます。';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '常に開発中です — 優先順位付けに役立ちます。';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '何が問題だったか理解したいです。';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'ハードウェアチームの改善に役立ちます。';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '何が気になったか教えてください。';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omiをもっと便利にしたいです。';
 }

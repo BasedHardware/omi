@@ -8772,4 +8772,108 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofons';
+
+  @override
+  String get whyAreYouCanceling => 'Kāpēc jūs atceļat?';
+
+  @override
+  String get cancelReasonSubtitle => 'Vai varat mums pastāstīt, kāpēc aizejat?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Pārāk dārgs';
+
+  @override
+  String get cancelReasonNotUsing => 'Neizmantoju pietiekami';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Trūkstošas funkcijas';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transkripcijas kvalitāte';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Bažas par baterijas iztukšošanos';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Atradu alternatīvu';
+
+  @override
+  String get cancelReasonOther => 'Cits';
+
+  @override
+  String get tellUsMore => 'Pastāstiet mums vairāk (neobligāti)';
+
+  @override
+  String get cancelReasonDetailHint => 'Mēs novērtējam jebkādu atsauksmi...';
+
+  @override
+  String get justAMoment => 'Vienu brīdi, lūdzu';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Mēs ļoti iesakām izpētīt citas iespējas, nevis atcelt.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs tiksiet pārcelts uz bezmaksas versiju ar ierobežotām funkcijām.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ja atcelsiet:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Norēķinu perioda beigās vairs nebūs neierobežotas piekļuves.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lielāks baterijas patēriņš (apstrāde ierīcē)';
+
+  @override
+  String get cancelConsequenceQuality => '30% zemāka transkripcijas kvalitāte (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekunžu apstrādes aizkave (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nevar identificēt runātājus.';
+
+  @override
+  String get confirmAndCancel => 'Apstiprināt un atcelt';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nav reāllaika telefona zvanu transkripcijas';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Kāda cena jums derētu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Kādu funkciju jums pietrūkst?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Kādas problēmas jūs pieredzējāt?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pastāstiet mums par baterijas problēmām';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Uz ko jūs pāriejat?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Kas liktu jums vairāk izmantot Omi?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Jūsu atsauksmes palīdz mums atrast pareizo līdzsvaru.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mēs vienmēr būvējam — tas palīdz mums noteikt prioritātes.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Mēs labprāt saprastu, kas nogāja greizi.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Tas palīdz mūsu aparatūras komandai uzlabot.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Mēs labprāt uzzinātu, kas piesaistīja jūsu uzmanību.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Mēs vēlamies padarīt Omi noderīgāku jums.';
 }

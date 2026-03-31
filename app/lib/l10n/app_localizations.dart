@@ -243,7 +243,7 @@ abstract class AppLocalizations {
   /// **'Edit'**
   String get edit;
 
-  /// Close button label
+  /// Close button text
   ///
   /// In en, this message translates to:
   /// **'Close'**
@@ -4971,7 +4971,7 @@ abstract class AppLocalizations {
   /// **'Start Using Omi'**
   String get startUsingOmi;
 
-  /// Back button label
+  /// Back button text
   ///
   /// In en, this message translates to:
   /// **'Back'**
@@ -16328,6 +16328,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Microphone'**
   String get microphone;
+
+  /// Title for cancel subscription reason page
+  ///
+  /// In en, this message translates to:
+  /// **'Why are you canceling?'**
+  String get whyAreYouCanceling;
+
+  /// Subtitle for cancel reason page
+  ///
+  /// In en, this message translates to:
+  /// **'Can you tell us why you\'re leaving?'**
+  String get cancelReasonSubtitle;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Too expensive'**
+  String get cancelReasonTooExpensive;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Not using it enough'**
+  String get cancelReasonNotUsing;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Missing features'**
+  String get cancelReasonMissingFeatures;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Audio/transcription quality'**
+  String get cancelReasonAudioQuality;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Battery drain concerns'**
+  String get cancelReasonBatteryDrain;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Found an alternative'**
+  String get cancelReasonFoundAlternative;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get cancelReasonOther;
+
+  /// Label for optional details text field
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more (optional)'**
+  String get tellUsMore;
+
+  /// Hint for cancel reason detail text field
+  ///
+  /// In en, this message translates to:
+  /// **'We appreciate any feedback...'**
+  String get cancelReasonDetailHint;
+
+  /// Title for cancel consequences page
+  ///
+  /// In en, this message translates to:
+  /// **'Just a moment, please'**
+  String get justAMoment;
+
+  /// Subtitle for cancel consequences page
+  ///
+  /// In en, this message translates to:
+  /// **'We highly recommend exploring your other options instead of canceling.'**
+  String get cancelConsequencesSubtitle;
+
+  /// Info about billing period end
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan will remain active until {date}. After that, you\'ll be moved to the free version with limited features.'**
+  String cancelBillingPeriodInfo(String date);
+
+  /// Header for consequences list
+  ///
+  /// In en, this message translates to:
+  /// **'If you cancel:'**
+  String get ifYouCancel;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'No longer have unlimited access at the end of your billing period.'**
+  String get cancelConsequenceNoAccess;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'7x more battery usage (on-device processing)'**
+  String get cancelConsequenceBattery;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'30% lower transcription quality (on-device models)'**
+  String get cancelConsequenceQuality;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second processing delay (on-device models)'**
+  String get cancelConsequenceDelay;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot identify speakers.'**
+  String get cancelConsequenceSpeakers;
+
+  /// Confirm cancellation button text
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm & Cancel'**
+  String get confirmAndCancel;
+
+  /// Cancel consequence - phone calls
+  ///
+  /// In en, this message translates to:
+  /// **'No real-time phone call transcription'**
+  String get cancelConsequencePhoneCalls;
+
+  /// Feedback title when cancel reason is too expensive
+  ///
+  /// In en, this message translates to:
+  /// **'What price would work for you?'**
+  String get feedbackTitleTooExpensive;
+
+  /// Feedback title when cancel reason is missing features
+  ///
+  /// In en, this message translates to:
+  /// **'What features are you missing?'**
+  String get feedbackTitleMissingFeatures;
+
+  /// Feedback title when cancel reason is audio quality
+  ///
+  /// In en, this message translates to:
+  /// **'What issues did you experience?'**
+  String get feedbackTitleAudioQuality;
+
+  /// Feedback title when cancel reason is battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us about the battery issues'**
+  String get feedbackTitleBatteryDrain;
+
+  /// Feedback title when cancel reason is found alternative
+  ///
+  /// In en, this message translates to:
+  /// **'What are you switching to?'**
+  String get feedbackTitleFoundAlternative;
+
+  /// Feedback title when cancel reason is not using enough
+  ///
+  /// In en, this message translates to:
+  /// **'What would make you use Omi more?'**
+  String get feedbackTitleNotUsing;
+
+  /// Feedback subtitle for too expensive
+  ///
+  /// In en, this message translates to:
+  /// **'Your feedback helps us find the right balance.'**
+  String get feedbackSubtitleTooExpensive;
+
+  /// Feedback subtitle for missing features
+  ///
+  /// In en, this message translates to:
+  /// **'We\'re always building — this helps us prioritize.'**
+  String get feedbackSubtitleMissingFeatures;
+
+  /// Feedback subtitle for audio quality
+  ///
+  /// In en, this message translates to:
+  /// **'We\'d love to understand what went wrong.'**
+  String get feedbackSubtitleAudioQuality;
+
+  /// Feedback subtitle for battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'This helps our hardware team improve.'**
+  String get feedbackSubtitleBatteryDrain;
+
+  /// Feedback subtitle for found alternative
+  ///
+  /// In en, this message translates to:
+  /// **'We\'d love to learn what caught your eye.'**
+  String get feedbackSubtitleFoundAlternative;
+
+  /// Feedback subtitle for not using enough
+  ///
+  /// In en, this message translates to:
+  /// **'We want to make Omi more useful for you.'**
+  String get feedbackSubtitleNotUsing;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

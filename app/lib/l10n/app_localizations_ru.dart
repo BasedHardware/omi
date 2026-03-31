@@ -8783,4 +8783,108 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get microphone => 'Микрофон';
+
+  @override
+  String get whyAreYouCanceling => 'Почему вы отменяете?';
+
+  @override
+  String get cancelReasonSubtitle => 'Расскажите, почему вы уходите?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Слишком дорого';
+
+  @override
+  String get cancelReasonNotUsing => 'Недостаточно использую';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Отсутствующие функции';
+
+  @override
+  String get cancelReasonAudioQuality => 'Качество аудио/транскрипции';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Проблемы с расходом батареи';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Нашёл альтернативу';
+
+  @override
+  String get cancelReasonOther => 'Другое';
+
+  @override
+  String get tellUsMore => 'Расскажите подробнее (необязательно)';
+
+  @override
+  String get cancelReasonDetailHint => 'Мы ценим любой отзыв...';
+
+  @override
+  String get justAMoment => 'Одну минутку';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Мы настоятельно рекомендуем изучить другие варианты вместо отмены.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Ваш план останется активным до $date. После этого вы будете переведены на бесплатную версию с ограниченными функциями.';
+  }
+
+  @override
+  String get ifYouCancel => 'Если вы отмените:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Больше не будет безлимитного доступа по окончании расчётного периода.';
+
+  @override
+  String get cancelConsequenceBattery => 'В 7 раз больше расход батареи (обработка на устройстве)';
+
+  @override
+  String get cancelConsequenceQuality => 'На 30% ниже качество транскрипции (модели на устройстве)';
+
+  @override
+  String get cancelConsequenceDelay => 'Задержка обработки 5-7 секунд (модели на устройстве)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Невозможно идентифицировать говорящих.';
+
+  @override
+  String get confirmAndCancel => 'Подтвердить и отменить';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Нет транскрипции телефонных звонков в реальном времени';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Какая цена вас бы устроила?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Каких функций вам не хватает?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'С какими проблемами вы столкнулись?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Расскажите о проблемах с батареей';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'На что вы переходите?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Что заставило бы вас использовать Omi больше?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Ваш отзыв помогает нам найти правильный баланс.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Мы всегда создаём — это помогает нам расставить приоритеты.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Мы хотели бы понять, что пошло не так.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Это помогает нашей команде аппаратного обеспечения улучшаться.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Нам интересно узнать, что привлекло ваше внимание.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Мы хотим сделать Omi более полезным для вас.';
 }

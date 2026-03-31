@@ -8773,4 +8773,108 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Dlaczego anulujesz?';
+
+  @override
+  String get cancelReasonSubtitle => 'Czy możesz nam powiedzieć, dlaczego odchodzisz?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Za drogie';
+
+  @override
+  String get cancelReasonNotUsing => 'Nie używam wystarczająco';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Brakujące funkcje';
+
+  @override
+  String get cancelReasonAudioQuality => 'Jakość audio/transkrypcji';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obawy o zużycie baterii';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Znalazłem alternatywę';
+
+  @override
+  String get cancelReasonOther => 'Inne';
+
+  @override
+  String get tellUsMore => 'Powiedz nam więcej (opcjonalnie)';
+
+  @override
+  String get cancelReasonDetailHint => 'Doceniamy każdą opinię...';
+
+  @override
+  String get justAMoment => 'Chwileczkę';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Zdecydowanie zalecamy sprawdzenie innych opcji zamiast anulowania.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Twój plan pozostanie aktywny do $date. Po tym zostaniesz przeniesiony na darmową wersję z ograniczonymi funkcjami.';
+  }
+
+  @override
+  String get ifYouCancel => 'Jeśli anulujesz:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Brak nieograniczonego dostępu po zakończeniu okresu rozliczeniowego.';
+
+  @override
+  String get cancelConsequenceBattery => '7x większe zużycie baterii (przetwarzanie na urządzeniu)';
+
+  @override
+  String get cancelConsequenceQuality => '30% niższa jakość transkrypcji (modele na urządzeniu)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundowe opóźnienie przetwarzania (modele na urządzeniu)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nie może identyfikować mówców.';
+
+  @override
+  String get confirmAndCancel => 'Potwierdź i anuluj';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Brak transkrypcji rozmów telefonicznych w czasie rzeczywistym';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Jaka cena byłaby odpowiednia?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Jakich funkcji brakuje?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Jakie problemy napotkałeś?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Opowiedz nam o problemach z baterią';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na co przechodzisz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Co skłoniłoby cię do częstszego korzystania z Omi?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Twoja opinia pomaga nam znaleźć właściwą równowagę.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Zawsze budujemy — to pomaga nam ustalać priorytety.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chcielibyśmy zrozumieć, co poszło nie tak.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomaga naszemu zespołowi sprzętowemu się poprawić.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chcielibyśmy dowiedzieć się, co przykuło twoją uwagę.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chcemy, aby Omi było bardziej przydatne dla ciebie.';
 }

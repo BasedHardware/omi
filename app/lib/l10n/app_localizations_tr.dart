@@ -8767,4 +8767,109 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Neden iptal ediyorsunuz?';
+
+  @override
+  String get cancelReasonSubtitle => 'Neden ayrıldığınızı bize söyleyebilir misiniz?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Çok pahalı';
+
+  @override
+  String get cancelReasonNotUsing => 'Yeterince kullanmıyorum';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Eksik özellikler';
+
+  @override
+  String get cancelReasonAudioQuality => 'Ses/transkripsiyon kalitesi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Pil tükenme endişeleri';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Bir alternatif buldum';
+
+  @override
+  String get cancelReasonOther => 'Diğer';
+
+  @override
+  String get tellUsMore => 'Daha fazla anlatın (isteğe bağlı)';
+
+  @override
+  String get cancelReasonDetailHint => 'Her türlü geri bildirimi takdir ediyoruz...';
+
+  @override
+  String get justAMoment => 'Bir dakika, lütfen';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'İptal etmek yerine diğer seçeneklerinizi keşfetmenizi şiddetle tavsiye ediyoruz.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planınız $date tarihine kadar aktif kalacaktır. Bundan sonra sınırlı özelliklerle ücretsiz sürüme geçirileceksiniz.';
+  }
+
+  @override
+  String get ifYouCancel => 'İptal ederseniz:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Fatura dönemi sonunda sınırsız erişim olmayacak.';
+
+  @override
+  String get cancelConsequenceBattery => '7 kat daha fazla pil tüketimi (cihazda işleme)';
+
+  @override
+  String get cancelConsequenceQuality => '%30 daha düşük transkripsiyon kalitesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 saniye işleme gecikmesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Konuşmacıları tanımlayamaz.';
+
+  @override
+  String get confirmAndCancel => 'Onayla ve iptal et';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Gerçek zamanlı telefon görüşmesi transkripsiyon yok';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Sizin için hangi fiyat uygun olurdu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Hangi özellikleri kaçırıyorsunuz?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ne tür sorunlar yaşadınız?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pil sorunlarını bize anlatın';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Neye geçiyorsunuz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omi\'yi daha fazla kullanmanızı ne sağlardı?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Geri bildiriminiz doğru dengeyi bulmamıza yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Her zaman inşa ediyoruz — bu önceliklendirmemize yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Neyin yanlış gittiğini anlamak isteriz.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Bu, donanım ekibimizin gelişmesine yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Dikkatinizi çeken şeyi öğrenmek isteriz.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omi\'yi sizin için daha yararlı hale getirmek istiyoruz.';
 }

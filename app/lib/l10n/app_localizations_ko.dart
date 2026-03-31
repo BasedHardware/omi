@@ -8607,4 +8607,108 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get microphone => '마이크';
+
+  @override
+  String get whyAreYouCanceling => '취소하시는 이유는?';
+
+  @override
+  String get cancelReasonSubtitle => '떠나시는 이유를 알려주시겠어요?';
+
+  @override
+  String get cancelReasonTooExpensive => '너무 비쌈';
+
+  @override
+  String get cancelReasonNotUsing => '충분히 사용하지 않음';
+
+  @override
+  String get cancelReasonMissingFeatures => '누락된 기능';
+
+  @override
+  String get cancelReasonAudioQuality => '오디오/전사 품질';
+
+  @override
+  String get cancelReasonBatteryDrain => '배터리 소모 우려';
+
+  @override
+  String get cancelReasonFoundAlternative => '대안을 찾았음';
+
+  @override
+  String get cancelReasonOther => '기타';
+
+  @override
+  String get tellUsMore => '더 알려주세요 (선택사항)';
+
+  @override
+  String get cancelReasonDetailHint => '모든 피드백을 감사히 여깁니다...';
+
+  @override
+  String get justAMoment => '잠시만요';
+
+  @override
+  String get cancelConsequencesSubtitle => '취소 대신 다른 옵션을 살펴보시길 강력히 권장합니다.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return '플랜은 $date까지 활성 상태로 유지됩니다. 그 후 제한된 기능의 무료 버전으로 전환됩니다.';
+  }
+
+  @override
+  String get ifYouCancel => '취소하면:';
+
+  @override
+  String get cancelConsequenceNoAccess => '청구 기간 종료 시 무제한 액세스가 없어집니다.';
+
+  @override
+  String get cancelConsequenceBattery => '7배 더 많은 배터리 사용량 (기기 내 처리)';
+
+  @override
+  String get cancelConsequenceQuality => '30% 낮은 전사 품질 (기기 내 모델)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7초 처리 지연 (기기 내 모델)';
+
+  @override
+  String get cancelConsequenceSpeakers => '화자를 식별할 수 없습니다.';
+
+  @override
+  String get confirmAndCancel => '확인 및 취소';
+
+  @override
+  String get cancelConsequencePhoneCalls => '실시간 전화 통화 전사 없음';
+
+  @override
+  String get feedbackTitleTooExpensive => '어떤 가격이 적당할까요?';
+
+  @override
+  String get feedbackTitleMissingFeatures => '어떤 기능이 부족한가요?';
+
+  @override
+  String get feedbackTitleAudioQuality => '어떤 문제를 경험하셨나요?';
+
+  @override
+  String get feedbackTitleBatteryDrain => '배터리 문제에 대해 알려주세요';
+
+  @override
+  String get feedbackTitleFoundAlternative => '무엇으로 전환하시나요?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omi를 더 사용하게 만들 것은 무엇인가요?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => '피드백이 적절한 균형을 찾는 데 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '항상 개발 중입니다 — 우선순위 결정에 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '무엇이 잘못되었는지 이해하고 싶습니다.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => '하드웨어 팀의 개선에 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '무엇이 눈길을 끌었는지 알고 싶습니다.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omi를 더 유용하게 만들고 싶습니다.';
 }
