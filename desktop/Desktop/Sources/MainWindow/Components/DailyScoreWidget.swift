@@ -35,7 +35,7 @@ struct ScoreWidget: View {
                 ZStack {
                     // Background arc
                     SemicircleShape()
-                        .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .stroke(NootoColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .frame(width: gaugeWidth, height: gaugeHeight)
 
                     // Progress arc
@@ -49,7 +49,7 @@ struct ScoreWidget: View {
                     VStack(spacing: 2) {
                         Text("\(Int(weeklyScore.score))%")
                             .scaledFont(size: fontSize, weight: .bold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .contentTransition(.numericText())
                     }
                     .offset(y: gaugeHeight * 0.14)
@@ -64,18 +64,18 @@ struct ScoreWidget: View {
                                 .foregroundColor(scoreColor)
                             Text("\(weeklyScore.completedTasks) of \(weeklyScore.totalTasks) tasks completed")
                                 .scaledMonospacedDigitFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .contentTransition(.numericText())
                         }
                     } else {
                         Text("No tasks this week")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Text("Last 7 days")
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.textQuaternary)
+                        .foregroundColor(NootoColors.textQuaternary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -84,10 +84,10 @@ struct ScoreWidget: View {
         .frame(minHeight: 200)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
     }
@@ -128,7 +128,7 @@ struct DailyScoreWidget: View {
             HStack {
                 Text("Daily Score")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
             }
 
@@ -136,7 +136,7 @@ struct DailyScoreWidget: View {
             ZStack {
                 // Background arc
                 SemicircleShape()
-                    .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(NootoColors.backgroundQuaternary, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .frame(width: 140, height: 70)
 
                 // Progress arc
@@ -149,7 +149,7 @@ struct DailyScoreWidget: View {
                 VStack(spacing: 2) {
                     Text("\(Int(score))%")
                         .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
                 .offset(y: 10)
             }
@@ -162,21 +162,21 @@ struct DailyScoreWidget: View {
                         .foregroundColor(scoreColor)
                     Text("\(ds.completedTasks) of \(ds.totalTasks) tasks completed")
                         .scaledMonospacedDigitFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             } else {
                 Text("No tasks due today")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
     }
