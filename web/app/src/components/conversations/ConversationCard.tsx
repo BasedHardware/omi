@@ -50,8 +50,8 @@ export const ConversationCard = memo(function ConversationCard({
 
   // Check if conversation is new (less than 60 seconds old)
   const isNew = Date.now() - startedAt.getTime() < 60000;
+  const isProcessing = conversation.status === 'processing' || conversation.status === 'in_progress';
 
-  // Get category for tag display
   const category = conversation.structured.category;
 
   const handleStarClick = (e: React.MouseEvent) => {
@@ -122,14 +122,22 @@ export const ConversationCard = memo(function ConversationCard({
       </span>
 
       {/* Title */}
-      <h3
-        className={cn(
-          'flex-1 min-w-0 text-sm truncate transition-colors',
-          isSelected ? 'text-brand font-medium' : 'text-foreground/90'
-        )}
-      >
-        {conversation.structured.title || 'Untitled conversation'}
-      </h3>
+      {isProcessing && !conversation.structured.title ? (
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <div className="h-3.5 flex-1 max-w-[200px] rounded bg-muted animate-pulse" />
+          <span className="text-[10px] text-muted-foreground animate-pulse">Processing...</span>
+        </div>
+      ) : (
+        <h3
+          className={cn(
+            'flex-1 min-w-0 text-sm truncate transition-colors',
+            isSelected ? 'text-brand font-medium' : 'text-foreground/90',
+            isProcessing && 'text-muted-foreground'
+          )}
+        >
+          {conversation.structured.title || 'Untitled conversation'}
+        </h3>
+      )}
 
       {/* Right side: category + duration + star */}
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -143,7 +151,7 @@ export const ConversationCard = memo(function ConversationCard({
             {formatDuration(durationSeconds)}
           </span>
         )}
-        {conversation.status === 'processing' && (
+        {isProcessing && conversation.structured.title && (
           <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
         )}
         {isNew && !conversation.status?.includes('processing') && (
