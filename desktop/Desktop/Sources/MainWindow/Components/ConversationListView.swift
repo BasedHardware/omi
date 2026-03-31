@@ -108,11 +108,11 @@ struct ConversationListView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
-                .tint(OmiColors.purplePrimary)
+                .tint(NootoColors.brandPrimary)
 
             Text("Loading conversations...")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -121,26 +121,26 @@ struct ConversationListView: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .scaledFont(size: 40)
-                .foregroundColor(OmiColors.warning)
+                .foregroundColor(NootoColors.warning)
 
             Text("Failed to load conversations")
                 .scaledFont(size: 16, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text(error)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             Button(action: onRefresh) {
                 Text("Try Again")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(OmiColors.purplePrimary)
+                            .fill(NootoColors.brandPrimary)
                     )
             }
             .buttonStyle(.plain)
@@ -153,15 +153,15 @@ struct ConversationListView: View {
         VStack(spacing: 16) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Conversations")
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Start recording to capture your first conversation")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -176,7 +176,7 @@ struct ConversationListView: View {
                 case .header(let key, let isFirst):
                     Text(key)
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.top, isFirst ? 0 : 16)
                         .padding(.bottom, 8)
                 case .conversation(let conversation):
@@ -225,5 +225,5 @@ struct ConversationListView: View {
         appState: AppState()
     )
     .frame(width: 400, height: 600)
-    .background(OmiColors.backgroundSecondary)
+    .background(NootoColors.backgroundSecondary)
 }
