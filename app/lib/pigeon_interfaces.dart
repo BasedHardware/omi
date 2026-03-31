@@ -97,21 +97,22 @@ abstract class BleHostApi {
   @SwiftFunction('stopScan()')
   void stopScan();
 
-  // Connection
-  @SwiftFunction('connectPeripheral(uuid:)')
-  void connectPeripheral(String uuid);
+  // Connection lifecycle (intent-based)
 
-  @SwiftFunction('disconnectPeripheral(uuid:)')
-  void disconnectPeripheral(String uuid);
+  /// Tell native to keep this device connected. Native owns the full lifecycle:
+  /// scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
+  /// Fires onDeviceReady when the device is fully ready for characteristic operations.
+  /// Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
+  @SwiftFunction('manageDevice(uuid:requiresBond:)')
+  void manageDevice(String uuid, bool requiresBond);
 
-  /// Reconnect a previously-paired peripheral. No active scanning — the platform
-  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
-  @SwiftFunction('reconnectKnownPeripheral(uuid:)')
-  void reconnectKnownPeripheral(String uuid);
+  /// Stop managing a device. Disconnects, cancels retries, and removes from managed set.
+  @SwiftFunction('unmanageDevice(uuid:)')
+  void unmanageDevice(String uuid);
 
   /// Request bonding/pairing for a connected peripheral.
-  /// Only needed for devices that require encrypted links (e.g. Limitless).
-  /// Waits for bond to complete or timeout. Returns true if bonded.
+  /// Kept as a Dart-callable fallback; primary bonding now happens natively
+  /// when requiresBond=true is passed to manageDevice.
   @async
   @SwiftFunction('requestBond(uuid:)')
   bool requestBond(String uuid);
@@ -159,11 +160,12 @@ abstract class BleFlutterApi {
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
-  void onPeripheralConnected(String peripheralUuid);
+  /// Fired when a managed device is fully ready: connected + services discovered +
+  /// bonded (if required) + MTU negotiated. Replaces the old separate
+  /// onPeripheralConnected + onServicesDiscovered events.
+  void onDeviceReady(String peripheralUuid, List<BleService> services);
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
-
-  void onServicesDiscovered(String peripheralUuid, List<BleService> services);
 
   /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(
