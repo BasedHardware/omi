@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed transcription not auto-starting after proxy migration"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.204",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed transcription not auto-starting after proxy migration"
+      ]
+    },
     {
       "version": "0.11.203",
       "date": "2026-03-31",
