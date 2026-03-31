@@ -1,9 +1,16 @@
 {
   "unreleased": [
-    "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state",
     "Fixed batch transcription failing on long speech (50s+) by splitting large audio chunks automatically"
   ],
   "releases": [
+    {
+      "version": "0.11.202",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state",
+        "Fixed UI freezes caused by dock tile updates when receiving support messages"
+      ]
+    },
     {
       "version": "0.11.200",
       "date": "2026-03-31",
