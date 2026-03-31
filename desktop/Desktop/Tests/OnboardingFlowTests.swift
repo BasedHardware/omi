@@ -7,7 +7,7 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(
       OnboardingFlow.steps,
       [
-        "Trust", "Name", "Language", "ScreenRecording", "FullDiskAccess",
+        "Name", "Language", "Trust", "ScreenRecording", "FullDiskAccess",
         "FileScan", "Microphone", "Notifications", "Accessibility", "Automation",
         "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo",
         "Research", "Goal", "Tasks",
