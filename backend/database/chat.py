@@ -464,9 +464,24 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     return None
 
 
-def delete_chat_session(uid, chat_session_id):
+def delete_chat_session(uid, chat_session_id, cascade_messages: bool = False):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+
+    if cascade_messages:
+        if not session_ref.get().exists:
+            return False
+        msg_col = user_ref.collection('messages')
+        query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        while True:
+            docs = list(query.limit(BATCH_LIMIT).stream())
+            if not docs:
+                break
+            batch = db.batch()
+            for doc in docs:
+                batch.delete(msg_col.document(doc.id))
+            batch.commit()
+
     session_ref.delete()
 
 
@@ -559,16 +574,16 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
 
 # ============================================================================
-# DESKTOP CHAT SESSIONS (v2)
+# CHAT SESSIONS (v2)
 #
-# Desktop sessions store: title, preview, message_count, starred, updated_at.
-# Mobile sessions store: message_ids, file_ids, openai_thread_id.
+# v2 sessions support: title, preview, message_count, starred, updated_at.
+# v1 sessions store: message_ids, file_ids, openai_thread_id.
 # Both schemas coexist in the same Firestore collection.
 # Both MUST write plugin_id alongside app_id for cross-platform query compat.
 # ============================================================================
 
 
-def create_desktop_chat_session(uid: str, title: str = None, app_id: str = None) -> dict:
+def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict:
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
@@ -586,7 +601,7 @@ def create_desktop_chat_session(uid: str, title: str = None, app_id: str = None)
     return doc
 
 
-def acquire_desktop_chat_session(uid: str, app_id: str = None) -> str:
+def acquire_chat_session(uid: str, app_id: str = None) -> str:
     """Get or create a chat session for the given app_id (None = main chat).
 
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
@@ -597,11 +612,11 @@ def acquire_desktop_chat_session(uid: str, app_id: str = None) -> str:
     docs = list(query.stream())
     if docs:
         return docs[0].id
-    session = create_desktop_chat_session(uid, app_id=app_id)
+    session = create_chat_session(uid, app_id=app_id)
     return session['id']
 
 
-def get_desktop_chat_sessions(
+def get_chat_sessions(
     uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
 ) -> List[dict]:
     col = db.collection('users').document(uid).collection('chat_sessions')
@@ -621,17 +636,7 @@ def get_desktop_chat_sessions(
     return items
 
 
-def get_desktop_chat_session(uid: str, session_id: str) -> Optional[dict]:
-    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-    doc = ref.get()
-    if not doc.exists:
-        return None
-    data = doc.to_dict()
-    data['id'] = doc.id
-    return data
-
-
-def update_desktop_chat_session(uid: str, session_id: str, title: str = None, starred: bool = None) -> Optional[dict]:
+def update_chat_session(uid: str, session_id: str, title: str = None, starred: bool = None) -> Optional[dict]:
     ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
     if not ref.get().exists:
         return None
@@ -646,43 +651,18 @@ def update_desktop_chat_session(uid: str, session_id: str, title: str = None, st
     return result
 
 
-def delete_desktop_chat_session(uid: str, session_id: str) -> bool:
-    """Delete a chat session and cascade-delete its messages."""
-    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-    msg_col = db.collection('users').document(uid).collection('messages')
-
-    if not session_ref.get().exists:
-        return False
-
-    # Delete messages in batches
-    query = msg_col.where(filter=FieldFilter('chat_session_id', '==', session_id))
-    while True:
-        docs = list(query.limit(BATCH_LIMIT).stream())
-        if not docs:
-            break
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(msg_col.document(doc.id))
-        batch.commit()
-
-    # Delete the session itself
-    session_ref.delete()
-    return True
-
-
 # ============================================================================
-# DESKTOP MESSAGES
+# MESSAGES (v2)
 #
-# Desktop messages are persistence-only (no LLM streaming).  They write the
-# same field set as chat.py's Message model for cross-platform compatibility:
+# Persistence-only message writes (no LLM streaming).  They write the same
+# field set as the Message model for cross-platform compatibility:
 #   plugin_id, app_id, type='text', chat_session_id, from_external_integration
 #
-# When session_id is not provided, acquire_desktop_chat_session() auto-creates
-# one (matching Rust's save_message behavior for default-chat visibility).
+# When session_id is not provided, acquire_chat_session() auto-creates one.
 # ============================================================================
 
 
-def save_desktop_message(
+def save_message(
     uid: str, text: str, sender: str, app_id: str = None, session_id: str = None, metadata: str = None
 ) -> dict:
     """Save a chat message for the desktop app.
@@ -695,7 +675,7 @@ def save_desktop_message(
 
     # Auto-acquire session (matches Rust backend behavior)
     if not session_id:
-        session_id = acquire_desktop_chat_session(uid, app_id=app_id)
+        session_id = acquire_chat_session(uid, app_id=app_id)
 
     doc = {
         'id': msg_id,
@@ -730,29 +710,7 @@ def save_desktop_message(
     return {'id': msg_id, 'created_at': now.isoformat()}
 
 
-def get_desktop_messages(
-    uid: str, app_id: str = None, session_id: str = None, limit: int = 100, offset: int = 0
-) -> List[dict]:
-    """Fetch messages.  Always filters by plugin_id so default chat (None) only
-    returns its own messages, not messages from every app."""
-    col = db.collection('users').document(uid).collection('messages')
-    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
-
-    # Always filter — when app_id is None this returns only default-chat messages
-    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
-    if session_id is not None:
-        query = query.where(filter=FieldFilter('chat_session_id', '==', session_id))
-
-    query = query.offset(offset).limit(limit)
-    items = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data['id'] = doc.id
-        items.append(data)
-    return items
-
-
-def delete_desktop_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
+def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
     """Delete messages matching app_id/session_id.  Returns count deleted."""
     col = db.collection('users').document(uid).collection('messages')
     query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
@@ -770,12 +728,3 @@ def delete_desktop_messages(uid: str, app_id: str = None, session_id: str = None
         batch.commit()
         deleted += len(docs)
     return deleted
-
-
-def rate_desktop_message(uid: str, message_id: str, rating: Optional[int]) -> bool:
-    """Rate a message (1=thumbs up, -1=thumbs down, None=clear)."""
-    ref = db.collection('users').document(uid).collection('messages').document(message_id)
-    if not ref.get().exists:
-        return False
-    ref.update({'rating': rating, 'updated_at': datetime.now(timezone.utc)})
-    return True
