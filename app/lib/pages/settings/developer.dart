@@ -1869,8 +1869,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // Manual Firmware Flash (only when device connected)
                   if (provider.isConnected && provider.pairedDevice != null) ...[
                     const SizedBox(height: 24),
-                    _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'), 
-                    const SizedBox(height: 8),
+                    _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
+                    const SizedBox(height: 8), 
                     _buildManualFirmwareFlash(provider),
                   ],
 
