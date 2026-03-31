@@ -27,7 +27,7 @@ struct RewindTimelineView: View {
                 ZStack(alignment: .leading) {
                     // Background
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
 
                     // Activity markers
                     activityMarkers(width: width)
@@ -37,7 +37,7 @@ struct RewindTimelineView: View {
                        let index = screenshots.firstIndex(where: { $0.id == selected.id }) {
                         let position = positionForIndex(index, width: width)
                         Rectangle()
-                            .fill(OmiColors.purplePrimary)
+                            .fill(NootoColors.brandPrimary)
                             .frame(width: 2, height: timelineHeight - 16)
                             .position(x: position, y: (timelineHeight - 8) / 2)
                     }
@@ -96,7 +96,7 @@ struct RewindTimelineView: View {
         }
         .frame(height: timelineHeight + 50)
         .background(
-            OmiColors.backgroundSecondary.opacity(0.95)
+            NootoColors.backgroundSecondary.opacity(0.95)
                 .background(.ultraThinMaterial)
         )
         // Scroll wheel handler for timeline navigation
@@ -187,7 +187,7 @@ struct RewindTimelineView: View {
             if let oldest = screenshots.last {
                 Text(oldest.formattedTime)
                     .scaledFont(size: 10, weight: .medium, design: .monospaced)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Spacer()
@@ -196,11 +196,11 @@ struct RewindTimelineView: View {
                 VStack(spacing: 2) {
                     Text(selected.formattedTime)
                         .scaledFont(size: 12, weight: .semibold, design: .monospaced)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text(selected.appName)
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
             }
 
@@ -209,7 +209,7 @@ struct RewindTimelineView: View {
             if let newest = screenshots.first {
                 Text(newest.formattedTime)
                     .scaledFont(size: 10, weight: .medium, design: .monospaced)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(.horizontal, 16)
@@ -313,14 +313,14 @@ struct AppIconButton: View {
 
                 // Active indicator dot
                 Circle()
-                    .fill(isActive ? OmiColors.purplePrimary : Color.clear)
+                    .fill(isActive ? NootoColors.brandPrimary : Color.clear)
                     .frame(width: 4, height: 4)
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isHovered ? OmiColors.backgroundTertiary : Color.clear)
+                    .fill(isHovered ? NootoColors.backgroundTertiary : Color.clear)
             )
         }
         .buttonStyle(.plain)
@@ -349,7 +349,7 @@ struct HoverPreviewTooltip: View {
                         .clipped()
                 } else {
                     Rectangle()
-                        .fill(OmiColors.backgroundTertiary)
+                        .fill(NootoColors.backgroundTertiary)
                         .frame(width: 160, height: 100)
                 }
             }
@@ -359,17 +359,17 @@ struct HoverPreviewTooltip: View {
             VStack(spacing: 2) {
                 Text(screenshot.formattedTime)
                     .scaledFont(size: 11, weight: .semibold, design: .monospaced)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text(screenshot.appName)
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
         }
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
         )
         .task {
@@ -424,12 +424,12 @@ struct ScreenshotPreviewView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(screenshot.appName)
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         if let title = screenshot.windowTitle, !title.isEmpty {
                             Text(title)
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineLimit(1)
                         }
                     }
@@ -447,10 +447,10 @@ struct ScreenshotPreviewView: View {
                             Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
                                 .scaledFont(size: 11)
                         }
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(OmiColors.purplePrimary.opacity(0.15))
+                        .background(NootoColors.brandPrimary.opacity(0.15))
                         .cornerRadius(4)
                     }
                 }
@@ -458,7 +458,7 @@ struct ScreenshotPreviewView: View {
                 // Time
                 Text(screenshot.formattedDate)
                     .scaledFont(size: 13, weight: .medium, design: .monospaced)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 // Keyboard hints
                 HStack(spacing: 12) {
@@ -472,16 +472,16 @@ struct ScreenshotPreviewView: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(OmiColors.backgroundSecondary.opacity(0.95))
+            .background(NootoColors.backgroundSecondary.opacity(0.95))
 
             // Image with highlight overlays
             GeometryReader { geometry in
@@ -515,7 +515,7 @@ struct ScreenshotPreviewView: View {
                     } else {
                         Image(systemName: "photo")
                             .scaledFont(size: 48)
-                            .foregroundColor(OmiColors.textQuaternary)
+                            .foregroundColor(NootoColors.textQuaternary)
                     }
 
                     // Navigation arrows
@@ -547,15 +547,15 @@ struct ScreenshotPreviewView: View {
         HStack(spacing: 4) {
             Text(key)
                 .scaledFont(size: 10, weight: .medium, design: .monospaced)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(4)
 
             Text(label)
                 .scaledFont(size: 10)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
     }
 
@@ -576,11 +576,11 @@ struct ScreenshotPreviewView: View {
             HStack {
                 Image(systemName: "doc.text.viewfinder")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 Text("Extracted Text")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
 
@@ -593,7 +593,7 @@ struct ScreenshotPreviewView: View {
                         Text("Copy")
                     }
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -609,7 +609,7 @@ struct ScreenshotPreviewView: View {
                 } else {
                     Text(text)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -618,12 +618,12 @@ struct ScreenshotPreviewView: View {
             .frame(maxHeight: 100)
         }
         .padding(12)
-        .background(OmiColors.backgroundTertiary.opacity(0.8))
+        .background(NootoColors.backgroundTertiary.opacity(0.8))
     }
 
     private func highlightedText(_ text: String, query: String) -> AttributedString {
         var result = AttributedString(text)
-        result.foregroundColor = OmiColors.textSecondary
+        result.foregroundColor = NootoColors.textSecondary
 
         let lowercasedText = text.lowercased()
         let lowercasedQuery = query.lowercased()
@@ -631,8 +631,8 @@ struct ScreenshotPreviewView: View {
         var searchStart = lowercasedText.startIndex
         while let range = lowercasedText.range(of: lowercasedQuery, range: searchStart..<lowercasedText.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].foregroundColor = OmiColors.purplePrimary
-                result[attrRange].backgroundColor = OmiColors.purplePrimary.opacity(0.2)
+                result[attrRange].foregroundColor = NootoColors.brandPrimary
+                result[attrRange].backgroundColor = NootoColors.brandPrimary.opacity(0.2)
                 result[attrRange].font = .system(size: 11, weight: .semibold)
             }
             searchStart = range.upperBound
@@ -702,8 +702,8 @@ struct SearchHighlightOverlay: View {
                 let screenRect = block.screenRect(for: CGSize(width: 1, height: 1)) // Normalized
 
                 Rectangle()
-                    .stroke(OmiColors.purplePrimary, lineWidth: 2)
-                    .background(OmiColors.purplePrimary.opacity(0.2))
+                    .stroke(NootoColors.brandPrimary, lineWidth: 2)
+                    .background(NootoColors.brandPrimary.opacity(0.2))
                     .frame(
                         width: screenRect.width * layout.size.width,
                         height: screenRect.height * layout.size.height
