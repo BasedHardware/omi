@@ -8790,4 +8790,108 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get microphone => 'Микрофон';
+
+  @override
+  String get whyAreYouCanceling => 'Why are you canceling?';
+
+  @override
+  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Too expensive';
+
+  @override
+  String get cancelReasonNotUsing => 'Not using it enough';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Missing features';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Found an alternative';
+
+  @override
+  String get cancelReasonOther => 'Other';
+
+  @override
+  String get tellUsMore => 'Tell us more (optional)';
+
+  @override
+  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+
+  @override
+  String get justAMoment => 'Just a moment, please';
+
+  @override
+  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+  }
+
+  @override
+  String get ifYouCancel => 'If you cancel:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+
+  @override
+  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+
+  @override
+  String get confirmAndCancel => 'Confirm & Cancel';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+
+  @override
+  String get feedbackTitleTooExpensive => 'What price would work for you?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+
+  @override
+  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
 }
