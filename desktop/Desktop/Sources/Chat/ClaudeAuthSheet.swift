@@ -11,18 +11,18 @@ struct ClaudeAuthSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Upgrade to Omi Pro")
+                Text("Upgrade to Nooto Pro")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .background(NootoColors.backgroundTertiary.opacity(0.5))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -32,26 +32,26 @@ struct ClaudeAuthSheet: View {
             .padding(.bottom, 16)
 
             Divider()
-                .foregroundColor(OmiColors.border)
+                .foregroundColor(NootoColors.border)
 
             // Content
             VStack(spacing: 20) {
                 // Icon
                 Image(systemName: "crown")
                     .scaledFont(size: 40)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .padding(.top, 8)
 
                 // Description
                 VStack(spacing: 8) {
-                    Text("Unlock Omi Pro for $199/month")
+                    Text("Unlock Nooto Pro for $199/month")
                         .scaledFont(size: 15, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
+                    Text("Your browser will open to the Nooto Pro checkout. After subscribing, return to Nooto.")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -64,7 +64,7 @@ struct ClaudeAuthSheet: View {
 
                         Text("Complete sign-in in your browser...")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .padding(.top, 4)
                 }
@@ -85,13 +85,13 @@ struct ClaudeAuthSheet: View {
                             ProgressView()
                                 .controlSize(.mini)
                         }
-                        Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
+                        Text(isConnecting ? "Opening checkout..." : "Upgrade to Nooto Pro")
                             .scaledFont(size: 14, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(isConnecting ? OmiColors.backgroundTertiary : Color.accentColor)
-                    .foregroundColor(isConnecting ? OmiColors.textSecondary : .white)
+                    .background(isConnecting ? NootoColors.backgroundTertiary : Color.accentColor)
+                    .foregroundColor(isConnecting ? NootoColors.textSecondary : .white)
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
@@ -100,7 +100,7 @@ struct ClaudeAuthSheet: View {
                 Button(action: onCancel) {
                     Text("Cancel")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -108,6 +108,6 @@ struct ClaudeAuthSheet: View {
             .padding(.bottom, 20)
         }
         .frame(width: 400, height: 380)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 }
