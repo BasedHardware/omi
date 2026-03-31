@@ -723,6 +723,32 @@ final class VADGateService {
         return BatchGateOutput(audioBuffer: completedBuffer, speechStartWallTime: startTime, isComplete: true)
     }
 
+    // MARK: - Test Accessors (internal, accessible via @testable import)
+
+    /// Directly invoke auto-emit for testing. Sets up state, calls autoEmitBatchBuffer, returns result.
+    func testAutoEmit(
+        batchBuffer: Data,
+        startState: GateState,
+        speechStartWallTime: Double,
+        audioCursorMs: Double,
+        lastSpeechMs: Double
+    ) -> (output: BatchGateOutput, resultState: GateState, resultLastSpeechMs: Double, resultStartWallTime: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        batchAudioBuffer = batchBuffer
+        batchState = startState
+        batchSpeechStartWallTime = speechStartWallTime
+        batchAudioCursorMs = audioCursorMs
+        batchLastSpeechMs = lastSpeechMs
+
+        let output = autoEmitBatchBuffer(nextChunkMs: 100, nextChunkData: Data())
+        return (output, batchState, batchLastSpeechMs, batchSpeechStartWallTime)
+    }
+
+    /// Read batch state for assertions.
+    var testBatchState: GateState { batchState }
+    var testBatchBufferCount: Int { batchAudioBuffer.count }
+
     /// Flush remaining batch audio buffer (call when recording stops).
     func flushBatchBuffer() -> BatchGateOutput? {
         lock.lock()
