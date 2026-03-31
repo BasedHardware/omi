@@ -1,6 +1,7 @@
 // Configuration - Environment variables
 // Copied from Python backend .env
 
+use base64::Engine;
 use std::env;
 
 /// Application configuration loaded from environment
@@ -71,6 +72,8 @@ pub struct Config {
     pub anthropic_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
+    /// Service account JSON (decoded from SERVICE_ACCOUNT_JSON_BASE64 or read from GOOGLE_APPLICATION_CREDENTIALS file)
+    pub service_account_json: Option<String>,
 }
 
 impl Config {
@@ -93,8 +96,11 @@ impl Config {
             apple_client_id: env::var("APPLE_CLIENT_ID").ok(),
             apple_team_id: env::var("APPLE_TEAM_ID").ok(),
             apple_key_id: env::var("APPLE_KEY_ID").ok(),
-            apple_private_key: env::var("APPLE_PRIVATE_KEY_PATH").ok()
-                .and_then(|path| std::fs::read_to_string(&path).ok())
+            apple_private_key: env::var("APPLE_PRIVATE_KEY_BASE64").ok()
+                .and_then(|b64| base64::engine::general_purpose::STANDARD.decode(b64).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .or_else(|| env::var("APPLE_PRIVATE_KEY_PATH").ok()
+                    .and_then(|path| std::fs::read_to_string(&path).ok()))
                 .or_else(|| env::var("APPLE_PRIVATE_KEY").ok().map(|s| s.replace("\\n", "\n"))),
             google_client_id: env::var("GOOGLE_CLIENT_ID").ok(),
             google_client_secret: env::var("GOOGLE_CLIENT_SECRET").ok(),
@@ -133,6 +139,12 @@ impl Config {
             deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
+            service_account_json: env::var("SERVICE_ACCOUNT_JSON_BASE64").ok()
+                .and_then(|b64| base64::engine::general_purpose::STANDARD.decode(b64).ok())
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .or_else(|| env::var("SERVICE_ACCOUNT_JSON").ok().filter(|s| !s.is_empty()))
+                .or_else(|| env::var("GOOGLE_APPLICATION_CREDENTIALS").ok()
+                    .and_then(|path| std::fs::read_to_string(&path).ok())),
         }
     }
 
