@@ -5,7 +5,7 @@ from typing import List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-import database.desktop as desktop_db
+import database.staged_tasks as staged_tasks_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -45,7 +45,7 @@ def create_staged_task(
     request: CreateStagedTaskRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_staged_task(
+    return staged_tasks_db.create_staged_task(
         uid,
         description=request.description,
         due_at=request.due_at,
@@ -64,7 +64,7 @@ def get_staged_tasks(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     fetch_limit = limit + 1
-    items = desktop_db.get_staged_tasks(uid, limit=fetch_limit, offset=offset)
+    items = staged_tasks_db.get_staged_tasks(uid, limit=fetch_limit, offset=offset)
     has_more = len(items) > limit
     if has_more:
         items = items[:limit]
@@ -76,7 +76,7 @@ def delete_staged_task(
     task_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    desktop_db.delete_staged_task(uid, task_id)
+    staged_tasks_db.delete_staged_task(uid, task_id)
     return {'status': 'ok'}
 
 
@@ -85,20 +85,20 @@ def batch_update_staged_scores(
     request: BatchUpdateScoresRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    desktop_db.batch_update_staged_scores(uid, [s.model_dump() for s in request.scores])
+    staged_tasks_db.batch_update_staged_scores(uid, [s.model_dump() for s in request.scores])
     return {'status': 'ok'}
 
 
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'])
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.promote_staged_task(uid)
+    return staged_tasks_db.promote_staged_task(uid)
 
 
 @router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'])
 def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.migrate_ai_tasks(uid)
+    return staged_tasks_db.migrate_ai_tasks(uid)
 
 
 @router.post('/v1/staged-tasks/migrate-conversation-items', tags=['staged-tasks'])
 def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.migrate_conversation_items_to_staged(uid)
+    return staged_tasks_db.migrate_conversation_items_to_staged(uid)
