@@ -71,7 +71,8 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        transport = NativeBleTransport(deviceId);
+        final needsBond = device.type == DeviceType.limitless;
+        transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 
       case TransportKind.watchConnectivity:
@@ -164,8 +165,9 @@ abstract class DeviceConnection {
     switch (transportState) {
       case DeviceTransportState.connected:
         return DeviceConnectionState.connected;
-      case DeviceTransportState.disconnected:
       case DeviceTransportState.connecting:
+        return DeviceConnectionState.connecting;
+      case DeviceTransportState.disconnected:
       case DeviceTransportState.disconnecting:
         return DeviceConnectionState.disconnected;
     }
