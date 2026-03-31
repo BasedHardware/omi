@@ -93,7 +93,9 @@ impl Config {
             apple_client_id: env::var("APPLE_CLIENT_ID").ok(),
             apple_team_id: env::var("APPLE_TEAM_ID").ok(),
             apple_key_id: env::var("APPLE_KEY_ID").ok(),
-            apple_private_key: env::var("APPLE_PRIVATE_KEY").ok(),
+            apple_private_key: env::var("APPLE_PRIVATE_KEY_PATH").ok()
+                .and_then(|path| std::fs::read_to_string(&path).ok())
+                .or_else(|| env::var("APPLE_PRIVATE_KEY").ok().map(|s| s.replace("\\n", "\n"))),
             google_client_id: env::var("GOOGLE_CLIENT_ID").ok(),
             google_client_secret: env::var("GOOGLE_CLIENT_SECRET").ok(),
             encryption_secret: env::var("ENCRYPTION_SECRET")
