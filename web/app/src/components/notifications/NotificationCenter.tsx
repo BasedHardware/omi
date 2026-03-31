@@ -90,57 +90,49 @@ export function NotificationCenter() {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
-              'bg-bg-secondary border-l border-border',
+              'bg-bg-secondary border-l border-border/50',
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
             )}
           >
             <div
               className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center">
-                    <Bell className="w-4 h-4 text-brand" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-text-primary">
-                      Notifications
-                    </h2>
-                    {unreadCount > 0 && (
-                      <p className="text-xs text-text-tertiary">
-                        {unreadCount} unread
-                      </p>
-                    )}
-                  </div>
+              {/* Header — matches page header */}
+              <div className="flex items-center justify-between px-3 h-16 border-b border-border/50">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="text-xs text-muted-foreground">{unreadCount}</span>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
-                      className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Mark all as read"
-                      title="Mark all as read"
+                      className="p-1.5 rounded-md hover:bg-accent transition-colors"
+                      aria-label="Mark all read"
+                      title="Mark all read"
                     >
-                      <CheckCheck className="w-4 h-4 text-muted-foreground hover:text-text-secondary" />
+                      <CheckCheck className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>
                   )}
                   {notifications.length > 0 && (
                     <button
                       onClick={clearAllNotifications}
-                      className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                      aria-label="Clear all notifications"
-                      title="Clear all notifications"
+                      className="p-1.5 rounded-md hover:bg-accent transition-colors"
+                      aria-label="Clear all"
+                      title="Clear all"
                     >
-                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-text-secondary" />
+                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>
                   )}
                   <button
                     onClick={closeNotificationCenter}
-                    className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                    aria-label="Close notifications"
+                    className="p-1.5 rounded-md hover:bg-accent transition-colors"
+                    aria-label="Close"
                   >
-                    <X className="w-5 h-5 text-text-secondary" />
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
                 </div>
               </div>
