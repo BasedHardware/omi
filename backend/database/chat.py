@@ -605,9 +605,7 @@ def get_desktop_chat_sessions(
     uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
 ) -> List[dict]:
     col = db.collection('users').document(uid).collection('chat_sessions')
-    # Order by created_at (not updated_at) — old sessions from mobile may lack updated_at,
-    # and Firestore excludes docs missing the order-by field from results.
-    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
+    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
     # Always filter — when app_id is None this returns only default-chat sessions
     query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
