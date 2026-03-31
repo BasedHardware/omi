@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-import database.desktop as desktop_db
+import database.advice as advice_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -39,7 +39,7 @@ def create_advice(
     request: CreateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_advice(
+    return advice_db.create_advice(
         uid,
         content=request.content,
         category=request.category or 'other',
@@ -59,9 +59,7 @@ def get_advice(
     include_dismissed: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.get_advice(
-        uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed
-    )
+    return advice_db.get_advice(uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed)
 
 
 @router.patch('/v1/advice/{advice_id}', tags=['advice'])
@@ -70,7 +68,7 @@ def update_advice(
     request: UpdateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = desktop_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
+    result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
     if result is None:
         raise HTTPException(status_code=404, detail='Advice not found')
     return result
@@ -81,11 +79,11 @@ def delete_advice(
     advice_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    desktop_db.delete_advice(uid, advice_id)
+    advice_db.delete_advice(uid, advice_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/advice/mark-all-read', tags=['advice'])
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
-    count = desktop_db.mark_all_advice_read(uid)
+    count = advice_db.mark_all_advice_read(uid)
     return {'status': f'marked {count} as read'}
