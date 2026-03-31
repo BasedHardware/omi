@@ -164,6 +164,10 @@ class $AssetsImagesGen {
   AssetGenImage get gradientCard =>
       const AssetGenImage('assets/images/gradient_card.png');
 
+  /// File path: assets/images/heypocket.webp
+  AssetGenImage get heypocket =>
+      const AssetGenImage('assets/images/heypocket.webp');
+
   /// File path: assets/images/herologo.png
   AssetGenImage get herologo =>
       const AssetGenImage('assets/images/herologo.png');
@@ -368,6 +372,7 @@ class $AssetsImagesGen {
     friendPendant,
     googleLogo,
     gradientCard,
+    heypocket,
     herologo,
     icChart,
     icCloneChat,

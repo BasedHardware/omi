@@ -13,6 +13,7 @@ import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/heypocket_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
@@ -120,6 +121,8 @@ class DeviceConnectionFactory {
         return FriendPendantDeviceConnection(device, transport);
       case DeviceType.limitless:
         return LimitlessDeviceConnection(device, transport);
+      case DeviceType.heyPocket:
+        return HeyPocketDeviceConnection(device, transport);
     }
   }
 }

@@ -71,6 +71,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
         _isFieldy(p) ||
         _isFriendPendant(p) ||
         _isLimitless(p) ||
+        _isHeyPocket(p) ||
         _isOmi(p) ||
         _isFrame(p);
   }
@@ -95,6 +96,11 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   static bool _isLimitless(BlePeripheral p) {
     final name = p.name.toLowerCase();
     return name.contains('limitless') || name.contains('pendant') || _hasService(p, limitlessServiceUuid);
+  }
+
+  static bool _isHeyPocket(BlePeripheral p) {
+    final name = p.name.toLowerCase();
+    return name.contains('heypocket') || name.contains('pkt01') || _hasService(p, heyPocketServiceUuid);
   }
 
   static bool _isOmi(BlePeripheral p) {
@@ -122,6 +128,8 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
       type = DeviceType.friendPendant;
     } else if (_isLimitless(p)) {
       type = DeviceType.limitless;
+    } else if (_isHeyPocket(p)) {
+      type = DeviceType.heyPocket;
     } else if (_isOmi(p)) {
       type = DeviceType.omi;
     } else if (_isFrame(p)) {

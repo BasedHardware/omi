@@ -10,6 +10,7 @@ import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/heypocket_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
@@ -206,6 +207,8 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
     deviceType = DeviceType.friendPendant;
   } else if (BtDevice.isLimitlessDeviceFromDevice(device)) {
     deviceType = DeviceType.limitless;
+  } else if (BtDevice.isHeyPocketDeviceFromDevice(device)) {
+    deviceType = DeviceType.heyPocket;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
@@ -225,7 +228,7 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   return deviceType;
 }
 
-enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless, heyPocket }
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
@@ -363,6 +366,8 @@ class BtDevice {
       return await _getDeviceInfoFromFriendPendant(conn);
     } else if (type == DeviceType.limitless) {
       return await _getDeviceInfoFromLimitless(conn as LimitlessDeviceConnection);
+    } else if (type == DeviceType.heyPocket) {
+      return await _getDeviceInfoFromHeyPocket(conn as HeyPocketDeviceConnection);
     } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
@@ -607,6 +612,31 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromHeyPocket(HeyPocketDeviceConnection conn) async {
+    var modelNumber = 'HeyPocket';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = 'PKT01';
+    var manufacturerName = 'Pocket';
+
+    try {
+      final deviceInfo = await conn.getDeviceInfo();
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+    } catch (e) {
+      Logger.error('Error getting HeyPocket device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.heyPocket,
+    );
+  }
+
   bool get isBeeFirmwareUnsupported {
     if (type != DeviceType.bee) return false;
     final fw = firmwareRevision;
@@ -638,6 +668,8 @@ class BtDevice {
         return 'Compatibility Note';
       case DeviceType.bee:
         return isBeeFirmwareUnsupported ? 'Firmware Not Supported' : 'Compatibility Note';
+      case DeviceType.heyPocket:
+        return 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.frame:
@@ -676,6 +708,10 @@ class BtDevice {
         return 'Your $name\'s current firmware works great with Omi.\n\n'
             'We recommend keeping your current firmware and not updating through the Limitless app, as newer versions may affect compatibility.';
 
+      case DeviceType.heyPocket:
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the Pocket app, as newer versions may affect compatibility.';
+
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.frame:
@@ -697,6 +733,7 @@ class BtDevice {
         isFieldyDevice(result) ||
         isFriendPendantDevice(result) ||
         isLimitlessDevice(result) ||
+        isHeyPocketDevice(result) ||
         isOmiDevice(result) ||
         isFrameDevice(result);
   }
@@ -790,6 +827,24 @@ class BtDevice {
         device.servicesList.any((s) => s.uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
   }
 
+  static bool isHeyPocketDevice(ScanResult result) {
+    final name = result.device.platformName.toLowerCase();
+    return name.contains('heypocket') ||
+        name.contains('pkt01') ||
+        result.advertisementData.serviceUuids.any(
+          (uuid) => uuid.toString().toLowerCase() == heyPocketServiceUuid.toLowerCase(),
+        );
+  }
+
+  static bool isHeyPocketDeviceFromDevice(BluetoothDevice device) {
+    final name = device.platformName.toLowerCase();
+    return name.contains('heypocket') ||
+        name.contains('pkt01') ||
+        device.servicesList.any(
+          (s) => s.uuid.toString().toLowerCase() == heyPocketServiceUuid.toLowerCase(),
+        );
+  }
+
   static bool isOmiDevice(ScanResult result) {
     return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
   }
@@ -820,6 +875,8 @@ class BtDevice {
       deviceType = DeviceType.friendPendant;
     } else if (isLimitlessDevice(result)) {
       deviceType = DeviceType.limitless;
+    } else if (isHeyPocketDevice(result)) {
+      deviceType = DeviceType.heyPocket;
     } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
     } else if (isFrameDevice(result)) {

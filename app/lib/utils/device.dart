@@ -69,6 +69,8 @@ class DeviceUtils {
           return Assets.images.fieldy.path;
         case DeviceType.friendPendant:
           return Assets.images.friendPendant.path;
+        case DeviceType.heyPocket:
+          return Assets.images.heypocket.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
           if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
@@ -137,6 +139,9 @@ class DeviceUtils {
       if (upperModel.contains('NEO')) {
         return Assets.images.neoOne.path;
       }
+      if (upperModel.contains('HEYPOCKET') || upperModel.contains('PKT01') || upperModel.contains('POCKET')) {
+        return Assets.images.heypocket.path;
+      }
     }
 
     // Fallback to device name
@@ -169,6 +174,9 @@ class DeviceUtils {
       }
       if (upperName.contains('NEO')) {
         return Assets.images.neoOne.path;
+      }
+      if (upperName.contains('HEYPOCKET') || upperName.contains('PKT01') || upperName.contains('POCKET')) {
+        return Assets.images.heypocket.path;
       }
     }
 
