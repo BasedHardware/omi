@@ -26,5 +26,5 @@ struct TranscriptDetailView: View {
 #Preview {
     TranscriptDetailView(segments: [])
         .frame(width: 400, height: 400)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
 }
