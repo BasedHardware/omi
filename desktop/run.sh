@@ -172,7 +172,7 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
 # Kill any old Rust backend by process name (port-agnostic)
-pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
+pgrep -f "omi-desktop-backend\|nooto-desktop-backend" 2>/dev/null | while read pid; do
     substep "Killing old backend (PID: $pid)"
     kill -9 "$pid" 2>/dev/null || true
 done
@@ -322,12 +322,12 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     cd "$BACKEND_DIR"
 
     # Build if binary doesn't exist or source is newer
-    if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
+    if [ ! -f "target/release/nooto-desktop-backend" ] || [ -n "$(find src -newer target/release/nooto-desktop-backend 2>/dev/null)" ]; then
         step "Building Rust backend (cargo build --release)..."
         cargo build --release
     fi
 
-    ./target/release/omi-desktop-backend &
+    ./target/release/nooto-desktop-backend &
     BACKEND_PID=$!
     cd - > /dev/null
 
