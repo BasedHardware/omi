@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
+from sync import start_auto_sync, stop_auto_sync, sync_user_calendar
+
 from db import (
     store_google_tokens,
     get_google_tokens,
@@ -1301,9 +1303,6 @@ def get_css() -> str:
 # Calendar Sync Endpoints
 # ============================================
 
-from sync import sync_user_calendar
-
-
 @app.post("/sync", tags=["sync"])
 async def trigger_sync(request: Request):
     """Manually trigger a calendar sync to push events as Omi memories."""
@@ -1313,11 +1312,21 @@ async def trigger_sync(request: Request):
         if not uid:
             return JSONResponse({"error": "uid is required"}, status_code=400)
 
-        result = sync_user_calendar(
+        # Auth check: verify user has connected Google Calendar
+        tokens = get_google_tokens(uid)
+        if not tokens:
+            return JSONResponse({"error": "Google Calendar not connected"}, status_code=401)
+
+        # Run sync in thread pool to avoid blocking the event loop
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            sync_user_calendar,
             uid,
-            get_valid_access_token_fn=get_valid_access_token,
-            calendar_api_request_fn=calendar_api_request,
-            get_default_calendar_fn=get_default_calendar,
+            get_valid_access_token,
+            calendar_api_request,
+            get_default_calendar,
         )
         return result
 
@@ -1329,6 +1338,11 @@ async def trigger_sync(request: Request):
 @app.get("/sync/status", tags=["sync"])
 async def sync_status(uid: str = Query(...)):
     """Get sync status for a user."""
+    # Auth check: only return status if user has connected
+    tokens = get_google_tokens(uid)
+    if not tokens:
+        return JSONResponse({"error": "Google Calendar not connected"}, status_code=401)
+
     last_sync = get_user_setting(uid, "last_sync_at")
     auto_sync = get_user_setting(uid, "auto_sync_enabled")
     synced_count = len(get_user_setting(uid, "synced_event_ids") or [])
@@ -1349,22 +1363,35 @@ async def toggle_auto_sync(request: Request):
         if not uid:
             return JSONResponse({"error": "uid is required"}, status_code=400)
 
-        store_user_setting(uid, "auto_sync_enabled", enabled)
-        status = "enabled" if enabled else "disabled"
-        log(f"Auto-sync {status} for {uid}")
+        # Auth check: verify user has connected Google Calendar
+        tokens = get_google_tokens(uid)
+        if not tokens:
+            return JSONResponse({"error": "Google Calendar not connected"}, status_code=401)
 
-        result = {"message": f"Auto-sync {status}"}
+        store_user_setting(uid, "auto_sync_enabled", enabled)
 
         if enabled:
-            sync_result = sync_user_calendar(
+            start_auto_sync(
                 uid,
-                get_valid_access_token_fn=get_valid_access_token,
-                calendar_api_request_fn=calendar_api_request,
-                get_default_calendar_fn=get_default_calendar,
+                get_valid_access_token,
+                calendar_api_request,
+                get_default_calendar,
             )
-            result["initial_sync"] = sync_result
-
-        return result
+            # Run initial sync in thread pool
+            import asyncio
+            loop = asyncio.get_event_loop()
+            sync_result = await loop.run_in_executor(
+                None,
+                sync_user_calendar,
+                uid,
+                get_valid_access_token,
+                calendar_api_request,
+                get_default_calendar,
+            )
+            return {"message": "Auto-sync enabled", "initial_sync": sync_result}
+        else:
+            stop_auto_sync(uid)
+            return {"message": "Auto-sync disabled"}
 
     except Exception as e:
         log(f"Toggle sync error: {e}")
