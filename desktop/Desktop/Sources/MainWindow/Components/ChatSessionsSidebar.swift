@@ -23,7 +23,7 @@ struct ChatSessionsSidebar: View {
             .padding(.vertical, 12)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Sessions list
             if chatProvider.isLoadingSessions {
@@ -32,15 +32,15 @@ struct ChatSessionsSidebar: View {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .scaledFont(size: 24)
-                        .foregroundColor(OmiColors.warning)
+                        .foregroundColor(NootoColors.warning)
 
                     Text("Failed to load chats")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text(error)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
 
@@ -49,12 +49,12 @@ struct ChatSessionsSidebar: View {
                     }) {
                         Text("Try Again")
                             .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(OmiColors.purplePrimary)
+                                    .fill(NootoColors.brandPrimary)
                             )
                     }
                     .buttonStyle(.plain)
@@ -68,7 +68,7 @@ struct ChatSessionsSidebar: View {
             }
         }
         .frame(width: sidebarWidth)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - New Chat Button
@@ -88,10 +88,10 @@ struct ChatSessionsSidebar: View {
 
                 Spacer()
             }
-            .foregroundColor(OmiColors.purplePrimary)
+            .foregroundColor(NootoColors.brandPrimary)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(10)
         }
         .buttonStyle(.plain)
@@ -120,16 +120,16 @@ struct ChatSessionsSidebar: View {
                     .scaledFont(size: 12, weight: .medium)
                 Spacer()
             }
-            .foregroundColor(chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
+            .foregroundColor(chatProvider.showStarredOnly ? NootoColors.amber : NootoColors.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(chatProvider.showStarredOnly ? OmiColors.amber.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.6))
+                    .fill(chatProvider.showStarredOnly ? NootoColors.amber.opacity(0.15) : NootoColors.backgroundTertiary.opacity(0.6))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(chatProvider.showStarredOnly ? OmiColors.amber.opacity(0.4) : Color.clear, lineWidth: 1)
+                    .stroke(chatProvider.showStarredOnly ? NootoColors.amber.opacity(0.4) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -142,12 +142,12 @@ struct ChatSessionsSidebar: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             TextField("Search chats...", text: $chatProvider.searchQuery)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             if !chatProvider.searchQuery.isEmpty {
                 Button(action: {
@@ -155,14 +155,14 @@ struct ChatSessionsSidebar: View {
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(OmiColors.backgroundTertiary.opacity(0.6))
+        .background(NootoColors.backgroundTertiary.opacity(0.6))
         .cornerRadius(8)
     }
 
@@ -175,7 +175,7 @@ struct ChatSessionsSidebar: View {
                     // Group header
                     Text(group)
                         .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
                         .padding(.bottom, 8)
@@ -223,7 +223,7 @@ struct ChatSessionsSidebar: View {
                 .scaleEffect(0.8)
             Text("Loading chats...")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.top, 8)
             Spacer()
         }
@@ -234,15 +234,15 @@ struct ChatSessionsSidebar: View {
             Spacer()
             Image(systemName: emptyStateIcon)
                 .scaledFont(size: 32)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text(emptyStateTitle)
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Text(emptyStateSubtitle)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
             Spacer()
         }
         .padding()
@@ -315,7 +315,7 @@ struct SessionRow: View {
                         TextField("Chat title", text: $editedTitle)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                            .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+                            .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textPrimary)
                             .focused($isTitleFocused)
                             .onSubmit {
                                 saveTitle()
@@ -326,7 +326,7 @@ struct SessionRow: View {
                     } else {
                         Text(session.title)
                             .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                            .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+                            .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textPrimary)
                             .lineLimit(1)
                     }
 
@@ -334,7 +334,7 @@ struct SessionRow: View {
                        !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted") {
                         Text(preview)
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .lineLimit(1)
                     }
                 }
@@ -354,7 +354,7 @@ struct SessionRow: View {
                         Button(action: startEditing) {
                             Image(systemName: "pencil")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
@@ -362,7 +362,7 @@ struct SessionRow: View {
                         Button(action: onToggleStar) {
                             Image(systemName: session.starred ? "star.fill" : "star")
                                 .scaledFont(size: 11)
-                                .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
+                                .foregroundColor(session.starred ? .yellow : NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
@@ -370,7 +370,7 @@ struct SessionRow: View {
                         Button(action: { showDeleteConfirm = true }) {
                             Image(systemName: "trash")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -379,7 +379,7 @@ struct SessionRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? OmiColors.backgroundTertiary : (isHovering ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+            .background(isSelected ? NootoColors.backgroundTertiary : (isHovering ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear))
             .contentShape(Rectangle())
             .cornerRadius(8)
         }
