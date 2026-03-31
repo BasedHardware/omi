@@ -98,7 +98,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                   <div className="flex justify-center mb-6">
                     <Image
                       src="/omi-white.webp"
-                      alt="Omi"
+                      alt="Nooto"
                       width={120}
                       height={48}
                       className="h-12 w-auto"
@@ -197,7 +197,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/terms"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-brand hover:text-brand-light transition-colors"
                   >
                     Terms of Service
                   </a>{' '}
@@ -206,7 +206,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/privacy"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-brand hover:text-brand-light transition-colors"
                   >
                     Privacy Policy
                   </a>

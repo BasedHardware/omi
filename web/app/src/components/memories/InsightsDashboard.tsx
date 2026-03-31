@@ -54,13 +54,13 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
       <div className="h-full overflow-y-auto w-full max-w-full">
         <div className="max-w-full lg:max-w-5xl mx-auto p-6 space-y-6 w-full">
           {/* Skeleton for Activity Calendar */}
-          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-border animate-pulse">
             <div className="h-4 w-24 bg-bg-tertiary rounded mb-4"></div>
             <div className="h-32 bg-bg-tertiary rounded"></div>
           </div>
 
           {/* Skeleton for Tags */}
-          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-border animate-pulse">
             <div className="h-4 w-32 bg-bg-tertiary rounded mb-4"></div>
             <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 12 }).map((_, i) => (
@@ -78,7 +78,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <div className="w-20 h-20 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
-          <Sparkles className="w-10 h-10 text-text-quaternary" />
+          <Sparkles className="w-10 h-10 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-medium text-text-primary mb-2">No insights yet</h3>
         <p className="text-sm text-text-tertiary max-w-sm">
@@ -95,7 +95,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary"
+          className="p-6 rounded-2xl bg-bg-secondary border border-border"
         >
           <h2 className="text-sm font-medium text-text-tertiary mb-4">ACTIVITY</h2>
           <ActivityHeatmap data={activityCalendar} />
@@ -106,16 +106,16 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary"
+          className="p-6 rounded-2xl bg-bg-secondary border border-border"
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-purple-primary" />
+              <Tag className="w-4 h-4 text-brand" />
               <h2 className="text-sm font-medium text-text-tertiary">ALL TAGS</h2>
-              <span className="text-xs text-text-quaternary">({allTags.length})</span>
+              <span className="text-xs text-muted-foreground">({allTags.length})</span>
             </div>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
                 value={searchQuery}
@@ -123,10 +123,10 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                 placeholder="Search tags..."
                 className={cn(
                   'pl-9 pr-4 py-1.5 rounded-lg w-48',
-                  'bg-bg-tertiary border border-bg-quaternary',
+                  'bg-bg-tertiary border border-border',
                   'text-sm text-text-primary',
-                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                  'placeholder:text-text-quaternary'
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                  'placeholder:text-muted-foreground'
                 )}
               />
             </div>
@@ -138,25 +138,25 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                 onClick={() => handleTagClick(t.tag)}
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-                  'bg-bg-tertiary border border-bg-quaternary',
-                  'hover:border-purple-primary/50 hover:bg-purple-primary/10',
+                  'bg-bg-tertiary border border-border',
+                  'hover:border-brand/50 hover:bg-brand/10',
                   'transition-all text-sm group'
                 )}
               >
-                <span className="text-text-primary group-hover:text-purple-primary transition-colors">
+                <span className="text-text-primary group-hover:text-brand transition-colors">
                   {t.tag}
                 </span>
-                <span className="text-text-quaternary text-xs">({t.count})</span>
+                <span className="text-muted-foreground text-xs">({t.count})</span>
               </button>
             ))}
             {allTags.length > 50 && !searchQuery && (
-              <span className="inline-flex items-center px-3 py-1.5 text-sm text-text-quaternary">
+              <span className="inline-flex items-center px-3 py-1.5 text-sm text-muted-foreground">
                 +{allTags.length - 50} more
               </span>
             )}
           </div>
           {filteredTags.length === 0 && searchQuery && (
-            <p className="text-center text-text-quaternary py-4">No tags match &quot;{searchQuery}&quot;</p>
+            <p className="text-center text-muted-foreground py-4">No tags match &quot;{searchQuery}&quot;</p>
           )}
         </motion.div>
       </div>
@@ -383,10 +383,10 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
   const getColor = (count: number) => {
     if (count === 0) return 'bg-bg-tertiary';
     const intensity = count / maxCount;
-    if (intensity < 0.25) return 'bg-purple-primary/20';
-    if (intensity < 0.5) return 'bg-purple-primary/40';
-    if (intensity < 0.75) return 'bg-purple-primary/60';
-    return 'bg-purple-primary';
+    if (intensity < 0.25) return 'bg-brand/20';
+    if (intensity < 0.5) return 'bg-brand/40';
+    if (intensity < 0.75) return 'bg-brand/60';
+    return 'bg-brand';
   };
 
   // Month labels
@@ -407,7 +407,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
         {monthLabels.map((label, idx) => (
           <div
             key={idx}
-            className="text-xs text-text-quaternary"
+            className="text-xs text-muted-foreground"
             style={{ marginLeft: idx === 0 ? 0 : `${(label.weekIdx - monthLabels[idx - 1].weekIdx) * 12 - 20}px` }}
           >
             {label.month}
@@ -417,7 +417,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
 
       <div className="flex gap-0.5">
         {/* Day labels */}
-        <div className="flex flex-col gap-0.5 mr-1 text-xs text-text-quaternary">
+        <div className="flex flex-col gap-0.5 mr-1 text-xs text-muted-foreground">
           <div className="h-[10px]"></div>
           <div className="h-[10px] leading-[10px]">M</div>
           <div className="h-[10px]"></div>
@@ -445,14 +445,14 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-2 mt-3 text-xs text-text-quaternary">
+      <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
         <span>Less</span>
         <div className="flex gap-0.5">
           <div className="w-[10px] h-[10px] rounded-sm bg-bg-tertiary" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/20" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/40" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary/60" />
-          <div className="w-[10px] h-[10px] rounded-sm bg-purple-primary" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-brand/20" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-brand/40" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-brand/60" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-brand" />
         </div>
         <span>More</span>
       </div>

@@ -99,7 +99,7 @@ export function MemoryList({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
-          <Brain className="w-8 h-8 text-text-quaternary" />
+          <Brain className="w-8 h-8 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-medium text-text-primary mb-2">No memories yet</h3>
         <p className="text-sm text-text-tertiary max-w-sm">
@@ -164,14 +164,14 @@ export function MemoryList({
       {/* Loading indicator */}
       {(loading || loadingMore) && (
         <div className="flex items-center justify-center py-4">
-          <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />
+          <Loader2 className="w-5 h-5 text-brand animate-spin" />
           <span className="ml-2 text-sm text-text-tertiary">Loading memories...</span>
         </div>
       )}
 
       {/* End of list indicator */}
       {!loading && !loadingMore && !hasMore && memories.length > 0 && (
-        <p className="text-center text-sm text-text-quaternary py-4">
+        <p className="text-center text-sm text-muted-foreground py-4">
           You&apos;ve reached the end
         </p>
       )}
@@ -188,7 +188,7 @@ export function MemoryListSkeleton() {
           key={i}
           className={cn(
             'rounded-xl p-4',
-            'bg-bg-tertiary border border-bg-quaternary',
+            'bg-bg-tertiary border border-border',
             'animate-pulse'
           )}
         >

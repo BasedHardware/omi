@@ -93,7 +93,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const colors = {
     success: 'bg-green-500/10 border-green-500/30 text-green-400',
     error: 'bg-error/10 border-error/30 text-error',
-    info: 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary',
+    info: 'bg-brand/10 border-brand/30 text-brand',
   }[toast.type];
 
   return (

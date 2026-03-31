@@ -58,7 +58,7 @@ function getNotificationIconColor(type: NotificationType): string {
     case 'action_item_delete':
       return 'text-blue-400';
     case 'daily_summary':
-      return 'text-purple-400';
+      return 'text-brand-light';
     case 'plugin':
       return 'text-green-400';
     case 'merge_completed':
@@ -100,7 +100,7 @@ export function NotificationItem({
         'flex items-start gap-3 px-4 py-3 cursor-pointer',
         'hover:bg-bg-tertiary/50 transition-colors',
         'group relative',
-        !notification.read && 'bg-purple-primary/5'
+        !notification.read && 'bg-brand/5'
       )}
     >
       {/* Icon or App Image */}
@@ -134,24 +134,30 @@ export function NotificationItem({
           >
             {notification.title}
           </p>
-          <span className="text-xs text-text-quaternary flex-shrink-0">
+          <span className="text-xs text-muted-foreground flex-shrink-0">
             {formatNotificationTimestamp(new Date(notification.timestamp))}
           </span>
         </div>
-        <p
-          className={cn(
-            'text-sm mt-0.5 line-clamp-2',
-            notification.read ? 'text-text-quaternary' : 'text-text-tertiary'
-          )}
-        >
-          {notification.body}
-        </p>
+        {notification.body ? (
+          <p
+            className={cn(
+              'text-sm mt-0.5 line-clamp-2',
+              notification.read ? 'text-muted-foreground' : 'text-text-tertiary'
+            )}
+          >
+            {notification.body}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground/50 mt-0.5">
+            No details available
+          </p>
+        )}
       </div>
 
       {/* Unread indicator */}
       {!notification.read && (
         <div
-          className="w-2 h-2 rounded-full bg-purple-primary flex-shrink-0 mt-2"
+          className="w-2 h-2 rounded-full bg-brand flex-shrink-0 mt-2"
           title="Unread"
         />
       )}
@@ -171,7 +177,7 @@ export function NotificationItem({
             className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
             title="Mark as read"
           >
-            <Clock className="w-3.5 h-3.5 text-text-quaternary" />
+            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
         )}
         <button
@@ -179,7 +185,7 @@ export function NotificationItem({
           className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
           title="Remove"
         >
-          <X className="w-3.5 h-3.5 text-text-quaternary" />
+          <X className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
       </div>
     </div>

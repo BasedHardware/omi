@@ -82,7 +82,7 @@ function payloadToNotification(payload: MessagePayload): OmiNotification {
   return {
     id: data.notification_id || `notif-${Date.now()}`,
     type: (data.notification_type as NotificationType) || 'announcement',
-    title: notification.title || data.title || 'Omi',
+    title: notification.title || data.title || 'Nooto',
     body: notification.body || data.body || '',
     timestamp: new Date().toISOString(),
     read: false,
@@ -180,6 +180,12 @@ export function useNotifications(): UseNotificationsReturn {
   // Handle foreground message (defined before useEffect that uses it)
   const handleForegroundMessage = useCallback((payload: MessagePayload) => {
     const notification = payloadToNotification(payload);
+
+    // Skip data-only messages with no body (background sync, etc.)
+    if (!notification.body.trim()) {
+      console.log('[Notifications] Skipping empty-body notification:', notification.type);
+      return;
+    }
 
     setNotifications((prev) => {
       const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);

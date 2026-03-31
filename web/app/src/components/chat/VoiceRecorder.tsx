@@ -185,9 +185,9 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
         className={cn(
           'p-2 rounded-lg flex-shrink-0',
           'transition-all duration-200',
-          state === 'idle' && 'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
+          state === 'idle' && 'text-text-tertiary hover:text-brand hover:bg-bg-tertiary',
           state === 'recording' && 'text-white bg-error hover:bg-error/80 animate-pulse',
-          state === 'transcribing' && 'text-text-quaternary cursor-not-allowed',
+          state === 'transcribing' && 'text-muted-foreground cursor-not-allowed',
           'disabled:opacity-50 disabled:cursor-not-allowed'
         )}
         title={

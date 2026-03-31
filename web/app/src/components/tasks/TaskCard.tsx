@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Trash2, Calendar, Clock, X } from 'lucide-react';
+import { TableRow, TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
 
@@ -187,94 +188,52 @@ export function TaskCard({
   };
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.2 }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
+    <TableRow
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onDoubleClick={handleCardDoubleClick}
       className={cn(
-        'noise-overlay group relative rounded-xl cursor-pointer',
-        'border-l-4 transition-all duration-150',
-        'bg-white/[0.02] hover:bg-white/[0.05]',
-        'p-4',
-        showDatePicker && 'z-10',
-        // Left border color based on status
-        task.completed
-          ? 'border-l-success/50'
-          : isOverdue
-          ? 'border-l-purple-primary'
-          : 'border-l-bg-quaternary',
-        // Selection state
-        isSelected && 'ring-2 ring-purple-primary/50 bg-purple-primary/5'
+        'group cursor-pointer border-border/30',
+        'transition-colors duration-75',
+        'hover:bg-accent/50',
+        isSelected && 'bg-brand/5',
+        showDatePicker && 'z-10 relative'
       )}
     >
-      <div className="flex items-start gap-3">
-        {/* Selection checkbox - shown when onSelect is provided */}
-        {onSelect && (
+      {/* Checkbox cell */}
+      <TableCell className="w-8 px-2 py-1.5">
+        {onSelect ? (
           <button
             onClick={handleSelectionClick}
             className={cn(
-              'flex-shrink-0 w-5 h-5 mt-0.5 rounded',
-              'border-2 transition-all duration-200',
-              'flex items-center justify-center',
-              isSelected
-                ? 'bg-purple-primary border-purple-primary'
-                : 'border-text-quaternary hover:border-purple-primary'
+              'w-4 h-4 rounded border flex items-center justify-center transition-colors',
+              isSelected ? 'bg-brand border-brand' : 'border-muted-foreground/40 hover:border-brand'
             )}
-            aria-label={isSelected ? 'Deselect task' : 'Select task'}
           >
-            <AnimatePresence>
-              {isSelected && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
           </button>
-        )}
-
-        {/* Completion checkbox - hidden in selection mode */}
-        {!onSelect && (
+        ) : (
           <button
             onClick={handleCheckboxClick}
             className={cn(
-              'flex-shrink-0 w-5 h-5 mt-0.5 rounded-full',
-              'border-2 transition-all duration-200',
-              'flex items-center justify-center',
+              'w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center transition-colors',
               task.completed
                 ? 'bg-success border-success'
                 : isOverdue
-                ? 'border-purple-primary hover:bg-purple-primary/20'
-                : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary'
+                ? 'border-destructive hover:bg-destructive/20'
+                : 'border-muted-foreground/40 hover:border-foreground/60'
             )}
-            aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
           >
-            <AnimatePresence>
-              {(task.completed || isCompleting) && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {(task.completed || isCompleting) && (
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            )}
           </button>
         )}
+      </TableCell>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
+      {/* Task description cell */}
+      <TableCell className="py-1.5">
+        <div className="min-w-0">
           {isEditing ? (
             <input
               ref={inputRef}
@@ -284,10 +243,10 @@ export function TaskCard({
               onBlur={handleEditSubmit}
               onKeyDown={handleEditKeyDown}
               className={cn(
-                'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+                'w-full text-sm bg-bg-secondary border border-brand/50',
                 'rounded px-2 py-0.5 -ml-2 -my-0.5',
                 'text-text-primary outline-none',
-                'focus:ring-2 focus:ring-purple-primary/30'
+                'focus:ring-2 focus:ring-brand/30'
               )}
             />
           ) : (
@@ -296,9 +255,9 @@ export function TaskCard({
               className={cn(
                 'text-sm transition-all duration-200',
                 task.completed
-                  ? 'text-text-quaternary line-through'
+                  ? 'text-muted-foreground line-through'
                   : 'text-text-primary',
-                !task.completed && onUpdateDescription && 'hover:text-purple-primary cursor-text'
+                !task.completed && onUpdateDescription && 'hover:text-brand cursor-text'
               )}
               title={!task.completed ? 'Double-click to edit' : undefined}
             >
@@ -313,15 +272,15 @@ export function TaskCard({
                 onClick={handleDateClick}
                 className={cn(
                   'flex items-center gap-1.5 group/date',
-                  'hover:text-purple-primary transition-colors',
-                  isOverdue ? 'text-error hover:text-error' : 'text-text-quaternary'
+                  'hover:text-brand transition-colors',
+                  isOverdue ? 'text-error hover:text-error' : 'text-muted-foreground'
                 )}
                 title="Click to change date"
               >
                 <Clock className="w-3 h-3" />
                 <span className={cn(
                   'text-xs',
-                  isOverdue ? 'text-error' : 'text-text-quaternary group-hover/date:text-purple-primary'
+                  isOverdue ? 'text-error' : 'text-muted-foreground group-hover/date:text-brand'
                 )}>
                   {dueStatus.text}
                 </span>
@@ -338,7 +297,7 @@ export function TaskCard({
                     transition={{ duration: 0.15 }}
                     className={cn(
                       'absolute top-full left-0 mt-1 z-50',
-                      'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                      'bg-bg-secondary border border-border rounded-lg',
                       'shadow-lg shadow-black/30 p-3'
                     )}
                     onClick={(e) => e.stopPropagation()}
@@ -349,9 +308,9 @@ export function TaskCard({
                         value={task.due_at ? formatDateForInput(new Date(task.due_at)) : ''}
                         onChange={handleDateChange}
                         className={cn(
-                          'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
+                          'bg-bg-tertiary border border-border rounded px-2 py-1',
                           'text-sm text-text-primary outline-none',
-                          'focus:border-purple-primary'
+                          'focus:border-brand'
                         )}
                       />
                       <div className="flex gap-1">
@@ -363,7 +322,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                         >
                           Today
                         </button>
@@ -377,7 +336,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                         >
                           Tomorrow
                         </button>
@@ -404,8 +363,8 @@ export function TaskCard({
               <button
                 onClick={handleDateClick}
                 className={cn(
-                  'flex items-center gap-1.5 text-text-quaternary',
-                  'hover:text-purple-primary transition-colors text-xs'
+                  'flex items-center gap-1.5 text-muted-foreground',
+                  'hover:text-brand transition-colors text-xs'
                 )}
               >
                 <Calendar className="w-3 h-3" />
@@ -423,7 +382,7 @@ export function TaskCard({
                     transition={{ duration: 0.15 }}
                     className={cn(
                       'absolute top-full left-0 mt-1 z-50',
-                      'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                      'bg-bg-secondary border border-border rounded-lg',
                       'shadow-lg shadow-black/30 p-3'
                     )}
                     onClick={(e) => e.stopPropagation()}
@@ -433,9 +392,9 @@ export function TaskCard({
                         type="date"
                         onChange={handleDateChange}
                         className={cn(
-                          'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
+                          'bg-bg-tertiary border border-border rounded px-2 py-1',
                           'text-sm text-text-primary outline-none',
-                          'focus:border-purple-primary'
+                          'focus:border-brand'
                         )}
                       />
                       <div className="flex gap-1">
@@ -447,7 +406,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                         >
                           Today
                         </button>
@@ -461,7 +420,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                         >
                           Tomorrow
                         </button>
@@ -477,69 +436,45 @@ export function TaskCard({
           {task.completed && task.completed_at && (
             <div className="flex items-center gap-1.5 mt-1">
               <Check className="w-3 h-3 text-success" />
-              <span className="text-xs text-text-quaternary">
+              <span className="text-xs text-muted-foreground">
                 Completed {new Date(task.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             </div>
           )}
         </div>
+      </TableCell>
 
-        {/* Hover actions */}
+      {/* Actions cell */}
+      <TableCell className="py-1.5 text-right w-20">
         <AnimatePresence>
           {isHovered && !task.completed && !isEditing && (
             <motion.div
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ duration: 0.15 }}
-              className="flex items-center gap-1"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.1 }}
+              className="flex items-center justify-end gap-0.5"
             >
-              {/* Snooze buttons */}
               <button
                 onClick={(e) => handleSnooze(e, 0)}
-                className={cn(
-                  'px-2 py-1 text-xs rounded',
-                  'bg-bg-secondary hover:bg-purple-primary/20 hover:text-purple-primary',
-                  'text-text-tertiary transition-colors'
-                )}
-                title="Set due to today"
+                className="px-1.5 py-0.5 text-[10px] rounded text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                title="Set due today"
               >
                 Today
               </button>
               <button
                 onClick={(e) => handleSnooze(e, 1)}
-                className={cn(
-                  'px-2 py-1 text-xs rounded',
-                  'bg-bg-secondary hover:bg-purple-primary/20 hover:text-purple-primary',
-                  'text-text-tertiary transition-colors'
-                )}
+                className="px-1.5 py-0.5 text-[10px] rounded text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
                 title="Snooze 1 day"
               >
-                +1 day
+                +1d
               </button>
-              <button
-                onClick={(e) => handleSnooze(e, 7)}
-                className={cn(
-                  'px-2 py-1 text-xs rounded',
-                  'bg-bg-secondary hover:bg-purple-primary/20 hover:text-purple-primary',
-                  'text-text-tertiary transition-colors'
-                )}
-                title="Snooze 7 days"
-              >
-                +7 days
-              </button>
-
-              {/* Delete button */}
               <button
                 onClick={handleDelete}
-                className={cn(
-                  'p-1.5 rounded',
-                  'bg-bg-secondary hover:bg-error/20 hover:text-error',
-                  'text-text-quaternary transition-colors'
-                )}
-                title="Delete task"
+                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                title="Delete"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3 h-3" />
               </button>
             </motion.div>
           )}
@@ -552,27 +487,25 @@ export function TaskCard({
             className={cn(
               'p-1.5 rounded opacity-0 group-hover:opacity-100',
               'hover:bg-error/20 hover:text-error',
-              'text-text-quaternary transition-all'
+              'text-muted-foreground transition-all'
             )}
             title="Delete task"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
-      </div>
-    </motion.div>
+      </TableCell>
+    </TableRow>
   );
 }
 
 // Skeleton loader
 export function TaskCardSkeleton() {
   return (
-    <div className="flex items-start gap-3 p-4 rounded-xl bg-bg-tertiary animate-pulse border-l-4 border-l-bg-quaternary">
-      <div className="w-5 h-5 rounded-full bg-bg-quaternary flex-shrink-0" />
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-bg-quaternary rounded w-3/4" />
-        <div className="h-3 bg-bg-quaternary rounded w-1/4" />
-      </div>
-    </div>
+    <tr className="animate-pulse">
+      <td className="w-8 px-2 py-2"><div className="w-4 h-4 rounded-full bg-muted" /></td>
+      <td className="py-2"><div className="h-3 bg-muted rounded w-3/4" /></td>
+      <td className="w-10" />
+    </tr>
   );
 }

@@ -234,11 +234,11 @@ export function SpeakerTagSheet({
               'absolute bottom-0 left-0 right-0 z-50',
               'bg-bg-secondary rounded-t-2xl',
               'max-h-[80%] overflow-hidden flex flex-col',
-              'shadow-xl border-t border-bg-tertiary'
+              'shadow-xl border-t border-border'
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+            <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-text-primary">
                   Tag Speaker {segment.speaker_id + 1}
@@ -266,7 +266,7 @@ export function SpeakerTagSheet({
 
               {/* Add Person Form */}
               {showAddPerson && (
-                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
+                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-border">
                   <p className="text-sm font-medium text-text-primary mb-2">Add New Person</p>
                   <div className="flex gap-2">
                     <input
@@ -277,9 +277,9 @@ export function SpeakerTagSheet({
                       autoFocus
                       className={cn(
                         'flex-1 px-3 py-2 rounded-lg',
-                        'bg-bg-secondary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-secondary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreatePerson();
@@ -291,7 +291,7 @@ export function SpeakerTagSheet({
                       disabled={!newPersonName.trim() || creatingPerson}
                       className={cn(
                         'px-4 py-2 rounded-lg text-sm font-medium',
-                        'bg-purple-primary hover:bg-purple-secondary text-white',
+                        'bg-brand hover:bg-brand-light text-white',
                         'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors'
                       )}
@@ -340,7 +340,7 @@ export function SpeakerTagSheet({
 
               {/* Bulk Tagging Section */}
               {otherUntaggedSegments.length > 0 && (
-                <div className="border-t border-bg-tertiary pt-4">
+                <div className="border-t border-border pt-4">
                   {/* Toggle Header */}
                   <button
                     onClick={() => setTagOtherSegments(!tagOtherSegments)}
@@ -355,7 +355,7 @@ export function SpeakerTagSheet({
                         type="checkbox"
                         checked={tagOtherSegments}
                         onChange={() => {}}
-                        className="w-4 h-4 rounded border-bg-quaternary text-purple-primary focus:ring-purple-primary"
+                        className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                       />
                       <div>
                         <p className="text-sm font-medium text-text-primary">
@@ -384,18 +384,18 @@ export function SpeakerTagSheet({
                           className={cn(
                             'flex items-start gap-3 p-3 rounded-lg cursor-pointer',
                             'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
-                            selectedSegmentIds.has(s.id!) && 'ring-1 ring-purple-primary/50'
+                            selectedSegmentIds.has(s.id!) && 'ring-1 ring-brand/50'
                           )}
                         >
                           <input
                             type="checkbox"
                             checked={selectedSegmentIds.has(s.id!)}
                             onChange={() => handleToggleSegment(s.id!)}
-                            className="mt-0.5 w-4 h-4 rounded border-bg-quaternary text-purple-primary focus:ring-purple-primary"
+                            className="mt-0.5 w-4 h-4 rounded border-border text-brand focus:ring-brand"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-text-primary line-clamp-2">{s.text}</p>
-                            <p className="text-xs text-text-quaternary mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               [{formatTimestamp(s.start)} - {formatTimestamp(s.end)}]
                             </p>
                           </div>
@@ -409,7 +409,7 @@ export function SpeakerTagSheet({
               {/* Manage People Link - always visible */}
               {onManagePeople && (
                 <div className={cn(
-                  otherUntaggedSegments.length > 0 ? 'mt-4' : 'border-t border-bg-tertiary pt-4'
+                  otherUntaggedSegments.length > 0 ? 'mt-4' : 'border-t border-border pt-4'
                 )}>
                   <button
                     onClick={onManagePeople}
@@ -426,14 +426,14 @@ export function SpeakerTagSheet({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-bg-tertiary">
+            <div className="p-4 border-t border-border">
               <button
                 onClick={handleSave}
                 disabled={(!selectedPersonId && !isYouSelected) || saving}
                 className={cn(
                   'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
                   'text-sm font-medium transition-all duration-150',
-                  'bg-purple-primary hover:bg-purple-secondary text-white',
+                  'bg-brand hover:bg-brand-light text-white',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
               >

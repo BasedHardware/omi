@@ -86,7 +86,7 @@ export function TaskProgressCard({
       {/* Left side - Progress Ring & Main Stats */}
       <div className={cn(
         "flex items-center gap-4 p-4",
-        !compact && "border-r border-bg-tertiary"
+        !compact && "border-r border-border"
       )}>
         {/* Progress Ring */}
         <div className="relative flex-shrink-0">
@@ -156,7 +156,7 @@ export function TaskProgressCard({
           <p className="text-sm text-text-secondary mb-1">{message}</p>
 
           {/* Counts */}
-          <div className="flex items-center gap-3 text-xs text-text-quaternary">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>{totalPending} pending</span>
             <span>{totalCompleted} completed</span>
           </div>
@@ -166,20 +166,20 @@ export function TaskProgressCard({
       {/* Right side - Weekly Stats & Streak */}
       <div className={cn(
         "flex flex-col justify-center p-4 gap-3",
-        compact && "border-t border-bg-tertiary"
+        compact && "border-t border-border"
       )}>
         {/* This Week Progress */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-purple-primary" />
+              <TrendingUp className="w-3.5 h-3.5 text-brand" />
               <span className="text-xs font-medium text-text-secondary">This Week</span>
             </div>
-            <span className="text-xs text-text-quaternary">{weekCompleted}/{weekTotal}</span>
+            <span className="text-xs text-muted-foreground">{weekCompleted}/{weekTotal}</span>
           </div>
           <div className="h-2 bg-bg-quaternary rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-purple-primary to-purple-secondary rounded-full"
+              className="h-full bg-gradient-to-r from-purple-primary to-brand-light rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${weekPercent}%` }}
               transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
@@ -198,19 +198,19 @@ export function TaskProgressCard({
             <Flame
               className={cn(
                 'w-4 h-4',
-                streak > 0 ? 'text-orange-500' : 'text-text-quaternary'
+                streak > 0 ? 'text-orange-500' : 'text-muted-foreground'
               )}
             />
             <span
               className={cn(
                 'text-sm font-medium',
-                streak > 0 ? 'text-orange-500' : 'text-text-quaternary'
+                streak > 0 ? 'text-orange-500' : 'text-muted-foreground'
               )}
             >
               {streak}
             </span>
           </div>
-          <span className="text-xs text-text-quaternary">
+          <span className="text-xs text-muted-foreground">
             {streak === 0
               ? 'Complete a task to start!'
               : streak === 1

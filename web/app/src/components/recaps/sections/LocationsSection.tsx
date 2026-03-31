@@ -10,7 +10,7 @@ const LocationMap = dynamic(() => import('./LocationMap'), {
   ssr: false,
   loading: () => (
     <div className="h-64 rounded-xl bg-bg-tertiary animate-pulse flex items-center justify-center">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+      <MapPin className="w-8 h-8 text-muted-foreground" />
     </div>
   ),
 });

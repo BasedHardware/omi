@@ -1,8 +1,15 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow as ShadcnTableRow,
+} from '@/components/ui/table';
 import { TaskRow } from './TaskRow';
 import type { ActionItem } from '@/types/conversation';
 
@@ -21,7 +28,6 @@ interface TaskListViewProps {
   onUpdateDescription: (id: string, description: string) => void;
   onSetDueDate: (id: string, date: Date | null) => void;
   searchQuery?: string;
-  // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
 }
 
@@ -42,17 +48,12 @@ export function TaskListView({
   searchQuery = '',
   onEnterSelectionMode,
 }: TaskListViewProps) {
-  // Filter tasks based on search query
   const filteredPending = searchQuery
-    ? pendingTasks.filter(t =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? pendingTasks.filter(t => t.description.toLowerCase().includes(searchQuery.toLowerCase()))
     : pendingTasks;
 
   const filteredCompleted = searchQuery
-    ? completedTasks.filter(t =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? completedTasks.filter(t => t.description.toLowerCase().includes(searchQuery.toLowerCase()))
     : completedTasks;
 
   const isEmpty = filteredPending.length === 0 && filteredCompleted.length === 0;
@@ -60,11 +61,9 @@ export function TaskListView({
   if (isEmpty && !searchQuery) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
-          <span className="text-2xl">✓</span>
-        </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">All caught up!</h3>
-        <p className="text-sm text-text-tertiary">No tasks to show. Add a new task to get started.</p>
+        <CheckCircle2 className="w-10 h-10 text-muted-foreground mb-3" />
+        <h3 className="text-sm font-medium text-foreground mb-1">All caught up!</h3>
+        <p className="text-xs text-muted-foreground">No tasks to show.</p>
       </div>
     );
   }
@@ -72,59 +71,67 @@ export function TaskListView({
   if (isEmpty && searchQuery) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm text-text-tertiary">No tasks match "{searchQuery}"</p>
+        <p className="text-sm text-muted-foreground">No tasks match &ldquo;{searchQuery}&rdquo;</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col">
-      {/* Pending tasks - flat list */}
-      <div className="border border-bg-tertiary rounded-lg overflow-hidden">
-        <AnimatePresence mode="popLayout">
-          {filteredPending.map((task, index) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onToggleComplete={onToggleComplete}
-              onSnooze={onSnooze}
-              onDelete={onDelete}
-              onUpdateDescription={onUpdateDescription}
-              onSetDueDate={onSetDueDate}
-              isSelected={selectedIds.has(task.id)}
-              onSelect={isSelectMode ? onSelect : undefined}
-              isFocused={focusedIndex === index}
-              onEnterSelectionMode={onEnterSelectionMode}
-            />
-          ))}
-        </AnimatePresence>
+    <div className="flex flex-col gap-4">
+      {/* Pending tasks table */}
+      <Table>
+        <TableHeader>
+          <ShadcnTableRow className="border-border/30 hover:bg-transparent">
+            <TableHead className="w-8 px-2" />
+            <TableHead className="text-[10px] uppercase tracking-wider font-medium">Task</TableHead>
+            <TableHead className="text-[10px] uppercase tracking-wider font-medium w-28 text-right">Due</TableHead>
+            <TableHead className="w-10" />
+          </ShadcnTableRow>
+        </TableHeader>
+        <TableBody>
+          <AnimatePresence mode="popLayout">
+            {filteredPending.map((task, index) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onToggleComplete={onToggleComplete}
+                onSnooze={onSnooze}
+                onDelete={onDelete}
+                onUpdateDescription={onUpdateDescription}
+                onSetDueDate={onSetDueDate}
+                isSelected={selectedIds.has(task.id)}
+                onSelect={isSelectMode ? onSelect : undefined}
+                isFocused={focusedIndex === index}
+                onEnterSelectionMode={onEnterSelectionMode}
+              />
+            ))}
+          </AnimatePresence>
+        </TableBody>
+      </Table>
 
-        {filteredPending.length === 0 && (
-          <div className="px-4 py-8 text-center text-text-tertiary text-sm">
-            No pending tasks
-          </div>
-        )}
-      </div>
+      {filteredPending.length === 0 && (
+        <div className="px-4 py-6 text-center text-muted-foreground text-sm">
+          No pending tasks
+        </div>
+      )}
 
-      {/* Completed tasks toggle */}
+      {/* Completed toggle */}
       {filteredCompleted.length > 0 && (
-        <div className="mt-4">
+        <div>
           <button
             onClick={onToggleShowCompleted}
             className={cn(
-              'flex items-center gap-2 px-3 py-2 w-full',
-              'text-sm text-text-tertiary hover:text-text-secondary',
-              'transition-colors rounded-lg hover:bg-bg-tertiary/50'
+              'flex items-center gap-1.5 px-2 py-1.5 w-full text-left',
+              'text-xs text-muted-foreground hover:text-foreground',
+              'transition-colors rounded-md hover:bg-accent/50'
             )}
           >
-            {showCompleted ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
+            <ChevronDown className={cn(
+              'w-3 h-3 transition-transform duration-150',
+              !showCompleted && '-rotate-90'
+            )} />
             <span>
-              {showCompleted ? 'Hide' : 'Show'} {filteredCompleted.length} completed task
-              {filteredCompleted.length !== 1 ? 's' : ''}
+              {filteredCompleted.length} completed
             </span>
           </button>
 
@@ -137,23 +144,25 @@ export function TaskListView({
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="border border-bg-tertiary rounded-lg overflow-hidden mt-2">
-                  {filteredCompleted.map((task, index) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      onToggleComplete={onToggleComplete}
-                      onSnooze={onSnooze}
-                      onDelete={onDelete}
-                      onUpdateDescription={onUpdateDescription}
-                      onSetDueDate={onSetDueDate}
-                      isSelected={selectedIds.has(task.id)}
-                      onSelect={isSelectMode ? onSelect : undefined}
-                      isFocused={focusedIndex === filteredPending.length + index}
-                      onEnterSelectionMode={onEnterSelectionMode}
-                    />
-                  ))}
-                </div>
+                <Table>
+                  <TableBody>
+                    {filteredCompleted.map((task, index) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        onToggleComplete={onToggleComplete}
+                        onSnooze={onSnooze}
+                        onDelete={onDelete}
+                        onUpdateDescription={onUpdateDescription}
+                        onSetDueDate={onSetDueDate}
+                        isSelected={selectedIds.has(task.id)}
+                        onSelect={isSelectMode ? onSelect : undefined}
+                        isFocused={focusedIndex === filteredPending.length + index}
+                        onEnterSelectionMode={onEnterSelectionMode}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
               </motion.div>
             )}
           </AnimatePresence>

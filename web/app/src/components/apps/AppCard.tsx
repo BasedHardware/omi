@@ -50,7 +50,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
       className={cn(
         'noise-overlay block p-4 rounded-xl',
         'bg-white/[0.02] border border-white/[0.06]',
-        'hover:bg-white/[0.05] hover:border-purple-primary/30',
+        'hover:bg-white/[0.05] hover:border-brand/30',
         'transition-all group'
       )}
     >
@@ -78,7 +78,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
             <div className="min-w-0">
               <h3 className="font-medium text-text-primary truncate flex items-center gap-1">
                 {app.name}
-                {app.private && <Lock className="w-3 h-3 text-text-quaternary" />}
+                {app.private && <Lock className="w-3 h-3 text-muted-foreground" />}
               </h3>
               <p className="text-sm text-text-tertiary truncate">
                 {app.author || 'Unknown'}
@@ -94,7 +94,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
                 'transition-colors',
                 isEnabled
                   ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
-                  : 'bg-purple-primary text-white hover:bg-purple-secondary',
+                  : 'bg-brand text-white hover:bg-brand-light',
                 'disabled:opacity-50'
               )}
             >
@@ -112,7 +112,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
           </div>
 
           {/* Description */}
-          <p className="text-sm text-text-quaternary mt-1 line-clamp-2">
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
             {app.description}
           </p>
 

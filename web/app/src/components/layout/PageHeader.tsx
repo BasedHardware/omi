@@ -22,17 +22,17 @@ export function PageHeader({ title, icon: Icon, showBackButton, onBack }: PageHe
   };
 
   return (
-    <div className="flex items-center gap-3 px-6 py-4 border-b border-bg-tertiary bg-bg-secondary">
+    <div className="flex items-center gap-3 px-6 h-16 border-b border-border/50">
       {showBackButton && (
         <button
           onClick={handleBack}
-          className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+          className="p-1.5 rounded-lg hover:bg-secondary transition-colors -ml-1"
         >
-          <ArrowLeft className="w-5 h-5 text-text-secondary" />
+          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
         </button>
       )}
-      {Icon && <Icon className="w-6 h-6 text-text-secondary" />}
-      <h1 className="text-2xl font-bold text-text-primary">{title}</h1>
+      {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
+      <h1 className="text-sm font-medium text-foreground">{title}</h1>
     </div>
   );
 }

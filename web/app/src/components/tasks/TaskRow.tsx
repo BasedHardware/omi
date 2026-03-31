@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Trash2, Clock, Calendar, X } from 'lucide-react';
+import { TableRow as ShadcnTableRow, TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
 
@@ -65,7 +66,7 @@ export function TaskRow({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
 
   const dueBadge = task.due_at ? formatDueBadge(task.due_at) : null;
   const isOverdue = dueBadge?.isOverdue && !task.completed;
@@ -157,65 +158,53 @@ export function TaskRow({
   };
 
   return (
-    <motion.div
+    <ShadcnTableRow
       ref={rowRef}
-      layout
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.15 }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onDoubleClick={handleRowDoubleClick}
       className={cn(
-        'group flex items-center gap-3 px-3 py-2.5',
-        'border-b border-bg-tertiary/50',
-        'transition-colors duration-100',
-        isHovered && 'bg-white/[0.02]',
-        isFocused && 'bg-purple-primary/10',
-        isSelected && 'bg-purple-primary/5'
+        'group cursor-pointer border-border/30',
+        'transition-colors duration-75',
+        'hover:bg-accent/50',
+        isFocused && 'bg-brand/10',
+        isSelected && 'bg-brand/5'
       )}
     >
-      {/* Selection checkbox */}
-      {onSelect && (
-        <button
-          onClick={handleSelectionClick}
-          className={cn(
-            'flex-shrink-0 w-4 h-4 rounded',
-            'border transition-all duration-150',
-            'flex items-center justify-center',
-            isSelected
-              ? 'bg-purple-primary border-purple-primary'
-              : 'border-text-quaternary/50 hover:border-purple-primary'
-          )}
-        >
-          {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-        </button>
-      )}
+      {/* Checkbox cell */}
+      <TableCell className="w-8 px-2 py-1.5">
+        {onSelect ? (
+          <button
+            onClick={handleSelectionClick}
+            className={cn(
+              'w-4 h-4 rounded border flex items-center justify-center transition-colors',
+              isSelected ? 'bg-brand border-brand' : 'border-muted-foreground/40 hover:border-brand'
+            )}
+          >
+            {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+          </button>
+        ) : (
+          <button
+            onClick={handleCheckboxClick}
+            className={cn(
+              'w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center transition-colors',
+              task.completed
+                ? 'bg-success border-success'
+                : isOverdue
+                ? 'border-destructive hover:bg-destructive/20'
+                : 'border-muted-foreground/40 hover:border-foreground/60'
+            )}
+          >
+            {(task.completed || isCompleting) && (
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            )}
+          </button>
+        )}
+      </TableCell>
 
-      {/* Completion checkbox - hidden in selection mode */}
-      {!onSelect && (
-        <button
-          onClick={handleCheckboxClick}
-          className={cn(
-            'flex-shrink-0 w-4 h-4 rounded-full',
-            'border transition-all duration-150',
-            'flex items-center justify-center',
-            task.completed
-              ? 'bg-success border-success'
-              : isOverdue
-              ? 'border-error hover:bg-error/20'
-              : 'border-text-quaternary/50 hover:border-text-tertiary'
-          )}
-        >
-          {(task.completed || isCompleting) && (
-            <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-          )}
-        </button>
-      )}
-
-      {/* Description */}
-      <div className="flex-1 min-w-0">
+      {/* Task description cell */}
+      <TableCell className="py-1.5">
+        <div className="min-w-0">
         {isEditing ? (
           <input
             ref={inputRef}
@@ -225,20 +214,20 @@ export function TaskRow({
             onBlur={handleEditSubmit}
             onKeyDown={handleEditKeyDown}
             className={cn(
-              'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+              'w-full text-sm bg-bg-secondary border border-brand/50',
               'rounded px-2 py-0.5',
               'text-text-primary outline-none',
-              'focus:ring-1 focus:ring-purple-primary/30'
+              'focus:ring-1 focus:ring-brand/30'
             )}
           />
         ) : (
           <p
             onDoubleClick={handleTextDoubleClick}
             className={cn(
-              'text-sm transition-colors',
+              'text-sm truncate transition-colors',
               task.completed
-                ? 'text-text-quaternary line-through'
-                : 'text-text-primary',
+                ? 'text-muted-foreground line-through'
+                : 'text-foreground',
               !task.completed && onUpdateDescription && 'cursor-text'
             )}
           >
@@ -246,10 +235,12 @@ export function TaskRow({
           </p>
         )}
       </div>
+      </TableCell>
 
-      {/* Due date badge */}
+      {/* Due date cell */}
+      <TableCell className="py-1.5 text-right w-28">
       {!task.completed && (
-        <div className="relative flex-shrink-0">
+        <div className="relative inline-block">
           {dueBadge ? (
             <button
               onClick={handleDateClick}
@@ -258,7 +249,7 @@ export function TaskRow({
                 'transition-colors',
                 isOverdue
                   ? 'bg-error/10 text-error'
-                  : 'bg-bg-tertiary text-text-tertiary hover:bg-purple-primary/10 hover:text-purple-primary'
+                  : 'bg-bg-tertiary text-text-tertiary hover:bg-brand/10 hover:text-brand'
               )}
             >
               <Clock className="w-3 h-3" />
@@ -269,7 +260,7 @@ export function TaskRow({
               onClick={handleDateClick}
               className={cn(
                 'flex items-center gap-1 px-2 py-0.5 rounded text-xs',
-                'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10',
+                'text-muted-foreground hover:text-brand hover:bg-brand/10',
                 'opacity-0 group-hover:opacity-100 transition-opacity'
               )}
             >
@@ -289,7 +280,7 @@ export function TaskRow({
                 transition={{ duration: 0.1 }}
                 className={cn(
                   'absolute top-full right-0 mt-1 z-50',
-                  'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                  'bg-bg-secondary border border-border rounded-lg',
                   'shadow-lg shadow-black/30 p-2'
                 )}
                 onClick={(e) => e.stopPropagation()}
@@ -300,9 +291,9 @@ export function TaskRow({
                     value={task.due_at ? formatDateForInput(new Date(task.due_at)) : ''}
                     onChange={handleDateChange}
                     className={cn(
-                      'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
+                      'bg-bg-tertiary border border-border rounded px-2 py-1',
                       'text-xs text-text-primary outline-none',
-                      'focus:border-purple-primary'
+                      'focus:border-brand'
                     )}
                   />
                   <div className="flex gap-1">
@@ -314,7 +305,7 @@ export function TaskRow({
                           setShowDatePicker(false);
                         }
                       }}
-                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                     >
                       Today
                     </button>
@@ -328,7 +319,7 @@ export function TaskRow({
                           setShowDatePicker(false);
                         }
                       }}
-                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-brand/20 rounded text-text-secondary"
                     >
                       Tmrw
                     </button>
@@ -355,13 +346,15 @@ export function TaskRow({
         </div>
       )}
 
-      {/* Completed date */}
       {task.completed && task.completed_at && (
-        <span className="flex-shrink-0 text-xs text-text-quaternary">
+        <span className="text-xs text-muted-foreground">
           {new Date(task.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </span>
       )}
+      </TableCell>
 
+      {/* Actions cell */}
+      <TableCell className="py-1.5 w-10">
       {/* Hover actions */}
       <AnimatePresence>
         {isHovered && !task.completed && !isEditing && (
@@ -370,27 +363,28 @@ export function TaskRow({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.1 }}
-            className="flex items-center gap-0.5 flex-shrink-0"
+            className="flex items-center justify-end gap-0.5"
           >
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSnooze(task.id, 1);
-              }}
-              className="px-1.5 py-0.5 text-xs rounded text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10"
+              onClick={(e) => { e.stopPropagation(); onSnooze(task.id, 0); }}
+              className="px-1.5 py-0.5 text-[10px] rounded text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+              title="Set due today"
+            >
+              Today
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onSnooze(task.id, 1); }}
+              className="px-1.5 py-0.5 text-[10px] rounded text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
               title="Snooze 1 day"
             >
               +1d
             </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(task.id);
-              }}
-              className="p-1 rounded text-text-quaternary hover:text-error hover:bg-error/10"
+              onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               title="Delete"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3 h-3" />
             </button>
           </motion.div>
         )}
@@ -403,12 +397,13 @@ export function TaskRow({
             e.stopPropagation();
             onDelete(task.id);
           }}
-          className="p-1 rounded text-text-quaternary hover:text-error hover:bg-error/10 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
           title="Delete"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       )}
-    </motion.div>
+      </TableCell>
+    </ShadcnTableRow>
   );
 }

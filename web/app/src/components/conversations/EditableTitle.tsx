@@ -91,7 +91,7 @@ export function EditableTitle({
         onBlur={handleBlur}
         disabled={isSaving}
         className={cn(
-          'w-full bg-transparent border-b-2 border-purple-primary',
+          'w-full bg-transparent border-b-2 border-brand',
           'outline-none text-text-primary',
           'disabled:opacity-50',
           className

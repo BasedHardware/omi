@@ -31,7 +31,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
           key={index}
           className={cn(
             'relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden',
-            'bg-bg-tertiary border border-bg-quaternary',
+            'bg-bg-tertiary border border-border',
             'group'
           )}
         >
@@ -46,7 +46,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-1">
               <FileText className="w-6 h-6 text-text-tertiary mb-1" />
-              <span className="text-[10px] text-text-quaternary truncate max-w-full px-1">
+              <span className="text-[10px] text-muted-foreground truncate max-w-full px-1">
                 {item.file.name.split('.').pop()?.toUpperCase()}
               </span>
             </div>
@@ -65,7 +65,7 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
               onClick={() => onRemove(index)}
               className={cn(
                 'absolute -top-1 -right-1 w-5 h-5 rounded-full',
-                'bg-bg-primary border border-bg-tertiary',
+                'bg-bg-primary border border-border',
                 'flex items-center justify-center',
                 'opacity-0 group-hover:opacity-100 transition-opacity',
                 'hover:bg-error hover:border-error hover:text-white'

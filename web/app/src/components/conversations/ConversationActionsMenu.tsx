@@ -147,27 +147,27 @@ export function ConversationActionsMenu({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'p-2 rounded-lg transition-colors',
-          'hover:bg-bg-tertiary text-text-secondary hover:text-text-primary',
-          isOpen && 'bg-bg-tertiary text-text-primary'
+          'p-1.5 rounded-md transition-colors',
+          'text-muted-foreground hover:text-foreground hover:bg-accent',
+          isOpen && 'bg-accent text-foreground'
         )}
-        aria-label="Conversation actions"
+        aria-label="Actions"
       >
-        <MoreVertical className="w-5 h-5" />
+        <MoreVertical className="w-4 h-4" />
       </button>
 
-      {/* Dropdown menu */}
+      {/* Dropdown */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ duration: 0.15 }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.12 }}
             className={cn(
-              'absolute right-0 top-full mt-2 z-50',
-              'min-w-[200px] py-2 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary shadow-xl'
+              'absolute right-0 top-full mt-1 z-50',
+              'min-w-[180px] p-1 rounded-xl',
+              'bg-popover border border-border shadow-xl'
             )}
           >
             {/* Copy Transcript */}
@@ -175,9 +175,9 @@ export function ConversationActionsMenu({
               <button
                 onClick={handleCopyTranscript}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
-                  'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors'
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg',
+                  'text-sm text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors'
                 )}
               >
                 {copiedItem === 'transcript' ? (
@@ -194,9 +194,9 @@ export function ConversationActionsMenu({
               <button
                 onClick={handleCopySummary}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
-                  'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors'
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg',
+                  'text-sm text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors'
                 )}
               >
                 {copiedItem === 'summary' ? (
@@ -210,7 +210,7 @@ export function ConversationActionsMenu({
 
             {/* Divider */}
             {(hasTranscript || hasSummary) && (
-              <div className="my-2 border-t border-bg-tertiary" />
+              <div className="my-1 border-t border-border/50" />
             )}
 
             {/* Reprocess */}
@@ -219,19 +219,19 @@ export function ConversationActionsMenu({
                 onClick={handleReprocess}
                 disabled={isReprocessing}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
-                  'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg',
+                  'text-sm text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
               >
                 <RefreshCw className={cn('w-4 h-4', isReprocessing && 'animate-spin')} />
-                <span>{isReprocessing ? 'Reprocessing...' : 'Reprocess Conversation'}</span>
+                <span className="whitespace-nowrap">{isReprocessing ? 'Reprocessing...' : 'Reprocess'}</span>
               </button>
             )}
 
             {/* Divider before delete */}
-            <div className="my-2 border-t border-bg-tertiary" />
+            <div className="my-2 border-t border-border" />
 
             {/* Delete */}
             {showDeleteConfirm ? (
@@ -257,13 +257,13 @@ export function ConversationActionsMenu({
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
-                  'text-sm text-error hover:bg-error/10',
-                  'transition-colors'
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg',
+                  'text-sm text-destructive',
+                  'hover:bg-destructive/10 transition-colors'
                 )}
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Delete Conversation</span>
+                <span>Delete</span>
               </button>
             )}
           </motion.div>

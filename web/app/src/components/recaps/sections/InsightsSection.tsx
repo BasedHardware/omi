@@ -55,9 +55,9 @@ export function InsightsSection({
       <InsightColumn
         title="Learnings"
         icon={Lightbulb}
-        iconColor="text-purple-primary"
-        bgColor="bg-purple-primary/5"
-        borderColor="border-purple-primary/20"
+        iconColor="text-brand"
+        bgColor="bg-brand/5"
+        borderColor="border-brand/20"
         items={learnings?.map(l => ({ content: l.insight, conversationId: l.conversation_id })) || []}
         onConversationClick={onConversationClick}
       />
@@ -130,8 +130,8 @@ function InsightColumn({
                   onClick={() => onConversationClick?.(item.conversationId!)}
                   className={cn(
                     'flex-shrink-0 p-1 rounded',
-                    'text-text-tertiary hover:text-purple-primary',
-                    'hover:bg-purple-primary/10 transition-colors'
+                    'text-text-tertiary hover:text-brand',
+                    'hover:bg-brand/10 transition-colors'
                   )}
                   title="View source conversation"
                 >

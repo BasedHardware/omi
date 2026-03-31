@@ -67,15 +67,14 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
     try:
         with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
             response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
-        body = response.content
-        # Return placeholder title and generated body
-        return "omi", body.strip()
-
+        body = response.content.strip() if response.content else ""
+        if body:
+            return "omi", body
+        logger.warning(f"LLM returned empty notification body for user {uid}")
     except Exception as e:
         logger.error(f"Error generating notification message: {e}")
 
-    # Improved fallback messages with more personality
-    return ("omi", f"Hey {name}! 👋 Thanks for being part of the Omi family! ✨")
+    return ("omi", f"Hey {name}! Thanks for being part of the journey!")
 
 
 async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, str]:
@@ -125,9 +124,10 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     try:
         with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
             response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
-        body = response.content
-        return "omi", body.strip()
-
+        body = response.content.strip() if response.content else ""
+        if body:
+            return "omi", body
+        logger.warning(f"LLM returned empty credit limit notification body for user {uid}")
     except Exception as e:
         logger.error(f"Error generating credit limit notification: {e}")
 

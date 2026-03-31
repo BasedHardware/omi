@@ -62,7 +62,7 @@ function getSpeakerName(
 
 // Speaker avatar colors matching mobile app
 const SPEAKER_COLORS = [
-  'bg-purple-primary/30 text-purple-primary', // user
+  'bg-brand/30 text-brand', // user
   'bg-amber-700/30 text-amber-300',
   'bg-blue-900/30 text-blue-300',
   'bg-emerald-800/30 text-emerald-300',
@@ -174,10 +174,10 @@ export function TranscriptView({
             className={cn(
               'rounded-xl p-4 transition-all duration-200',
               isUser
-                ? 'bg-purple-primary/10 border border-purple-primary/20'
+                ? 'bg-brand/10 border border-brand/20'
                 : 'bg-bg-tertiary',
               // Active segment highlighting during audio playback
-              isActive && 'ring-2 ring-purple-primary/50 bg-purple-primary/5'
+              isActive && 'ring-2 ring-ring/50 bg-brand/5'
             )}
           >
             {/* Speaker header */}
@@ -201,7 +201,7 @@ export function TranscriptView({
                       'flex items-center gap-1.5 text-sm font-medium',
                       'hover:underline underline-offset-2',
                       isUser
-                        ? 'text-purple-primary'
+                        ? 'text-brand'
                         : isTagged
                         ? 'text-text-secondary'
                         : 'text-text-tertiary'
@@ -219,7 +219,7 @@ export function TranscriptView({
                   <span
                     className={cn(
                       'text-sm font-medium',
-                      isUser ? 'text-purple-primary' : 'text-text-secondary'
+                      isUser ? 'text-brand' : 'text-text-secondary'
                     )}
                   >
                     {speakerName}
@@ -233,7 +233,7 @@ export function TranscriptView({
                   onClick={() => onSeekTo(firstSegment.start)}
                   className={cn(
                     'flex items-center gap-1.5 text-xs',
-                    'text-text-quaternary hover:text-purple-primary transition-colors',
+                    'text-muted-foreground hover:text-brand transition-colors',
                     'group'
                   )}
                   title="Click to play from here"
@@ -242,7 +242,7 @@ export function TranscriptView({
                   <span>{formatTimestamp(firstSegment.start)} - {formatTimestamp(lastSegment.end)}</span>
                 </button>
               ) : (
-                <span className="text-xs text-text-quaternary">
+                <span className="text-xs text-muted-foreground">
                   {formatTimestamp(firstSegment.start)} - {formatTimestamp(lastSegment.end)}
                 </span>
               )}

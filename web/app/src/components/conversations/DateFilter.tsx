@@ -177,9 +177,9 @@ export function DateFilter({
           'text-sm font-medium transition-all duration-150',
           'border',
           isOpen
-            ? 'bg-bg-tertiary border-purple-primary/40 text-text-primary'
+            ? 'bg-bg-tertiary border-brand/40 text-text-primary'
             : selectedDate
-              ? 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary'
+              ? 'bg-brand/10 border-brand/30 text-brand'
               : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
         )}
       >
@@ -219,13 +219,13 @@ export function DateFilter({
             className={cn(
               'absolute top-full right-0 mt-2 z-50',
               'w-72 p-3 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary',
+              'bg-bg-secondary border border-border',
               'shadow-lg shadow-black/20'
             )}
           >
             {/* Quick filters */}
             <div className="mb-3">
-              <p className="text-xs text-text-quaternary mb-2">Quick filters</p>
+              <p className="text-xs text-muted-foreground mb-2">Quick filters</p>
               <div className="flex flex-wrap gap-1.5">
                 {quickFilters.map((filter) => (
                   <button
@@ -235,7 +235,7 @@ export function DateFilter({
                       'px-2.5 py-1 rounded-md text-xs font-medium',
                       'transition-colors',
                       selectedDate && isSameDay(selectedDate, filter.getDate())
-                        ? 'bg-purple-primary text-white'
+                        ? 'bg-brand text-white'
                         : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary'
                     )}
                   >
@@ -271,7 +271,7 @@ export function DateFilter({
               {DAYS.map((day) => (
                 <div
                   key={day}
-                  className="text-center text-xs text-text-quaternary py-1"
+                  className="text-center text-xs text-muted-foreground py-1"
                 >
                   {day}
                 </div>
@@ -294,10 +294,10 @@ export function DateFilter({
                     className={cn(
                       'w-8 h-8 rounded-md text-xs font-medium',
                       'transition-all duration-100',
-                      !isCurrentMonth && 'text-text-quaternary/50',
+                      !isCurrentMonth && 'text-muted-foreground/50',
                       isCurrentMonth && !isSelected && 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                      isSelected && 'bg-purple-primary text-white',
-                      isTodayDate && !isSelected && 'ring-1 ring-purple-primary/50',
+                      isSelected && 'bg-brand text-white',
+                      isTodayDate && !isSelected && 'ring-1 ring-brand/50',
                       isFuture && 'opacity-30 cursor-not-allowed'
                     )}
                   >

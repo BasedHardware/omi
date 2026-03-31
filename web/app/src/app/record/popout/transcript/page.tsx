@@ -42,7 +42,7 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
           key={i}
           className={cn(
             "w-1 rounded-full",
-            isActive && !isPaused ? "bg-purple-400" : "bg-gray-500"
+            isActive && !isPaused ? "bg-primary" : "bg-gray-500"
           )}
           animate={{
             height: isActive && !isPaused
@@ -61,7 +61,7 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
 
 // Colors for different speakers
 const speakerColors = [
-  { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/20' },
   { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
   { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
@@ -199,7 +199,7 @@ export default function TranscriptPopoutPage() {
             {isIdle && (
               <button
                 onClick={handleStart}
-                className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white transition-colors"
+                className="p-2 rounded-lg bg-primary hover:bg-primary/90 text-white transition-colors"
                 title="Start Recording"
               >
                 <Play className="w-4 h-4" />
@@ -209,7 +209,7 @@ export default function TranscriptPopoutPage() {
             {/* Initializing spinner */}
             {isInitializing && (
               <motion.div
-                className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full"
+                className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               />
@@ -223,7 +223,7 @@ export default function TranscriptPopoutPage() {
                   className={cn(
                     "p-2 rounded-lg transition-colors",
                     isPaused
-                      ? "bg-purple-500 hover:bg-purple-600 text-white"
+                      ? "bg-primary hover:bg-primary/90 text-white"
                       : "bg-bg-tertiary hover:bg-bg-secondary text-text-primary"
                   )}
                   title={isPaused ? "Resume" : "Pause"}
@@ -264,7 +264,7 @@ export default function TranscriptPopoutPage() {
         {segments.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-12 h-12 rounded-full bg-bg-tertiary flex items-center justify-center mb-3">
-              <User className="w-6 h-6 text-text-quaternary" />
+              <User className="w-6 h-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-text-tertiary">
               {isActive ? 'Listening for speech...' : isInitializing ? 'Starting...' : 'No active recording'}
@@ -272,7 +272,7 @@ export default function TranscriptPopoutPage() {
             {isIdle && (
               <button
                 onClick={handleStart}
-                className="mt-4 px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+                className="mt-4 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors"
               >
                 Start Recording
               </button>
@@ -323,7 +323,7 @@ export default function TranscriptPopoutPage() {
 
       {/* Footer with segment count */}
       <footer className="flex-shrink-0 border-t border-white/[0.04] px-4 py-2 bg-bg-secondary">
-        <p className="text-xs text-text-quaternary text-center">
+        <p className="text-xs text-muted-foreground text-center">
           {segments.length} segment{segments.length !== 1 ? 's' : ''}
         </p>
       </footer>

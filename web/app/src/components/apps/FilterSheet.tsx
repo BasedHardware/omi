@@ -106,13 +106,13 @@ export function FilterSheet({
             className={cn(
               'fixed top-0 right-0 bottom-0 z-50',
               'w-full sm:w-[400px] max-w-full',
-              'bg-bg-secondary border-l border-bg-tertiary',
+              'bg-bg-secondary border-l border-border',
               'flex flex-col',
               'shadow-2xl'
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+            <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-text-primary">Filters</h2>
               <button
                 onClick={onClose}
@@ -183,12 +183,12 @@ export function FilterSheet({
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 p-4 border-t border-bg-tertiary">
+            <div className="flex gap-3 p-4 border-t border-border">
               <button
                 onClick={handleReset}
                 className={cn(
                   'flex-1 px-4 py-2.5 rounded-xl',
-                  'border border-bg-quaternary',
+                  'border border-border',
                   'text-text-secondary hover:bg-bg-tertiary',
                   'transition-colors'
                 )}
@@ -199,8 +199,8 @@ export function FilterSheet({
                 onClick={handleApply}
                 className={cn(
                   'flex-1 px-4 py-2.5 rounded-xl',
-                  'bg-purple-primary text-white',
-                  'hover:bg-purple-secondary',
+                  'bg-brand text-white',
+                  'hover:bg-brand-light',
                   'transition-colors'
                 )}
               >
@@ -239,7 +239,7 @@ function FilterChip({ label, icon, selected, onClick }: FilterChipProps) {
         'flex items-center gap-1.5',
         'transition-colors',
         selected
-          ? 'bg-purple-primary text-white'
+          ? 'bg-brand text-white'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
       )}
     >

@@ -101,7 +101,7 @@ export function DeleteConversationsDialog({
             className={cn(
               'relative z-10',
               'w-full max-w-sm p-6 rounded-2xl mx-4',
-              'bg-bg-secondary border border-bg-tertiary',
+              'bg-bg-secondary border border-border',
               'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
             )}
           >

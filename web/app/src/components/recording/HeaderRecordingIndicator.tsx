@@ -82,10 +82,9 @@ export function HeaderRecordingIndicator() {
   };
 
   return (
-    <motion.div
-      className="fixed top-4 z-[9999]"
-      animate={{ right: rightOffset }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+    <div
+      className="fixed top-3 z-[9999] transition-[right] duration-200 ease-out"
+      style={{ right: rightOffset }}
     >
       <div className="relative" ref={dropdownRef}>
         {/* Idle state - Start recording button */}
@@ -96,14 +95,14 @@ export function HeaderRecordingIndicator() {
             <div
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-full',
-                'bg-bg-tertiary border border-bg-quaternary',
+                'bg-bg-tertiary border border-border',
                 'text-sm font-medium cursor-not-allowed opacity-70'
               )}
               title="Web recording coming soon"
             >
-              <Mic className="w-4 h-4 text-text-quaternary" />
+              <Mic className="w-4 h-4 text-muted-foreground" />
               <span className="text-text-tertiary">Record</span>
-              <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-muted-foreground bg-bg-quaternary px-1.5 py-0.5 rounded">
                 Soon
               </span>
             </div>
@@ -112,16 +111,16 @@ export function HeaderRecordingIndicator() {
             onClick={() => setShowModeSelector(!showModeSelector)}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-full',
-              'bg-purple-primary/10 border border-purple-primary/30',
-              'hover:bg-purple-primary/20 transition-colors',
-              'text-sm font-medium'
+              'bg-brand text-white',
+              'hover:bg-brand-dark transition-colors',
+              'text-sm font-medium shadow-lg shadow-brand/20'
             )}
           >
-            <Mic className="w-4 h-4 text-purple-primary" />
-            <span className="text-purple-primary">Record</span>
+            <Mic className="w-4 h-4" />
+            <span>Record</span>
             <ChevronDown
               className={cn(
-                'w-3.5 h-3.5 text-purple-primary/70 transition-transform',
+                'w-3.5 h-3.5 text-white/70 transition-transform',
                 showModeSelector && 'rotate-180'
               )}
             />
@@ -132,98 +131,58 @@ export function HeaderRecordingIndicator() {
           <AnimatePresence>
             {showModeSelector && (
               <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.12 }}
                 className={cn(
-                  'absolute right-0 top-full mt-2 z-50',
-                  'w-72 p-4 rounded-xl',
-                  'bg-bg-secondary border border-bg-tertiary',
-                  'shadow-lg shadow-black/20'
+                  'absolute right-0 top-full mt-1.5 z-50',
+                  'w-52 rounded-xl overflow-hidden',
+                  'bg-popover border border-border',
+                  'shadow-xl'
                 )}
               >
-                <h3 className="text-sm font-medium text-text-primary mb-3">
-                  Start Recording
-                </h3>
-
-                {/* Audio mode options */}
-                <div className="space-y-2 mb-4">
+                <div className="p-1">
                   <button
                     onClick={() => handleModeSelect('mic-only')}
                     className={cn(
-                      'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-                      audioMode === 'mic-only'
-                        ? 'bg-purple-primary/10 border border-purple-primary/30'
-                        : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent'
+                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors',
+                      audioMode === 'mic-only' ? 'bg-accent' : 'hover:bg-accent'
                     )}
                   >
-                    <div className={cn(
-                      'w-8 h-8 rounded-lg flex items-center justify-center',
-                      audioMode === 'mic-only' ? 'bg-purple-primary/20' : 'bg-bg-secondary'
-                    )}>
-                      <Mic className={cn(
-                        'w-4 h-4',
-                        audioMode === 'mic-only' ? 'text-purple-primary' : 'text-text-tertiary'
-                      )} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        'text-sm font-medium',
-                        audioMode === 'mic-only' ? 'text-purple-primary' : 'text-text-primary'
-                      )}>
-                        Microphone Only
-                      </p>
-                      <p className="text-xs text-text-tertiary">
-                        Record from your microphone
-                      </p>
-                    </div>
+                    <Mic className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-foreground flex-1">Mic only</span>
+                    {audioMode === 'mic-only' && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
                   </button>
-
                   <button
                     onClick={() => handleModeSelect('mic-and-system')}
                     className={cn(
-                      'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-                      audioMode === 'mic-and-system'
-                        ? 'bg-purple-primary/10 border border-purple-primary/30'
-                        : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent'
+                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors',
+                      audioMode === 'mic-and-system' ? 'bg-accent' : 'hover:bg-accent'
                     )}
                   >
-                    <div className={cn(
-                      'w-8 h-8 rounded-lg flex items-center justify-center',
-                      audioMode === 'mic-and-system' ? 'bg-purple-primary/20' : 'bg-bg-secondary'
-                    )}>
-                      <Monitor className={cn(
-                        'w-4 h-4',
-                        audioMode === 'mic-and-system' ? 'text-purple-primary' : 'text-text-tertiary'
-                      )} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        'text-sm font-medium',
-                        audioMode === 'mic-and-system' ? 'text-purple-primary' : 'text-text-primary'
-                      )}>
-                        Mic + System Audio
-                      </p>
-                      <p className="text-xs text-text-tertiary">
-                        Record both mic and system audio
-                      </p>
-                    </div>
+                    <Monitor className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-foreground flex-1">Mic + System</span>
+                    {audioMode === 'mic-and-system' && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
                   </button>
                 </div>
-
-                {/* Start button */}
-                <button
-                  onClick={handleStartRecording}
-                  className={cn(
-                    'w-full py-2.5 px-4 rounded-lg font-medium',
-                    'bg-purple-primary hover:bg-purple-secondary text-white',
-                    'transition-colors flex items-center justify-center gap-2'
-                  )}
-                >
-                  <Mic className="w-4 h-4" />
-                  <span>Start Recording</span>
-                </button>
+                <div className="border-t border-border p-1">
+                  <button
+                    onClick={handleStartRecording}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 rounded-lg',
+                      'text-sm font-medium text-primary',
+                      'hover:bg-primary/10 transition-colors'
+                    )}
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Start</span>
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -235,12 +194,12 @@ export function HeaderRecordingIndicator() {
         <div
           className={cn(
             'flex items-center gap-2 px-3 py-1.5 rounded-full',
-            'bg-bg-secondary border border-bg-tertiary',
+            'bg-bg-secondary border border-border',
             'text-sm font-medium'
           )}
         >
           <motion.div
-            className="w-4 h-4 border-2 border-purple-primary border-t-transparent rounded-full"
+            className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full"
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           />
@@ -255,7 +214,7 @@ export function HeaderRecordingIndicator() {
             onClick={() => setIsExpanded(!isExpanded)}
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-full',
-              'bg-bg-secondary border border-bg-tertiary',
+              'bg-bg-secondary border border-border',
               'hover:bg-bg-tertiary transition-colors',
               'text-sm font-medium'
             )}
@@ -295,7 +254,7 @@ export function HeaderRecordingIndicator() {
                 className={cn(
                   'absolute right-0 top-full mt-2 z-50',
                   'w-80 p-4 rounded-xl',
-                  'bg-bg-secondary border border-bg-tertiary',
+                  'bg-bg-secondary border border-border',
                   'shadow-lg shadow-black/20'
                 )}
               >
@@ -322,10 +281,10 @@ export function HeaderRecordingIndicator() {
                 {/* Level meter */}
                 <div className="mb-4">
                   <div className="flex items-center gap-2">
-                    <Mic className="w-3 h-3 text-text-quaternary" />
+                    <Mic className="w-3 h-3 text-muted-foreground" />
                     <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                       <motion.div
-                        className="h-full bg-purple-primary rounded-full"
+                        className="h-full bg-brand rounded-full"
                         initial={{ width: 0 }}
                         animate={{ width: `${Math.min(100, micLevel * 100)}%` }}
                         transition={{ duration: 0.1 }}
@@ -340,7 +299,7 @@ export function HeaderRecordingIndicator() {
                 </div>
 
                 {/* Controls */}
-                <div className="flex items-center justify-between pt-3 border-t border-bg-tertiary">
+                <div className="flex items-center justify-between pt-3 border-t border-border">
                   <div className="flex items-center gap-2">
                     {/* Pause/Resume */}
                     <button
@@ -423,6 +382,6 @@ export function HeaderRecordingIndicator() {
         </>
       )}
       </div>
-    </motion.div>
+    </div>
   );
 }

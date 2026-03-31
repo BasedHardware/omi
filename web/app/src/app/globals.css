@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
@@ -29,17 +30,24 @@
 }
 
 :root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
   /* Backgrounds */
   --bg-primary: #0F0F0F;
   --bg-secondary: #1A1A1A;
   --bg-tertiary: #252525;
   --bg-quaternary: #2A2A2A;
 
-  /* Purple accent system */
-  --purple-primary: #8B5CF6;
-  --purple-secondary: #A855F7;
-  --purple-accent: #7C3AED;
-  --purple-light: #D946EF;
+  /* Brand accent system (blue — matching landing) */
+  --brand: #3B82F6;
+  --brand-light: #60A5FA;
+  --brand-dark: #2563EB;
+  /* Aliases for backward compat */
+  --purple-primary: #3B82F6;
+  --purple-secondary: #60A5FA;
+  --purple-accent: #2563EB;
+  --purple-light: #60A5FA;
 
   /* Text */
   --text-primary: #FFFFFF;
@@ -52,6 +60,33 @@
   --warning: #F59E0B;
   --error: #EF4444;
   --info: #3B82F6;
+
+  /* shadcn/ui design tokens (dark by default — app is always dark) */
+  --radius: 0.75rem;
+  --background: 0 0% 5.9%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 10.2%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 10.2%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14.5%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 14.5%;
+  --muted-foreground: 0 0% 53.3%;
+  --accent: 0 0% 14.5%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 217 91% 60%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 160 84% 39%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 0 84% 60%;
+  --chart-5: 262 83% 58%;
 }
 
 * {
@@ -67,13 +102,24 @@ body {
   overflow-x: hidden;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-inter);
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   position: relative;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: white;
 }
 
 /* Focus styles for accessibility */
 .focus-ring {
-  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary;
+  outline: none;
+  &:focus-visible {
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  }
 }
 
 /* Scrollbar styling */

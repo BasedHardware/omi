@@ -306,7 +306,7 @@ export function GenerateSummaryButton({
           'text-sm font-medium transition-all duration-150',
           'bg-bg-tertiary hover:bg-bg-quaternary',
           'text-text-secondary hover:text-text-primary',
-          'border border-bg-quaternary/50',
+          'border border-border/50',
           (generating || testingPrompt) && 'opacity-50 cursor-not-allowed'
         )}
       >
@@ -334,7 +334,7 @@ export function GenerateSummaryButton({
             className={cn(
               'absolute top-full right-0 mt-2 z-50',
               'overflow-y-auto',
-              'bg-bg-secondary border border-bg-tertiary rounded-xl',
+              'bg-bg-secondary border border-border rounded-xl',
               'shadow-lg',
               // Compact size only for apps list view
               viewMode === 'apps'
@@ -346,7 +346,7 @@ export function GenerateSummaryButton({
             {viewMode === 'apps' && (
               <>
                 {/* Header */}
-                <div className="flex items-center justify-between p-3 border-b border-bg-tertiary">
+                <div className="flex items-center justify-between p-3 border-b border-border">
                   <span className="text-sm font-medium text-text-primary">Generate</span>
                   <button
                     onClick={handleClose}
@@ -364,7 +364,7 @@ export function GenerateSummaryButton({
                 )}
 
                 {/* Create Custom Template option */}
-                <div className="p-2 border-b border-bg-tertiary">
+                <div className="p-2 border-b border-border">
                   <button
                     onClick={() => {
                       setTemplatePrompt('');
@@ -377,8 +377,8 @@ export function GenerateSummaryButton({
                       'hover:bg-bg-tertiary'
                     )}
                   >
-                    <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Plus className="w-5 h-5 text-purple-primary" />
+                    <div className="w-10 h-10 rounded-lg bg-brand/20 flex items-center justify-center flex-shrink-0">
+                      <Plus className="w-5 h-5 text-brand" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary">
@@ -436,7 +436,7 @@ export function GenerateSummaryButton({
                           'w-full flex items-center gap-3 p-3 rounded-lg',
                           'text-left transition-all duration-150',
                           'hover:bg-bg-tertiary',
-                          generating === app.id && 'bg-purple-primary/10',
+                          generating === app.id && 'bg-brand/10',
                           generating && generating !== app.id && 'opacity-50'
                         )}
                       >
@@ -447,8 +447,8 @@ export function GenerateSummaryButton({
                             className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-purple-primary" />
+                          <div className="w-10 h-10 rounded-lg bg-brand/20 flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-brand" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -462,9 +462,9 @@ export function GenerateSummaryButton({
                           )}
                         </div>
                         {generating === app.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
+                          <Loader2 className="w-4 h-4 animate-spin text-brand flex-shrink-0" />
                         ) : existingAppIds.has(app.id) ? (
-                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">Generated</span>
                         ) : null}
                       </button>
                     ))}
@@ -473,7 +473,7 @@ export function GenerateSummaryButton({
 
                 {/* User's enabled templates */}
                 {!loading && userTemplates.length > 0 && (
-                  <div className="p-2 border-t border-bg-tertiary">
+                  <div className="p-2 border-t border-border">
                     <p className="px-3 py-1.5 text-xs font-medium text-text-tertiary uppercase tracking-wide">
                       Your Templates
                     </p>
@@ -486,7 +486,7 @@ export function GenerateSummaryButton({
                           'w-full flex items-center gap-3 p-3 rounded-lg',
                           'text-left transition-all duration-150',
                           'hover:bg-bg-tertiary',
-                          generating === app.id && 'bg-purple-primary/10',
+                          generating === app.id && 'bg-brand/10',
                           generating && generating !== app.id && 'opacity-50'
                         )}
                       >
@@ -497,8 +497,8 @@ export function GenerateSummaryButton({
                             className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-purple-primary" />
+                          <div className="w-10 h-10 rounded-lg bg-brand/20 flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-brand" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -512,9 +512,9 @@ export function GenerateSummaryButton({
                           )}
                         </div>
                         {generating === app.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
+                          <Loader2 className="w-4 h-4 animate-spin text-brand flex-shrink-0" />
                         ) : existingAppIds.has(app.id) ? (
-                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">Generated</span>
                         ) : null}
                       </button>
                     ))}
@@ -534,7 +534,7 @@ export function GenerateSummaryButton({
             {viewMode === 'prompt' && (
               <>
                 {/* Header */}
-                <div className="flex items-center gap-2 p-3 border-b border-bg-tertiary">
+                <div className="flex items-center gap-2 p-3 border-b border-border">
                   <button
                     onClick={() => setViewMode('apps')}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -567,9 +567,9 @@ export function GenerateSummaryButton({
                     rows={8}
                     className={cn(
                       'w-full p-3 rounded-lg resize-none',
-                      'bg-bg-tertiary border border-bg-quaternary',
-                      'text-sm text-text-primary placeholder:text-text-quaternary',
-                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                      'bg-bg-tertiary border border-border',
+                      'text-sm text-text-primary placeholder:text-muted-foreground',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
                     )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -577,7 +577,7 @@ export function GenerateSummaryButton({
                       }
                     }}
                   />
-                  <p className="mt-2 text-xs text-text-quaternary">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Press {isMac ? '⌘' : 'Ctrl'}+Enter to run
                   </p>
                   <button
@@ -586,7 +586,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'bg-brand hover:bg-brand-light text-white',
                       'disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
@@ -610,7 +610,7 @@ export function GenerateSummaryButton({
             {viewMode === 'result' && promptResult && (
               <>
                 {/* Header */}
-                <div className="flex items-center gap-2 p-3 border-b border-bg-tertiary">
+                <div className="flex items-center gap-2 p-3 border-b border-border">
                   <button
                     onClick={() => {
                       setViewMode('prompt');
@@ -631,7 +631,7 @@ export function GenerateSummaryButton({
 
                 {/* Result content */}
                 <div className="p-3 max-h-64 overflow-y-auto">
-                  <div className="p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
+                  <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
                     <div className="text-sm text-text-secondary prose prose-sm prose-invert max-w-none">
                       <ReactMarkdown>{promptResult}</ReactMarkdown>
                     </div>
@@ -639,7 +639,7 @@ export function GenerateSummaryButton({
                 </div>
 
                 {/* Actions */}
-                <div className="p-3 border-t border-bg-tertiary space-y-2">
+                <div className="p-3 border-t border-border space-y-2">
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
@@ -672,7 +672,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-colors',
-                      'bg-purple-primary hover:bg-purple-secondary text-white'
+                      'bg-brand hover:bg-brand-light text-white'
                     )}
                   >
                     <Star className="w-4 h-4" />
@@ -686,7 +686,7 @@ export function GenerateSummaryButton({
             {viewMode === 'create' && (
               <>
                 {/* Header */}
-                <div className="flex items-center gap-2 p-3 border-b border-bg-tertiary">
+                <div className="flex items-center gap-2 p-3 border-b border-border">
                   <button
                     onClick={() => setViewMode('apps')}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -724,9 +724,9 @@ export function GenerateSummaryButton({
                       placeholder="e.g., Meeting Action Items"
                       className={cn(
                         'w-full p-3 rounded-lg',
-                        'bg-bg-tertiary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-tertiary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                     />
                   </div>
@@ -743,9 +743,9 @@ export function GenerateSummaryButton({
                       rows={4}
                       className={cn(
                         'w-full p-3 rounded-lg resize-none',
-                        'bg-bg-tertiary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-tertiary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                     />
                   </div>
@@ -786,7 +786,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'bg-brand hover:bg-brand-light text-white',
                       'disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
@@ -810,7 +810,7 @@ export function GenerateSummaryButton({
             {viewMode === 'save' && (
               <>
                 {/* Header */}
-                <div className="flex items-center gap-2 p-3 border-b border-bg-tertiary">
+                <div className="flex items-center gap-2 p-3 border-b border-border">
                   <button
                     onClick={() => setViewMode('result')}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -848,9 +848,9 @@ export function GenerateSummaryButton({
                       placeholder="e.g., Meeting Action Items"
                       className={cn(
                         'w-full p-3 rounded-lg',
-                        'bg-bg-tertiary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-tertiary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                     />
                   </div>
@@ -866,9 +866,9 @@ export function GenerateSummaryButton({
                       rows={4}
                       className={cn(
                         'w-full p-3 rounded-lg resize-none',
-                        'bg-bg-tertiary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-tertiary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                     />
                   </div>
@@ -909,7 +909,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'bg-brand hover:bg-brand-light text-white',
                       'disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >

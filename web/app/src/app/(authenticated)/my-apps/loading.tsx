@@ -4,7 +4,7 @@ import { LayoutGrid } from 'lucide-react';
 
 function AppCardSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-bg-secondary border border-bg-tertiary">
+    <div className="p-4 rounded-xl bg-bg-secondary border border-border">
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-lg bg-bg-tertiary animate-pulse" />
         <div className="flex-1 min-w-0">
@@ -26,7 +26,7 @@ export default function AppsLoading() {
     <div className="h-full overflow-y-auto">
       <div className="flex flex-col h-full">
         {/* Page Header */}
-        <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary bg-bg-primary">
+        <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-bg-primary">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-bg-tertiary">
               <LayoutGrid className="w-5 h-5 text-text-secondary" />
@@ -36,7 +36,7 @@ export default function AppsLoading() {
         </div>
 
         {/* Tabs */}
-        <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+        <div className="flex-shrink-0 px-6 py-3 border-b border-border bg-bg-secondary">
           <div className="flex items-center gap-1">
             {['Explore', 'Installed', 'My Apps'].map((tab, i) => (
               <div
@@ -52,7 +52,7 @@ export default function AppsLoading() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary">
+        <div className="flex-shrink-0 px-6 py-4 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="flex-1 h-10 rounded-lg bg-bg-tertiary animate-pulse" />
             <div className="w-28 h-10 rounded-lg bg-bg-tertiary animate-pulse" />

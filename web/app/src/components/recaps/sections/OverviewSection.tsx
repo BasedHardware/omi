@@ -35,7 +35,7 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
           'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
           'border border-white/[0.04]'
         )}>
-          <MessageSquare className="w-5 h-5 text-purple-primary mb-1" />
+          <MessageSquare className="w-5 h-5 text-brand mb-1" />
           <span className="text-lg font-semibold text-text-primary">
             {recap.stats.total_conversations}
           </span>

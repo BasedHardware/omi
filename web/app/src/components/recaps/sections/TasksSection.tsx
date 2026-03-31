@@ -59,7 +59,7 @@ export function TasksSection({
               {task.completed ? (
                 <CheckCircle className="w-4 h-4 text-success" />
               ) : (
-                <Circle className="w-4 h-4 text-text-quaternary" />
+                <Circle className="w-4 h-4 text-muted-foreground" />
               )}
             </div>
 
@@ -86,8 +86,8 @@ export function TasksSection({
                     onClick={() => onConversationClick?.(task.source_conversation_id)}
                     className={cn(
                       'p-0.5 rounded',
-                      'text-text-tertiary hover:text-purple-primary',
-                      'hover:bg-purple-primary/10 transition-colors'
+                      'text-text-tertiary hover:text-brand',
+                      'hover:bg-brand/10 transition-colors'
                     )}
                     title="View source conversation"
                   >

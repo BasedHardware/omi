@@ -51,7 +51,7 @@ export function NoDueDatePrompt({
       {/* Dismiss button */}
       <button
         onClick={() => setDismissed(true)}
-        className="absolute top-2 right-2 p-1 rounded text-text-quaternary hover:text-text-secondary hover:bg-white/10 transition-colors"
+        className="absolute top-2 right-2 p-1 rounded text-muted-foreground hover:text-text-secondary hover:bg-white/10 transition-colors"
         aria-label="Dismiss"
       >
         <X className="w-3.5 h-3.5" />
@@ -78,8 +78,8 @@ export function NoDueDatePrompt({
           onClick={onSetAllToday}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium',
-            'bg-purple-primary/20 text-purple-primary',
-            'hover:bg-purple-primary/30 transition-colors'
+            'bg-brand/20 text-brand',
+            'hover:bg-brand/30 transition-colors'
           )}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -115,7 +115,7 @@ export function NoDueDatePrompt({
                 exit={{ opacity: 0, y: -5 }}
                 className={cn(
                   'absolute top-full left-0 mt-1 z-50',
-                  'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                  'bg-bg-secondary border border-border rounded-lg',
                   'shadow-lg shadow-black/30 p-2'
                 )}
               >
@@ -123,9 +123,9 @@ export function NoDueDatePrompt({
                   type="date"
                   onChange={handleDateChange}
                   className={cn(
-                    'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
+                    'bg-bg-tertiary border border-border rounded px-2 py-1',
                     'text-xs text-text-primary outline-none',
-                    'focus:border-purple-primary'
+                    'focus:border-brand'
                   )}
                   autoFocus
                 />
@@ -140,7 +140,7 @@ export function NoDueDatePrompt({
         onClick={onShowItems}
         className={cn(
           'flex items-center gap-1 text-xs text-text-tertiary',
-          'hover:text-purple-primary transition-colors'
+          'hover:text-brand transition-colors'
         )}
       >
         View these tasks
@@ -154,13 +154,13 @@ export function NoDueDatePrompt({
             {items.slice(0, 3).map(item => (
               <div
                 key={item.id}
-                className="text-xs text-text-quaternary pl-2 border-l-2 border-amber-500/30"
+                className="text-xs text-muted-foreground pl-2 border-l-2 border-amber-500/30"
               >
                 {item.description}
               </div>
             ))}
             {items.length > 3 && (
-              <div className="text-xs text-text-quaternary pl-2">
+              <div className="text-xs text-muted-foreground pl-2">
                 +{items.length - 3} more
               </div>
             )}

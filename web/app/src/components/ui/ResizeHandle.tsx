@@ -83,9 +83,9 @@ export function ResizeHandle({
         className={cn(
           'w-0.5 h-full transition-all duration-150',
           isDragging
-            ? 'bg-purple-primary'
+            ? 'bg-brand'
             : isHovered
-            ? 'bg-purple-primary/50'
+            ? 'bg-brand/50'
             : 'bg-bg-quaternary'
         )}
       />
@@ -103,7 +103,7 @@ export function ResizeHandle({
             key={i}
             className={cn(
               'w-1 h-1 rounded-full',
-              isDragging ? 'bg-purple-primary' : 'bg-purple-primary/60'
+              isDragging ? 'bg-brand' : 'bg-brand/60'
             )}
           />
         ))}

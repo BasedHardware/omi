@@ -102,16 +102,16 @@ export function MonthCalendar({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.add('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.add('ring-2', 'ring-brand');
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-brand');
   };
 
   const handleDrop = (e: React.DragEvent, date: Date) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-brand');
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId && onDropTask) {
       onDropTask(date, taskId);
@@ -121,7 +121,7 @@ export function MonthCalendar({
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+    <div className="rounded-xl bg-bg-secondary border border-border p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-text-primary">{monthName}</h3>
@@ -164,7 +164,7 @@ export function MonthCalendar({
         {weekDays.map((day) => (
           <div
             key={day}
-            className="text-center text-[10px] font-medium text-text-quaternary uppercase py-1"
+            className="text-center text-[10px] font-medium text-muted-foreground uppercase py-1"
           >
             {day}
           </div>
@@ -197,9 +197,9 @@ export function MonthCalendar({
                 'transition-all duration-150',
                 isCurrentMonth
                   ? 'text-text-secondary'
-                  : 'text-text-quaternary opacity-40',
-                isToday && 'bg-purple-primary/10 text-purple-primary font-semibold',
-                isSelected && 'ring-2 ring-purple-primary',
+                  : 'text-muted-foreground opacity-40',
+                isToday && 'bg-brand/10 text-brand font-semibold',
+                isSelected && 'ring-2 ring-ring',
                 !isToday && isCurrentMonth && 'hover:bg-bg-quaternary'
               )}
             >
@@ -215,7 +215,7 @@ export function MonthCalendar({
                     <span
                       className={cn(
                         'text-[9px] font-medium',
-                        isToday ? 'text-purple-primary' : 'text-purple-primary'
+                        isToday ? 'text-brand' : 'text-brand'
                       )}
                     >
                       {taskData.pending}

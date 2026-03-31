@@ -40,7 +40,7 @@ const CAPABILITY_INFO: Record<string, { icon: React.ReactNode; label: string; co
   persona: {
     icon: <Brain className="w-4 h-4" />,
     label: 'Persona',
-    color: 'text-purple-400',
+    color: 'text-brand-light',
   },
   memories: {
     icon: <Brain className="w-4 h-4" />,
@@ -137,7 +137,7 @@ export function AppDetail({ appId }: AppDetailProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand animate-spin" />
       </div>
     );
   }
@@ -148,7 +148,7 @@ export function AppDetail({ appId }: AppDetailProps) {
         <p className="text-text-tertiary">{error || 'App not found'}</p>
         <Link
           href="/my-apps"
-          className="text-purple-primary hover:underline mt-2 inline-block"
+          className="text-brand hover:underline mt-2 inline-block"
         >
           Back to Apps
         </Link>
@@ -186,7 +186,7 @@ export function AppDetail({ appId }: AppDetailProps) {
         <div className="flex-1 text-center sm:text-left">
           <h1 className="text-2xl font-bold text-text-primary flex items-center justify-center sm:justify-start gap-2">
             {app.name}
-            {app.private && <Lock className="w-5 h-5 text-text-quaternary" />}
+            {app.private && <Lock className="w-5 h-5 text-muted-foreground" />}
           </h1>
           <p className="text-text-secondary mt-1">{app.author || 'Unknown author'}</p>
 
@@ -215,7 +215,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                 'transition-colors flex items-center gap-2',
                 app.enabled
                   ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
-                  : 'bg-purple-primary text-white hover:bg-purple-secondary',
+                  : 'bg-brand text-white hover:bg-brand-light',
                 'disabled:opacity-50'
               )}
             >
@@ -235,7 +235,7 @@ export function AppDetail({ appId }: AppDetailProps) {
               onClick={handleShare}
               className={cn(
                 'p-2.5 rounded-xl',
-                'border border-bg-quaternary',
+                'border border-border',
                 'text-text-secondary hover:bg-bg-tertiary',
                 'transition-colors'
               )}
@@ -248,7 +248,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                 onClick={() => router.push(`/my-apps/${app.id}/edit`)}
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
-                  'border border-bg-quaternary',
+                  'border border-border',
                   'text-text-secondary hover:bg-bg-tertiary',
                   'transition-colors flex items-center gap-2'
                 )}
@@ -265,7 +265,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                 rel="noopener noreferrer"
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
-                  'border border-bg-quaternary',
+                  'border border-border',
                   'text-text-secondary hover:bg-bg-tertiary',
                   'transition-colors flex items-center gap-2'
                 )}
@@ -383,7 +383,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                           'hover:bg-bg-quaternary transition-colors'
                         )}
                       >
-                        <span className="w-6 h-6 rounded-full bg-purple-primary/20 text-purple-primary text-sm flex items-center justify-center">
+                        <span className="w-6 h-6 rounded-full bg-brand/20 text-brand text-sm flex items-center justify-center">
                           {index + 1}
                         </span>
                         {step.name}
@@ -402,7 +402,7 @@ export function AppDetail({ appId }: AppDetailProps) {
           <Section title={`Reviews (${app.reviews.length})`}>
             <div className="space-y-4">
               {app.reviews.slice(0, 5).map((review, index) => (
-                <div key={index} className="border-b border-bg-tertiary pb-4 last:border-0">
+                <div key={index} className="border-b border-border pb-4 last:border-0">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, i) => (
@@ -412,7 +412,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                             'w-4 h-4',
                             i < review.score
                               ? 'fill-yellow-400 text-yellow-400'
-                              : 'text-text-quaternary'
+                              : 'text-muted-foreground'
                           )}
                         />
                       ))}
@@ -425,7 +425,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                     <p className="text-sm text-text-secondary">{review.review}</p>
                   )}
                   {review.response && (
-                    <div className="mt-2 pl-4 border-l-2 border-purple-primary/30">
+                    <div className="mt-2 pl-4 border-l-2 border-brand/30">
                       <p className="text-xs text-text-tertiary mb-1">Developer response:</p>
                       <p className="text-sm text-text-secondary">{review.response}</p>
                     </div>

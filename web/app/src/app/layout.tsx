@@ -15,15 +15,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://omi.me'),
   title: {
-    default: 'Omi - Your AI Companion',
-    template: '%s | Omi',
+    default: 'Nooto - Your AI Companion',
+    template: '%s | Nooto',
   },
-  description: 'Omi Web App - Access your conversations anywhere',
+  description: 'Nooto Web App - Access your conversations anywhere',
   icons: {
     icon: '/favicon.png',
   },
   openGraph: {
-    siteName: 'Omi',
+    siteName: 'Nooto',
     locale: 'en_US',
     type: 'website',
   },

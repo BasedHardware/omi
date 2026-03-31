@@ -101,10 +101,10 @@ export function RecordingWidget() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-bg-secondary border border-bg-tertiary rounded-t-2xl overflow-hidden shadow-strong"
+                  className="bg-bg-secondary border border-border rounded-t-2xl overflow-hidden shadow-strong"
                 >
                   {/* Header */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-bg-tertiary">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                     <span className="text-sm font-medium text-text-primary">Live Transcript</span>
                     <button
                       onClick={() => setWidgetExpanded(false)}
@@ -120,7 +120,7 @@ export function RecordingWidget() {
                   </div>
 
                   {/* Controls */}
-                  <div className="px-4 py-3 border-t border-bg-tertiary bg-bg-tertiary/30">
+                  <div className="px-4 py-3 border-t border-border bg-bg-tertiary/30">
                     <RecordingControls
                       state={state}
                       duration={duration}
@@ -140,7 +140,7 @@ export function RecordingWidget() {
             {/* Main button / collapsed state */}
             <motion.div
               className={cn(
-                'bg-bg-secondary border border-bg-tertiary shadow-strong',
+                'bg-bg-secondary border border-border shadow-strong',
                 isWidgetExpanded && (isRecording || isPaused || segments.length > 0)
                   ? 'rounded-b-2xl border-t-0'
                   : 'rounded-2xl'
@@ -177,7 +177,7 @@ export function RecordingWidget() {
                     onClick={handleStartClick}
                     className={cn(
                       'flex items-center gap-3 px-4 py-2.5 rounded-xl w-full',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'bg-primary hover:bg-primary/90 text-white',
                       'transition-all'
                     )}
                   >

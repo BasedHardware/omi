@@ -34,7 +34,7 @@ const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: str
   interesting: {
     icon: <Lightbulb className="w-4 h-4" />,
     label: 'Interesting',
-    color: 'text-purple-primary',
+    color: 'text-brand',
   },
   manual: {
     icon: <FileText className="w-4 h-4" />,
@@ -44,7 +44,7 @@ const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: str
   system: {
     icon: <Settings className="w-4 h-4" />,
     label: 'System',
-    color: 'text-text-quaternary',
+    color: 'text-muted-foreground',
   },
 };
 
@@ -146,10 +146,10 @@ export const MemoryCard = memo(function MemoryCard({
         'noise-overlay group relative rounded-xl p-4',
         'bg-white/[0.02] border border-white/[0.06]',
         'transition-all duration-150',
-        'hover:bg-white/[0.05] hover:border-purple-primary/30',
+        'hover:bg-white/[0.05] hover:border-brand/30',
         needsReview && 'border-l-4 border-l-warning',
-        isHighlighted && 'ring-2 ring-purple-primary bg-purple-primary/10 animate-pulse',
-        isSelected && 'bg-purple-primary/5 border-purple-primary/50'
+        isHighlighted && 'ring-2 ring-ring bg-brand/10 animate-pulse',
+        isSelected && 'bg-brand/5 border-brand/50'
       )}
     >
       {/* Content */}
@@ -166,8 +166,8 @@ export const MemoryCard = memo(function MemoryCard({
               'border-2 transition-all duration-200',
               'flex items-center justify-center',
               isSelected
-                ? 'bg-purple-primary border-purple-primary'
-                : 'border-text-quaternary hover:border-purple-primary'
+                ? 'bg-brand border-brand'
+                : 'border-text-quaternary hover:border-brand'
             )}
             aria-label={isSelected ? 'Deselect memory' : 'Select memory'}
           >
@@ -213,10 +213,10 @@ export const MemoryCard = memo(function MemoryCard({
                 }
               }}
               className={cn(
-                'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+                'w-full text-sm bg-bg-secondary border border-brand/50',
                 'rounded px-2 py-1.5 resize-none overflow-hidden',
                 'text-text-primary outline-none leading-relaxed',
-                'focus:ring-1 focus:ring-purple-primary/30'
+                'focus:ring-1 focus:ring-brand/30'
               )}
               placeholder="Enter memory content..."
               rows={1}
@@ -238,7 +238,7 @@ export const MemoryCard = memo(function MemoryCard({
               {needsTruncation && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="text-xs text-text-quaternary hover:text-purple-primary mt-1 transition-colors"
+                  className="text-xs text-muted-foreground hover:text-brand mt-1 transition-colors"
                 >
                   {isExpanded ? 'Show less' : 'Show more'}
                 </button>
@@ -255,7 +255,7 @@ export const MemoryCard = memo(function MemoryCard({
                   <span
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs',
-                      memory.category === 'interesting' && 'bg-purple-primary/10 text-purple-primary',
+                      memory.category === 'interesting' && 'bg-brand/10 text-brand',
                       memory.category === 'manual' && 'bg-blue-400/10 text-blue-400'
                     )}
                   >
@@ -275,7 +275,7 @@ export const MemoryCard = memo(function MemoryCard({
                       </span>
                     ))}
                     {memory.tags.length > 4 && (
-                      <span className="text-xs text-text-quaternary">
+                      <span className="text-xs text-muted-foreground">
                         +{memory.tags.length - 4}
                       </span>
                     )}
@@ -286,7 +286,7 @@ export const MemoryCard = memo(function MemoryCard({
               {/* Date and indicators on the right */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Date */}
-                <span className="text-xs text-text-quaternary">
+                <span className="text-xs text-muted-foreground">
                   {formatDate(memory.created_at)}
                 </span>
 
@@ -296,7 +296,7 @@ export const MemoryCard = memo(function MemoryCard({
                     onClick={handleToggleVisibility}
                     className={cn(
                       'p-0.5 rounded transition-colors cursor-pointer',
-                      'text-text-quaternary hover:text-text-tertiary'
+                      'text-muted-foreground hover:text-text-tertiary'
                     )}
                     title="Private memory (click to make public)"
                   >
@@ -306,7 +306,7 @@ export const MemoryCard = memo(function MemoryCard({
 
                 {/* Edited indicator */}
                 {memory.edited && (
-                  <span className="text-xs text-text-quaternary italic">edited</span>
+                  <span className="text-xs text-muted-foreground italic">edited</span>
                 )}
               </div>
             </div>

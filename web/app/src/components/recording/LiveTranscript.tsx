@@ -15,7 +15,7 @@ interface LiveTranscriptProps {
 
 // Colors for different speakers - subtle badge styles
 const speakerColors = [
-  { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/20' },
   { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
   { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
@@ -60,7 +60,7 @@ export function LiveTranscript({
       {segments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <div className="w-12 h-12 rounded-full bg-bg-tertiary flex items-center justify-center mb-3">
-            <Users className="w-6 h-6 text-text-quaternary" />
+            <Users className="w-6 h-6 text-muted-foreground" />
           </div>
           <p className="text-sm text-text-tertiary">{emptyMessage}</p>
         </div>
@@ -124,7 +124,7 @@ export function LiveTranscriptCompact({
 
   if (segments.length === 0) {
     return (
-      <p className="text-xs text-text-quaternary text-center py-2">
+      <p className="text-xs text-muted-foreground text-center py-2">
         Waiting for speech...
       </p>
     );
@@ -162,7 +162,7 @@ export function LiveTranscriptCompact({
       </AnimatePresence>
 
       {segments.length > maxItems && (
-        <p className="text-[10px] text-text-quaternary text-center">
+        <p className="text-[10px] text-muted-foreground text-center">
           +{segments.length - maxItems} more segments
         </p>
       )}

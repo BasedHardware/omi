@@ -28,16 +28,16 @@ export function WeekStrip({
 }: WeekStripProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.add('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.add('ring-2', 'ring-brand');
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-brand');
   };
 
   const handleDrop = (e: React.DragEvent, date: Date) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-brand');
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId && onDropTask) {
       onDropTask(date, taskId);
@@ -65,16 +65,16 @@ export function WeekStrip({
               'flex flex-col items-center min-w-[72px] px-3 py-2 rounded-lg',
               'border transition-all duration-150',
               day.isToday
-                ? 'bg-purple-primary/10 border-purple-primary/50'
-                : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary hover:border-purple-primary/30',
-              isSelected && 'ring-2 ring-purple-primary'
+                ? 'bg-brand/10 border-brand/50'
+                : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary hover:border-brand/30',
+              isSelected && 'ring-2 ring-ring'
             )}
           >
             {/* Day name */}
             <span
               className={cn(
                 'text-[10px] font-medium uppercase tracking-wide',
-                day.isToday ? 'text-purple-primary' : 'text-text-quaternary'
+                day.isToday ? 'text-brand' : 'text-muted-foreground'
               )}
             >
               {day.dayName}
@@ -101,7 +101,7 @@ export function WeekStrip({
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full text-xs font-medium',
-                      'bg-purple-primary text-white'
+                      'bg-brand text-white'
                     )}
                   >
                     {day.pending}

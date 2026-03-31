@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const categoryName = formatCategoryName(plugin.category);
   const title = `${plugin.name} - ${categoryName} App`;
-  const description = `${plugin.description} Available on Omi, the AI-powered wearable platform.`;
+  const description = `${plugin.description} Available on Nooto, the AI-powered wearable platform.`;
   const ogImage = plugin.image || '/og-apps.png';
 
   return {

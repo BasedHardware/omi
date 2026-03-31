@@ -102,7 +102,7 @@ export default function SingleLocationMap({
                 href={openStreetMapUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 transition-colors"
+                className="flex items-center gap-1 text-xs text-brand hover:text-brand-dark transition-colors"
               >
                 <ExternalLink className="w-3 h-3" />
                 <span>Open in maps</span>

@@ -57,7 +57,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
         className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg',
           'bg-bg-tertiary hover:bg-bg-quaternary',
-          'border border-bg-quaternary',
+          'border border-border',
           'transition-colors',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           isOpen && 'bg-bg-quaternary'
@@ -81,13 +81,13 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
             )}
           </div>
         ) : (
-          <div className="w-6 h-6 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-purple-primary" />
+          <div className="w-6 h-6 rounded-full bg-brand/20 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-brand" />
           </div>
         )}
 
         <span className="text-sm text-text-primary max-w-[120px] truncate">
-          {selectedApp ? selectedApp.name : 'Omi'}
+          {selectedApp ? selectedApp.name : 'Nooto'}
         </span>
 
         <ChevronDown className={cn(
@@ -107,7 +107,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
             className={cn(
               'absolute top-full left-0 mt-2 z-50',
               'min-w-[200px] max-w-[280px]',
-              'bg-bg-secondary border border-bg-tertiary rounded-xl',
+              'bg-bg-secondary border border-border rounded-xl',
               'shadow-lg overflow-hidden'
             )}
           >
@@ -129,21 +129,21 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                     !selectedAppId && 'bg-bg-tertiary/50'
                   )}
                 >
-                  <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-4 h-4 text-purple-primary" />
+                  <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-brand" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-text-primary">Omi</p>
+                    <p className="text-sm font-medium text-text-primary">Nooto</p>
                     <p className="text-xs text-text-tertiary">Default assistant</p>
                   </div>
                   {!selectedAppId && (
-                    <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                    <Check className="w-4 h-4 text-brand flex-shrink-0" />
                   )}
                 </button>
 
                 {/* Separator if there are apps */}
                 {apps.length > 0 && (
-                  <div className="border-t border-bg-tertiary my-1" />
+                  <div className="border-t border-border my-1" />
                 )}
 
                 {/* Chat apps list */}
@@ -186,7 +186,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                       )}
                     </div>
                     {selectedAppId === app.id && (
-                      <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                      <Check className="w-4 h-4 text-brand flex-shrink-0" />
                     )}
                   </button>
                 ))}
@@ -197,7 +197,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                     <p className="text-sm text-text-tertiary">
                       No chat apps enabled
                     </p>
-                    <p className="text-xs text-text-quaternary mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Enable apps in the Apps section
                     </p>
                   </div>

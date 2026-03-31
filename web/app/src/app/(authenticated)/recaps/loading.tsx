@@ -4,7 +4,7 @@ import { CalendarDays } from 'lucide-react';
 
 function RecapCardSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-bg-secondary border border-bg-tertiary">
+    <div className="p-4 rounded-xl bg-bg-secondary border border-border">
       <div className="flex items-center gap-3 mb-3">
         <div className="w-10 h-10 rounded-lg bg-bg-tertiary animate-pulse" />
         <div className="flex-1">
@@ -24,7 +24,7 @@ export default function RecapsLoading() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Page Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary bg-bg-primary">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-bg-primary">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <CalendarDays className="w-5 h-5 text-text-secondary" />
@@ -36,9 +36,9 @@ export default function RecapsLoading() {
       {/* Split View */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: Recap List */}
-        <div style={{ width: '420px' }} className="flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-primary border-r border-bg-tertiary">
+        <div style={{ width: '420px' }} className="flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-primary border-r border-border">
           {/* Month Header */}
-          <div className="flex-shrink-0 px-4 py-3 border-b border-bg-tertiary">
+          <div className="flex-shrink-0 px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between">
               <div className="h-6 w-32 bg-bg-tertiary rounded animate-pulse" />
               <div className="flex items-center gap-2">
@@ -64,7 +64,7 @@ export default function RecapsLoading() {
         {/* Right Panel: Detail */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-bg-primary">
           {/* Detail Header */}
-          <div className="flex-shrink-0 p-6 border-b border-bg-tertiary">
+          <div className="flex-shrink-0 p-6 border-b border-border">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-xl bg-bg-tertiary animate-pulse" />
               <div className="flex-1">

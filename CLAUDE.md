@@ -312,6 +312,45 @@ Use `SIGUSR1` for hot reload (widget/UI-only changes) or `SIGUSR2` for hot resta
 - **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
 - When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the named test app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 
+## Web App (Next.js)
+
+### No Emoji in UI
+
+Never use emoji characters in the web app UI. Use Lucide icons instead.
+
+```tsx
+// BAD — emoji in UI
+<span>📝 Summary</span>
+<div>{conversation.structured.emoji || '💬'}</div>
+
+// GOOD — Lucide icon
+<span><FileText className="w-4 h-4" /> Summary</span>
+<div><MessageSquare className="w-5 h-5 text-muted-foreground" /></div>
+```
+
+Rules:
+- Replace all emoji fallbacks (`|| '💬'`, `|| '📁'`) with Lucide icons
+- Conversation cards: use a Lucide icon matching the category instead of `structured.emoji`
+- Folder icons: use a mapped Lucide icon, not emoji characters
+- Tab labels, buttons, badges: always Lucide icons, never emoji
+
+### Design System (shadcn/ui)
+
+- **Component library**: shadcn/ui (new-york style) with CSS variables
+- **AI components**: AI SDK Elements from `elements.ai-sdk.dev` registry
+- **Generative UI**: Custom XML tag renderer in `components/generative-ui/`
+- **Colors**: Use shadcn semantic tokens (`primary`, `muted-foreground`, `card`, `border`, `destructive`)
+- **Legacy colors**: `bg-primary`, `text-secondary`, etc. still work but prefer semantic tokens for new code
+- **Brand color**: Blue `#3B82F6` (matches landing site), NOT purple
+- **Font**: Inter for body (`font-body`/`font-display`), Playfair Display for serif accents (`font-serif italic`)
+- **Typography pattern**: Use `font-display font-semibold` for strong text + `font-serif italic` for brand emphasis (e.g., "Welcome to *Nooto*", "Your AI *companion*")
+- **Borders**: `border-border` or `border-white/10`, never `border-bg-tertiary`
+- **Buttons**: Use `<Button>` from `@/components/ui/button` with variant props
+- **Cards**: Use `<Card>` from `@/components/ui/card` or `bg-card border border-border rounded-2xl`
+- **Inputs**: Use `<Input>` / `<Textarea>` from `@/components/ui/input`
+- **Markdown**: Use `<GenerativeMarkdown>` from `@/components/generative-ui/GenerativeMarkdown` for any AI-generated content (supports 12 XML tag types)
+- **Structured summaries**: Use `<CollapsibleSummary>` for conversation overviews (auto-detects numbered sections)
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:

@@ -12,10 +12,10 @@ type ListItem =
   | { type: 'header'; dateLabel: string }
   | { type: 'conversation'; conversation: Conversation; dateLabel: string };
 
-// Item heights
-const HEADER_HEIGHT = 32;
-const CARD_HEIGHT = 100;
-const CARD_GAP = 6;
+// Item heights — compact single-row cards
+const HEADER_HEIGHT = 30;
+const CARD_HEIGHT = 44;
+const CARD_GAP = 4;
 
 interface VirtualizedConversationListProps {
   groupedConversations: Record<string, Conversation[]>;
@@ -85,7 +85,7 @@ function RowComponentImpl(props: RowComponentProps): ReactElement {
           className={cn(
             'sticky top-0 z-10',
             'px-1 py-1.5',
-            'text-xs font-medium text-text-quaternary uppercase tracking-wide',
+            'text-xs font-medium text-muted-foreground uppercase tracking-wide',
             'bg-bg-primary'
           )}
         >

@@ -32,10 +32,10 @@ function formatDuration(seconds: number): string {
 function LevelMeter({ level, label }: { level: number; label: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-text-quaternary w-12">{label}</span>
+      <span className="text-xs text-muted-foreground w-12">{label}</span>
       <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-purple-primary rounded-full"
+          className="h-full bg-primary rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(100, level * 100)}%` }}
           transition={{ duration: 0.1 }}
@@ -113,77 +113,74 @@ export function RecordingControls({
   }
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      {/* Status */}
-      <div className="flex items-center gap-3">
+    <div className="flex items-center gap-4">
+      {/* Recording dot + timer */}
+      <div className="flex items-center gap-2">
         {isRecording && (
           <motion.div
-            className="w-3 h-3 rounded-full bg-error"
-            animate={{ opacity: [1, 0.5, 1] }}
+            className="w-2 h-2 rounded-full bg-destructive"
+            animate={{ opacity: [1, 0.4, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
           />
         )}
-        {isPaused && <div className="w-3 h-3 rounded-full bg-yellow-500" />}
-        {isInitializing && <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />}
-        {isProcessing && <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />}
-
-        <span className="text-2xl font-mono text-text-primary tabular-nums">
+        {isPaused && <div className="w-2 h-2 rounded-full bg-yellow-500" />}
+        {(isInitializing || isProcessing) && (
+          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+        )}
+        <span className="text-sm font-mono text-foreground tabular-nums">
           {formatDuration(duration)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {isInitializing ? 'Starting...' : isPaused ? 'Paused' : isProcessing ? 'Saving...' : ''}
         </span>
       </div>
 
-      {/* Status text */}
-      <p className="text-sm text-text-tertiary">
-        {isInitializing && 'Initializing...'}
-        {isRecording && 'Recording'}
-        {isPaused && 'Paused'}
-        {isProcessing && 'Processing...'}
-      </p>
-
-      {/* Level meters */}
+      {/* Level meter — inline */}
       {(isRecording || isPaused) && (
-        <div className="w-full max-w-xs space-y-2">
-          <LevelMeter level={micLevel} label="Mic" />
-          {audioMode === 'mic-and-system' && (
-            <LevelMeter level={systemLevel} label="System" />
-          )}
+        <div className="flex items-center gap-2 w-32">
+          <span className="text-[10px] text-muted-foreground uppercase">Mic</span>
+          <div className="flex-1 h-1 bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-primary rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.min(100, micLevel * 100)}%` }}
+              transition={{ duration: 0.1 }}
+            />
+          </div>
         </div>
       )}
 
-      {/* Controls */}
-      <div className="flex items-center gap-4">
-        {/* Pause/Resume button */}
+      {/* Controls — small pill buttons */}
+      <div className="flex items-center gap-1.5">
         <button
           onClick={isPaused ? onResume : onPause}
           disabled={isProcessing || isInitializing}
           className={cn(
-            'p-4 rounded-full transition-all',
-            'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
+            'p-2 rounded-lg transition-colors',
+            'bg-secondary text-foreground hover:bg-accent',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title={isPaused ? 'Resume' : 'Pause'}
         >
-          {isPaused ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+          {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
         </button>
 
-        {/* Stop button */}
         <button
           onClick={onStop}
           disabled={isProcessing || isInitializing}
           className={cn(
-            'p-5 rounded-full transition-all',
-            'bg-error text-white hover:bg-error/80',
+            'p-2 rounded-lg transition-colors',
+            'bg-destructive/10 text-destructive hover:bg-destructive/20',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title="Stop"
         >
           {isProcessing ? (
-            <Loader2 className="w-8 h-8 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <Square className="w-8 h-8 fill-current" />
+            <Square className="w-4 h-4 fill-current" />
           )}
         </button>
-
-        {/* Placeholder for symmetry */}
-        <div className="p-4 w-14" />
       </div>
     </div>
   );

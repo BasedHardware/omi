@@ -122,7 +122,7 @@ export function MobileBlockOverlay() {
 
       {/* Background gradient effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-primary/5 rounded-full blur-[120px]" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-brand/5 rounded-full blur-[120px]" />
       </div>
 
       {/* Main content container */}
@@ -130,13 +130,13 @@ export function MobileBlockOverlay() {
         {/* Round logo with breathing glow */}
         <div className="relative mb-8">
           <div
-            className="absolute inset-0 rounded-full bg-purple-primary/20 blur-xl animate-pulse"
+            className="absolute inset-0 rounded-full bg-brand/20 blur-xl animate-pulse"
             style={{ animationDuration: '3s' }}
           />
           <div className="w-28 h-28 relative">
             <Image
               src="/logo.png"
-              alt="Omi"
+              alt="Nooto"
               fill
               className="object-contain relative z-10 drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]"
               priority
@@ -146,10 +146,10 @@ export function MobileBlockOverlay() {
 
         {/* Message */}
         <h1 className="text-2xl font-semibold text-text-primary mb-3">
-          Omi Web is optimized for desktop.
+          Nooto Web is optimized for desktop.
         </h1>
         <p className="text-text-tertiary mb-8">
-          For the best mobile experience, download the Omi app.
+          For the best mobile experience, download the Nooto app.
         </p>
 
         {/* App Store Button */}
@@ -176,12 +176,12 @@ export function MobileBlockOverlay() {
       <div className="relative z-10 pb-8 flex flex-col items-center gap-4">
         <Image
           src="/omi-white.webp"
-          alt="Omi"
+          alt="Nooto"
           width={60}
           height={24}
           priority
         />
-        <div className="flex items-center gap-4 text-sm text-text-quaternary">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <a
             href="https://www.omi.me/"
             target="_blank"

@@ -42,7 +42,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         'fixed bottom-0 inset-x-0 z-40',
         'lg:hidden', // Only show on mobile
         'bg-bg-secondary/80 backdrop-blur-md',
-        'border-t border-bg-tertiary',
+        'border-t border-white/10',
         'pb-safe' // Safe area inset for devices with home indicators
       )}
       aria-label="Primary navigation"
@@ -66,7 +66,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
                 'w-14 h-14 rounded-xl',
                 'transition-colors duration-150',
                 isActive
-                  ? 'bg-purple-primary/10 text-purple-primary'
+                  ? 'bg-brand/10 text-brand'
                   : 'text-text-tertiary hover:text-text-secondary'
               )}
               aria-label={item.label}

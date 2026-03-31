@@ -10,7 +10,7 @@ export function Footer() {
         <div>
           <Image
             src="/omi-white.webp"
-            alt="Omi Logo"
+            alt="Nooto Logo"
             width={146}
             height={64}
             className="h-auto w-[70px]"
@@ -67,7 +67,7 @@ export function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi AI
+                Nooto AI
               </a>
             </li>
             <li>
@@ -77,7 +77,7 @@ export function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi DEV KIT 2
+                Nooto DEV KIT 2
               </a>
             </li>
           </ul>

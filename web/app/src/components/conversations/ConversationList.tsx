@@ -103,7 +103,7 @@ export function ConversationList({ onConversationClick }: ConversationListProps)
 
       {/* Loading state */}
       {loading && orderedKeys.length === 0 && (
-        <div className="space-y-8">
+        <div className="space-y-1">
           <DateGroupSkeleton count={3} />
           <DateGroupSkeleton count={2} />
         </div>
@@ -125,20 +125,20 @@ export function ConversationList({ onConversationClick }: ConversationListProps)
               'bg-bg-tertiary flex items-center justify-center'
             )}
           >
-            <MessageSquare className="w-8 h-8 text-text-quaternary" />
+            <MessageSquare className="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-medium text-text-primary mb-2">
             No conversations yet
           </h3>
           <p className="text-text-tertiary max-w-sm">
-            Start a conversation with your Omi device and it will appear here.
+            Start a conversation with your Nooto device and it will appear here.
           </p>
         </motion.div>
       )}
 
       {/* Conversation groups */}
       {orderedKeys.length > 0 && (
-        <div className="space-y-8 max-w-3xl mx-auto">
+        <div className="space-y-1 max-w-3xl mx-auto">
           {orderedKeys.map((dateKey) => (
             <DateGroup
               key={dateKey}
@@ -155,7 +155,7 @@ export function ConversationList({ onConversationClick }: ConversationListProps)
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex items-center gap-2 text-text-quaternary"
+                className="flex items-center gap-2 text-muted-foreground"
               >
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Loading more...</span>

@@ -47,7 +47,7 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
           key={i}
           className={cn(
             "w-[3px] rounded-full",
-            isActive && !isPaused ? "bg-purple-400" : "bg-gray-500"
+            isActive && !isPaused ? "bg-primary" : "bg-gray-500"
           )}
           animate={{
             height: isActive && !isPaused
@@ -141,9 +141,9 @@ export default function RecordingPopoutPage() {
             "w-10 h-10 rounded-full flex items-center justify-center transition-all",
             "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1a1a1a]",
             isInitializing && "opacity-50 cursor-not-allowed",
-            isRecording && "bg-purple-500 hover:bg-purple-600 focus:ring-purple-500",
+            isRecording && "bg-primary hover:bg-primary/90 focus:ring-primary",
             isPaused && "bg-amber-500 hover:bg-amber-600 focus:ring-amber-500",
-            !isActive && !isInitializing && "bg-purple-500 hover:bg-purple-600 focus:ring-purple-500"
+            !isActive && !isInitializing && "bg-primary hover:bg-primary/90 focus:ring-primary"
           )}
         >
           {isInitializing ? (
@@ -217,7 +217,7 @@ export default function RecordingPopoutPage() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors",
               selectedMode === 'mic-only'
-                ? "bg-purple-500 text-white"
+                ? "bg-primary text-white"
                 : "bg-white/10 hover:bg-white/20 text-white/70"
             )}
           >
@@ -229,7 +229,7 @@ export default function RecordingPopoutPage() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors",
               selectedMode === 'mic-and-system'
-                ? "bg-purple-500 text-white"
+                ? "bg-primary text-white"
                 : "bg-white/10 hover:bg-white/20 text-white/70"
             )}
           >

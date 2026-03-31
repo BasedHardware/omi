@@ -4,8 +4,8 @@ import { CheckSquare } from 'lucide-react';
 
 function TaskCardSkeleton() {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-bg-secondary border border-bg-tertiary">
-      <div className="w-5 h-5 rounded border-2 border-bg-quaternary animate-pulse" />
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-bg-secondary border border-border">
+      <div className="w-5 h-5 rounded border-2 border-border animate-pulse" />
       <div className="flex-1 min-w-0">
         <div className="h-4 w-full bg-bg-tertiary rounded animate-pulse" />
       </div>
@@ -16,8 +16,8 @@ function TaskCardSkeleton() {
 
 function TaskGroupSkeleton({ count }: { title?: string; count: number }) {
   return (
-    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary overflow-hidden">
-      <div className="px-4 py-3 border-b border-bg-tertiary">
+    <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="h-5 w-24 bg-bg-tertiary rounded animate-pulse" />
           <div className="h-5 w-8 bg-bg-tertiary rounded-full animate-pulse" />
@@ -36,7 +36,7 @@ export default function TasksLoading() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary bg-bg-primary">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-bg-primary">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <CheckSquare className="w-5 h-5 text-text-secondary" />
@@ -46,7 +46,7 @@ export default function TasksLoading() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-border bg-bg-secondary">
         <div className="flex items-center justify-between">
           {/* View tabs */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-bg-tertiary">
@@ -75,7 +75,7 @@ export default function TasksLoading() {
       </div>
 
       {/* Quick Add */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-border">
         <div className="h-10 w-full rounded-lg bg-bg-tertiary animate-pulse" />
       </div>
 

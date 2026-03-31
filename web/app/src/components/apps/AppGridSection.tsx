@@ -31,7 +31,7 @@ export function AppGridSection({
           <Link
             href={`/my-apps?capability=${capabilityId}`}
             className={cn(
-              'flex items-center gap-1 text-sm text-purple-primary',
+              'flex items-center gap-1 text-sm text-brand',
               'hover:underline'
             )}
           >

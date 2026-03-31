@@ -97,11 +97,11 @@ export function ConversationPreviewPanel({
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-purple-primary" />
+                <MessageSquare className="w-4 h-4 text-brand" />
                 <span className="text-sm font-medium text-text-primary">
                   Source Conversations
                 </span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-brand/10 text-brand">
                   {conversationIds.length}
                 </span>
               </div>
@@ -142,7 +142,7 @@ export function ConversationPreviewPanel({
                     className={cn(
                       'w-full text-left p-3 rounded-xl',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
-                      'border border-transparent hover:border-purple-primary/30',
+                      'border border-transparent hover:border-brand/30',
                       'transition-all duration-150 group'
                     )}
                   >
@@ -155,14 +155,14 @@ export function ConversationPreviewPanel({
                       <div className="flex-1 min-w-0">
                         {/* Title */}
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-medium text-text-primary line-clamp-1 group-hover:text-purple-primary transition-colors">
+                          <h4 className="text-sm font-medium text-text-primary line-clamp-1 group-hover:text-brand transition-colors">
                             {conversation.structured.title || 'Untitled'}
                           </h4>
-                          <ExternalLink className="w-3.5 h-3.5 text-text-quaternary group-hover:text-purple-primary flex-shrink-0 mt-0.5 transition-colors" />
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-brand flex-shrink-0 mt-0.5 transition-colors" />
                         </div>
 
                         {/* Time info */}
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-quaternary">
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
                           <span className="flex items-center gap-0.5">
                             <Clock className="w-2.5 h-2.5" />
                             {formatTime(conversation.started_at)}

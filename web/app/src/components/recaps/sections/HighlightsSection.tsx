@@ -72,8 +72,8 @@ function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCard
             onClick={handleConversationClick}
             className={cn(
               'p-1.5 rounded-lg flex-shrink-0',
-              'text-text-quaternary hover:text-purple-primary',
-              'hover:bg-purple-primary/10 transition-colors'
+              'text-muted-foreground hover:text-brand',
+              'hover:bg-brand/10 transition-colors'
             )}
             title={`${highlight.conversation_ids!.length} conversation${highlight.conversation_ids!.length > 1 ? 's' : ''}`}
           >

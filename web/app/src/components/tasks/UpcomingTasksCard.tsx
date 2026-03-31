@@ -66,13 +66,13 @@ export function UpcomingTasksCard({
   }
 
   return (
-    <div className="bg-bg-secondary rounded-xl p-4 border border-bg-tertiary overflow-hidden">
+    <div className="bg-bg-secondary rounded-xl p-4 border border-border overflow-hidden">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-text-primary flex items-center gap-2">
-          <ArrowRight className="w-4 h-4 text-purple-primary flex-shrink-0" />
+          <ArrowRight className="w-4 h-4 text-brand flex-shrink-0" />
           Coming Up
         </h3>
-        <span className="text-xs text-text-quaternary flex-shrink-0">
+        <span className="text-xs text-muted-foreground flex-shrink-0">
           Next {upcomingTasks.length}
         </span>
       </div>
@@ -115,7 +115,7 @@ export function UpcomingTasksCard({
               <span
                 className={cn(
                   'flex-shrink-0 text-xs flex items-center gap-1 whitespace-nowrap',
-                  isOverdue(task.due_at) ? 'text-error' : 'text-text-quaternary'
+                  isOverdue(task.due_at) ? 'text-error' : 'text-muted-foreground'
                 )}
               >
                 <Clock className="w-3 h-3" />

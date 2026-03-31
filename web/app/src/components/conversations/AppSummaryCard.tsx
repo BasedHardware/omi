@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import { GenerativeMarkdown } from '@/components/generative-ui/GenerativeMarkdown';
 import { cn } from '@/lib/utils';
 import { getApp } from '@/lib/api';
 import type { AppResponse } from '@/types/conversation';
@@ -120,8 +120,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
             className="w-8 h-8 rounded-lg object-cover"
           />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-purple-primary/20 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+          <div className="w-8 h-8 rounded-lg bg-brand/20 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-brand" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -156,17 +156,19 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
                 </h3>
               )}
               {section.content && (
-                <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-                  <ReactMarkdown>{section.content}</ReactMarkdown>
-                </div>
+                <GenerativeMarkdown
+                  content={section.content}
+                  className="text-sm text-text-secondary leading-relaxed"
+                />
               )}
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-          <ReactMarkdown>{appResponse.content}</ReactMarkdown>
-        </div>
+        <GenerativeMarkdown
+          content={appResponse.content}
+          className="text-sm text-text-secondary leading-relaxed"
+        />
       )}
     </motion.div>
   );
@@ -177,7 +179,7 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
  */
 export function AppSummaryCardSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 animate-pulse">
+    <div className="p-4 rounded-xl bg-bg-tertiary border border-border/50 animate-pulse">
       <div className="flex items-center gap-3 mb-3">
         <div className="w-8 h-8 rounded-lg bg-bg-quaternary" />
         <div className="flex-1">

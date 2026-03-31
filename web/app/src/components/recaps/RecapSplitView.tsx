@@ -104,7 +104,7 @@ export function RecapSplitView() {
         <p className="text-error mb-4">{error}</p>
         <button
           onClick={refresh}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-primary text-white hover:bg-purple-secondary transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand text-white hover:bg-brand-light transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Retry
@@ -117,7 +117,7 @@ export function RecapSplitView() {
   if (!loading && recaps.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-        <CalendarDays className="w-16 h-16 text-text-quaternary mb-4" />
+        <CalendarDays className="w-16 h-16 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium text-text-primary mb-2">
           No recaps yet
         </h3>
@@ -135,11 +135,11 @@ export function RecapSplitView() {
     <div className="flex h-full overflow-hidden">
       {/* Left panel: Recap list (fixed width) */}
       <div
-        className="flex-shrink-0 flex flex-col overflow-hidden border-r border-bg-tertiary"
+        className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border"
         style={{ width: panelWidth }}
       >
         {/* List header */}
-        <div className="flex-shrink-0 p-4 border-b border-bg-tertiary">
+        <div className="flex-shrink-0 p-4 border-b border-border">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-text-secondary">
               {recaps.length} recap{recaps.length !== 1 ? 's' : ''}
@@ -193,7 +193,7 @@ export function RecapSplitView() {
           {/* Load more indicator */}
           {loading && recaps.length > 0 && (
             <div className="flex justify-center py-4">
-              <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />
+              <Loader2 className="w-5 h-5 text-brand animate-spin" />
             </div>
           )}
         </div>
@@ -228,7 +228,7 @@ export function RecapSplitView() {
               className="h-full flex items-center justify-center"
             >
               <div className="text-center p-8">
-                <CalendarDays className="w-12 h-12 text-text-quaternary mx-auto mb-3" />
+                <CalendarDays className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                 <p className="text-text-tertiary">
                   Select a recap to view details
                 </p>
