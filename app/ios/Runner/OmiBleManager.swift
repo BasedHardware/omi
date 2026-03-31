@@ -132,19 +132,6 @@ final class OmiBleManager: NSObject {
         }
     }
 
-    func reconnectKnownPeripheral(uuid: String) {
-        manuallyDisconnected.remove(uuid)
-
-        guard let cbUuid = UUID(uuidString: uuid) else { return }
-        let retrieved = centralManager.retrievePeripherals(withIdentifiers: [cbUuid])
-        if let peripheral = retrieved.first {
-            peripheral.delegate = self
-            peripherals[uuid] = peripheral
-            // iOS handles this at the chipset level — zero CPU/radio cost while waiting.
-            centralManager.connect(peripheral, options: nil)
-        }
-    }
-
     func isPeripheralConnected(uuid: String) -> Bool {
         return peripherals[uuid]?.state == .connected
     }
@@ -343,7 +330,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
         peripheral.delegate = self
-        flutterApi?.onPeripheralConnected(peripheralUuid: uuid) { _ in }
+        // Don't notify Dart yet — wait for service discovery to complete,
+        // then fire onDeviceReady with services.
         peripheral.discoverServices(nil)
     }
 
@@ -401,7 +389,8 @@ extension OmiBleManager: CBPeripheralDelegate {
                     characteristicUuids: svc.characteristics?.map { self.fullUuidString($0.uuid) } ?? []
                 )
             }
-            flutterApi?.onServicesDiscovered(peripheralUuid: uuid, services: bleServices) { _ in }
+            // iOS handles bonding automatically — fire onDeviceReady directly
+            flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             startRssiKeepAlive(for: peripheral)
         }
     }
