@@ -161,6 +161,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           return (_TierState.completed, _TierState.completed, _TierState.waiting);
         case SyncPhase.uploadingToCloud:
           return (_TierState.completed, _TierState.completed, _TierState.active);
+        case SyncPhase.processingOnServer:
+          return (_TierState.completed, _TierState.completed, _TierState.active);
         default:
           return (_TierState.completed, _TierState.active, _TierState.pending);
       }
@@ -337,6 +339,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   String? _cloudDetail(SyncState syncState, bool isSyncing) {
+    // Server is processing segments
+    if (isSyncing && syncState.phase == SyncPhase.processingOnServer) {
+      final current = syncState.currentFile;
+      final total = syncState.totalFiles;
+      if (current != null && total != null && total > 0) {
+        return context.l10n.processingOnServerProgress(current, total);
+      }
+      return context.l10n.processingOnServer;
+    }
     // During upload — show file count progress
     if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
       final current = syncState.currentFile;

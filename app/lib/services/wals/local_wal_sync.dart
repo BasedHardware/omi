@@ -453,12 +453,26 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
 
       // Report file-count progress
-      progress?.onWalSyncedProgress(filesUploaded / totalFilesToUpload,
-          phase: SyncPhase.uploadingToCloud, currentFile: filesUploaded, totalFiles: totalFilesToUpload);
+      progress?.onWalSyncedProgress(
+        filesUploaded / totalFilesToUpload,
+        phase: SyncPhase.uploadingToCloud,
+        currentFile: filesUploaded,
+        totalFiles: totalFilesToUpload,
+      );
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
+        var partialRes = await syncLocalFilesV2(
+          files,
+          onPollProgress: (jobStatus) {
+            progress?.onWalSyncedProgress(
+              jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+              phase: SyncPhase.processingOnServer,
+              currentFile: jobStatus.processedSegments,
+              totalFiles: jobStatus.totalSegments,
+            );
+          },
+        );
 
         resp.newConversationIds.addAll(
           partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -583,7 +597,17 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     listener.onWalUpdated();
     try {
-      var partialRes = await syncLocalFiles([walFile]);
+      var partialRes = await syncLocalFilesV2(
+        [walFile],
+        onPollProgress: (jobStatus) {
+          progress?.onWalSyncedProgress(
+            jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+            phase: SyncPhase.processingOnServer,
+            currentFile: jobStatus.processedSegments,
+            totalFiles: jobStatus.totalSegments,
+          );
+        },
+      );
 
       resp.newConversationIds.addAll(
         partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),

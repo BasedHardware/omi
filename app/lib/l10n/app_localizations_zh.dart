@@ -8009,6 +8009,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => '正在服务器上处理...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '处理中... $current/$total 个片段';
+  }
+
+  @override
   String get processedStatus => '已处理';
 
   @override

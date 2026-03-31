@@ -8161,6 +8161,14 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Đang xử lý trên máy chủ...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Đang xử lý... $current/$total phân đoạn';
+  }
+
+  @override
   String get processedStatus => 'Đã xử lý';
 
   @override

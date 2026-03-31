@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Descarregant del dispositiu",
     "reconnectingToInternet": "Reconnectant a internet...",
     "uploadingToCloud": "Pujant {current} de {total}",
+    "processingOnServer": "Processant al servidor...",
+    "processingOnServerProgress": "Processant... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Processat",
     "corruptedStatus": "Corrupte",
     "nPending": "{count} pendents",

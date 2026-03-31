@@ -7,6 +7,7 @@ struct OnboardingVoiceDemoView: View {
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
+    var onForceComplete: (() -> Void)?
 
     @ObservedObject private var pttManager = PushToTalkManager.shared
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
@@ -20,9 +21,7 @@ struct OnboardingVoiceDemoView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi a question with your voice")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
 
                 Spacer()
 

@@ -8198,6 +8198,14 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Procesare pe server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Procesare... $current/$total segmente';
+  }
+
+  @override
   String get processedStatus => 'Procesat';
 
   @override

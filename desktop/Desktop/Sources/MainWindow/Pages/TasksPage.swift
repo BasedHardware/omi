@@ -502,6 +502,11 @@ class TasksViewModel: ObservableObject {
                         Task { await store.loadCompletedTasks() }
                     }
                 }
+            } else {
+                // No status filter = "All" — ensure completed tasks are present for the in-memory fallback
+                if !showCompleted {
+                    Task { await store.loadCompletedTasks() }
+                }
             }
             // When non-status filters (including date) are applied, query SQLite directly
             let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
@@ -1608,9 +1613,13 @@ class TasksViewModel: ObservableObject {
         if !searchText.isEmpty {
             filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
         } else if hasSQLiteFilters || hasDateFilters {
-            // SQLite already filtered by category/source/priority/date
-            // Just apply status filters (todo/done/deleted)
+            // SQLite already filtered by category/source/priority/date when filteredFromDatabase is populated.
+            // When using in-memory source (filteredFromDatabase empty — e.g. async query not yet complete),
+            // date filters must be applied manually so old tasks don't bleed through.
             filteredTasks = applyStatusFilters(sourceTasks)
+            if filteredFromDatabase.isEmpty && hasDateFilters {
+                filteredTasks = applyDateFilters(filteredTasks, context: filterContext)
+            }
         } else {
             filteredTasks = applyTagFilters(sourceTasks, context: filterContext)
         }
@@ -1639,11 +1648,11 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        // Only apply 7-day cutoff when the last7Days filter is active (matches Flutter _categorizeItems default)
+        let applySevenDayCutoff = selectedTags.contains(.last7Days)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
-            if !task.completed {
+            if applySevenDayCutoff && !task.completed {
                 if let dueAt = task.dueAt {
                     if dueAt < sevenDaysAgo { continue }
                 } else if task.createdAt < sevenDaysAgo {
@@ -1675,11 +1684,11 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        // Only apply 7-day cutoff when the last7Days filter is active
+        let applySevenDayCutoff = selectedTags.contains(.last7Days)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
-            if !task.completed {
+            if applySevenDayCutoff && !task.completed {
                 if let dueAt = task.dueAt {
                     if dueAt < sevenDaysAgo { continue }
                 } else if task.createdAt < sevenDaysAgo {
@@ -3757,6 +3766,8 @@ struct TaskRow: View {
     @State private var rowOffset: CGFloat = 0
     @State private var showTaskDetail = false
     @State private var isCopyingLink = false
+    @State private var showShareCopiedToast = false
+    @State private var shareToastDismissTask: Task<Void, Never>?
 
     // Inline editing state
     @State private var editText = ""
@@ -3830,6 +3841,14 @@ struct TaskRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if showShareCopiedToast {
+                shareCopiedToast
+                    .padding(.top, -10)
+                    .padding(.trailing, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .sheet(isPresented: $showTaskDetail) {
             TaskDetailView(
                 task: task,
@@ -4237,7 +4256,7 @@ struct TaskRow: View {
         }
         .overlay(alignment: .trailing) {
             // Hover actions overlaid on trailing edge (no layout shift)
-            if (isHovering || showRepeatPicker || showTagPicker || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
+            if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
                 HStack(spacing: 4) {
                     // Add date button (shown on hover when no due date)
                     if task.dueAt == nil && !task.completed {
@@ -4254,24 +4273,6 @@ struct TaskRow: View {
                         .help("Add due date")
                     }
 
-                    // Repeat button
-                    if !task.completed {
-                        Button {
-                            editRecurrenceRule = task.recurrenceRule ?? ""
-                            showRepeatPicker = true
-                        } label: {
-                            Image(systemName: "repeat")
-                                .scaledFont(size: 12)
-                                .foregroundColor(task.isRecurring ? OmiColors.textPrimary : OmiColors.textTertiary)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .help(task.isRecurring ? "Edit repeat" : "Set repeat")
-                        .popover(isPresented: $showRepeatPicker) {
-                            repeatPopover
-                        }
-                    }
-
                     // Priority button
                     if !task.completed {
                         PriorityBadgeInteractive(
@@ -4281,19 +4282,6 @@ struct TaskRow: View {
                             showPriorityPicker: $showPriorityPicker,
                             onPriorityChange: { newPriority in
                                 Task { await onUpdateDetails?(task, nil, nil, newPriority, nil) }
-                            }
-                        )
-                    }
-
-                    // Tag button
-                    if !task.completed {
-                        TagBadgeInteractive(
-                            tags: task.tags,
-                            isCompleted: task.completed,
-                            isRowHovering: isHovering,
-                            showTagPicker: $showTagPicker,
-                            onUpdateTags: { newTags in
-                                Task { await onUpdateTags?(task, newTags) }
                             }
                         )
                     }
@@ -4334,7 +4322,7 @@ struct TaskRow: View {
                     Button {
                         Task { await copyShareLink() }
                     } label: {
-                        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+                        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "arrowshape.turn.up.right.fill")
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 24, height: 24)
@@ -4451,10 +4439,50 @@ struct TaskRow: View {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(response.url, forType: .string)
+            showShareCopiedFeedback()
             log("Copied task share link to clipboard: \(response.url)")
         } catch {
             log("Failed to get task share link: \(error)")
         }
+    }
+
+    private func showShareCopiedFeedback() {
+        shareToastDismissTask?.cancel()
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+            showShareCopiedToast = true
+        }
+
+        shareToastDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showShareCopiedToast = false
+                }
+            }
+        }
+    }
+
+    private var shareCopiedToast: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .scaledFont(size: 10, weight: .bold)
+            Text("Sharing link copied")
+                .scaledFont(size: 11, weight: .semibold)
+        }
+        .foregroundColor(OmiColors.textPrimary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            Capsule()
+                .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+            Capsule()
+                .stroke(OmiColors.border.opacity(0.8), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 6)
+        .allowsHitTesting(false)
     }
 
     // MARK: - Due Date Popover

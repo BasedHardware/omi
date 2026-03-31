@@ -13,8 +13,9 @@ struct AIResponseView: View {
     let chatHistory: [FloatingChatExchange]
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
+    var canClearVisibleConversation: Bool = false
 
-    var onClose: (() -> Void)?
+    var onClearVisibleConversation: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
 
     var body: some View {
@@ -87,7 +88,8 @@ struct AIResponseView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onExitCommand {
-            onClose?()
+            guard canClearVisibleConversation else { return }
+            onClearVisibleConversation?()
         }
         .onChange(of: isLoading) {
             if !isLoading {
@@ -116,7 +118,19 @@ struct AIResponseView: View {
 
             Spacer()
 
-            // modelPicker — moved to Settings > Ask Omi Floating Bar
+            if canClearVisibleConversation {
+                HStack(spacing: 4) {
+                    Text("esc")
+                        .scaledFont(size: 11)
+                        .foregroundColor(.secondary)
+                        .frame(width: 30, height: 16)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(4)
+                    Text("to clear")
+                        .scaledFont(size: 11)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
     }
 

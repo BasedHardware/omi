@@ -8171,6 +8171,14 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Sunucuda işleniyor...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'İşleniyor... $current/$total segment';
+  }
+
+  @override
   String get processedStatus => 'İşlendi';
 
   @override

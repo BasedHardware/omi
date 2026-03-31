@@ -2640,6 +2640,18 @@
     "downloadingFromDevice": "Đang tải xuống từ thiết bị",
     "reconnectingToInternet": "Đang kết nối lại internet...",
     "uploadingToCloud": "Đang tải lên {current}/{total}",
+    "processingOnServer": "Đang xử lý trên máy chủ...",
+    "processingOnServerProgress": "Đang xử lý... {current}/{total} phân đoạn",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Đã xử lý",
     "corruptedStatus": "Bị hỏng",
     "nPending": "{count} đang chờ",

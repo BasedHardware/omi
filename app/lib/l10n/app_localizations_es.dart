@@ -8173,6 +8173,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Procesando en el servidor...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Procesando... $current/$total segmentos';
+  }
+
+  @override
   String get processedStatus => 'Procesado';
 
   @override

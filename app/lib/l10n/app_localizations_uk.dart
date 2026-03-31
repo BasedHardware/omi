@@ -8172,6 +8172,14 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Обробка на сервері...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Обробка... $current/$total сегментів';
+  }
+
+  @override
   String get processedStatus => 'Оброблено';
 
   @override

@@ -4,6 +4,7 @@ import SwiftUI
 struct OnboardingTasksStepView: View {
     var onComplete: () -> Void
     var onSkip: (() -> Void)? = nil
+    var onForceComplete: (() -> Void)?
 
     @State private var pulseAnimation = false
     @State private var showTasks = false
@@ -18,9 +19,7 @@ struct OnboardingTasksStepView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Tasks")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
                 Spacer()
             }
             .padding(.horizontal, 24)

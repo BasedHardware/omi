@@ -8,6 +8,7 @@ struct OnboardingFloatingBarDemoView: View {
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
+    var onForceComplete: (() -> Void)?
 
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var barActivated = false
@@ -17,9 +18,7 @@ struct OnboardingFloatingBarDemoView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi which Mac fits you")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
 
                 Spacer()
 

@@ -2670,6 +2670,18 @@
     "downloadingFromDevice": "Pobieranie z urządzenia",
     "reconnectingToInternet": "Ponowne łączenie z internetem...",
     "uploadingToCloud": "Przesyłanie {current} z {total}",
+    "processingOnServer": "Przetwarzanie na serwerze...",
+    "processingOnServerProgress": "Przetwarzanie... {current}/{total} segmentów",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Przetworzono",
     "corruptedStatus": "Uszkodzony",
     "nPending": "{count} oczekujących",

@@ -7,8 +7,9 @@ struct AskAIInputView: View {
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
 
+    var canClearVisibleConversation: Bool = false
     var onSend: ((String) -> Void)?
-    var onCancel: (() -> Void)?
+    var onClearVisibleConversation: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
 
     private let minHeight: CGFloat = 40
@@ -16,26 +17,25 @@ struct AskAIInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar: escape hint (model picker moved to Settings)
-            HStack {
-                Spacer()
+            if canClearVisibleConversation {
+                HStack {
+                    Spacer()
 
-                // modelPicker — moved to Settings > Ask Omi Floating Bar
-
-                HStack(spacing: 4) {
-                    Text("esc")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
-                        .frame(width: 30, height: 16)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(4)
-                    Text("to close")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("esc")
+                            .scaledFont(size: 11)
+                            .foregroundColor(.secondary)
+                            .frame(width: 30, height: 16)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(4)
+                        Text("to clear")
+                            .scaledFont(size: 11)
+                            .foregroundColor(.secondary)
+                    }
                 }
+                .padding(.top, 8)
+                .padding(.trailing, 16)
             }
-            .padding(.top, 8)
-            .padding(.trailing, 16)
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
@@ -95,7 +95,8 @@ struct AskAIInputView: View {
             .frame(maxWidth: .infinity)
         }
         .onExitCommand {
-            onCancel?()
+            guard canClearVisibleConversation else { return }
+            onClearVisibleConversation?()
         }
     }
 

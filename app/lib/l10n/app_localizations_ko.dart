@@ -8021,6 +8021,14 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => '서버에서 처리 중...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '처리 중... $current/$total 세그먼트';
+  }
+
+  @override
   String get processedStatus => '처리됨';
 
   @override
