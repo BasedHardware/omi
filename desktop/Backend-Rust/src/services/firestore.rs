@@ -92,11 +92,19 @@ impl FirestoreService {
     pub async fn new(
         project_id: String,
         encryption_secret: Option<Vec<u8>>,
+        service_account_json: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::new();
 
-        // Load service account credentials from GOOGLE_APPLICATION_CREDENTIALS
-        let credentials = Self::load_credentials()?;
+        // Load service account credentials from provided JSON or GOOGLE_APPLICATION_CREDENTIALS
+        let credentials = if let Some(json) = service_account_json {
+            let creds: ServiceAccountCredentials = serde_json::from_str(json)
+                .map_err(|e| format!("Failed to parse service account JSON: {}", e))?;
+            tracing::info!("Loaded credentials for service account: {}", creds.client_email);
+            Some(creds)
+        } else {
+            Self::load_credentials()?
+        };
 
         let service = Self {
             client,
