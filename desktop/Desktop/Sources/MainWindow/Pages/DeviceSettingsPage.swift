@@ -32,7 +32,7 @@ struct DeviceSettingsPage: View {
                 .padding(.horizontal, 32)
             }
         }
-        .background(OmiColors.backgroundSecondary.opacity(0.3))
+        .background(NootoColors.backgroundSecondary.opacity(0.3))
     }
 
     // MARK: - Header
@@ -41,7 +41,7 @@ struct DeviceSettingsPage: View {
         HStack {
             Text("Device")
                 .scaledFont(size: 28, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Spacer()
 
@@ -53,7 +53,7 @@ struct DeviceSettingsPage: View {
 
                 Text(bluetoothStatusText)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(.horizontal, 32)
@@ -94,7 +94,7 @@ struct DeviceSettingsPage: View {
             // Section header
             Text("Connected Device")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .textCase(.uppercase)
 
             // Device card
@@ -108,11 +108,11 @@ struct DeviceSettingsPage: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(device.displayName)
                             .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Text(device.type.displayName)
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Spacer()
@@ -124,7 +124,7 @@ struct DeviceSettingsPage: View {
                 }
 
                 Divider()
-                    .background(OmiColors.backgroundQuaternary)
+                    .background(NootoColors.backgroundQuaternary)
 
                 // Device details
                 VStack(spacing: 12) {
@@ -140,7 +140,7 @@ struct DeviceSettingsPage: View {
                 }
 
                 Divider()
-                    .background(OmiColors.backgroundQuaternary)
+                    .background(NootoColors.backgroundQuaternary)
 
                 // Actions
                 HStack(spacing: 12) {
@@ -152,12 +152,12 @@ struct DeviceSettingsPage: View {
                     }) {
                         Text("Disconnect")
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.backgroundTertiary)
+                                    .fill(NootoColors.backgroundTertiary)
                             )
                     }
                     .buttonStyle(.plain)
@@ -184,10 +184,10 @@ struct DeviceSettingsPage: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(NootoColors.backgroundTertiary.opacity(0.5))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
             )
         }
@@ -200,7 +200,7 @@ struct DeviceSettingsPage: View {
             // Section header
             Text("Paired Device")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .textCase(.uppercase)
 
             // Device card
@@ -213,7 +213,7 @@ struct DeviceSettingsPage: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(device.displayName)
                         .scaledFont(size: 16, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     HStack(spacing: 6) {
                         Circle()
@@ -221,7 +221,7 @@ struct DeviceSettingsPage: View {
                             .frame(width: 6, height: 6)
                         Text("Disconnected")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
 
@@ -245,7 +245,7 @@ struct DeviceSettingsPage: View {
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.purplePrimary)
+                                    .fill(NootoColors.brandPrimary)
                             )
                     }
                     .buttonStyle(.plain)
@@ -254,10 +254,10 @@ struct DeviceSettingsPage: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(NootoColors.backgroundTertiary.opacity(0.5))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
             )
         }
@@ -271,7 +271,7 @@ struct DeviceSettingsPage: View {
             HStack {
                 Text("Find Devices")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .textCase(.uppercase)
 
                 Spacer()
@@ -282,7 +282,7 @@ struct DeviceSettingsPage: View {
                             .scaleEffect(0.6)
                         Text("Scanning...")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
             }
@@ -307,7 +307,7 @@ struct DeviceSettingsPage: View {
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(deviceProvider.isScanning ? Color.orange : OmiColors.purplePrimary)
+                        .fill(deviceProvider.isScanning ? Color.orange : NootoColors.brandPrimary)
                 )
             }
             .buttonStyle(.plain)
@@ -322,7 +322,7 @@ struct DeviceSettingsPage: View {
             // Section header
             Text("Available Devices (\(deviceProvider.discoveredDevices.count))")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .textCase(.uppercase)
 
             // Device list
@@ -333,7 +333,7 @@ struct DeviceSettingsPage: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(NootoColors.backgroundTertiary.opacity(0.5))
             )
         }
     }
@@ -347,12 +347,12 @@ struct DeviceSettingsPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.displayName)
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 8) {
                     Text(device.type.displayName)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     // Signal strength
                     signalIndicator(rssi: device.rssi)
@@ -377,7 +377,7 @@ struct DeviceSettingsPage: View {
                 }) {
                     Text("Connect")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
                 .buttonStyle(.plain)
             }
@@ -396,12 +396,12 @@ struct DeviceSettingsPage: View {
     private func deviceIcon(for type: DeviceType, size: CGFloat = 48) -> some View {
         ZStack {
             Circle()
-                .fill(OmiColors.purplePrimary.opacity(0.15))
+                .fill(NootoColors.brandPrimary.opacity(0.15))
                 .frame(width: size, height: size)
 
             Image(systemName: deviceIconName(for: type))
                 .scaledFont(size: size * 0.4)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
         }
     }
 
@@ -472,20 +472,20 @@ struct DeviceSettingsPage: View {
         default: threshold = -45
         }
 
-        return rssi >= threshold ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary
+        return rssi >= threshold ? NootoColors.brandPrimary : NootoColors.backgroundQuaternary
     }
 
     private func detailRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Spacer()
 
             Text(value)
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
         }
     }
 }
@@ -495,5 +495,5 @@ struct DeviceSettingsPage: View {
 #Preview {
     DeviceSettingsPage()
         .frame(width: 600, height: 800)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }

@@ -20,16 +20,16 @@ struct OnboardingVoiceDemoView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi a question with your voice")
+                Text("Ask Nooto a question with your voice")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onSkip) {
                     Text("Skip")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -37,7 +37,7 @@ struct OnboardingVoiceDemoView: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             Spacer()
 
@@ -45,11 +45,11 @@ struct OnboardingVoiceDemoView: View {
                 VStack(spacing: 12) {
                     Text("Hold and Ask")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text("Try asking: What's on my screen?")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
 
@@ -57,7 +57,7 @@ struct OnboardingVoiceDemoView: View {
                     VStack(spacing: 12) {
                         Text("Hold the shortcut, speak, then release")
                             .font(.system(size: 13))
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         HStack(spacing: 6) {
                             ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
@@ -65,15 +65,15 @@ struct OnboardingVoiceDemoView: View {
                             }
                             Text("hold")
                                 .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                     }
                     .padding(.top, 4)
                     .transition(.opacity)
                 } else if !showContinue {
-                    Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
+                    Text(waitingForResponse ? "Waiting for Nooto to respond..." : "Listening... release when done")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.top, 4)
                         .transition(.opacity)
                 }
@@ -98,7 +98,7 @@ struct OnboardingVoiceDemoView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
             resetFloatingBarConversation()
@@ -177,15 +177,15 @@ struct OnboardingVoiceDemoView: View {
     private func keyCap(_ label: String) -> some View {
         Text(label)
             .font(.system(size: 15, weight: .medium, design: .rounded))
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(NootoColors.textPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundTertiary)
+                    .fill(NootoColors.backgroundTertiary)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             )

@@ -30,7 +30,7 @@ class GlobalShortcutManager {
             1, &eventType, nil, nil
         )
 
-        // Re-register Ask Omi shortcut when user changes it in settings
+        // Re-register Ask Nooto shortcut when user changes it in settings
         shortcutObserver = NotificationCenter.default.addObserver(
             forName: ShortcutSettings.askOmiShortcutChanged,
             object: nil,
@@ -42,7 +42,7 @@ class GlobalShortcutManager {
 
     func registerShortcuts() {
         unregisterShortcuts()
-        // Register Ask Omi shortcut from user settings
+        // Register Ask Nooto shortcut from user settings
         registerAskOmi()
     }
 
@@ -55,15 +55,15 @@ class GlobalShortcutManager {
             (ShortcutSettings.shared.askOmiEnabled, ShortcutSettings.shared.askOmiShortcut)
         }
         guard askOmiEnabled else {
-            NSLog("GlobalShortcutManager: Ask Omi shortcut is disabled")
+            NSLog("GlobalShortcutManager: Ask Nooto shortcut is disabled")
             return
         }
         guard askOmiShortcut.supportsGlobalHotKey, let keyCode = askOmiShortcut.keyCode else {
-            NSLog("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
+            NSLog("GlobalShortcutManager: Ask Nooto shortcut is not a registerable hotkey")
             return
         }
         registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
-        NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
+        NSLog("GlobalShortcutManager: Registered Ask Nooto shortcut: \(askOmiShortcut.displayLabel)")
     }
 
     private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {
@@ -100,7 +100,7 @@ class GlobalShortcutManager {
 
         switch id {
         case .askOmi:
-            NSLog("GlobalShortcutManager: Ask Omi shortcut detected")
+            NSLog("GlobalShortcutManager: Ask Nooto shortcut detected")
             DispatchQueue.main.async {
                 FloatingControlBarManager.shared.toggleAIInput()
             }

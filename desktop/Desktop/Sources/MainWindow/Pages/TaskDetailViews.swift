@@ -20,7 +20,7 @@ struct TaskDetailButton: View {
         } label: {
             Image(systemName: "info.circle")
                 .scaledFont(size: 10)
-                .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+                .foregroundColor(showTooltip ? NootoColors.textSecondary : NootoColors.textTertiary)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -173,12 +173,12 @@ private struct TaskDetailTooltip: View {
         HStack(alignment: .top, spacing: 6) {
             Text(label)
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .frame(width: 70, alignment: .trailing)
 
             Text(value)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
         }
     }
 
@@ -186,12 +186,12 @@ private struct TaskDetailTooltip: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.leading, 76)
 
             Text(value)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.leading, 76)
         }
     }
@@ -279,7 +279,7 @@ struct TaskDetailView: View {
             }
         }
         .frame(width: 550, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     // MARK: - Header
@@ -289,17 +289,17 @@ struct TaskDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Task Details")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if let source = task.source {
                     Text(source)
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(OmiColors.backgroundSecondary)
+                                .fill(NootoColors.backgroundSecondary)
                         )
                 }
             }
@@ -320,12 +320,12 @@ struct TaskDetailView: View {
 
             Text(task.description)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
+                        .fill(NootoColors.backgroundSecondary)
                 )
         }
     }
@@ -389,7 +389,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -415,7 +415,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -436,7 +436,7 @@ struct TaskDetailView: View {
                     HStack {
                         Text("Link")
                             .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .frame(width: 100, alignment: .leading)
 
                         Button {
@@ -458,7 +458,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -484,7 +484,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -520,7 +520,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -547,7 +547,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -576,7 +576,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -605,7 +605,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -673,7 +673,7 @@ struct TaskDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -683,19 +683,19 @@ struct TaskDetailView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top) {
             Text(label)
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .frame(width: 100, alignment: .leading)
 
             Text(value)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()
         }
@@ -705,11 +705,11 @@ struct TaskDetailView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Text(value)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()
         }

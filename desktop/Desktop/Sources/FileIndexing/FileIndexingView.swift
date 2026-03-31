@@ -57,7 +57,7 @@ struct FileIndexingView: View {
             // Title
             Text(statusText)
                 .scaledFont(size: 16, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 6)
 
@@ -65,18 +65,18 @@ struct FileIndexingView: View {
             if !scanningFolder.isEmpty {
                 Text("Scanning ~/\(scanningFolder)" + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : ""))
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .animation(.easeInOut(duration: 0.2), value: scanningFolder)
             } else if totalFilesScanned > 0 {
                 Text("\(totalFilesScanned.formatted()) files indexed")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
             } else {
                 Text("All data is secure and belongs to you. Open-source verified.")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
             }
 
@@ -85,13 +85,13 @@ struct FileIndexingView: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                             .frame(height: 6)
 
                         RoundedRectangle(cornerRadius: 3)
                             .fill(
                                 LinearGradient(
-                                    colors: [OmiColors.purplePrimary, OmiColors.purpleSecondary],
+                                    colors: [NootoColors.brandPrimary, NootoColors.brandSecondary],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
@@ -104,7 +104,7 @@ struct FileIndexingView: View {
 
                 Text("\(Int(progress * 100))%")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .monospacedDigit()
             }
             .padding(.horizontal, 40)
@@ -130,7 +130,7 @@ struct FileIndexingView: View {
             HStack {
                 Text("Behind the scenes")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
             }
 
@@ -138,17 +138,17 @@ struct FileIndexingView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "folder")
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                     Text("Scanning ~/\(scanningFolder)")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
             }
 
             if totalFilesScanned > 0 {
                 Text("\(totalFilesScanned.formatted()) files indexed")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             // Live chat messages from the AI exploration
@@ -161,7 +161,7 @@ struct FileIndexingView: View {
                         ForEach(Array(aiMessages.enumerated()), id: \.offset) { _, msg in
                             Text(msg.text)
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineSpacing(3)
                                 .textSelection(.enabled)
                         }
@@ -184,7 +184,7 @@ struct FileIndexingView: View {
                     Image(systemName: "brain")
                         .scaledFont(size: 40)
                         .foregroundColor(.white.opacity(0.15))
-                    Text("Your knowledge graph will grow as omi learns more about you")
+                    Text("Your knowledge graph will grow as Nooto learns more about you")
                         .scaledFont(size: 13)
                         .foregroundColor(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
@@ -212,9 +212,9 @@ struct FileIndexingView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: 220)
                         .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary)
+                        .background(NootoColors.brandPrimary)
                         .cornerRadius(12)
-                        .shadow(color: OmiColors.purplePrimary.opacity(0.4), radius: 16, x: 0, y: 4)
+                        .shadow(color: NootoColors.brandPrimary.opacity(0.4), radius: 16, x: 0, y: 4)
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 40)

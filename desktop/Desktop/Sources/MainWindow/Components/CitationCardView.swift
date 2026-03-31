@@ -19,13 +19,13 @@ struct CitationCardView: View {
                     // Title
                     Text(citation.title)
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     // Preview
                     Text(citation.preview)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .lineLimit(1)
                 }
 
@@ -34,17 +34,17 @@ struct CitationCardView: View {
                 // Chevron
                 Image(systemName: "chevron.right")
                     .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+                    .fill(isHovering ? NootoColors.backgroundTertiary : NootoColors.backgroundSecondary)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+                    .stroke(NootoColors.backgroundTertiary, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -63,10 +63,10 @@ struct CitationCardsView: View {
             HStack(spacing: 4) {
                 Image(systemName: "quote.opening")
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 Text("Sources")
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
             .padding(.top, 4)
 

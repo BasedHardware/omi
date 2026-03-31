@@ -21,14 +21,14 @@ struct OnboardingNotificationStepView: View {
             HStack {
                 Text("Notifications")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onSkip) {
                     Text("Skip")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -36,7 +36,7 @@ struct OnboardingNotificationStepView: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             Spacer()
 
@@ -66,11 +66,11 @@ struct OnboardingNotificationStepView: View {
                 VStack(spacing: 10) {
                     Text("Proactive Intelligence")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
-                    Text("omi watches your screen and catches things you'd miss —\nwrong recipients, stale data, hidden shortcuts.")
+                    Text("Nooto watches your screen and catches things you'd miss —\nwrong recipients, stale data, hidden shortcuts.")
                         .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -95,9 +95,9 @@ struct OnboardingNotificationStepView: View {
                         Image(systemName: "bell.badge.fill")
                             .foregroundColor(Color.white)
                             .font(.system(size: 12))
-                        Text("Notification shown below Ask omi")
+                        Text("Notification shown below Ask Nooto")
                             .font(.system(size: 12))
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Button(action: onContinue) {
@@ -116,7 +116,7 @@ struct OnboardingNotificationStepView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
             FloatingControlBarManager.shared.showTemporarily()
@@ -160,14 +160,14 @@ struct OnboardingNotificationStepView: View {
                     )
                     .frame(width: 36, height: 36)
 
-                Text("omi")
+                Text("nooto")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text("omi")
+                    Text("nooto")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.black)
 

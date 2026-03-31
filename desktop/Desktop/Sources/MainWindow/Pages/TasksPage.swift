@@ -21,10 +21,10 @@ enum TaskCategory: String, CaseIterable {
 
     var color: Color {
         switch self {
-        case .today: return OmiColors.textPrimary
-        case .tomorrow: return OmiColors.textSecondary
-        case .later: return OmiColors.textSecondary
-        case .noDeadline: return OmiColors.textTertiary
+        case .today: return NootoColors.textPrimary
+        case .tomorrow: return NootoColors.textSecondary
+        case .later: return NootoColors.textSecondary
+        case .noDeadline: return NootoColors.textTertiary
         }
     }
 }
@@ -2075,12 +2075,12 @@ struct TasksPage: View {
                 // Draggable divider with handle
                 ZStack {
                     Rectangle()
-                        .fill(isDraggingDivider ? OmiColors.textSecondary.opacity(0.3) : OmiColors.border)
+                        .fill(isDraggingDivider ? NootoColors.textSecondary.opacity(0.3) : NootoColors.border)
                         .frame(width: 1)
 
                     // Visible drag handle
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(isDraggingDivider ? OmiColors.textSecondary : OmiColors.textSecondary.opacity(0.4))
+                        .fill(isDraggingDivider ? NootoColors.textSecondary : NootoColors.textSecondary.opacity(0.4))
                         .frame(width: 4, height: 36)
                 }
                 .frame(width: 9)
@@ -2376,26 +2376,26 @@ struct TasksPage: View {
                 } else {
                     Image(systemName: "magnifyingglass")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 TextField("Search tasks...", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !viewModel.searchText.isEmpty {
                     Button {
                         viewModel.searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
+            .background(NootoColors.backgroundSecondary)
             .cornerRadius(8)
 
             // Saved filter view chips
@@ -2407,14 +2407,14 @@ struct TasksPage: View {
                     } label: {
                         Text(savedView.name)
                             .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(isActive ? .white : OmiColors.textSecondary)
+                            .foregroundColor(isActive ? .white : NootoColors.textSecondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(isActive ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+                            .background(isActive ? NootoColors.backgroundTertiary : NootoColors.backgroundSecondary)
                             .cornerRadius(6)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
+                                    .stroke(isActive ? NootoColors.border : Color.clear, lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
@@ -2478,10 +2478,10 @@ struct TasksPage: View {
         } label: {
             Image(systemName: "bookmark")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
@@ -2495,10 +2495,10 @@ struct TasksPage: View {
         } label: {
             Image(systemName: "plus")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
@@ -2556,14 +2556,14 @@ struct TasksPage: View {
         } label: {
             Image(systemName: "line.3.horizontal.decrease")
                 .scaledFont(size: 12)
-            .foregroundColor(viewModel.hasActiveFilters ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(viewModel.hasActiveFilters ? NootoColors.textPrimary : NootoColors.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
+            .background(NootoColors.backgroundSecondary)
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(viewModel.hasActiveFilters ? OmiColors.border : Color.clear, lineWidth: 1)
+                    .stroke(viewModel.hasActiveFilters ? NootoColors.border : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -2577,20 +2577,20 @@ struct TasksPage: View {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .scaledFont(size: 12)
 
                 TextField("Search filters...", text: $filterSearchText)
                     .textFieldStyle(.plain)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !filterSearchText.isEmpty {
                     Button {
                         filterSearchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .scaledFont(size: 12)
                     }
                     .buttonStyle(.plain)
@@ -2598,7 +2598,7 @@ struct TasksPage: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(6)
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -2624,10 +2624,10 @@ struct TasksPage: View {
                             Spacer()
                             Text("\(viewModel.todoCount + viewModel.doneCount)")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(OmiColors.backgroundTertiary)
+                                .background(NootoColors.backgroundTertiary)
                                 .cornerRadius(4)
                             if pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty {
                                 Image(systemName: "checkmark")
@@ -2635,10 +2635,10 @@ struct TasksPage: View {
                                     .foregroundColor(.white)
                             }
                         }
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                        .background(pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
                         .cornerRadius(6)
                         .contentShape(Rectangle())
                     }
@@ -2655,7 +2655,7 @@ struct TasksPage: View {
                             // Group header
                             Text(group.rawValue)
                                 .scaledFont(size: 11, weight: .semibold)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .textCase(.uppercase)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
@@ -2682,10 +2682,10 @@ struct TasksPage: View {
                                         Spacer()
                                         Text("\(count)")
                                             .scaledFont(size: 11)
-                                            .foregroundColor(OmiColors.textTertiary)
+                                            .foregroundColor(NootoColors.textTertiary)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(OmiColors.backgroundTertiary)
+                                            .background(NootoColors.backgroundTertiary)
                                             .cornerRadius(4)
                                         if isSelected {
                                             Image(systemName: "checkmark")
@@ -2693,10 +2693,10 @@ struct TasksPage: View {
                                                 .foregroundColor(.white)
                                         }
                                     }
-                                    .foregroundColor(OmiColors.textPrimary)
+                                    .foregroundColor(NootoColors.textPrimary)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                                    .background(isSelected ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
                                     .cornerRadius(6)
                                     .contentShape(Rectangle())
                                 }
@@ -2724,10 +2724,10 @@ struct TasksPage: View {
                                         Spacer()
                                         Text("\(count)")
                                             .scaledFont(size: 11)
-                                            .foregroundColor(OmiColors.textTertiary)
+                                            .foregroundColor(NootoColors.textTertiary)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(OmiColors.backgroundTertiary)
+                                            .background(NootoColors.backgroundTertiary)
                                             .cornerRadius(4)
                                         if isSelected {
                                             Image(systemName: "checkmark")
@@ -2735,10 +2735,10 @@ struct TasksPage: View {
                                                 .foregroundColor(.white)
                                         }
                                     }
-                                    .foregroundColor(OmiColors.textPrimary)
+                                    .foregroundColor(NootoColors.textPrimary)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                                    .background(isSelected ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
                                     .cornerRadius(6)
                                     .contentShape(Rectangle())
                                 }
@@ -2763,10 +2763,10 @@ struct TasksPage: View {
                 } label: {
                     Text("Clear")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -2806,13 +2806,13 @@ struct TasksPage: View {
                     Text(viewModel.selectedTaskIds.count == viewModel.displayTasks.count ? "Deselect All" : "Select All")
                         .scaledFont(size: 13, weight: .medium)
                 }
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
             }
             .buttonStyle(.plain)
 
             Text("\(viewModel.selectedTaskIds.count) selected")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
     }
 
@@ -2845,12 +2845,12 @@ struct TasksPage: View {
         } label: {
             Text("Cancel")
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
+                        .fill(NootoColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -2867,11 +2867,11 @@ struct TasksPage: View {
         } label: {
             Image(systemName: "gearshape")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
+                        .fill(NootoColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -2896,11 +2896,11 @@ struct TasksPage: View {
         } label: {
             Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                 .scaledFont(size: 12)
-                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                .foregroundColor(showChatPanel ? NootoColors.brandPrimary : NootoColors.textSecondary)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
+                        .fill(showChatPanel ? NootoColors.brandPrimary.opacity(0.15) : NootoColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -2913,11 +2913,11 @@ struct TasksPage: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.2)
-                .tint(OmiColors.textSecondary)
+                .tint(NootoColors.textSecondary)
 
             Text("Loading tasks...")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -2928,15 +2928,15 @@ struct TasksPage: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("Failed to load tasks")
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text(error)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -2946,7 +2946,7 @@ struct TasksPage: View {
                 }
             }
             .buttonStyle(.bordered)
-            .tint(OmiColors.textSecondary)
+            .tint(NootoColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -2957,15 +2957,15 @@ struct TasksPage: View {
         VStack(spacing: 16) {
             Image(systemName: viewModel.hasActiveFilters ? "line.3.horizontal.decrease" : "tray.fill")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text(viewModel.hasActiveFilters ? "No Matching Tasks" : "All Caught Up!")
                 .scaledFont(size: 24, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text(viewModel.hasActiveFilters ? "Try adjusting your filters" : "You have no tasks yet")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             if viewModel.hasActiveFilters {
@@ -2975,7 +2975,7 @@ struct TasksPage: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .tint(OmiColors.textSecondary)
+                .tint(NootoColors.textSecondary)
                 .padding(.top, 8)
             }
         }
@@ -3154,10 +3154,10 @@ struct TasksPage: View {
                                     Text("Load more tasks")
                                 }
                                 .scaledFont(size: 13, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
-                                .background(OmiColors.backgroundTertiary)
+                                .background(NootoColors.backgroundTertiary)
                                 .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
@@ -3172,10 +3172,10 @@ struct TasksPage: View {
                                     Text("Load more tasks")
                                 }
                                 .scaledFont(size: 13, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
-                                .background(OmiColors.backgroundTertiary)
+                                .background(NootoColors.backgroundTertiary)
                                 .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
@@ -3293,16 +3293,16 @@ struct TaskCategorySection: View {
 
                 Text(category.rawValue)
                     .scaledFont(size: 15, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("\(orderedTasks.count)")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(
                         Capsule()
-                            .fill(OmiColors.textTertiary.opacity(0.1))
+                            .fill(NootoColors.textTertiary.opacity(0.1))
                     )
 
                 Spacer()
@@ -3493,18 +3493,18 @@ struct TaskDragPreviewSimple: View {
         HStack(spacing: 8) {
             Image(systemName: "circle")
                 .scaledFont(size: 16)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text(description)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .lineLimit(1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         )
         .frame(maxWidth: 300)
@@ -3540,7 +3540,7 @@ struct ChatSessionStatusIndicator: View {
 
                     Text(streamingStatus ?? "Responding...")
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .lineLimit(1)
                 }
             } else if hasUnread {
@@ -3550,12 +3550,12 @@ struct ChatSessionStatusIndicator: View {
                 } label: {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(OmiColors.purplePrimary)
+                            .fill(NootoColors.brandPrimary)
                             .frame(width: 8, height: 8)
 
                         Text("New reply")
                             .scaledFont(size: 10, weight: .medium)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(NootoColors.brandPrimary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -3668,7 +3668,7 @@ struct TaskRow: View {
             if category != nil && !isMultiSelectMode && !isDeletedTask {
                 Image(systemName: "line.3.horizontal")
                     .scaledFont(size: 10)
-                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+                    .foregroundColor(isHovering ? NootoColors.textTertiary : .clear)
                     .frame(width: 16, height: 24)
                     .contentShape(Rectangle())
                     .onDrag {
@@ -3691,11 +3691,11 @@ struct TaskRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+                .fill(isActiveChatTask ? NootoColors.brandPrimary.opacity(0.08) : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isActiveChatTask ? NootoColors.brandPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .sheet(isPresented: $showTaskDetail) {
             TaskDetailView(
@@ -3789,7 +3789,7 @@ struct TaskRow: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.textSecondary)
+        .background(NootoColors.textSecondary)
         .cornerRadius(8)
     }
 
@@ -3864,7 +3864,7 @@ struct TaskRow: View {
                 HStack(spacing: 0) {
                     ForEach(0..<indentLevel, id: \.self) { level in
                         Rectangle()
-                            .fill(OmiColors.textQuaternary.opacity(0.5))
+                            .fill(NootoColors.textQuaternary.opacity(0.5))
                             .frame(width: 2)
                             .padding(.leading, level == 0 ? 8 : 26)
                     }
@@ -3876,7 +3876,7 @@ struct TaskRow: View {
                 // Deleted tasks: show trash icon instead of checkbox
                 Image(systemName: "trash.slash")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .frame(width: 24, height: 24)
             } else if isMultiSelectMode {
                 // Multi-select checkbox
@@ -3885,12 +3885,12 @@ struct TaskRow: View {
                 } label: {
                     ZStack {
                         RoundedRectangle(cornerRadius: 4)
-                            .stroke(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5)
+                            .stroke(isSelected ? NootoColors.textPrimary : NootoColors.textTertiary, lineWidth: 1.5)
                             .frame(width: 20, height: 20)
 
                         if isSelected {
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(OmiColors.textPrimary)
+                                .fill(NootoColors.textPrimary)
                                 .frame(width: 20, height: 20)
 
                             Image(systemName: "checkmark")
@@ -3910,12 +3910,12 @@ struct TaskRow: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .stroke(isCompletingAnimation || task.completed ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5)
+                            .stroke(isCompletingAnimation || task.completed ? NootoColors.textPrimary : NootoColors.textTertiary, lineWidth: 1.5)
                             .frame(width: 20, height: 20)
 
                         if isCompletingAnimation || task.completed {
                             Circle()
-                                .fill(OmiColors.textPrimary)
+                                .fill(NootoColors.textPrimary)
                                 .frame(width: 20, height: 20)
                                 .scaleEffect(checkmarkScale)
 
@@ -3937,13 +3937,13 @@ struct TaskRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.description)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .strikethrough(true, color: OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
+                        .strikethrough(true, color: NootoColors.textTertiary)
 
                     if let reason = task.deletedReason {
                         Text(reason)
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textQuaternary)
+                            .foregroundColor(NootoColors.textQuaternary)
                             .lineLimit(2)
                     }
                 }
@@ -3957,8 +3957,8 @@ struct TaskRow: View {
                         TextField("Task description", text: $editText, axis: .vertical)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 14)
-                            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                            .strikethrough(task.completed, color: OmiColors.textTertiary)
+                            .foregroundColor(task.completed ? NootoColors.textTertiary : NootoColors.textPrimary)
+                            .strikethrough(task.completed, color: NootoColors.textTertiary)
                             .lineLimit(1...4)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .focused($isTextFieldFocused)
@@ -4002,7 +4002,7 @@ struct TaskRow: View {
                                         .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 6))
                                         .background(
                                             RoundedRectangle(cornerRadius: 4)
-                                                .fill(OmiColors.backgroundPrimary)
+                                                .fill(NootoColors.backgroundPrimary)
                                         )
                                 }
                             }
@@ -4011,8 +4011,8 @@ struct TaskRow: View {
                         HStack(spacing: 0) {
                             Text(editText.isEmpty ? "Task description" : editText)
                                 .scaledFont(size: 14)
-                                .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                                .strikethrough(task.completed, color: OmiColors.textTertiary)
+                                .foregroundColor(task.completed ? NootoColors.textTertiary : NootoColors.textPrimary)
+                                .strikethrough(task.completed, color: NootoColors.textTertiary)
                                 .lineLimit(1...4)
                                 .onTapGesture {
                                     onSelect?(task)
@@ -4030,7 +4030,7 @@ struct TaskRow: View {
                                 Image(systemName: "repeat")
                                     .scaledFont(size: 9)
                             }
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                         }
 
                         // New badge
@@ -4059,7 +4059,7 @@ struct TaskRow: View {
                                         Text("View chat")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .foregroundColor(NootoColors.brandPrimary)
                                 }
                                 .buttonStyle(.plain)
                                 .help("View previous AI investigation")
@@ -4074,7 +4074,7 @@ struct TaskRow: View {
                                         Text("Investigate")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Start AI investigation in background")
@@ -4114,7 +4114,7 @@ struct TaskRow: View {
                         } label: {
                             Image(systemName: "calendar.badge.plus")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.plain)
@@ -4129,7 +4129,7 @@ struct TaskRow: View {
                         } label: {
                             Image(systemName: "repeat")
                                 .scaledFont(size: 12)
-                                .foregroundColor(task.isRecurring ? OmiColors.textPrimary : OmiColors.textTertiary)
+                                .foregroundColor(task.isRecurring ? NootoColors.textPrimary : NootoColors.textTertiary)
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.plain)
@@ -4174,7 +4174,7 @@ struct TaskRow: View {
                         } label: {
                             Image(systemName: "arrow.left.to.line")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.plain)
@@ -4190,7 +4190,7 @@ struct TaskRow: View {
                         } label: {
                             Image(systemName: "arrow.right.to.line")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.plain)
@@ -4203,7 +4203,7 @@ struct TaskRow: View {
                     } label: {
                         Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
@@ -4216,7 +4216,7 @@ struct TaskRow: View {
                     } label: {
                         Image(systemName: "trash")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
@@ -4228,14 +4228,14 @@ struct TaskRow: View {
                     HStack(spacing: 0) {
                         LinearGradient(
                             colors: [
-                                OmiColors.backgroundTertiary.opacity(0),
-                                OmiColors.backgroundTertiary
+                                NootoColors.backgroundTertiary.opacity(0),
+                                NootoColors.backgroundTertiary
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         .frame(width: 24)
-                        Rectangle().fill(OmiColors.backgroundTertiary)
+                        Rectangle().fill(NootoColors.backgroundTertiary)
                     }
                 )
                 .transition(.opacity)
@@ -4246,16 +4246,16 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
+                .fill(isKeyboardSelected ? NootoColors.brandPrimary.opacity(0.10) : (isHovering || isDragging ? NootoColors.backgroundTertiary : (isNewlyCreated ? NootoColors.brandPrimary.opacity(0.15) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isKeyboardSelected ? NootoColors.brandPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .overlay(alignment: .leading) {
             if isKeyboardSelected {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(OmiColors.purplePrimary)
+                    .fill(NootoColors.brandPrimary)
                     .frame(width: 3)
                     .padding(.vertical, 4)
             }
@@ -4349,7 +4349,7 @@ struct TaskRow: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(OmiColors.textPrimary)
+                .tint(NootoColors.textPrimary)
             }
         }
         .padding(16)
@@ -4361,7 +4361,7 @@ struct TaskRow: View {
             HStack {
                 Text("Repeat")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
             }
 
@@ -4389,7 +4389,7 @@ struct TaskRow: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(OmiColors.textPrimary)
+                .tint(NootoColors.textPrimary)
             }
         }
         .padding(16)
@@ -4495,7 +4495,7 @@ struct DueDateBadgeInteractive: View {
                         .scaledFont(size: 8)
                 }
             }
-            .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(isHovering ? NootoColors.textPrimary : NootoColors.textSecondary)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -4515,10 +4515,10 @@ struct PriorityBadgeInteractive: View {
 
     private var badgeColor: Color {
         switch priority {
-        case "high": return OmiColors.textPrimary
-        case "medium": return OmiColors.textSecondary
-        case "low": return OmiColors.textTertiary
-        default: return OmiColors.textTertiary
+        case "high": return NootoColors.textPrimary
+        case "medium": return NootoColors.textSecondary
+        case "low": return NootoColors.textTertiary
+        default: return NootoColors.textTertiary
         }
     }
 
@@ -4547,7 +4547,7 @@ struct PriorityBadgeInteractive: View {
                             .scaledFont(size: 7)
                     }
                 }
-                .foregroundColor(badgeHovering ? badgeColor : (priority != nil ? OmiColors.textSecondary : OmiColors.textTertiary))
+                .foregroundColor(badgeHovering ? badgeColor : (priority != nil ? NootoColors.textSecondary : NootoColors.textTertiary))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
@@ -4556,7 +4556,7 @@ struct PriorityBadgeInteractive: View {
             .popover(isPresented: $showPriorityPicker) {
                 VStack(spacing: 4) {
                     ForEach(["high", "medium", "low"], id: \.self) { value in
-                        let color: Color = value == "high" ? OmiColors.textPrimary : value == "medium" ? OmiColors.textSecondary : OmiColors.textTertiary
+                        let color: Color = value == "high" ? NootoColors.textPrimary : value == "medium" ? NootoColors.textSecondary : NootoColors.textTertiary
                         let isSelected = priority == value
 
                         Button {
@@ -4570,7 +4570,7 @@ struct PriorityBadgeInteractive: View {
                                     .frame(width: 20)
                                 Text(value.capitalized)
                                     .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textPrimary)
+                                    .foregroundColor(NootoColors.textPrimary)
                                 Spacer()
                                 if isSelected {
                                     Image(systemName: "checkmark")
@@ -4631,7 +4631,7 @@ struct TagBadgeInteractive: View {
                             .scaledFont(size: 7)
                     }
                 }
-                .foregroundColor(badgeHovering ? OmiColors.textPrimary : (tags.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary))
+                .foregroundColor(badgeHovering ? NootoColors.textPrimary : (tags.isEmpty ? NootoColors.textTertiary : NootoColors.textSecondary))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
@@ -4641,7 +4641,7 @@ struct TagBadgeInteractive: View {
                 VStack(spacing: 8) {
                     Text("Tags")
                         .scaledFont(size: 13, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     let allTags = TaskClassification.allCases
@@ -4650,7 +4650,7 @@ struct TagBadgeInteractive: View {
                     ], spacing: 6) {
                         ForEach(allTags, id: \.rawValue) { classification in
                             let isSelected = editingTags.contains(classification.rawValue)
-                            let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+                            let tagColor = Color(hex: classification.color) ?? NootoColors.textSecondary
                             Button {
                                 if isSelected {
                                     editingTags.remove(classification.rawValue)
@@ -4689,7 +4689,7 @@ struct TagBadgeInteractive: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
-                            .background(Capsule().fill(OmiColors.purplePrimary))
+                            .background(Capsule().fill(NootoColors.brandPrimary))
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -4714,7 +4714,7 @@ struct SourceBadgeCompact: View {
             Text(sourceLabel)
                 .scaledFont(size: 10, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
         .help(windowTitle ?? sourceLabel)
     }
 }
@@ -4726,10 +4726,10 @@ struct NewBadge: View {
     var body: some View {
         Text("New")
             .scaledFont(size: 10, weight: .semibold)
-            .foregroundColor(OmiColors.purplePrimary)
+            .foregroundColor(NootoColors.brandPrimary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(OmiColors.purplePrimary.opacity(0.15))
+            .background(NootoColors.brandPrimary.opacity(0.15))
             .cornerRadius(4)
     }
 }
@@ -4767,7 +4767,7 @@ struct TaskCreateSheet: View {
             HStack {
                 Text("New Task")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
@@ -4775,7 +4775,7 @@ struct TaskCreateSheet: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             // Content
             ScrollView {
@@ -4784,7 +4784,7 @@ struct TaskCreateSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Description")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         TextField("What needs to be done?", text: $description, axis: .vertical)
                             .textFieldStyle(.plain)
@@ -4793,11 +4793,11 @@ struct TaskCreateSheet: View {
                             .padding(12)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.backgroundSecondary)
+                                    .fill(NootoColors.backgroundSecondary)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(OmiColors.border, lineWidth: 1)
+                                    .stroke(NootoColors.border, lineWidth: 1)
                             )
                     }
 
@@ -4806,7 +4806,7 @@ struct TaskCreateSheet: View {
                         HStack {
                             Text("Due Date")
                                 .scaledFont(size: 13, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                             Toggle("", isOn: $hasDueDate)
                                 .toggleStyle(.switch)
@@ -4818,7 +4818,7 @@ struct TaskCreateSheet: View {
                                 .datePickerStyle(.graphical)
                                 .labelsHidden()
                                 .padding(12)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundSecondary))
+                                .background(RoundedRectangle(cornerRadius: 8).fill(NootoColors.backgroundSecondary))
                         }
                     }
 
@@ -4826,12 +4826,12 @@ struct TaskCreateSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Priority")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                         HStack(spacing: 8) {
                             createPriorityButton(label: "None", value: nil)
-                            createPriorityButton(label: "Low", value: "low", color: OmiColors.textTertiary)
-                            createPriorityButton(label: "Medium", value: "medium", color: OmiColors.textSecondary)
-                            createPriorityButton(label: "High", value: "high", color: OmiColors.textPrimary)
+                            createPriorityButton(label: "Low", value: "low", color: NootoColors.textTertiary)
+                            createPriorityButton(label: "Medium", value: "medium", color: NootoColors.textSecondary)
+                            createPriorityButton(label: "High", value: "high", color: NootoColors.textPrimary)
                         }
                     }
 
@@ -4839,7 +4839,7 @@ struct TaskCreateSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Tags")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         // Flow layout of toggleable tag pills
                         let allTags = TaskClassification.allCases
@@ -4848,7 +4848,7 @@ struct TaskCreateSheet: View {
                         ], spacing: 6) {
                             ForEach(allTags, id: \.rawValue) { classification in
                                 let isSelected = selectedTags.contains(classification.rawValue)
-                                let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+                                let tagColor = Color(hex: classification.color) ?? NootoColors.textSecondary
                                 Button {
                                     if isSelected {
                                         selectedTags.remove(classification.rawValue)
@@ -4883,7 +4883,7 @@ struct TaskCreateSheet: View {
             }
 
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             // Footer
             HStack(spacing: 12) {
@@ -4901,33 +4901,33 @@ struct TaskCreateSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(OmiColors.textPrimary)
+                .tint(NootoColors.textPrimary)
                 .controlSize(.large)
                 .disabled(!canSave || isSaving)
             }
             .padding(20)
         }
         .frame(width: 420, height: 500)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
-    private func createPriorityButton(label: String, value: String?, color: Color = OmiColors.textSecondary) -> some View {
+    private func createPriorityButton(label: String, value: String?, color: Color = NootoColors.textSecondary) -> some View {
         let isSelected = priority == value
         return Button {
             priority = value
         } label: {
             Text(label)
                 .scaledFont(size: 13, weight: isSelected ? .semibold : .medium)
-                .foregroundColor(isSelected ? OmiColors.backgroundPrimary : color)
+                .foregroundColor(isSelected ? NootoColors.backgroundPrimary : color)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? (value != nil ? color : OmiColors.textSecondary) : Color.clear)
+                        .fill(isSelected ? (value != nil ? color : NootoColors.textSecondary) : Color.clear)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.clear : OmiColors.border, lineWidth: 1)
+                        .stroke(isSelected ? Color.clear : NootoColors.border, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -5008,14 +5008,14 @@ struct InlineTaskCreationRow: View {
         HStack(alignment: .center, spacing: 12) {
             // Circle placeholder (matches TaskRow checkbox)
             Circle()
-                .stroke(OmiColors.purplePrimary.opacity(0.5), lineWidth: 1.5)
+                .stroke(NootoColors.brandPrimary.opacity(0.5), lineWidth: 1.5)
                 .frame(width: 20, height: 20)
                 .padding(.leading, 12)
 
             TextField("New task...", text: $text)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .focused($isFocused)
                 .onSubmit {
                     onCommit(text)
@@ -5031,15 +5031,15 @@ struct InlineTaskCreationRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.purplePrimary.opacity(0.05))
+                .fill(NootoColors.brandPrimary.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                .stroke(NootoColors.brandPrimary.opacity(0.3), lineWidth: 1)
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(OmiColors.purplePrimary)
+                .fill(NootoColors.brandPrimary)
                 .frame(width: 3)
                 .padding(.vertical, 4)
         }
@@ -5081,7 +5081,7 @@ struct KeyboardHintBar: View {
         .padding(.vertical, 8)
         .background(
             Capsule()
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
         )
     }
@@ -5090,15 +5090,15 @@ struct KeyboardHintBar: View {
         HStack(spacing: 6) {
             Text(key)
                 .scaledFont(size: 11, weight: .medium, design: .monospaced)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 4)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(4)
 
             Text(label)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
     }
 }

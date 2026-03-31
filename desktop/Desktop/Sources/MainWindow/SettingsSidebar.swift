@@ -170,7 +170,7 @@ struct SettingsSidebar: View {
             // Settings title
             Text("Settings")
                 .scaledFont(size: 22, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
 
@@ -209,20 +209,20 @@ struct SettingsSidebar: View {
             Spacer()
         }
         .frame(width: expandedWidth)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .scaledFont(size: 13)
-                .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                .foregroundColor(isSearchFocused ? NootoColors.purplePrimary : NootoColors.textTertiary)
                 .animation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
             TextField("Search settings...", text: $searchQuery)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .focused($isSearchFocused)
 
             if !searchQuery.isEmpty {
@@ -231,7 +231,7 @@ struct SettingsSidebar: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -240,10 +240,10 @@ struct SettingsSidebar: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.backgroundTertiary)
+                .fill(NootoColors.backgroundTertiary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSearchFocused ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
+                        .stroke(isSearchFocused ? NootoColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
                 )
         )
     }
@@ -254,7 +254,7 @@ struct SettingsSidebar: View {
                 if filteredSearchItems.isEmpty {
                     Text("No results")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 20)
                 } else {
@@ -280,11 +280,11 @@ struct SettingsSidebar: View {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.left")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Back")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
             }
@@ -293,7 +293,7 @@ struct SettingsSidebar: View {
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                    .fill(isBackHovered ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
             )
         }
         .buttonStyle(.plain)
@@ -336,12 +336,12 @@ struct SettingsSidebarItem: View {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .scaledFont(size: 17)
-                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+                    .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textTertiary)
                     .frame(width: iconWidth)
 
                 Text(section.rawValue)
                     .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
-                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+                    .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
 
                 Spacer()
             }
@@ -351,8 +351,8 @@ struct SettingsSidebarItem: View {
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(isSelected
-                          ? OmiColors.backgroundTertiary.opacity(0.8)
-                          : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+                          ? NootoColors.backgroundTertiary.opacity(0.8)
+                          : (isHovered ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear))
             )
         }
         .buttonStyle(.plain)
@@ -380,12 +380,12 @@ struct SettingsSubsectionItem: View {
 
                 Image(systemName: subsection.icon)
                     .scaledFont(size: 14)
-                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+                    .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textTertiary)
                     .frame(width: 16)
 
                 Text(subsection.rawValue)
                     .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
-                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+                    .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
 
                 Spacer()
             }
@@ -395,8 +395,8 @@ struct SettingsSubsectionItem: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(isSelected
-                          ? OmiColors.backgroundTertiary.opacity(0.6)
-                          : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+                          ? NootoColors.backgroundTertiary.opacity(0.6)
+                          : (isHovered ? NootoColors.backgroundTertiary.opacity(0.3) : Color.clear))
             )
         }
         .buttonStyle(.plain)
@@ -418,17 +418,17 @@ struct SettingsSearchResultRow: View {
             HStack(spacing: 10) {
                 Image(systemName: item.icon)
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .frame(width: 20)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name)
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text(item.breadcrumb)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -438,7 +438,7 @@ struct SettingsSearchResultRow: View {
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                    .fill(isHovered ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
             )
         }
         .buttonStyle(.plain)
@@ -460,7 +460,7 @@ struct SettingHighlightModifier: ViewModifier {
             .id(settingId)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isHighlighted ? OmiColors.purplePrimary.opacity(0.12) : Color.clear)
+                    .fill(isHighlighted ? NootoColors.purplePrimary.opacity(0.12) : Color.clear)
                     .animation(.easeInOut(duration: 0.3), value: isHighlighted)
                     .allowsHitTesting(false)
             )

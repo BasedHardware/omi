@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/omi-desktop-backend /app/omi-desktop-backend
+COPY --from=builder /app/target/release/nooto-desktop-backend /app/nooto-desktop-backend
 
 # Copy Google credentials for Firestore access
 COPY google-credentials.json /app/google-credentials.json
@@ -49,4 +49,4 @@ COPY google-credentials.json /app/google-credentials.json
 EXPOSE 8080
 
 # Run the binary
-CMD ["./omi-desktop-backend"]
+CMD ["./nooto-desktop-backend"]

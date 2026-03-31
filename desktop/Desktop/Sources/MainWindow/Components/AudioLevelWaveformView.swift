@@ -71,18 +71,18 @@ private struct BarView: View {
     }
 
     private var barColor: Color {
-        guard isActive else { return OmiColors.textTertiary.opacity(0.5) }
+        guard isActive else { return NootoColors.textTertiary.opacity(0.5) }
 
         // Color intensity based on level
         let boostedLevel = min(1.0, pow(CGFloat(level), 0.5) * 2.5)
         if boostedLevel > 0.6 {
-            return OmiColors.purplePrimary
+            return NootoColors.brandPrimary
         } else if boostedLevel > 0.2 {
-            return OmiColors.textPrimary
+            return NootoColors.textPrimary
         } else if boostedLevel > 0.02 {
-            return OmiColors.textSecondary
+            return NootoColors.textSecondary
         }
-        return OmiColors.textTertiary.opacity(0.5)
+        return NootoColors.textTertiary.opacity(0.5)
     }
 
     var body: some View {
@@ -126,5 +126,5 @@ private struct BarView: View {
         }
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }

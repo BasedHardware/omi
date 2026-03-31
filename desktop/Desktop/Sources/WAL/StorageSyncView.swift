@@ -19,7 +19,7 @@ struct StorageSyncView: View {
             HStack {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .scaledFont(size: 16)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
 
                 Text("Storage Sync")
                     .scaledFont(size: 14, weight: .semibold)
@@ -30,12 +30,12 @@ struct StorageSyncView: View {
                 if walService.pendingWals.count > 0 {
                     Text("\(walService.pendingWals.count) pending")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         )
                 }
             }
@@ -65,7 +65,7 @@ struct StorageSyncView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
         )
         .dismissableSheet(isPresented: $showWifiSetup) {
             wifiSetupSheet
@@ -79,11 +79,11 @@ struct StorageSyncView: View {
             // Device icon
             Image(systemName: device.type.iconName)
                 .scaledFont(size: 24)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
                 .frame(width: 40, height: 40)
                 .background(
                     Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .fill(NootoColors.brandPrimary.opacity(0.15))
                 )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -98,7 +98,7 @@ struct StorageSyncView: View {
                             .frame(width: 6, height: 6)
                         Text("Connected")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
 
                     // Battery
@@ -122,11 +122,11 @@ struct StorageSyncView: View {
         HStack(spacing: 12) {
             Image(systemName: "waveform.slash")
                 .scaledFont(size: 20)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No device connected")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Spacer()
         }
@@ -142,10 +142,10 @@ struct StorageSyncView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(OmiColors.backgroundTertiary)
+                        .fill(NootoColors.backgroundTertiary)
 
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(OmiColors.purplePrimary)
+                        .fill(NootoColors.brandPrimary)
                         .frame(width: geometry.size.width * CGFloat(progress.percentComplete / 100))
                 }
             }
@@ -158,7 +158,7 @@ struct StorageSyncView: View {
 
                 Text("of \(formatBytes(progress.totalBytes))")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
 
@@ -166,14 +166,14 @@ struct StorageSyncView: View {
                 if progress.bytesPerSecond > 0 {
                     Text("\(formatBytes(Int(progress.bytesPerSecond)))/s")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
 
                 // ETA
                 if let eta = progress.estimatedSecondsRemaining {
                     Text("~\(formatDuration(eta))")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
             }
 
@@ -185,13 +185,13 @@ struct StorageSyncView: View {
                     Text(wifiSyncService.status.displayName)
                         .scaledFont(size: 11)
                 }
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
             }
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
     }
 
@@ -202,7 +202,7 @@ struct StorageSyncView: View {
 
             Text(message)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Spacer()
 
@@ -211,7 +211,7 @@ struct StorageSyncView: View {
                 wifiSyncService.errorMessage = nil
             }
             .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(OmiColors.purplePrimary)
+            .foregroundColor(NootoColors.brandPrimary)
         }
         .padding(10)
         .background(
@@ -237,7 +237,7 @@ struct StorageSyncView: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.purplePrimary)
+                        .fill(NootoColors.brandPrimary)
                 )
                 .foregroundColor(.white)
             }
@@ -257,9 +257,9 @@ struct StorageSyncView: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(OmiColors.purplePrimary, lineWidth: 1)
+                        .stroke(NootoColors.brandPrimary, lineWidth: 1)
                 )
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
             }
             .buttonStyle(.plain)
             .disabled(storageSyncService.isSyncing || wifiSyncService.isSyncing)
@@ -291,7 +291,7 @@ struct StorageSyncView: View {
             HStack {
                 Text("WiFi Sync Setup")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: { showWifiSetup = false })
             }
@@ -299,7 +299,7 @@ struct StorageSyncView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Network Name (SSID)")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 TextField("Enter WiFi network name", text: $wifiSsid)
                     .textFieldStyle(.roundedBorder)
@@ -308,7 +308,7 @@ struct StorageSyncView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 SecureField("Enter WiFi password", text: $wifiPassword)
                     .textFieldStyle(.roundedBorder)
@@ -321,7 +321,7 @@ struct StorageSyncView: View {
                     showWifiSetup = false
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
                 Button("Start Sync") {
                     showWifiSetup = false
@@ -335,7 +335,7 @@ struct StorageSyncView: View {
         }
         .padding(24)
         .frame(width: 360, height: 280)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - Actions
@@ -447,13 +447,13 @@ struct StorageSyncIndicator: View {
 
                 Text("\(Int(progress.percentComplete))%")
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(OmiColors.purplePrimary.opacity(0.15))
+                    .fill(NootoColors.brandPrimary.opacity(0.15))
             )
         } else if walService.pendingWals.count > 0 {
             // Pending indicator
@@ -464,12 +464,12 @@ struct StorageSyncIndicator: View {
                 Text("\(walService.pendingWals.count)")
                     .scaledFont(size: 11, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(OmiColors.backgroundTertiary)
+                    .fill(NootoColors.backgroundTertiary)
             )
         }
     }
@@ -481,5 +481,5 @@ struct StorageSyncIndicator: View {
     StorageSyncView()
         .frame(width: 360)
         .padding()
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }

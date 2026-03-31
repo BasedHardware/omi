@@ -5730,7 +5730,7 @@ impl FirestoreService {
         // Build filters
         let mut filters: Vec<Value> = Vec::new();
 
-        // Filter by app_id (null = main Omi chat)
+        // Filter by app_id (null = main Nooto chat)
         if let Some(app) = app_id {
             filters.push(json!({
                 "fieldFilter": {
@@ -6121,10 +6121,10 @@ impl FirestoreService {
             .or_else(|| self.parse_string(fields, "plugin_id"));
 
         // For title: use explicit title, or "Omi" for main chat (app_id=null), or "New Chat"
-        // This helps users recognize their main Omi chat from old Flutter sessions
+        // This helps users recognize their main Nooto chat from old Flutter sessions
         let title = self.parse_string(fields, "title").unwrap_or_else(|| {
             if app_id.is_none() {
-                "Omi".to_string()
+                "Nooto".to_string()
             } else {
                 "New Chat".to_string()
             }

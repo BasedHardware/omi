@@ -386,7 +386,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
         setupInputHeightObserver()
 
-        // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
+        // Make the window key so the NootoTextEditor's focusOnAppear can take effect.
         // The text editor itself handles focusing via updateNSView once it's in the window.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             self?.makeKeyAndOrderFront(nil)

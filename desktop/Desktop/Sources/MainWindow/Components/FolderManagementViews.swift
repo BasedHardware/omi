@@ -95,11 +95,11 @@ struct FolderTabsStrip: View {
                 Button(action: onCreateFolder) {
                     Image(systemName: "plus")
                         .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .frame(width: 26, height: 26)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.6))
+                                .fill(NootoColors.backgroundTertiary.opacity(0.6))
                         )
                 }
                 .buttonStyle(.plain)
@@ -126,16 +126,16 @@ struct FolderTabsStrip: View {
                     .scaledFont(size: 12, weight: .medium)
                     .lineLimit(1)
             }
-            .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundTertiary.opacity(0.6))
+                    .fill(isSelected ? NootoColors.textPrimary.opacity(0.12) : NootoColors.backgroundTertiary.opacity(0.6))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? OmiColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .stroke(isSelected ? NootoColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -163,33 +163,33 @@ struct FolderFormSheet: View {
             HStack {
                 Text(isEditing ? "Edit Folder" : "New Folder")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
             .padding(20)
 
-            Divider().background(OmiColors.backgroundTertiary)
+            Divider().background(NootoColors.backgroundTertiary)
 
             VStack(alignment: .leading, spacing: 16) {
                 // Name field
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Name")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     TextField("Folder name", text: $name)
                         .textFieldStyle(.plain)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
+                                .stroke(NootoColors.border, lineWidth: 1)
                         )
                 }
 
@@ -197,20 +197,20 @@ struct FolderFormSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     TextField("Optional description", text: $descriptionText)
                         .textFieldStyle(.plain)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
+                                .stroke(NootoColors.border, lineWidth: 1)
                         )
                 }
 
@@ -218,7 +218,7 @@ struct FolderFormSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Color")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 8), count: 5), spacing: 8) {
                         ForEach(FolderColors.palette, id: \.hex) { item in
@@ -246,7 +246,7 @@ struct FolderFormSheet: View {
             }
             .padding(20)
 
-            Divider().background(OmiColors.backgroundTertiary)
+            Divider().background(NootoColors.backgroundTertiary)
 
             // Action buttons
             HStack {
@@ -255,7 +255,7 @@ struct FolderFormSheet: View {
                     onDismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
 
@@ -269,12 +269,12 @@ struct FolderFormSheet: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.textTertiary : .white)
+                .foregroundColor(name.trimmingCharacters(in: .whitespaces).isEmpty ? NootoColors.textTertiary : .white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.backgroundTertiary : Color(hex: selectedColor) ?? OmiColors.textPrimary)
+                        .fill(name.trimmingCharacters(in: .whitespaces).isEmpty ? NootoColors.backgroundTertiary : Color(hex: selectedColor) ?? NootoColors.textPrimary)
                 )
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
             }
@@ -332,23 +332,23 @@ struct DeleteFolderSheet: View {
             HStack {
                 Text("Delete Folder")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
             .padding(20)
 
-            Divider().background(OmiColors.backgroundTertiary)
+            Divider().background(NootoColors.backgroundTertiary)
 
             VStack(alignment: .leading, spacing: 16) {
                 Text("Are you sure you want to delete \"\(folder.name)\"?")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if folder.conversationCount > 0 {
                     Text("This folder has \(folder.conversationCount) conversation\(folder.conversationCount == 1 ? "" : "s"). Choose where to move them:")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     // Move destination picker
                     VStack(alignment: .leading, spacing: 4) {
@@ -362,7 +362,7 @@ struct DeleteFolderSheet: View {
             }
             .padding(20)
 
-            Divider().background(OmiColors.backgroundTertiary)
+            Divider().background(NootoColors.backgroundTertiary)
 
             // Action buttons
             HStack {
@@ -371,7 +371,7 @@ struct DeleteFolderSheet: View {
                     onDismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
 
@@ -412,24 +412,24 @@ struct DeleteFolderSheet: View {
                 } else {
                     Image(systemName: "tray")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 8)
                 }
                 Text(label)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
                         .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
+                    .fill(isSelected ? NootoColors.backgroundTertiary : Color.clear)
             )
         }
         .buttonStyle(.plain)

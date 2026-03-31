@@ -21,10 +21,10 @@ enum UpdateChannel: String, CaseIterable {
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
+  /// App display name based on update channel: "nooto" for stable, "Nooto Beta" for beta
   static var appDisplayName: String {
     let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    return (channel == "beta" || channel == "staging") ? "Nooto Beta" : "nooto"
   }
 }
 

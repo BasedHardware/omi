@@ -16,14 +16,14 @@ struct OnboardingFileScanStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Discovery",
       title: "Start building your profile.",
-      description: "Omi scans projects and recent files.",
+      description: "Nooto scans projects and recent files.",
       showsSkip: true,
       onSkip: onSkip
     ) {
       VStack(alignment: .leading, spacing: 24) {
         ZStack {
           RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(NootoColors.backgroundSecondary)
             .overlay(
               RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
@@ -35,17 +35,17 @@ struct OnboardingFileScanStepView: View {
 
             Text(coordinator.scanStatusText)
               .font(.system(size: 18, weight: .semibold))
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(NootoColors.textPrimary)
 
             if let snapshot = coordinator.scanSnapshot {
               Text("\(snapshot.fileCount.formatted()) files indexed")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .monospacedDigit()
             } else {
               Text("Your graph and suggestions will build from this scan.")
                 .font(.system(size: 13))
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
             }
           }
           .padding(28)
@@ -60,7 +60,7 @@ struct OnboardingFileScanStepView: View {
         } else {
           Text("Scanning your workspace…")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)

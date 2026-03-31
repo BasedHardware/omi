@@ -38,10 +38,10 @@ struct RewindOnlyView: View {
                     }
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .frame(minWidth: 800, minHeight: 500)
         .preferredColorScheme(.dark)
-        .tint(OmiColors.purplePrimary)
+        .tint(NootoColors.brandPrimary)
         .onAppear {
             log("RewindOnlyView: View appeared - isSignedIn=\(authState.isSignedIn)")
             // Force dark appearance on the window
@@ -83,7 +83,7 @@ struct RewindOnlyView: View {
             Button {
                 openFullApp()
             } label: {
-                Label("Open Full Omi App", systemImage: "square.grid.2x2")
+                Label("Open Full Nooto App", systemImage: "square.grid.2x2")
             }
 
             Divider()
@@ -155,7 +155,7 @@ class RewindSettingsWindow {
         let settingsView = RewindSettingsView()
             .withFontScaling()
             .frame(minWidth: 500, minHeight: 400)
-            .background(OmiColors.backgroundPrimary)
+            .background(NootoColors.backgroundPrimary)
             .preferredColorScheme(.dark)
 
         let hostingController = NSHostingController(rootView: settingsView)
@@ -211,7 +211,7 @@ struct RewindSettingsView: View {
                 ) {
                     Toggle("", isOn: $screenAnalysisEnabled)
                         .toggleStyle(.switch)
-                        .tint(OmiColors.purplePrimary)
+                        .tint(NootoColors.brandPrimary)
                 }
 
                 // Retention Period
@@ -256,7 +256,7 @@ struct RewindSettingsView: View {
             }
             .padding(24)
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     private func settingsRow<Content: View>(
@@ -309,7 +309,7 @@ struct RewindSettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
                 .scaledFont(size: 12, weight: .medium)
             }
         }
@@ -330,7 +330,7 @@ struct RewindSettingsView: View {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")
                         .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Screen Recording")
@@ -346,7 +346,7 @@ struct RewindSettingsView: View {
 
                     Text("Open Settings")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
                 .padding(12)
                 .background(Color.white.opacity(0.05))

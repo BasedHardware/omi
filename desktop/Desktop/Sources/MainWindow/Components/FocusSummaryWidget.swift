@@ -21,7 +21,7 @@ struct FocusSummaryWidget: View {
             HStack {
                 Text("Focus")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -35,12 +35,12 @@ struct FocusSummaryWidget: View {
                         }) {
                             Text(tab.rawValue)
                                 .scaledFont(size: 11, weight: selectedTab == tab ? .semibold : .regular)
-                                .foregroundColor(selectedTab == tab ? OmiColors.textPrimary : OmiColors.textTertiary)
+                                .foregroundColor(selectedTab == tab ? NootoColors.textPrimary : NootoColors.textTertiary)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
-                                        .fill(selectedTab == tab ? OmiColors.backgroundQuaternary.opacity(0.6) : Color.clear)
+                                        .fill(selectedTab == tab ? NootoColors.backgroundQuaternary.opacity(0.6) : Color.clear)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -49,7 +49,7 @@ struct FocusSummaryWidget: View {
                 .padding(2)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 )
             }
 
@@ -76,7 +76,7 @@ struct FocusSummaryWidget: View {
                     value: String(format: "%.0f", stats.focusRate),
                     unit: "%",
                     icon: "chart.pie.fill",
-                    color: OmiColors.info
+                    color: NootoColors.info
                 )
 
                 FocusStatCard(
@@ -84,7 +84,7 @@ struct FocusSummaryWidget: View {
                     value: "\(stats.sessionCount)",
                     unit: "",
                     icon: "clock.fill",
-                    color: OmiColors.info
+                    color: NootoColors.info
                 )
             }
         }
@@ -92,10 +92,10 @@ struct FocusSummaryWidget: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
     }
@@ -115,17 +115,17 @@ struct FocusStatCard: View {
             HStack(alignment: .center, spacing: 4) {
                 Image(systemName: icon)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 HStack(alignment: .lastTextBaseline, spacing: 1) {
                     Text(value)
                         .scaledFont(size: 18, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     if !unit.isEmpty {
                         Text(unit)
                             .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
             }
@@ -134,14 +134,14 @@ struct FocusStatCard: View {
 
             Text(title)
                 .scaledFont(size: 10)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(OmiColors.backgroundTertiary.opacity(0.6))
+                .fill(NootoColors.backgroundTertiary.opacity(0.6))
         )
     }
 }
@@ -168,5 +168,5 @@ struct FocusStatCard: View {
         )
     )
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }

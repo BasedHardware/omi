@@ -128,14 +128,14 @@ struct OnboardingChatView: View {
             HStack {
                 Text("Setting up omi")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .alert("Are you sure?", isPresented: $showSkipConfirmation) {
@@ -149,7 +149,7 @@ struct OnboardingChatView: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Chat messages
             ScrollViewReader { proxy in
@@ -197,18 +197,18 @@ struct OnboardingChatView: View {
                                     }) {
                                         Text(option)
                                             .font(.system(size: 13, weight: .medium))
-                                            .foregroundColor(isGrantButton(option) ? .white : OmiColors.purplePrimary)
+                                            .foregroundColor(isGrantButton(option) ? .white : NootoColors.purplePrimary)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 8)
                                             .background(
                                                 isGrantButton(option)
-                                                    ? OmiColors.purplePrimary
-                                                    : OmiColors.purplePrimary.opacity(0.1)
+                                                    ? NootoColors.purplePrimary
+                                                    : NootoColors.purplePrimary.opacity(0.1)
                                             )
                                             .cornerRadius(20)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 20)
-                                                    .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                                                    .stroke(NootoColors.purplePrimary.opacity(0.3), lineWidth: 1)
                                             )
                                     }
                                     .buttonStyle(.plain)
@@ -250,7 +250,7 @@ struct OnboardingChatView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)
-                                    .background(OmiColors.purplePrimary)
+                                    .background(NootoColors.purplePrimary)
                                     .cornerRadius(20)
                                 }
                                 .buttonStyle(.plain)
@@ -270,7 +270,7 @@ struct OnboardingChatView: View {
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
                                     .padding(.vertical, 12)
-                                    .background(OmiColors.purplePrimary)
+                                    .background(NootoColors.purplePrimary)
                                     .cornerRadius(12)
                             }
                             .buttonStyle(.plain)
@@ -323,7 +323,7 @@ struct OnboardingChatView: View {
                 TextField(quickReplyOptions.isEmpty ? "Type your message..." : "Or type your own answer...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .focused($isInputFocused)
                     .padding(12)
                     .lineLimit(1...3)
@@ -331,7 +331,7 @@ struct OnboardingChatView: View {
                         sendMessage()
                     }
                     .frame(maxWidth: .infinity)
-                    .background(OmiColors.backgroundSecondary)
+                    .background(NootoColors.backgroundSecondary)
                     .cornerRadius(20)
 
                 if chatProvider.isSending && inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -339,7 +339,7 @@ struct OnboardingChatView: View {
                     Button(action: stopAgent) {
                         Image(systemName: chatProvider.isStopping ? "ellipsis.circle" : "stop.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(NootoColors.purplePrimary)
                     }
                     .buttonStyle(.plain)
                     .disabled(chatProvider.isStopping)
@@ -347,7 +347,7 @@ struct OnboardingChatView: View {
                     Button(action: sendMessage) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                            .foregroundColor(canSend ? NootoColors.purplePrimary : NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
@@ -393,7 +393,7 @@ struct OnboardingChatView: View {
                 .scaledToFit()
                 .frame(width: 20, height: 20)
                 .frame(width: 32, height: 32)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .clipShape(Circle())
         }
     }
@@ -909,7 +909,7 @@ struct OnboardingChatBubble: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                             .frame(width: 32, height: 32)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .clipShape(Circle())
                     }
                 }
@@ -924,7 +924,7 @@ struct OnboardingChatBubble: View {
                                     .textSelection(.enabled)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
-                                    .background(OmiColors.backgroundSecondary)
+                                    .background(NootoColors.backgroundSecondary)
                                     .cornerRadius(18)
                             }
                         } else {
@@ -938,7 +938,7 @@ struct OnboardingChatBubble: View {
                                     .textSelection(.enabled)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
-                                    .background(OmiColors.backgroundSecondary)
+                                    .background(NootoColors.backgroundSecondary)
                                     .cornerRadius(18)
                             }
 
@@ -963,7 +963,7 @@ struct OnboardingChatBubble: View {
                                 .textSelection(.enabled)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 10)
-                                .background(OmiColors.purplePrimary)
+                                .background(NootoColors.purplePrimary)
                                 .cornerRadius(18)
                         }
                     }
@@ -973,9 +973,9 @@ struct OnboardingChatBubble: View {
                     // User avatar
                     Image(systemName: "person.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .clipShape(Circle())
                 }
             }
@@ -1006,7 +1006,7 @@ struct OnboardingToolIndicator: View {
 
                 Text(displayText)
                     .font(.system(size: 12))
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             // Show permission guide image automatically for scan_files and request_permission
@@ -1102,7 +1102,7 @@ struct OnboardingPermissionImage: View {
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary, lineWidth: 1)
                     )
             } else if let url = Bundle.resourceBundle.url(forResource: info.name, withExtension: info.ext),
                       let nsImage = NSImage(contentsOf: url) {
@@ -1113,7 +1113,7 @@ struct OnboardingPermissionImage: View {
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary, lineWidth: 1)
                     )
             }
         }
@@ -1146,18 +1146,18 @@ struct ExplorationProfileCard: View {
                     } else {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.system(size: 12))
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(NootoColors.purplePrimary)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(isRunning ? "Learning about you..." : "Your Digital Profile")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         if !text.isEmpty {
                             Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
                                 .font(.system(size: 12))
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineLimit(2)
                         }
                     }
@@ -1167,7 +1167,7 @@ struct ExplorationProfileCard: View {
                     if !text.isEmpty {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 10))
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -1190,11 +1190,11 @@ struct ExplorationProfileCard: View {
                 .frame(maxHeight: 300)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+                .stroke(NootoColors.purplePrimary.opacity(0.2), lineWidth: 1)
         )
     }
 }

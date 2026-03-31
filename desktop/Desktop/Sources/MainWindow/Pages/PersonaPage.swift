@@ -71,7 +71,7 @@ struct PersonaPage: View {
                 }
             }
         }
-        .background(OmiColors.backgroundSecondary.opacity(0.3))
+        .background(NootoColors.backgroundSecondary.opacity(0.3))
         .dismissableSheet(isPresented: $showingCreateForm) {
             createPersonaSheet
                 .frame(width: 400, height: 400)
@@ -96,11 +96,11 @@ struct PersonaPage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("AI Persona")
                     .scaledFont(size: 28, weight: .bold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("Create an AI clone of yourself that others can chat with")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Spacer()
@@ -111,7 +111,7 @@ struct PersonaPage: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
@@ -128,7 +128,7 @@ struct PersonaPage: View {
 
             Text("Loading persona...")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.top, 100)
@@ -140,11 +140,11 @@ struct PersonaPage: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .scaledFont(size: 40)
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(NootoColors.error)
 
             Text(message)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -155,7 +155,7 @@ struct PersonaPage: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(OmiColors.purplePrimary)
+                    .background(NootoColors.brandPrimary)
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
@@ -171,22 +171,22 @@ struct PersonaPage: View {
             // Icon
             ZStack {
                 Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.15))
+                    .fill(NootoColors.brandPrimary.opacity(0.15))
                     .frame(width: 100, height: 100)
 
                 Image(systemName: "person.crop.circle.badge.plus")
                     .scaledFont(size: 44)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
             }
 
             VStack(spacing: 8) {
                 Text("No Persona Yet")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("Create an AI clone of yourself using your public memories. Others can then chat with your persona to learn about you.")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
             }
@@ -202,7 +202,7 @@ struct PersonaPage: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                .background(OmiColors.purplePrimary)
+                .background(NootoColors.brandPrimary)
                 .cornerRadius(10)
             }
             .buttonStyle(.plain)
@@ -215,7 +215,7 @@ struct PersonaPage: View {
                 Text("Make memories public in the Memories page to enhance your persona")
                     .scaledFont(size: 13)
             }
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity)
@@ -231,7 +231,7 @@ struct PersonaPage: View {
                 // Avatar
                 ZStack {
                     Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .fill(NootoColors.brandPrimary.opacity(0.15))
                         .frame(width: 80, height: 80)
 
                     if !persona.image.isEmpty, let url = URL(string: persona.image) {
@@ -242,26 +242,26 @@ struct PersonaPage: View {
                         } placeholder: {
                             Image(systemName: "person.fill")
                                 .scaledFont(size: 32)
-                                .foregroundColor(OmiColors.purplePrimary)
+                                .foregroundColor(NootoColors.brandPrimary)
                         }
                         .frame(width: 80, height: 80)
                         .clipShape(Circle())
                     } else {
                         Image(systemName: "person.fill")
                             .scaledFont(size: 32)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(NootoColors.brandPrimary)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(persona.name)
                         .scaledFont(size: 20, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     if let username = persona.username {
                         Text("@\(username)")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     // Status badge
@@ -272,7 +272,7 @@ struct PersonaPage: View {
 
                         Text(persona.statusText)
                             .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
                     .padding(.top, 4)
                 }
@@ -288,9 +288,9 @@ struct PersonaPage: View {
                     } label: {
                         Image(systemName: "pencil")
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .frame(width: 36, height: 36)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
@@ -300,45 +300,45 @@ struct PersonaPage: View {
                     } label: {
                         Image(systemName: "trash")
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.error)
+                            .foregroundColor(NootoColors.error)
                             .frame(width: 36, height: 36)
-                            .background(OmiColors.error.opacity(0.15))
+                            .background(NootoColors.error.opacity(0.15))
                             .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(20)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(NootoColors.backgroundTertiary.opacity(0.5))
             .cornerRadius(12)
 
             // Description section
             VStack(alignment: .leading, spacing: 12) {
                 Text("Description")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 if isEditing {
                     TextEditor(text: $editDescription)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .frame(height: 80)
                         .padding(8)
-                        .background(OmiColors.backgroundPrimary)
+                        .background(NootoColors.backgroundPrimary)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
+                                .stroke(NootoColors.textQuaternary.opacity(0.5), lineWidth: 1)
                         )
                 } else {
                     Text(persona.description.isEmpty ? "No description yet" : persona.description)
                         .scaledFont(size: 14)
-                        .foregroundColor(persona.description.isEmpty ? OmiColors.textTertiary : OmiColors.textPrimary)
+                        .foregroundColor(persona.description.isEmpty ? NootoColors.textTertiary : NootoColors.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(16)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(NootoColors.backgroundTertiary.opacity(0.5))
             .cornerRadius(12)
 
             // Stats section
@@ -361,7 +361,7 @@ struct PersonaPage: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Actions")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 if isEditing {
                     HStack(spacing: 12) {
@@ -370,10 +370,10 @@ struct PersonaPage: View {
                         } label: {
                             Text("Cancel")
                                 .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(OmiColors.backgroundTertiary)
+                                .background(NootoColors.backgroundTertiary)
                                 .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
@@ -386,7 +386,7 @@ struct PersonaPage: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(OmiColors.purplePrimary)
+                                .background(NootoColors.brandPrimary)
                                 .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
@@ -406,10 +406,10 @@ struct PersonaPage: View {
                             Text(isRegenerating ? "Regenerating..." : "Regenerate from Memories")
                         }
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary.opacity(0.15))
+                        .background(NootoColors.brandPrimary.opacity(0.15))
                         .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
@@ -417,7 +417,7 @@ struct PersonaPage: View {
                 }
             }
             .padding(16)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(NootoColors.backgroundTertiary.opacity(0.5))
             .cornerRadius(12)
 
             // Persona prompt preview (collapsible)
@@ -432,20 +432,20 @@ struct PersonaPage: View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .scaledFont(size: 14)
-                    .foregroundColor(isWarning ? OmiColors.warning : OmiColors.purplePrimary)
+                    .foregroundColor(isWarning ? NootoColors.warning : NootoColors.brandPrimary)
 
                 Text(title)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Text(value)
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(isWarning ? OmiColors.warning : OmiColors.textPrimary)
+                .foregroundColor(isWarning ? NootoColors.warning : NootoColors.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(12)
     }
 
@@ -461,13 +461,13 @@ struct PersonaPage: View {
                 HStack {
                     Text("Persona Prompt")
                         .scaledFont(size: 14, weight: .semibold)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     Spacer()
 
                     Image(systemName: isPromptExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
             .buttonStyle(.plain)
@@ -475,15 +475,15 @@ struct PersonaPage: View {
             if isPromptExpanded {
                 Text(prompt)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .background(OmiColors.backgroundPrimary)
+                    .background(NootoColors.backgroundPrimary)
                     .cornerRadius(8)
             }
         }
         .padding(16)
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(12)
     }
 
@@ -636,7 +636,7 @@ private struct CreatePersonaSheetContent: View {
             HStack {
                 Text("Create AI Persona")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -645,7 +645,7 @@ private struct CreatePersonaSheetContent: View {
             .padding(20)
 
             Divider()
-                .background(OmiColors.textQuaternary.opacity(0.3))
+                .background(NootoColors.textQuaternary.opacity(0.3))
 
             // Form
             VStack(alignment: .leading, spacing: 20) {
@@ -653,18 +653,18 @@ private struct CreatePersonaSheetContent: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Name")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     TextField("Your display name", text: $newPersonaName)
                         .textFieldStyle(.plain)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(12)
-                        .background(OmiColors.backgroundPrimary)
+                        .background(NootoColors.backgroundPrimary)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
+                                .stroke(NootoColors.textQuaternary.opacity(0.5), lineWidth: 1)
                         )
                 }
 
@@ -672,17 +672,17 @@ private struct CreatePersonaSheetContent: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Username (optional)")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     HStack {
                         Text("@")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         TextField("username", text: $newPersonaUsername)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .onChange(of: newPersonaUsername) { _, newValue in
                                 newPersonaUsername = newValue.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" }
                                 usernameAvailable = nil
@@ -700,16 +700,16 @@ private struct CreatePersonaSheetContent: View {
                         }
                     }
                     .padding(12)
-                    .background(OmiColors.backgroundPrimary)
+                    .background(NootoColors.backgroundPrimary)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(NootoColors.textQuaternary.opacity(0.5), lineWidth: 1)
                     )
 
                     Text("3-30 characters, lowercase letters, numbers, and underscores only")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 // Info
@@ -720,9 +720,9 @@ private struct CreatePersonaSheetContent: View {
                     Text("Your persona will be built from your public memories. Make more memories public to improve it.")
                         .scaledFont(size: 12)
                 }
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(12)
-                .background(OmiColors.info.opacity(0.1))
+                .background(NootoColors.info.opacity(0.1))
                 .cornerRadius(8)
 
                 Spacer()
@@ -743,7 +743,7 @@ private struct CreatePersonaSheetContent: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(canCreate ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    .background(canCreate ? NootoColors.brandPrimary : NootoColors.textTertiary)
                     .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
@@ -752,6 +752,6 @@ private struct CreatePersonaSheetContent: View {
             .padding(20)
         }
         .frame(width: 400, height: 450)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 }

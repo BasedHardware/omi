@@ -14,7 +14,7 @@ struct TaskChatPanel: View {
             panelHeader
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             if coordinator.activeTaskId == nil {
                 // No task selected — prompt user to pick one
@@ -27,7 +27,7 @@ struct TaskChatPanel: View {
                         .scaleEffect(0.8)
                     Text("Setting up chat...")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -56,24 +56,24 @@ struct TaskChatPanel: View {
                         if let error = taskState.errorMessage {
                             HStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(OmiColors.warning)
+                                    .foregroundColor(NootoColors.warning)
                                     .scaledFont(size: 14)
                                 Text(error)
                                     .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                                 Spacer()
                                 Button {
                                     taskState.errorMessage = nil
                                 } label: {
                                     Image(systemName: "xmark")
                                         .scaledFont(size: 11)
-                                        .foregroundColor(OmiColors.textTertiary)
+                                        .foregroundColor(NootoColors.textTertiary)
                                 }
                                 .buttonStyle(.plain)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(OmiColors.backgroundSecondary)
+                            .background(NootoColors.backgroundSecondary)
                         }
 
                         // Input area
@@ -103,11 +103,11 @@ struct TaskChatPanel: View {
                         )
                         .padding(12)
                     }
-                    .background(OmiColors.backgroundPrimary)
+                    .background(NootoColors.backgroundPrimary)
                 }
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     // MARK: - Header
@@ -127,11 +127,11 @@ struct TaskChatPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text(task?.description ?? "Task Chat")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -140,7 +140,7 @@ struct TaskChatPanel: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
@@ -165,13 +165,13 @@ struct TaskChatPanel: View {
                     }
                     Spacer()
                 }
-                .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+                .foregroundColor(NootoColors.textTertiary.opacity(0.7))
                 .padding(.top, 4)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
     }
 
     // MARK: - Empty State
@@ -182,15 +182,15 @@ struct TaskChatPanel: View {
 
             Image(systemName: "text.bubble")
                 .scaledFont(size: 36)
-                .foregroundColor(OmiColors.textTertiary.opacity(0.4))
+                .foregroundColor(NootoColors.textTertiary.opacity(0.4))
 
             Text("Select a task to chat")
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Text("Click on any task in the list to start a conversation about it.")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
 
@@ -205,15 +205,15 @@ struct TaskChatPanel: View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .scaledFont(size: 32)
-                .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                .foregroundColor(NootoColors.textTertiary.opacity(0.5))
 
             Text("Chat about this task")
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Text("Ask questions, get suggestions, or discuss implementation details.")
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
         }
@@ -234,15 +234,15 @@ struct TaskChatPanelPlaceholder: View {
             HStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 Text("Task Chat")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
@@ -250,29 +250,29 @@ struct TaskChatPanelPlaceholder: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(NootoColors.backgroundTertiary.opacity(0.5))
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Empty state
             VStack(spacing: 16) {
                 Spacer()
                 Image(systemName: "text.bubble")
                     .scaledFont(size: 36)
-                    .foregroundColor(OmiColors.textTertiary.opacity(0.4))
+                    .foregroundColor(NootoColors.textTertiary.opacity(0.4))
                 Text("Select a task to chat")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 Text("Click on any task in the list to start a conversation about it.")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 }

@@ -244,23 +244,23 @@ struct DesktopHomeView: View {
 
                             Text(viewModelContainer.initStatusMessage)
                                 .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             ProgressView()
                                 .scaleEffect(0.8)
-                                .tint(OmiColors.purplePrimary.opacity(0.6))
+                                .tint(NootoColors.purplePrimary.opacity(0.6))
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(OmiColors.backgroundPrimary)
+                        .background(NootoColors.backgroundPrimary)
                         .transition(.opacity.animation(.easeOut(duration: 0.3)))
                     }
                 }
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .frame(minWidth: 900, minHeight: 600)
         .preferredColorScheme(.dark)
-        .tint(OmiColors.purplePrimary)
+        .tint(NootoColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
             // Force dark appearance and disable minSize computation on NSHostingView.
@@ -405,10 +405,10 @@ struct DesktopHomeView: View {
             ZStack {
                 // Content container background
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(OmiColors.backgroundSecondary.opacity(0.4))
+                    .fill(NootoColors.backgroundSecondary.opacity(0.4))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
+                            .stroke(NootoColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
 

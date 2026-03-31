@@ -112,7 +112,7 @@ struct GoalConfettiView: View {
             Color(red: 0.133, green: 0.773, blue: 0.369), // Green
             Color(red: 0.2, green: 0.6, blue: 1.0), // Blue
             .pink, .orange, .cyan, .mint,
-            OmiColors.purplePrimary, OmiColors.purplePrimary.opacity(0.7)
+            NootoColors.brandPrimary, NootoColors.brandPrimary.opacity(0.7)
         ]
         return (0..<40).map { _ in
             (

@@ -10,7 +10,7 @@ struct MemoryGraphPage: View {
     var body: some View {
         ZStack {
             // Full-bleed background + 3D scene
-            OmiColors.backgroundSecondary.ignoresSafeArea()
+            NootoColors.backgroundSecondary.ignoresSafeArea()
 
             if !viewModel.isEmpty {
                 MemoryGraphSceneView(viewModel: viewModel)
@@ -85,7 +85,7 @@ struct MemoryGraphSceneView: NSViewRepresentable {
         scnView.pointOfView = viewModel.cameraNode
         scnView.allowsCameraControl = true
         scnView.autoenablesDefaultLighting = false // We set up our own lights
-        scnView.backgroundColor = NSColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x1A/255.0, alpha: 1.0) // Match OmiColors.backgroundSecondary
+        scnView.backgroundColor = NSColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x1A/255.0, alpha: 1.0) // Match NootoColors.backgroundSecondary
         scnView.antialiasingMode = .multisampling2X // Lighter AA
         scnView.preferredFramesPerSecond = 30 // Cap render rate
 

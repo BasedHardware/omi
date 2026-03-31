@@ -59,20 +59,20 @@ struct OnboardingStepScaffold<Content: View>: View {
           .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
 
         Divider()
-          .background(OmiColors.backgroundTertiary)
+          .background(NootoColors.backgroundTertiary)
 
         OnboardingSecondBrainPane(graphViewModel: graphViewModel, mode: rightPaneMode)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(OmiColors.backgroundPrimary)
+      .background(NootoColors.backgroundPrimary)
 
     case .centered:
       VStack(spacing: 0) {
         header
 
         Divider()
-          .background(OmiColors.backgroundTertiary)
+          .background(NootoColors.backgroundTertiary)
 
         GeometryReader { geometry in
           ScrollView(showsIndicators: false) {
@@ -92,7 +92,7 @@ struct OnboardingStepScaffold<Content: View>: View {
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(OmiColors.backgroundPrimary)
+      .background(NootoColors.backgroundPrimary)
     }
   }
 
@@ -101,7 +101,7 @@ struct OnboardingStepScaffold<Content: View>: View {
       header
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(NootoColors.backgroundTertiary)
 
       ScrollView(showsIndicators: false) {
         VStack(alignment: .leading, spacing: 28) {
@@ -114,7 +114,7 @@ struct OnboardingStepScaffold<Content: View>: View {
         .padding(.vertical, 36)
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
   }
 
   private var header: some View {
@@ -128,7 +128,7 @@ struct OnboardingStepScaffold<Content: View>: View {
           .frame(width: 52, height: 18)
           .accessibilityLabel("omi")
       } else {
-        Text("omi")
+        Text("nooto")
           .font(.system(size: 18, weight: .semibold))
           .foregroundColor(.white)
       }
@@ -139,7 +139,7 @@ struct OnboardingStepScaffold<Content: View>: View {
         Button(action: onSkip) {
           Text("Skip")
             .font(.system(size: 13, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
         }
         .buttonStyle(.plain)
       }
@@ -164,17 +164,17 @@ struct OnboardingStepScaffold<Content: View>: View {
       Text(eyebrow.uppercased())
         .font(.system(size: 12, weight: .semibold))
         .tracking(1.2)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(NootoColors.textTertiary)
 
       Text(title)
         .font(.system(size: 40, weight: .bold))
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(NootoColors.textPrimary)
         .lineSpacing(2)
         .multilineTextAlignment(centered ? .center : .leading)
 
       Text(description)
         .font(.system(size: 16))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
         .lineSpacing(4)
         .multilineTextAlignment(centered ? .center : .leading)
         .frame(maxWidth: 460, alignment: centered ? .center : .leading)
@@ -201,7 +201,7 @@ private struct OnboardingSecondBrainPane: View {
 
   var body: some View {
     ZStack {
-      OmiColors.backgroundSecondary
+      NootoColors.backgroundSecondary
         .ignoresSafeArea()
 
       switch mode {
@@ -209,21 +209,21 @@ private struct OnboardingSecondBrainPane: View {
         VStack(spacing: 12) {
           Text(title)
             .font(.system(size: 28, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(NootoColors.textPrimary)
             .multilineTextAlignment(.center)
 
           Text(detail)
             .font(.system(size: 15))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: 320)
         }
       case .graph:
         if graphViewModel.isEmpty {
           VStack(spacing: 14) {
-            Text("Your graph appears once Omi has something real to map.")
+            Text("Your graph appears once Nooto has something real to map.")
               .font(.system(size: 15, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(NootoColors.textTertiary)
               .multilineTextAlignment(.center)
               .frame(maxWidth: 320)
           }
@@ -288,12 +288,12 @@ struct OnboardingCardButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 15, weight: .semibold))
-      .foregroundColor(isPrimary ? .black : OmiColors.textPrimary)
+      .foregroundColor(isPrimary ? .black : NootoColors.textPrimary)
       .padding(.horizontal, 18)
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isPrimary ? Color.white : OmiColors.backgroundTertiary)
+          .fill(isPrimary ? Color.white : NootoColors.backgroundTertiary)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -314,22 +314,22 @@ struct OnboardingInsightCard: View {
     HStack(alignment: .top, spacing: 14) {
       ZStack {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(OmiColors.backgroundQuaternary)
+          .fill(NootoColors.backgroundQuaternary)
           .frame(width: 42, height: 42)
 
         Image(systemName: icon)
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
       }
 
       VStack(alignment: .leading, spacing: 6) {
         Text(title)
           .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(NootoColors.textPrimary)
 
         Text(detail)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(NootoColors.textTertiary)
           .lineSpacing(3)
       }
 
@@ -338,7 +338,7 @@ struct OnboardingInsightCard: View {
     .padding(18)
     .background(
       RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(NootoColors.backgroundSecondary)
         .overlay(
           RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
@@ -356,12 +356,12 @@ struct OnboardingSelectableChip: View {
     Button(action: action) {
       Text(title)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+        .foregroundColor(isSelected ? .black : NootoColors.textSecondary)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
           Capsule()
-            .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+            .fill(isSelected ? Color.white : NootoColors.backgroundSecondary)
         )
         .overlay(
           Capsule()

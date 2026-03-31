@@ -24,7 +24,7 @@ struct TryAskingPopupView: View {
         .padding(26)
         .background(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(OmiColors.backgroundSecondary.opacity(0.98))
+            .fill(NootoColors.backgroundSecondary.opacity(0.98))
         )
         .overlay(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -45,11 +45,11 @@ struct TryAskingPopupView: View {
           Button(action: onDismiss) {
             Image(systemName: "xmark")
               .font(.system(size: 12, weight: .bold))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(NootoColors.textTertiary)
               .frame(width: 28, height: 28)
               .background(
                 Circle()
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(NootoColors.backgroundTertiary)
               )
           }
           .buttonStyle(.plain)
@@ -76,13 +76,13 @@ struct TryAskingPopupView: View {
           .fill(calloutAmber.opacity(0.14))
       )
 
-      Text("What would you like to ask omi first?")
+      Text("What would you like to ask Nooto first?")
         .font(.system(size: 32, weight: .semibold, design: .serif))
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(NootoColors.textPrimary)
 
       Text("Pick one and we’ll run it through the floating bar with your real context.")
         .font(.system(size: 15))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
 
       VStack(spacing: 14) {
@@ -103,19 +103,19 @@ struct TryAskingPopupView: View {
 
               Image(systemName: "arrow.up.right")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(OmiColors.textQuaternary)
+                .foregroundColor(NootoColors.textQuaternary)
             }
             .contentShape(Rectangle())
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(NootoColors.textPrimary)
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
             .background(
               RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(OmiColors.backgroundTertiary.opacity(0.82))
+                .fill(NootoColors.backgroundTertiary.opacity(0.82))
             )
             .overlay(
               RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(OmiColors.backgroundQuaternary.opacity(0.9), lineWidth: 1)
+                .stroke(NootoColors.backgroundQuaternary.opacity(0.9), lineWidth: 1)
             )
           }
           .buttonStyle(.plain)
@@ -170,7 +170,7 @@ struct PromptSuggestionBanner: View {
           }
           .foregroundColor(Color.black.opacity(0.68))
 
-          Text("Next step -> Ask omi")
+          Text("Next step -> Ask Nooto")
             .font(.system(size: 20, weight: .semibold, design: .serif))
             .foregroundColor(Color.black.opacity(0.86))
 

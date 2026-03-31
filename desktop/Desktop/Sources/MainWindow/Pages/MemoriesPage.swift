@@ -59,18 +59,18 @@ enum MemoryTag: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .focus: return OmiColors.textSecondary
-        case .focused: return OmiColors.textSecondary
-        case .distracted: return OmiColors.textSecondary
-        case .tips: return OmiColors.textSecondary
-        case .system: return OmiColors.textSecondary
-        case .interesting: return OmiColors.textSecondary
-        case .manual: return OmiColors.textSecondary
-        case .productivity: return OmiColors.textSecondary
-        case .health: return OmiColors.textSecondary
-        case .communication: return OmiColors.textSecondary
-        case .learning: return OmiColors.textSecondary
-        case .other: return OmiColors.textTertiary
+        case .focus: return NootoColors.textSecondary
+        case .focused: return NootoColors.textSecondary
+        case .distracted: return NootoColors.textSecondary
+        case .tips: return NootoColors.textSecondary
+        case .system: return NootoColors.textSecondary
+        case .interesting: return NootoColors.textSecondary
+        case .manual: return NootoColors.textSecondary
+        case .productivity: return NootoColors.textSecondary
+        case .health: return NootoColors.textSecondary
+        case .communication: return NootoColors.textSecondary
+        case .learning: return NootoColors.textSecondary
+        case .other: return NootoColors.textTertiary
         }
     }
 
@@ -984,18 +984,18 @@ struct MemoriesPage: View {
             HStack(spacing: 12) {
                 Image(systemName: "trash")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Memory deleted")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 // Progress indicator
                 Text(String(format: "%.0fs", viewModel.undoTimeRemaining))
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .monospacedDigit()
 
                 Button {
@@ -1003,7 +1003,7 @@ struct MemoriesPage: View {
                 } label: {
                     Text("Undo")
                         .scaledFont(size: 14, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
                 .buttonStyle(.plain)
 
@@ -1013,17 +1013,17 @@ struct MemoriesPage: View {
                 } label: {
                     Image(systemName: "xmark")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
+                    .stroke(NootoColors.textQuaternary.opacity(0.5), lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
             .padding(.horizontal, 24)
@@ -1045,26 +1045,26 @@ struct MemoriesPage: View {
                         .frame(width: 14, height: 14)
                 } else {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 TextField("Search memories...", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !viewModel.searchText.isEmpty {
                     Button {
                         viewModel.searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(8)
 
             // Category filter dropdown
@@ -1081,14 +1081,14 @@ struct MemoriesPage: View {
                     Image(systemName: "chevron.down")
                         .scaledFont(size: 10)
                 }
-                .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
+                .foregroundColor(viewModel.selectedTags.isEmpty ? NootoColors.textSecondary : NootoColors.textPrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : NootoColors.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -1102,9 +1102,9 @@ struct MemoriesPage: View {
             } label: {
                 Image(systemName: "brain")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(width: 32, height: 32)
-                    .background(OmiColors.backgroundTertiary)
+                    .background(NootoColors.backgroundTertiary)
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
@@ -1122,7 +1122,7 @@ struct MemoriesPage: View {
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
+                            .stroke(NootoColors.border, lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -1140,7 +1140,7 @@ struct MemoriesPage: View {
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
+                            .stroke(NootoColors.border, lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -1191,20 +1191,20 @@ struct MemoriesPage: View {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .scaledFont(size: 12)
 
                 TextField("Search categories...", text: $categorySearchText)
                     .textFieldStyle(.plain)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !categorySearchText.isEmpty {
                     Button {
                         categorySearchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .scaledFont(size: 12)
                     }
                     .buttonStyle(.plain)
@@ -1212,7 +1212,7 @@ struct MemoriesPage: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(6)
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -1237,10 +1237,10 @@ struct MemoriesPage: View {
                             Spacer()
                             Text("\(viewModel.totalMemoriesCount)")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(OmiColors.backgroundTertiary)
+                                .background(NootoColors.backgroundTertiary)
                                 .cornerRadius(4)
                             if pendingSelectedTags.isEmpty {
                                 Image(systemName: "checkmark")
@@ -1248,10 +1248,10 @@ struct MemoriesPage: View {
                                     .foregroundColor(.white)
                             }
                         }
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(pendingSelectedTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                        .background(pendingSelectedTags.isEmpty ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
                         .cornerRadius(6)
                         .contentShape(Rectangle())
                     }
@@ -1281,10 +1281,10 @@ struct MemoriesPage: View {
                                 Spacer()
                                 Text("\(count)")
                                     .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(OmiColors.backgroundTertiary)
+                                    .background(NootoColors.backgroundTertiary)
                                     .cornerRadius(4)
                                 if isSelected {
                                     Image(systemName: "checkmark")
@@ -1292,10 +1292,10 @@ struct MemoriesPage: View {
                                         .foregroundColor(.white)
                                 }
                             }
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                            .background(isSelected ? NootoColors.backgroundTertiary.opacity(0.5) : Color.clear)
                             .cornerRadius(6)
                             .contentShape(Rectangle())
                         }
@@ -1317,10 +1317,10 @@ struct MemoriesPage: View {
                 } label: {
                     Text("Clear")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -1342,7 +1342,7 @@ struct MemoriesPage: View {
             .padding(12)
         }
         .frame(width: 280)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - Management Menu Popover
@@ -1352,7 +1352,7 @@ struct MemoriesPage: View {
             // Visibility section
             Text("Visibility")
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 6)
@@ -1369,7 +1369,7 @@ struct MemoriesPage: View {
                         .scaledFont(size: 13)
                     Spacer()
                 }
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())
@@ -1390,7 +1390,7 @@ struct MemoriesPage: View {
                         .scaledFont(size: 13)
                     Spacer()
                 }
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())
@@ -1416,7 +1416,7 @@ struct MemoriesPage: View {
                         .scaledFont(size: 13)
                     Spacer()
                 }
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(NootoColors.error)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())
@@ -1427,7 +1427,7 @@ struct MemoriesPage: View {
         }
         .padding(.vertical, 4)
         .frame(width: 200)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - Memory List
@@ -1459,7 +1459,7 @@ struct MemoriesPage: View {
                             .scaleEffect(0.8)
                         Text("Loading more...")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -1476,10 +1476,10 @@ struct MemoriesPage: View {
                                 Text("Load more memories")
                             }
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
@@ -1494,10 +1494,10 @@ struct MemoriesPage: View {
                                 Text("Load more memories")
                             }
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
@@ -1518,7 +1518,7 @@ struct MemoriesPage: View {
             Text(title)
                 .scaledFont(size: 11, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
     }
 
     private func categoryIcon(_ category: MemoryCategory) -> String {
@@ -1531,14 +1531,14 @@ struct MemoriesPage: View {
 
     private func categoryColor(_ category: MemoryCategory) -> Color {
         switch category {
-        case .system: return OmiColors.textSecondary
-        case .interesting: return OmiColors.textSecondary
-        case .manual: return OmiColors.textSecondary
+        case .system: return NootoColors.textSecondary
+        case .interesting: return NootoColors.textSecondary
+        case .manual: return NootoColors.textSecondary
         }
     }
 
     private func tagColorFor(_ tag: String) -> Color {
-        return OmiColors.textSecondary
+        return NootoColors.textSecondary
     }
 
     private func formatDate(_ date: Date) -> String {
@@ -1560,15 +1560,15 @@ struct MemoriesPage: View {
         VStack(spacing: 16) {
             Image(systemName: "brain.head.profile")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Memories Yet")
                 .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Your memories and tips will appear here.\nMemories are extracted from your conversations.")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -1579,14 +1579,14 @@ struct MemoriesPage: View {
                     Text("Add Your First Memory")
                 }
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .background(Color.white)
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(OmiColors.border, lineWidth: 1)
+                        .stroke(NootoColors.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -1599,15 +1599,15 @@ struct MemoriesPage: View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .scaledFont(size: 36)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Results")
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Try a different search or filter")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             if !viewModel.selectedTags.isEmpty {
                 Button {
@@ -1615,7 +1615,7 @@ struct MemoriesPage: View {
                 } label: {
                     Text("Clear Filters")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -1631,7 +1631,7 @@ struct MemoriesPage: View {
 
             Text("Loading memories...")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1640,15 +1640,15 @@ struct MemoriesPage: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .scaledFont(size: 36)
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(NootoColors.error)
 
             Text("Failed to Load Memories")
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text(message)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Button {
                 Task { await viewModel.loadMemories() }
@@ -1658,14 +1658,14 @@ struct MemoriesPage: View {
                     Text("Retry")
                 }
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .background(Color.white)
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(OmiColors.border, lineWidth: 1)
+                        .stroke(NootoColors.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -1701,10 +1701,10 @@ private struct MemoryCardView: View {
                 if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
                     Text("Protected memory")
                         .italic()
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 } else {
                     Text(memory.content)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
             }
                 .scaledFont(size: 14)
@@ -1721,7 +1721,7 @@ private struct MemoryCardView: View {
             // Date
             Text(formatDate(memory.createdAt))
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .fixedSize()
 
             // Info icon with hover popover for details
@@ -1736,16 +1736,16 @@ private struct MemoryCardView: View {
             if isHovered {
                 Image(systemName: "arrow.up.right")
                     .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary))
+        .background(isHovered ? NootoColors.backgroundSecondary : (isNewlyCreated ? NootoColors.brandPrimary.opacity(0.15) : NootoColors.backgroundTertiary))
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border, lineWidth: 1)
+                .stroke(isNewlyCreated ? NootoColors.brandPrimary.opacity(0.3) : NootoColors.border, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -1782,7 +1782,7 @@ private struct MemoryDetailButton: View {
     var body: some View {
         Image(systemName: "info.circle")
             .scaledFont(size: 10)
-            .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+            .foregroundColor(showTooltip ? NootoColors.textSecondary : NootoColors.textTertiary)
             .frame(width: 20, height: 20)
             .contentShape(Rectangle())
             .onHover { hovering in
@@ -1893,12 +1893,12 @@ private struct MemoryDetailTooltip: View {
         HStack(alignment: .top, spacing: 6) {
             Text(label)
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .frame(width: 70, alignment: .trailing)
 
             Text(value)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
         }
     }
 
@@ -1906,12 +1906,12 @@ private struct MemoryDetailTooltip: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.leading, 76)
 
             Text(value)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.leading, 76)
                 .lineLimit(3)
         }
@@ -1947,7 +1947,7 @@ struct MemoryDetailSheet: View {
                 // Header with tags, visibility toggle, delete, and dismiss
                 HStack(spacing: 8) {
                     if memory.isTip {
-                        tagBadge("Tips", "lightbulb.fill", OmiColors.textSecondary)
+                        tagBadge("Tips", "lightbulb.fill", NootoColors.textSecondary)
                         if let tipCat = memory.tipCategory {
                             tagBadge(tipCat.capitalized, memory.tipCategoryIcon, tagColorFor(tipCat))
                         }
@@ -1961,7 +1961,7 @@ struct MemoryDetailSheet: View {
                     HStack(spacing: 6) {
                         Text("Public")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                         if viewModel.isTogglingVisibility {
                             ProgressView()
                                 .scaleEffect(0.7)
@@ -1988,7 +1988,7 @@ struct MemoryDetailSheet: View {
                     } label: {
                         Image(systemName: "trash")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.error)
+                            .foregroundColor(NootoColors.error)
                     }
                     .buttonStyle(.plain)
 
@@ -2000,10 +2000,10 @@ struct MemoryDetailSheet: View {
                     VStack(alignment: .trailing, spacing: 8) {
                         TextEditor(text: $editContentText)
                             .scaledFont(size: 15)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .scrollContentBackground(.hidden)
                             .padding(8)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .cornerRadius(8)
                             .frame(minHeight: 80)
 
@@ -2013,7 +2013,7 @@ struct MemoryDetailSheet: View {
                             } label: {
                                 Text("Cancel")
                                     .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                             }
                             .buttonStyle(.plain)
 
@@ -2040,12 +2040,12 @@ struct MemoryDetailSheet: View {
                     Text("Protected memory")
                         .italic()
                         .scaledFont(size: 15)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text(memory.content)
                         .scaledFont(size: 15)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -2059,15 +2059,15 @@ struct MemoryDetailSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Why this tip?")
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         Text(reasoning)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .textSelection(.enabled)
                     }
                     .padding(12)
-                    .background(OmiColors.backgroundTertiary)
+                    .background(NootoColors.backgroundTertiary)
                     .cornerRadius(8)
                 }
 
@@ -2076,7 +2076,7 @@ struct MemoryDetailSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Context")
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         if let activity = memory.currentActivity {
                             HStack(spacing: 6) {
@@ -2086,18 +2086,18 @@ struct MemoryDetailSheet: View {
                                     .scaledFont(size: 13)
                                     .textSelection(.enabled)
                             }
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                         }
 
                         if let context = memory.contextSummary {
                             Text(context)
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .textSelection(.enabled)
                         }
                     }
                     .padding(12)
-                    .background(OmiColors.backgroundTertiary)
+                    .background(NootoColors.backgroundTertiary)
                     .cornerRadius(8)
                 }
 
@@ -2106,10 +2106,10 @@ struct MemoryDetailSheet: View {
                     if let confidence = memory.confidenceString {
                         HStack {
                             Text("Confidence")
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                             Text(confidence)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
                         }
                         .scaledFont(size: 13)
                     }
@@ -2117,10 +2117,10 @@ struct MemoryDetailSheet: View {
                     if let sourceApp = memory.sourceApp {
                         HStack {
                             Text("Source App")
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                             Text(sourceApp)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
                         }
                         .scaledFont(size: 13)
                     }
@@ -2128,13 +2128,13 @@ struct MemoryDetailSheet: View {
                     if let sourceName = memory.sourceName {
                         HStack {
                             Text("Device")
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                             HStack(spacing: 4) {
                                 Image(systemName: memory.sourceIcon)
                                 Text(sourceName)
                             }
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                         }
                         .scaledFont(size: 13)
                     }
@@ -2142,30 +2142,30 @@ struct MemoryDetailSheet: View {
                     if let micName = memory.inputDeviceName, memory.source == "desktop" {
                         HStack {
                             Text("Microphone")
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                             HStack(spacing: 4) {
                                 Image(systemName: "mic")
                                 Text(micName)
                             }
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                         }
                         .scaledFont(size: 13)
                     }
 
                     HStack {
                         Text("Created")
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                         Spacer()
                         Text(formatDate(memory.createdAt))
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                     }
                     .scaledFont(size: 13)
 
                     if !memory.tags.isEmpty {
                         HStack(alignment: .top) {
                             Text("Tags")
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .scaledFont(size: 13)
                             Spacer()
                             FlowLayout(spacing: 4) {
@@ -2179,7 +2179,7 @@ struct MemoryDetailSheet: View {
                     }
                 }
                 .padding(12)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
 
                 // Action Buttons
@@ -2189,9 +2189,9 @@ struct MemoryDetailSheet: View {
                         MemoryActionRow(
                             icon: "bubble.left.and.bubble.right",
                             title: "View Source Conversation",
-                            iconColor: OmiColors.textPrimary,
-                            textColor: OmiColors.textPrimary,
-                            backgroundColor: OmiColors.backgroundTertiary,
+                            iconColor: NootoColors.textPrimary,
+                            textColor: NootoColors.textPrimary,
+                            backgroundColor: NootoColors.backgroundTertiary,
                             trailingIcon: "arrow.up.right"
                         ) {
                             NSApp.keyWindow?.makeFirstResponder(nil)
@@ -2209,7 +2209,7 @@ struct MemoryDetailSheet: View {
         }
         .frame(width: 450)
         .frame(maxHeight: 600)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
@@ -2219,7 +2219,7 @@ struct MemoryDetailSheet: View {
             Text(title)
                 .scaledFont(size: 11, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
     }
 }
 
@@ -2246,7 +2246,7 @@ private struct MemoryActionRow: View {
             if let trailing = trailingIcon {
                 Image(systemName: trailing)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .scaledFont(size: 14)
@@ -2313,17 +2313,17 @@ struct AddMemorySheet: View {
             HStack {
                 Text("Add Memory")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
 
             TextEditor(text: $viewModel.newMemoryText)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .scrollContentBackground(.hidden)
                 .padding(12)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
                 .frame(height: 150)
 
@@ -2331,7 +2331,7 @@ struct AddMemorySheet: View {
                 // Cancel button
                 Button(action: dismissSheet) {
                     Text("Cancel")
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
 
                 Spacer()
@@ -2341,14 +2341,14 @@ struct AddMemorySheet: View {
                 } label: {
                     Text("Save")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(viewModel.newMemoryText.isEmpty ? OmiColors.textTertiary : .black)
+                        .foregroundColor(viewModel.newMemoryText.isEmpty ? NootoColors.textTertiary : .black)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
-                        .background(viewModel.newMemoryText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
+                        .background(viewModel.newMemoryText.isEmpty ? NootoColors.backgroundTertiary : Color.white)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(viewModel.newMemoryText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                                .stroke(viewModel.newMemoryText.isEmpty ? Color.clear : NootoColors.border, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
@@ -2357,7 +2357,7 @@ struct AddMemorySheet: View {
         }
         .padding(24)
         .frame(width: 400)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 }
 
@@ -2385,17 +2385,17 @@ struct EditMemorySheet: View {
             HStack {
                 Text("Edit Memory")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
 
             TextEditor(text: $viewModel.editText)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .scrollContentBackground(.hidden)
                 .padding(12)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
                 .frame(height: 150)
 
@@ -2403,7 +2403,7 @@ struct EditMemorySheet: View {
                 // Cancel button
                 Button(action: dismissSheet) {
                     Text("Cancel")
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
 
                 Spacer()
@@ -2413,14 +2413,14 @@ struct EditMemorySheet: View {
                 } label: {
                     Text("Save")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(viewModel.editText.isEmpty ? OmiColors.textTertiary : .black)
+                        .foregroundColor(viewModel.editText.isEmpty ? NootoColors.textTertiary : .black)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
-                        .background(viewModel.editText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
+                        .background(viewModel.editText.isEmpty ? NootoColors.backgroundTertiary : Color.white)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(viewModel.editText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                                .stroke(viewModel.editText.isEmpty ? Color.clear : NootoColors.border, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
@@ -2429,6 +2429,6 @@ struct EditMemorySheet: View {
         }
         .padding(24)
         .frame(width: 400)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 }

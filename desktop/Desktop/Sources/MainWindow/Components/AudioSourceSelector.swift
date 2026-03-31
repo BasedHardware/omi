@@ -44,16 +44,16 @@ struct AudioSourceSelector: View {
                         if deviceProvider.isConnected, let device = deviceProvider.connectedDevice {
                             Text(device.displayName)
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         } else {
                             Text("Not connected")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                     } else {
                         Text(AudioCaptureService.getCurrentMicrophoneName() ?? "Default")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .lineLimit(1)
                     }
                 }
@@ -62,20 +62,20 @@ struct AudioSourceSelector: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(isSelected ? NootoColors.brandPrimary.opacity(0.15) : NootoColors.backgroundTertiary.opacity(0.5))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                            .stroke(isSelected ? NootoColors.brandPrimary : Color.clear, lineWidth: 1.5)
                     )
             )
-            .foregroundColor(isAvailable ? OmiColors.textPrimary : OmiColors.textTertiary)
+            .foregroundColor(isAvailable ? NootoColors.textPrimary : NootoColors.textTertiary)
             .opacity(isAvailable ? 1.0 : 0.5)
         }
         .buttonStyle(.plain)
@@ -96,7 +96,7 @@ struct AudioSourceIndicator: View {
 
             Text(sourceName)
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             if appState.audioSource == .bleDevice && deviceProvider.isConnected {
                 // Show battery for BLE device
@@ -115,7 +115,7 @@ struct AudioSourceIndicator: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
     }
 
@@ -133,9 +133,9 @@ struct AudioSourceIndicator: View {
 
     private var indicatorColor: Color {
         if appState.audioSource == .bleDevice {
-            return deviceProvider.isConnected ? OmiColors.purplePrimary : .orange
+            return deviceProvider.isConnected ? NootoColors.brandPrimary : .orange
         }
-        return OmiColors.purplePrimary
+        return NootoColors.brandPrimary
     }
 
     private var batteryIcon: String {
@@ -167,5 +167,5 @@ struct AudioSourceIndicator: View {
         AudioSourceIndicator(appState: AppState())
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }

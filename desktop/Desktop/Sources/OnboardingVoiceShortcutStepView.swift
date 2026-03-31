@@ -21,14 +21,14 @@ struct OnboardingVoiceShortcutStepView: View {
             HStack {
                 Text("Set your voice shortcut")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onSkip) {
                     Text("Skip")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -36,18 +36,18 @@ struct OnboardingVoiceShortcutStepView: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             Spacer()
 
             VStack(spacing: 24) {
                 Text("Press and hold to test.\nDoes the button light up?")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .multilineTextAlignment(.center)
 
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
                     .frame(height: 128)
                     .frame(maxWidth: 420)
                     .overlay {
@@ -57,7 +57,7 @@ struct OnboardingVoiceShortcutStepView: View {
                 VStack(spacing: 12) {
                     Text("Try another shortcut if it doesn't react:")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     HStack(spacing: 10) {
                         ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
@@ -91,7 +91,7 @@ struct OnboardingVoiceShortcutStepView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
             resetFloatingBarConversation()
@@ -125,7 +125,7 @@ struct OnboardingVoiceShortcutStepView: View {
 
             Text(shortcutDetected ? "Shortcut detected" : "Press and hold to test")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
     }
 
@@ -134,12 +134,12 @@ struct OnboardingVoiceShortcutStepView: View {
         return Button(action: beginCustomShortcutCapture) {
             Text("Custom")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+                .foregroundColor(isSelected ? .black : NootoColors.textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+                        .fill(isSelected ? Color.white : NootoColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -149,7 +149,7 @@ struct OnboardingVoiceShortcutStepView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(isRecordingCustomShortcut ? "Press and hold your custom shortcut now" : "Custom shortcut")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             HStack(spacing: 10) {
                 HStack(spacing: 6) {
@@ -163,12 +163,12 @@ struct OnboardingVoiceShortcutStepView: View {
                 Button(action: beginCustomShortcutCapture) {
                     Text(isRecordingCustomShortcut ? "Listening..." : "Save")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(OmiColors.backgroundPrimary)
+                                .fill(NootoColors.backgroundPrimary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -176,7 +176,7 @@ struct OnboardingVoiceShortcutStepView: View {
 
             Text("You can use one key or a combination like ⌘ J.")
                 .font(.system(size: 12))
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             if let captureError {
                 Text(captureError)
@@ -188,25 +188,25 @@ struct OnboardingVoiceShortcutStepView: View {
         .frame(maxWidth: 420)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
         )
     }
 
     private func keyCap(_ label: String) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
+            .fill(shortcutDetected ? Color.white : NootoColors.backgroundTertiary)
             .frame(minWidth: 48, minHeight: 48)
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
+                        shortcutDetected ? Color.white : NootoColors.textTertiary.opacity(0.3),
                         lineWidth: 2
                     )
             )
             .overlay {
                 Text(label)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
+                    .foregroundColor(shortcutDetected ? .black : NootoColors.textPrimary)
                     .padding(.horizontal, label.count > 2 ? 14 : 10)
             }
             .fixedSize()
@@ -214,12 +214,12 @@ struct OnboardingVoiceShortcutStepView: View {
 
     private func smallKeyCap(_ label: String, active: Bool) -> some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(active ? Color.white : OmiColors.backgroundTertiary)
+            .fill(active ? Color.white : NootoColors.backgroundTertiary)
             .frame(minWidth: 36, minHeight: 32)
             .overlay {
                 Text(label)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(active ? .black : OmiColors.textPrimary)
+                    .foregroundColor(active ? .black : NootoColors.textPrimary)
                     .padding(.horizontal, label.count > 2 ? 10 : 8)
             }
             .fixedSize()
@@ -239,12 +239,12 @@ struct OnboardingVoiceShortcutStepView: View {
                         .font(.system(size: 13, weight: .medium))
                 }
             }
-            .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? .black : NootoColors.textSecondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+                    .fill(isSelected ? Color.white : NootoColors.backgroundSecondary)
             )
         }
         .buttonStyle(.plain)

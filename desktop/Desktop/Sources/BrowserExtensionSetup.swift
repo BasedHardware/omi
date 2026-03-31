@@ -40,7 +40,7 @@ struct BrowserExtensionSetup: View {
                 HStack(spacing: 8) {
                     ForEach(Phase.allCases, id: \.rawValue) { p in
                         Circle()
-                            .fill(p.rawValue <= phase.rawValue ? OmiColors.purplePrimary : OmiColors.textTertiary.opacity(0.3))
+                            .fill(p.rawValue <= phase.rawValue ? NootoColors.brandPrimary : NootoColors.textTertiary.opacity(0.3))
                             .frame(width: 8, height: 8)
                     }
                 }
@@ -97,10 +97,10 @@ struct BrowserExtensionSetup: View {
         .frame(width: phase == .connect ? 880 : 480, height: phase == .connect ? 520 : 420)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
                 )
         )
         .animation(.easeInOut(duration: 0.3), value: phase)
@@ -112,15 +112,15 @@ struct BrowserExtensionSetup: View {
         VStack(spacing: 16) {
             Image(systemName: "globe")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
 
             Text("Set up browser access")
                 .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("This lets the AI use your Chrome browser with all your logged-in sessions — search the web, fill forms, and interact with sites on your behalf.")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
@@ -150,7 +150,7 @@ struct BrowserExtensionSetup: View {
             VStack(spacing: 16) {
                 Text("Connect the extension")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 // Step 1: Install Chrome
                 HStack(alignment: .top, spacing: 12) {
@@ -159,7 +159,7 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(chromeInstalled ? "Google Chrome is installed" : "Install Google Chrome")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(chromeInstalled ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(chromeInstalled ? NootoColors.textTertiary : NootoColors.textPrimary)
 
                         if !chromeInstalled {
                             Button(action: {
@@ -189,7 +189,7 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Install the extension from Chrome Web Store")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(extensionStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(extensionStepDone ? NootoColors.textTertiary : NootoColors.textPrimary)
 
                         Button(action: {
                             Self.openURLInChrome(Self.chromeWebStoreURL)
@@ -216,7 +216,7 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Open the extension and copy the auth token")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(tokenStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(tokenStepDone ? NootoColors.textTertiary : NootoColors.textPrimary)
 
                         Button(action: {
                             Self.openExtensionInChrome()
@@ -245,22 +245,22 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Paste it here")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(isTokenValid ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(isTokenValid ? NootoColors.textTertiary : NootoColors.textPrimary)
 
                         TextField("Paste token here...", text: $tokenInput)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(8)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                                    .fill(NootoColors.backgroundPrimary.opacity(0.5))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(
-                                                tokenError != nil ? OmiColors.error.opacity(0.5) :
+                                                tokenError != nil ? NootoColors.error.opacity(0.5) :
                                                 isTokenValid ? Color.green.opacity(0.5) :
-                                                OmiColors.textTertiary.opacity(0.3),
+                                                NootoColors.textTertiary.opacity(0.3),
                                                 lineWidth: 1
                                             )
                                     )
@@ -273,7 +273,7 @@ struct BrowserExtensionSetup: View {
                         if let error = tokenError {
                             Text(error)
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.error)
+                                .foregroundColor(NootoColors.error)
                         }
                     }
                 }
@@ -309,16 +309,16 @@ struct BrowserExtensionSetup: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.textTertiary.opacity(0.2), lineWidth: 1)
+                            .stroke(NootoColors.textTertiary.opacity(0.2), lineWidth: 1)
                     )
             } else if !chromeInstalled {
                 VStack(spacing: 12) {
                     Image(systemName: "desktopcomputer")
                         .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.5))
                     Text("Install Chrome to get started")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -327,7 +327,7 @@ struct BrowserExtensionSetup: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                .fill(NootoColors.backgroundPrimary.opacity(0.5))
         )
     }
 
@@ -340,11 +340,11 @@ struct BrowserExtensionSetup: View {
 
                 Text("Testing connection...")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("Sending a test request to verify the extension is working.")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             } else if verifySuccess {
@@ -354,31 +354,31 @@ struct BrowserExtensionSetup: View {
 
                 Text("Connected!")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("The browser extension is working. The AI can now use your Chrome browser.")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             } else if let error = verifyError {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .scaledFont(size: 48)
-                    .foregroundColor(OmiColors.warning)
+                    .foregroundColor(NootoColors.warning)
 
                 Text("Connection failed")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text(error)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
 
                 Text("Make sure Chrome is open and the extension page shows \"Connected\".")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textQuaternary)
+                    .foregroundColor(NootoColors.textQuaternary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -394,11 +394,11 @@ struct BrowserExtensionSetup: View {
 
             Text("All set!")
                 .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Browser access is configured. The AI can now browse the web, fill forms, and interact with sites using your Chrome sessions.")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
         }
@@ -411,11 +411,11 @@ struct BrowserExtensionSetup: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
                 .frame(width: 20)
             Text(text)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
         }
     }
 
@@ -432,7 +432,7 @@ struct BrowserExtensionSetup: View {
                     .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.white)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
+                    .background(Circle().fill(NootoColors.textTertiary.opacity(0.5)))
             }
         }
     }

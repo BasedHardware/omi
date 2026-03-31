@@ -184,7 +184,7 @@ struct RewindTimelinePlayerView: View {
                 in: 0...Double(max(0, viewModel.screenshots.count - 1)),
                 step: 1
             )
-            .tint(OmiColors.purplePrimary)
+            .tint(NootoColors.brandPrimary)
         }
     }
 
@@ -234,7 +234,7 @@ struct RewindTimelinePlayerView: View {
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
                     .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .frame(width: 64, height: 64)
                     .background(Color.white)
                     .clipShape(Circle())

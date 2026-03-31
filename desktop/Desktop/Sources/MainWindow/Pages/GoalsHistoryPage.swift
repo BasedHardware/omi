@@ -18,7 +18,7 @@ struct GoalsHistoryPage: View {
                         Text("Back")
                             .scaledFont(size: 14, weight: .medium)
                     }
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
 
@@ -26,7 +26,7 @@ struct GoalsHistoryPage: View {
 
                 Text("Goals History")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -38,7 +38,7 @@ struct GoalsHistoryPage: View {
             .padding(.bottom, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             if isLoading {
                 VStack(spacing: 12) {
@@ -46,7 +46,7 @@ struct GoalsHistoryPage: View {
                         .scaleEffect(1.0)
                     Text("Loading history...")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = error {
@@ -56,20 +56,20 @@ struct GoalsHistoryPage: View {
                         .foregroundColor(.orange)
                     Text(error)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if completedGoals.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "trophy")
                         .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.5))
                     Text("No goals history yet")
                         .scaledFont(size: 15, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Text("Completed and removed goals will appear here")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -83,7 +83,7 @@ struct GoalsHistoryPage: View {
                 }
             }
         }
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
         .task {
             await loadCompletedGoals()
         }
@@ -147,7 +147,7 @@ struct CompletedGoalRow: View {
             // Emoji
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.6))
+                    .fill(NootoColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 36, height: 36)
                 Text(goalEmoji)
                     .scaledFont(size: 18)
@@ -157,25 +157,25 @@ struct CompletedGoalRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(goal.title)
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
                     // Type badge
                     Text(typeBadgeText)
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(OmiColors.purplePrimary.opacity(0.15))
+                                .fill(NootoColors.brandPrimary.opacity(0.15))
                         )
 
                     // Final value
                     Text("\(Int(goal.currentValue))/\(Int(goal.targetValue))\(goal.unit.map { " \($0)" } ?? "")")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -191,16 +191,16 @@ struct CompletedGoalRow: View {
                     if !completionDateText.isEmpty {
                         Text(completionDateText)
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.5))
 
                     Text("Removed")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.7))
                 }
             }
         }
@@ -208,7 +208,7 @@ struct CompletedGoalRow: View {
         .padding(.horizontal, 14)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.3))
+                .fill(NootoColors.backgroundTertiary.opacity(0.3))
         )
     }
 }

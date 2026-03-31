@@ -82,7 +82,7 @@ struct SelectableMarkdown: View {
             } else {
                 Text(content)
                     .font(.system(size: fontSize))
-                    .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+                    .foregroundColor(sender == .user ? .white : NootoColors.textPrimary)
                     .if_available_writingToolsNone()
             }
         }
@@ -105,12 +105,12 @@ struct SelectableMarkdown: View {
         let codeFontSize = round(13 * fontScale)
         let bgColor = sender == .user
             ? Color.white.opacity(0.15)
-            : OmiColors.backgroundTertiary
+            : NootoColors.backgroundTertiary
 
         ScrollView(.horizontal, showsIndicators: false) {
             Text(code)
                 .font(.system(size: codeFontSize, design: .monospaced))
-                .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+                .foregroundColor(sender == .user ? .white : NootoColors.textPrimary)
                 .if_available_writingToolsNone()
         }
         .padding(12)
@@ -132,11 +132,11 @@ struct SelectableMarkdown: View {
         ) else { return nil }
 
         let codeFontSize = round(13 * fontScale)
-        let baseColor: Color = sender == .user ? .white : OmiColors.textPrimary
-        let linkColor: Color = sender == .user ? .white.opacity(0.9) : OmiColors.purplePrimary
+        let baseColor: Color = sender == .user ? .white : NootoColors.textPrimary
+        let linkColor: Color = sender == .user ? .white.opacity(0.9) : NootoColors.brandPrimary
         let codeBgColor: Color = sender == .user
             ? .white.opacity(0.15)
-            : OmiColors.backgroundTertiary
+            : NootoColors.backgroundTertiary
 
         attributed.font = .system(size: fontSize)
         attributed.foregroundColor = baseColor
