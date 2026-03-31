@@ -16,11 +16,11 @@ struct DailyTaskCreationSheet: View {
                 HStack {
                     Image(systemName: "repeat.circle.fill")
                         .scaledFont(size: 20)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
 
                     Text("Create Daily Task")
                         .scaledFont(size: 18, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Spacer()
 
@@ -29,19 +29,19 @@ struct DailyTaskCreationSheet: View {
                     }
                     .buttonStyle(.plain)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 }
 
                 Text("This task will repeat every day until completed")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
 
             // Task description
             VStack(alignment: .leading, spacing: 8) {
                 Text("Task Description")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 TextField("What needs to be done daily?", text: $taskDescription)
                     .textFieldStyle(.roundedBorder)
@@ -56,7 +56,7 @@ struct DailyTaskCreationSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Priority")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 12) {
                     ForEach(["high", "medium", "low"], id: \.self) { level in
@@ -72,13 +72,13 @@ struct DailyTaskCreationSheet: View {
 
                                 Text(level.capitalized)
                                     .scaledFont(size: 13)
-                                    .foregroundColor(isSelected ? .white : OmiColors.textPrimary)
+                                    .foregroundColor(isSelected ? .white : NootoColors.textPrimary)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(isSelected ? priorityColor(level) : OmiColors.backgroundSecondary)
+                                    .fill(isSelected ? priorityColor(level) : NootoColors.backgroundSecondary)
                             )
                         }
                         .buttonStyle(.plain)
@@ -112,7 +112,7 @@ struct DailyTaskCreationSheet: View {
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
-                                  OmiColors.textTertiary : OmiColors.purplePrimary)
+                                  NootoColors.textTertiary : NootoColors.brandPrimary)
                     )
                 }
                 .buttonStyle(.plain)
@@ -121,7 +121,7 @@ struct DailyTaskCreationSheet: View {
         }
         .padding(24)
         .frame(width: 450, height: 320)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isTextFieldFocused = true
@@ -134,7 +134,7 @@ struct DailyTaskCreationSheet: View {
         case "high": return Color.red
         case "medium": return Color.orange
         case "low": return Color.blue
-        default: return OmiColors.textSecondary
+        default: return NootoColors.textSecondary
         }
     }
 
