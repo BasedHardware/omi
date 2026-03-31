@@ -235,6 +235,88 @@ final class URLConstructionTests: XCTestCase {
     }
 }
 
+// MARK: - VAD Gate Auto-Emit Tests
+
+final class VADGateAutoEmitTests: XCTestCase {
+
+    func testAutoEmitFromSpeechTransitionsToSpeech() {
+        let gate = VADGateService()
+        let buffer = Data(repeating: 0xAA, count: 1_500_000)
+        let result = gate.testAutoEmit(
+            batchBuffer: buffer,
+            startState: .speech,
+            speechStartWallTime: 100.0,
+            audioCursorMs: 23400,
+            lastSpeechMs: 23400
+        )
+
+        // Should emit the buffer
+        XCTAssertEqual(result.output.audioBuffer?.count, 1_500_000)
+        XCTAssertTrue(result.output.isComplete)
+        XCTAssertEqual(result.output.speechStartWallTime, 100.0, accuracy: 0.001)
+
+        // Should stay in .speech
+        XCTAssertEqual(result.resultState, .speech)
+
+        // Buffer should be cleared
+        XCTAssertEqual(gate.testBatchBufferCount, 0)
+    }
+
+    func testAutoEmitFromHangoverTransitionsToSpeech() {
+        let gate = VADGateService()
+        let buffer = Data(repeating: 0xBB, count: 1_500_000)
+        let result = gate.testAutoEmit(
+            batchBuffer: buffer,
+            startState: .hangover,
+            speechStartWallTime: 50.0,
+            audioCursorMs: 25000,
+            lastSpeechMs: 21000
+        )
+
+        // Should emit the buffer
+        XCTAssertTrue(result.output.isComplete)
+        XCTAssertEqual(result.output.audioBuffer?.count, 1_500_000)
+
+        // Should transition to .speech (not stay in .hangover)
+        XCTAssertEqual(result.resultState, .speech)
+    }
+
+    func testAutoEmitResetsBatchLastSpeechMs() {
+        let gate = VADGateService()
+        let buffer = Data(repeating: 0xCC, count: 1_500_000)
+        let result = gate.testAutoEmit(
+            batchBuffer: buffer,
+            startState: .hangover,
+            speechStartWallTime: 50.0,
+            audioCursorMs: 25000,
+            lastSpeechMs: 21000  // Old speech time from previous buffer
+        )
+
+        // batchLastSpeechMs should be reset to batchAudioCursorMs
+        XCTAssertEqual(result.resultLastSpeechMs, 25000, accuracy: 0.001)
+    }
+
+    func testAutoEmitAdvancesStartWallTime() {
+        let gate = VADGateService()
+        // 640000 bytes = 10 seconds of stereo 16kHz Int16 audio
+        let buffer = Data(repeating: 0xDD, count: 640_000)
+        let result = gate.testAutoEmit(
+            batchBuffer: buffer,
+            startState: .speech,
+            speechStartWallTime: 100.0,
+            audioCursorMs: 10000,
+            lastSpeechMs: 10000
+        )
+
+        // emittedDuration = 640000 / 4 / 16000 = 10.0s
+        // New start wall time should be 100.0 + 10.0 = 110.0
+        XCTAssertEqual(result.resultStartWallTime, 110.0, accuracy: 0.001)
+
+        // Emitted output should have old start time
+        XCTAssertEqual(result.output.speechStartWallTime, 100.0, accuracy: 0.001)
+    }
+}
+
 // MARK: - Batch Transcription Splitting Tests
 
 final class BatchSplitTests: XCTestCase {
