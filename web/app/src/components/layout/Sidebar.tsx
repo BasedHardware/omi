@@ -74,37 +74,37 @@ const navItems: NavItem[] = [
   {
     label: 'Conversations',
     href: '/conversations',
-    icon: <GanttChartSquare className="w-5 h-5" />,
+    icon: <GanttChartSquare className="w-4 h-4" />,
   },
   {
     label: 'Record',
     href: '/record',
-    icon: <Mic className="w-5 h-5" />,
+    icon: <Mic className="w-4 h-4" />,
   },
   {
     label: 'Recaps',
     href: '/recaps',
-    icon: <CalendarDays className="w-5 h-5" />,
+    icon: <CalendarDays className="w-4 h-4" />,
   },
   {
     label: 'Chat',
     href: '/chat',
-    icon: <MessageCircle className="w-5 h-5" />,
+    icon: <MessageCircle className="w-4 h-4" />,
   },
   {
     label: 'My Apps',
     href: '/my-apps',
-    icon: <LayoutGrid className="w-5 h-5" />,
+    icon: <LayoutGrid className="w-4 h-4" />,
   },
   {
     label: 'Tasks',
     href: '/tasks',
-    icon: <ListChecks className="w-5 h-5" />,
+    icon: <ListChecks className="w-4 h-4" />,
   },
   {
     label: 'Memories',
     href: '/memories',
-    icon: <Brain className="w-5 h-5" />,
+    icon: <Brain className="w-4 h-4" />,
   },
 ];
 
@@ -305,22 +305,22 @@ export function Sidebar({
             <button
               onClick={toggleNotificationCenter}
               className={cn(
-                'flex items-center rounded-xl w-full',
-                'transition-colors duration-200',
-                showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
-                'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+                'flex items-center rounded-lg w-full',
+                'transition-colors duration-150',
+                showText ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5',
+                'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground'
               )}
               title="Notifications"
             >
               <span className="flex-shrink-0 relative">
-                <Bell className="w-5 h-5" />
+                <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full">
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 flex items-center justify-center bg-red-500 text-white text-[8px] font-bold rounded-full">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </span>
-              {showText && <span className="font-medium">Notifications</span>}
+              {showText && <span className="text-sm">Notifications</span>}
             </button>
 
             {navItems.map((item) => {
@@ -340,12 +340,12 @@ export function Sidebar({
                   }}
                   title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                   className={cn(
-                    'flex items-center rounded-xl',
-                    'transition-all duration-200',
-                    showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                    'flex items-center rounded-lg',
+                    'transition-colors duration-150',
+                    showText ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5',
                     isActive
                       ? 'bg-brand/10 text-brand'
-                      : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary',
+                      : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
                     showComingSoon && 'opacity-60'
                   )}
                 >
@@ -360,10 +360,10 @@ export function Sidebar({
                     )}
                   </span>
                   {showText && (
-                    <span className="font-medium flex items-center gap-2">
+                    <span className="text-sm flex items-center gap-2">
                       {item.label}
                       {showComingSoon && (
-                        <span className="text-[10px] text-muted-foreground bg-bg-quaternary px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] text-muted-foreground bg-secondary px-1 py-0.5 rounded">
                           Soon
                         </span>
                       )}
@@ -430,12 +430,12 @@ export function Sidebar({
             title={!showText ? 'Feedback' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-brand hover:bg-white/[0.04]',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              'text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/[0.03]',
+              showText ? 'gap-2.5 px-3 py-1.5' : 'justify-center p-2'
             )}
           >
-            <MessageSquare className="w-4 h-4 flex-shrink-0" />
-            {showText && <span className="text-sm">Feedback</span>}
+            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
+            {showText && <span className="text-xs">Feedback</span>}
           </a>
           <a
             href="http://discord.omi.me"
@@ -444,12 +444,12 @@ export function Sidebar({
             title={!showText ? 'Discord' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-brand hover:bg-white/[0.04]',
-              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              'text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/[0.03]',
+              showText ? 'gap-2.5 px-3 py-1.5' : 'justify-center p-2'
             )}
           >
-            <DiscordIcon className="w-4 h-4 flex-shrink-0" />
-            {showText && <span className="text-sm">Discord</span>}
+            <DiscordIcon className="w-3.5 h-3.5 flex-shrink-0" />
+            {showText && <span className="text-xs">Discord</span>}
           </a>
         </div>
 
