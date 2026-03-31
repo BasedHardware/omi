@@ -20,14 +20,14 @@ struct OnboardingTasksStepView: View {
             HStack {
                 Text("Tasks")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             Spacer()
 
@@ -56,11 +56,11 @@ struct OnboardingTasksStepView: View {
                 VStack(spacing: 10) {
                     Text("Auto-created Tasks")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
-                    Text("omi listens to your conversations and automatically\ncreates tasks, action items, and follow-ups for you.")
+                    Text("Nooto listens to your conversations and automatically\ncreates tasks, action items, and follow-ups for you.")
                         .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -99,7 +99,7 @@ struct OnboardingTasksStepView: View {
             .padding(.bottom, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             // Stagger task card appearance
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -114,18 +114,18 @@ struct OnboardingTasksStepView: View {
         HStack(spacing: 12) {
             Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 18))
-                .foregroundColor(checked ? .green : OmiColors.textTertiary)
+                .foregroundColor(checked ? .green : NootoColors.textTertiary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13))
-                    .foregroundColor(checked ? OmiColors.textTertiary : OmiColors.textPrimary)
+                    .foregroundColor(checked ? NootoColors.textTertiary : NootoColors.textPrimary)
                     .strikethrough(checked)
                     .lineLimit(1)
 
                 Text(subtitle)
                     .font(.system(size: 11))
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Spacer()
@@ -134,10 +134,10 @@ struct OnboardingTasksStepView: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
                 )
         )
     }
