@@ -24,10 +24,11 @@ class BatteryInfoWidget extends StatelessWidget {
       builder: (context, isMemoriesPage, child) {
         // Use Selector to only rebuild when battery level, connected device, or connecting state changes
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
-        return Selector<DeviceProvider, (int, BtDevice?, bool)>(
-          selector: (_, provider) => (provider.batteryLevel, provider.connectedDevice, provider.isConnecting),
+        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool)>(
+          selector: (_, provider) =>
+              (provider.batteryLevel, provider.connectedDevice, provider.pairedDevice, provider.isConnecting),
           builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, isConnecting) = data;
+            final (batteryLevel, connectedDevice, pairedDevice, isConnecting) = data;
             if (connectedDevice != null) {
               return GestureDetector(
                 onTap: () {
@@ -65,8 +66,8 @@ class BatteryInfoWidget extends StatelessWidget {
                             color: batteryLevel > 75
                                 ? const Color.fromARGB(255, 0, 255, 8)
                                 : batteryLevel > 20
-                                ? Colors.yellow.shade700
-                                : Colors.red,
+                                    ? Colors.yellow.shade700
+                                    : Colors.red,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -80,7 +81,7 @@ class BatteryInfoWidget extends StatelessWidget {
                   ),
                 ),
               );
-            } else if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
+            } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
               // Device is paired but disconnected
               return GestureDetector(
                 onTap: () async {
@@ -101,7 +102,7 @@ class BatteryInfoWidget extends StatelessWidget {
                         child: Stack(
                           children: [
                             Image.asset(
-                              DeviceUtils.getDeviceImageFromBtDevice(SharedPreferencesUtil().btDevice),
+                              DeviceUtils.getDeviceImageFromBtDevice(pairedDevice),
                               fit: BoxFit.contain,
                             ),
                             // Slash line across the image
@@ -146,13 +147,13 @@ class BatteryInfoWidget extends StatelessWidget {
                               ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
-                          ? Text(
-                              context.l10n.connectDevice,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                            )
-                          : const SizedBox.shrink(),
+                              ? Text(
+                                  context.l10n.connectDevice,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                )
+                              : const SizedBox.shrink(),
                     ],
                   ),
                 ),
