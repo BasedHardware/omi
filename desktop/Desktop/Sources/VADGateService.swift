@@ -712,6 +712,10 @@ final class VADGateService {
         // Always transition to .speech for continued accumulation.
         // If we were in .hangover, staying there would emit a silence-only follow-up chunk.
         batchState = .speech
+        // Reset lastSpeechMs to current cursor so the hangover timer starts fresh.
+        // Without this, the next silent chunk would immediately trigger hangover→silence
+        // and emit an empty/silence-only buffer.
+        batchLastSpeechMs = batchAudioCursorMs
         batchAudioBuffer = Data()
 
         log("VADGate [batch]: Auto-emit (max size) — \(completedBuffer.count) bytes (\(String(format: "%.1f", emittedDurationSec))s)")
