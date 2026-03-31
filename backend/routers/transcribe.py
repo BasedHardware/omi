@@ -976,11 +976,12 @@ async def _stream_handler(
         nonlocal stt_degraded
         if not stt_degraded:
             return
-        stt_degraded = False
-        # Flush remaining degraded audio BEFORE declaring recovery so batch segments
-        # are in the buffer before live segments arrive (preserves chronological order).
+        # Keep stt_degraded = True during flush so incoming chunks still route to the
+        # degraded batch buffer (not silently dropped).  Only flip AFTER the recovered
+        # socket is published and ready to receive audio.
         if degraded_batch_processor.has_audio and not is_multi_channel:
             await _flush_degraded_batch()
+        stt_degraded = False
         _send_message_event(MessageServiceStatusEvent(status="stt_recovered", status_text="STT Service Restored"))
 
     def _degraded_flush_kwargs():
@@ -989,6 +990,7 @@ async def _stream_handler(
             'stream_start_time': first_audio_byte_timestamp,
             'segment_sink': realtime_segment_buffers,
             'budget_exhausted': fair_use_dg_budget_exhausted,
+            'track_usage': fair_use_track_dg_usage,
         }
 
     async def _flush_degraded_batch():
