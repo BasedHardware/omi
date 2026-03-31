@@ -51,8 +51,8 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
     let mut xml = String::from(r#"<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
-    <title>Omi Desktop Updates</title>
-    <description>Omi AI Desktop Application</description>
+    <title>Nooto Desktop Updates</title>
+    <description>Nooto AI Desktop Application</description>
     <language>en</language>
 "#);
 
@@ -78,7 +78,7 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
         };
 
         xml.push_str(&format!(r#"    <item>
-      <title>Omi {}</title>
+      <title>Nooto {}</title>
       <sparkle:version>{}</sparkle:version>
       <sparkle:shortVersionString>{}</sparkle:shortVersionString>
       <description><![CDATA[{}]]></description>
