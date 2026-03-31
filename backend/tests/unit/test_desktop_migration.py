@@ -572,6 +572,7 @@ class TestGetChatSessionsQuery:
 
         fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
         assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
 
 
 # ===========================================================================
