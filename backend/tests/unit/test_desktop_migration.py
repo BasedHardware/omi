@@ -753,3 +753,102 @@ class TestBatchLimit:
     def test_batch_limit_is_500(self):
         """BATCH_LIMIT constant is 500."""
         assert staged_tasks_db.BATCH_LIMIT == 500
+
+
+# ===========================================================================
+# 6. PROMOTE RESPONSE WIRE-COMPAT (PromoteResponse envelope)
+# ===========================================================================
+
+import database.focus_sessions as focus_sessions_db
+
+
+class TestPromoteResponseWireCompat:
+    """Verify promote endpoint returns PromoteResponse envelope expected by Swift client."""
+
+    def test_promote_returns_envelope_when_task_exists(self):
+        """Router wraps promoted action_item in {promoted: true, reason: null, promoted_task: {...}}."""
+        from routers.staged_tasks import promote_staged_task
+
+        mock_action_item = {'id': 'ai-1', 'description': 'Test task', 'completed': False}
+
+        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=mock_action_item):
+            result = promote_staged_task(uid='test-uid')
+
+        assert result['promoted'] is True
+        assert result['reason'] is None
+        assert result['promoted_task'] == mock_action_item
+
+    def test_promote_returns_envelope_when_no_tasks(self):
+        """Router wraps None in {promoted: false, reason: '...', promoted_task: null}."""
+        from routers.staged_tasks import promote_staged_task
+
+        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=None):
+            result = promote_staged_task(uid='test-uid')
+
+        assert result['promoted'] is False
+        assert result['reason'] is not None
+        assert result['promoted_task'] is None
+
+
+# ===========================================================================
+# 7. FOCUS STATS WIRE-COMPAT (FocusStatsResponse shape)
+# ===========================================================================
+
+
+class TestFocusStatsWireCompat:
+    """Verify focus stats returns FocusStatsResponse shape expected by Swift client."""
+
+    def test_focus_stats_has_all_required_fields(self):
+        """get_focus_stats returns date, focused_minutes, distracted_minutes, session_count, etc."""
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=[]):
+            result = focus_sessions_db.get_focus_stats('test-uid', date='2025-01-15')
+
+        required_keys = {
+            'date',
+            'focused_minutes',
+            'distracted_minutes',
+            'session_count',
+            'focused_count',
+            'distracted_count',
+            'top_distractions',
+        }
+        assert required_keys.issubset(result.keys()), f"Missing keys: {required_keys - result.keys()}"
+
+    def test_focus_stats_computes_minutes(self):
+        """Focused/distracted times are reported in minutes."""
+        sessions = [
+            {'status': 'focused', 'duration_seconds': 300},
+            {'status': 'focused', 'duration_seconds': 180},
+            {'status': 'distracted', 'duration_seconds': 120, 'app_or_site': 'Twitter'},
+        ]
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
+            result = focus_sessions_db.get_focus_stats('test-uid', date='2025-01-15')
+
+        assert result['focused_minutes'] == 8  # (300+180)//60
+        assert result['distracted_minutes'] == 2  # 120//60
+        assert result['session_count'] == 3
+        assert result['focused_count'] == 2
+        assert result['distracted_count'] == 1
+        assert result['date'] == '2025-01-15'
+
+    def test_top_distractions_is_list_of_dicts(self):
+        """top_distractions must be list of {app_or_site, total_seconds, count} dicts, not tuples."""
+        sessions = [
+            {'status': 'distracted', 'duration_seconds': 120, 'app_or_site': 'Twitter'},
+            {'status': 'distracted', 'duration_seconds': 60, 'app_or_site': 'Twitter'},
+            {'status': 'distracted', 'duration_seconds': 300, 'app_or_site': 'Reddit'},
+        ]
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
+            result = focus_sessions_db.get_focus_stats('test-uid', date='2025-01-15')
+
+        distractions = result['top_distractions']
+        assert isinstance(distractions, list)
+        assert len(distractions) == 2
+
+        # Sorted by total_seconds descending: Reddit (300) > Twitter (180)
+        assert distractions[0]['app_or_site'] == 'Reddit'
+        assert distractions[0]['total_seconds'] == 300
+        assert distractions[0]['count'] == 1
+        assert distractions[1]['app_or_site'] == 'Twitter'
+        assert distractions[1]['total_seconds'] == 180
+        assert distractions[1]['count'] == 2
