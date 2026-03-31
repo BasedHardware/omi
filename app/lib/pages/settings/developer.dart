@@ -1874,8 +1874,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     _buildManualFirmwareFlash(provider),
                   ],
 
-                  const SizedBox(height: 48), 
-                ],
+                  const SizedBox(height: 48),
+                ], 
               ),
             ),
           );
