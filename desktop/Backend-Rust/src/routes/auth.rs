@@ -665,11 +665,9 @@ async fn generate_custom_token(
         private_key: String,
     }
 
-    let creds_path = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .map_err(|_| "GOOGLE_APPLICATION_CREDENTIALS not set")?;
-    let creds_json = std::fs::read_to_string(&creds_path)
-        .map_err(|e| format!("Failed to read credentials: {}", e))?;
-    let sa: ServiceAccount = serde_json::from_str(&creds_json)
+    let creds_json = state.config.service_account_json.as_ref()
+        .ok_or("Service account credentials not configured (set SERVICE_ACCOUNT_JSON_BASE64 or GOOGLE_APPLICATION_CREDENTIALS)")?;
+    let sa: ServiceAccount = serde_json::from_str(creds_json)
         .map_err(|e| format!("Failed to parse credentials: {}", e))?;
 
     let now = std::time::SystemTime::now()
