@@ -598,7 +598,7 @@ def get_daily_score(uid: str, date: str = None) -> dict:
             completed += 1
 
     score = round((completed / total * 100) if total > 0 else 0)
-    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed': completed, 'total': total}
+    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
 def get_scores(uid: str, date: str = None) -> dict:
