@@ -9,7 +9,7 @@ streams AI responses.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-import database.desktop as desktop_db
+import database.chat as chat_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -52,7 +52,7 @@ def create_chat_session(
     request: CreateChatSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_chat_session(uid, title=request.title, app_id=request.app_id)
+    return chat_db.create_desktop_chat_session(uid, title=request.title, app_id=request.app_id)
 
 
 @router.get('/v2/chat-sessions', tags=['chat-sessions'])
@@ -63,7 +63,7 @@ def get_chat_sessions(
     starred: bool | None = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    return chat_db.get_desktop_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
 
 
 @router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
@@ -71,7 +71,7 @@ def get_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = desktop_db.get_chat_session(uid, session_id)
+    result = chat_db.get_desktop_chat_session(uid, session_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Chat session not found')
     return result
@@ -83,7 +83,7 @@ def update_chat_session(
     request: UpdateChatSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = desktop_db.update_chat_session(uid, session_id, title=request.title, starred=request.starred)
+    result = chat_db.update_desktop_chat_session(uid, session_id, title=request.title, starred=request.starred)
     if result is None:
         raise HTTPException(status_code=404, detail='Chat session not found')
     return result
@@ -94,7 +94,7 @@ def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    desktop_db.delete_chat_session(uid, session_id)
+    chat_db.delete_desktop_chat_session(uid, session_id)
     return {'status': 'ok'}
 
 
@@ -110,7 +110,7 @@ def save_message(
     request: SaveMessageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.save_desktop_message(
+    return chat_db.save_desktop_message(
         uid,
         text=request.text,
         sender=request.sender,
@@ -128,7 +128,7 @@ def get_messages(
     offset: int = Query(0, ge=0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.get_desktop_messages(uid, app_id=app_id, session_id=session_id, limit=limit, offset=offset)
+    return chat_db.get_desktop_messages(uid, app_id=app_id, session_id=session_id, limit=limit, offset=offset)
 
 
 @router.delete('/v2/desktop/messages', tags=['chat-sessions'])
@@ -137,7 +137,7 @@ def delete_messages(
     session_id: str | None = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    count = desktop_db.delete_desktop_messages(uid, app_id=app_id, session_id=session_id)
+    count = chat_db.delete_desktop_messages(uid, app_id=app_id, session_id=session_id)
     return {'status': 'ok', 'deleted_count': count}
 
 
@@ -149,6 +149,6 @@ def rate_message(
 ):
     if request.rating is not None and request.rating not in (1, -1):
         raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
-    if not desktop_db.rate_desktop_message(uid, message_id, request.rating):
+    if not chat_db.rate_desktop_message(uid, message_id, request.rating):
         raise HTTPException(status_code=404, detail='Message not found')
     return {'status': 'ok'}
