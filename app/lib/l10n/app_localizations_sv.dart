@@ -8760,106 +8760,107 @@ class AppLocalizationsSv extends AppLocalizations {
   String get microphone => 'Mikrofon';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Varför avbryter du?';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'Kan du berätta varför du lämnar?';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'För dyrt';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Använder det inte tillräckligt';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Saknade funktioner';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Ljud-/transkriptionskvalitet';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Bekymmer om batteridränering';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Hittade ett alternativ';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Annat';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Berätta mer (valfritt)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Vi uppskattar all feedback...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Ett ögonblick, tack';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle =>
+      'Vi rekommenderar starkt att utforska dina andra alternativ istället för att avbryta.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'Din plan förblir aktiv till $date. Efter det kommer du att flyttas till gratisversionen med begränsade funktioner.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Om du avbryter:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'Ingen obegränsad åtkomst längre vid slutet av din faktureringsperiod.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => '7x mer batteriförbrukning (bearbetning på enheten)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => '30% lägre transkriptionskvalitet (modeller på enheten)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => '5-7 sekunders bearbetningsfördröjning (modeller på enheten)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Kan inte identifiera talare.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Bekräfta och avbryt';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Ingen realtidstranskription av telefonsamtal';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Vilket pris skulle passa dig?';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Vilka funktioner saknar du?';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'Vilka problem upplevde du?';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Berätta om batteriproblemen';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'Vad byter du till?';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Vad skulle få dig att använda Omi mer?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Din feedback hjälper oss att hitta rätt balans.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Vi bygger alltid — detta hjälper oss att prioritera.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Vi vill gärna förstå vad som gick fel.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'Detta hjälper vårt hårdvaruteam att förbättra sig.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Vi vill gärna veta vad som fångade ditt öga.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Vi vill göra Omi mer användbar för dig.';
 }

@@ -8785,106 +8785,106 @@ class AppLocalizationsRu extends AppLocalizations {
   String get microphone => 'Микрофон';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Почему вы отменяете?';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'Расскажите, почему вы уходите?';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'Слишком дорого';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Недостаточно использую';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Отсутствующие функции';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Качество аудио/транскрипции';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Проблемы с расходом батареи';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Нашёл альтернативу';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Другое';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Расскажите подробнее (необязательно)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Мы ценим любой отзыв...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Одну минутку';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle => 'Мы настоятельно рекомендуем изучить другие варианты вместо отмены.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'Ваш план останется активным до $date. После этого вы будете переведены на бесплатную версию с ограниченными функциями.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Если вы отмените:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'Больше не будет безлимитного доступа по окончании расчётного периода.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => 'В 7 раз больше расход батареи (обработка на устройстве)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => 'На 30% ниже качество транскрипции (модели на устройстве)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => 'Задержка обработки 5-7 секунд (модели на устройстве)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Невозможно идентифицировать говорящих.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Подтвердить и отменить';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Нет транскрипции телефонных звонков в реальном времени';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Какая цена вас бы устроила?';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Каких функций вам не хватает?';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'С какими проблемами вы столкнулись?';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Расскажите о проблемах с батареей';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'На что вы переходите?';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Что заставило бы вас использовать Omi больше?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Ваш отзыв помогает нам найти правильный баланс.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Мы всегда создаём — это помогает нам расставить приоритеты.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Мы хотели бы понять, что пошло не так.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'Это помогает нашей команде аппаратного обеспечения улучшаться.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Нам интересно узнать, что привлекло ваше внимание.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Мы хотим сделать Omi более полезным для вас.';
 }

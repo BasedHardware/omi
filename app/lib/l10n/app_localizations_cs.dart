@@ -8753,106 +8753,106 @@ class AppLocalizationsCs extends AppLocalizations {
   String get microphone => 'Mikrofon';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Proč rušíte?';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'Můžete nám říct, proč odcházíte?';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'Příliš drahé';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Nepoužívám to dostatečně';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Chybějící funkce';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Kvalita zvuku/přepisu';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Obavy z vybíjení baterie';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Našel jsem alternativu';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Jiné';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Řekněte nám více (volitelné)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Oceníme jakoukoli zpětnou vazbu...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Moment, prosím';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle => 'Důrazně doporučujeme prozkoumat vaše další možnosti místo zrušení.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'Váš plán zůstane aktivní do $date. Poté budete přesunut na bezplatnou verzi s omezenými funkcemi.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Pokud zrušíte:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'Na konci fakturačního období již nebudete mít neomezený přístup.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => '7x větší spotřeba baterie (zpracování na zařízení)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => 'O 30 % nižší kvalita přepisu (modely na zařízení)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => '5-7 sekundové zpoždění zpracování (modely na zařízení)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Nelze identifikovat mluvčí.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Potvrdit a zrušit';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Žádný přepis telefonních hovorů v reálném čase';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Jaká cena by vám vyhovovala?';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Jaké funkce vám chybí?';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'Jaké problémy jste zaznamenal?';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Řekněte nám o problémech s baterií';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'Na co přecházíte?';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Co by vás přimělo používat Omi více?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Vaše zpětná vazba nám pomáhá najít správnou rovnováhu.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Stále stavíme — to nám pomáhá stanovit priority.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Rádi bychom pochopili, co se pokazilo.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'To pomáhá našemu hardwarovému týmu se zlepšit.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Rádi bychom se dozvěděli, co vás zaujalo.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Chceme, aby byl Omi pro vás užitečnější.';
 }

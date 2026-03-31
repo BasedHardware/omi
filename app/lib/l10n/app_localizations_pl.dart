@@ -8775,106 +8775,106 @@ class AppLocalizationsPl extends AppLocalizations {
   String get microphone => 'Mikrofon';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Dlaczego anulujesz?';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'Czy możesz nam powiedzieć, dlaczego odchodzisz?';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'Za drogie';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Nie używam wystarczająco';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Brakujące funkcje';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Jakość audio/transkrypcji';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Obawy o zużycie baterii';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Znalazłem alternatywę';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Inne';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Powiedz nam więcej (opcjonalnie)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Doceniamy każdą opinię...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Chwileczkę';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle => 'Zdecydowanie zalecamy sprawdzenie innych opcji zamiast anulowania.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'Twój plan pozostanie aktywny do $date. Po tym zostaniesz przeniesiony na darmową wersję z ograniczonymi funkcjami.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Jeśli anulujesz:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'Brak nieograniczonego dostępu po zakończeniu okresu rozliczeniowego.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => '7x większe zużycie baterii (przetwarzanie na urządzeniu)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => '30% niższa jakość transkrypcji (modele na urządzeniu)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => '5-7 sekundowe opóźnienie przetwarzania (modele na urządzeniu)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Nie może identyfikować mówców.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Potwierdź i anuluj';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Brak transkrypcji rozmów telefonicznych w czasie rzeczywistym';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Jaka cena byłaby odpowiednia?';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Jakich funkcji brakuje?';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'Jakie problemy napotkałeś?';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Opowiedz nam o problemach z baterią';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'Na co przechodzisz?';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Co skłoniłoby cię do częstszego korzystania z Omi?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Twoja opinia pomaga nam znaleźć właściwą równowagę.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Zawsze budujemy — to pomaga nam ustalać priorytety.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Chcielibyśmy zrozumieć, co poszło nie tak.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'To pomaga naszemu zespołowi sprzętowemu się poprawić.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Chcielibyśmy dowiedzieć się, co przykuło twoją uwagę.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Chcemy, aby Omi było bardziej przydatne dla ciebie.';
 }

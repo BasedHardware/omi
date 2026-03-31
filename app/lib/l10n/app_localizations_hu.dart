@@ -8794,106 +8794,107 @@ class AppLocalizationsHu extends AppLocalizations {
   String get microphone => 'Mikrofon';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Miért mondod le?';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'El tudod mondani, miért távozol?';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'Túl drága';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Nem használom eleget';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Hiányzó funkciók';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Hang/átírási minőség';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Akkumerülési aggodalmak';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Találtam alternatívát';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Egyéb';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Mondj el többet (opcionális)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Minden visszajelzést értékelünk...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Egy pillanat, kérlek';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle =>
+      'Erősen javasoljuk, hogy a lemondás helyett fedezd fel a többi lehetőségedet.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'A csomagod aktív marad $date-ig. Ezután az ingyenes verzióra leszel átállítva korlátozott funkciókkal.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Ha lemondod:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'A számlázási időszak végén már nem lesz korlátlan hozzáférésed.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => '7x több akkuhasználat (eszközön történő feldolgozás)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => '30%-kal alacsonyabb átírási minőség (eszközön lévő modellek)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => '5-7 másodperces feldolgozási késleltetés (eszközön lévő modellek)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Nem tudja azonosítani a beszélőket.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Megerősítés és lemondás';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Nincs valós idejű telefonhívás átírás';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Milyen ár lenne megfelelő számodra?';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Milyen funkciók hiányoznak?';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'Milyen problémákat tapasztaltál?';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Mesélj az akkuproblémákról';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'Mire váltasz?';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Mi késztetne arra, hogy többet használd az Omit?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Visszajelzésed segít megtalálni a megfelelő egyensúlyt.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Mindig építünk — ez segít a prioritások meghatározásában.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Szeretnénk megérteni, mi ment rosszul.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'Ez segít hardvercsapatunknak fejlődni.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Szeretnénk tudni, mi ragadta meg a figyelmedet.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
 }

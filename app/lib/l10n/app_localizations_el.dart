@@ -8820,106 +8820,107 @@ class AppLocalizationsEl extends AppLocalizations {
   String get microphone => 'Μικρόφωνο';
 
   @override
-  String get whyAreYouCanceling => 'Why are you canceling?';
+  String get whyAreYouCanceling => 'Γιατί ακυρώνετε;';
 
   @override
-  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+  String get cancelReasonSubtitle => 'Μπορείτε να μας πείτε γιατί φεύγετε;';
 
   @override
-  String get cancelReasonTooExpensive => 'Too expensive';
+  String get cancelReasonTooExpensive => 'Πολύ ακριβό';
 
   @override
-  String get cancelReasonNotUsing => 'Not using it enough';
+  String get cancelReasonNotUsing => 'Δεν το χρησιμοποιώ αρκετά';
 
   @override
-  String get cancelReasonMissingFeatures => 'Missing features';
+  String get cancelReasonMissingFeatures => 'Λειτουργίες που λείπουν';
 
   @override
-  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+  String get cancelReasonAudioQuality => 'Ποιότητα ήχου/μεταγραφής';
 
   @override
-  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+  String get cancelReasonBatteryDrain => 'Ανησυχίες για εξάντληση μπαταρίας';
 
   @override
-  String get cancelReasonFoundAlternative => 'Found an alternative';
+  String get cancelReasonFoundAlternative => 'Βρήκα εναλλακτική';
 
   @override
-  String get cancelReasonOther => 'Other';
+  String get cancelReasonOther => 'Άλλο';
 
   @override
-  String get tellUsMore => 'Tell us more (optional)';
+  String get tellUsMore => 'Πείτε μας περισσότερα (προαιρετικό)';
 
   @override
-  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+  String get cancelReasonDetailHint => 'Εκτιμούμε κάθε σχόλιο...';
 
   @override
-  String get justAMoment => 'Just a moment, please';
+  String get justAMoment => 'Μια στιγμή, παρακαλώ';
 
   @override
-  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+  String get cancelConsequencesSubtitle =>
+      'Συνιστούμε ανεπιφύλακτα να εξερευνήσετε τις άλλες επιλογές σας αντί να ακυρώσετε.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
-    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+    return 'Το πλάνο σας θα παραμείνει ενεργό μέχρι τις $date. Μετά, θα μεταφερθείτε στη δωρεάν έκδοση με περιορισμένες λειτουργίες.';
   }
 
   @override
-  String get ifYouCancel => 'If you cancel:';
+  String get ifYouCancel => 'Αν ακυρώσετε:';
 
   @override
-  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+  String get cancelConsequenceNoAccess => 'Δεν θα έχετε πλέον απεριόριστη πρόσβαση στο τέλος της περιόδου τιμολόγησης.';
 
   @override
-  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+  String get cancelConsequenceBattery => '7x περισσότερη κατανάλωση μπαταρίας (επεξεργασία στη συσκευή)';
 
   @override
-  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+  String get cancelConsequenceQuality => '30% χαμηλότερη ποιότητα μεταγραφής (μοντέλα στη συσκευή)';
 
   @override
-  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+  String get cancelConsequenceDelay => 'Καθυστέρηση επεξεργασίας 5-7 δευτερόλεπτα (μοντέλα στη συσκευή)';
 
   @override
-  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+  String get cancelConsequenceSpeakers => 'Δεν μπορεί να αναγνωρίσει ομιλητές.';
 
   @override
-  String get confirmAndCancel => 'Confirm & Cancel';
+  String get confirmAndCancel => 'Επιβεβαίωση και ακύρωση';
 
   @override
-  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+  String get cancelConsequencePhoneCalls => 'Χωρίς μεταγραφή τηλεφωνικών κλήσεων σε πραγματικό χρόνο';
 
   @override
-  String get feedbackTitleTooExpensive => 'What price would work for you?';
+  String get feedbackTitleTooExpensive => 'Ποια τιμή θα σας ταίριαζε;';
 
   @override
-  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+  String get feedbackTitleMissingFeatures => 'Ποιες λειτουργίες σας λείπουν;';
 
   @override
-  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+  String get feedbackTitleAudioQuality => 'Τι προβλήματα αντιμετωπίσατε;';
 
   @override
-  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+  String get feedbackTitleBatteryDrain => 'Πείτε μας για τα προβλήματα μπαταρίας';
 
   @override
-  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+  String get feedbackTitleFoundAlternative => 'Σε τι αλλάζετε;';
 
   @override
-  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+  String get feedbackTitleNotUsing => 'Τι θα σας έκανε να χρησιμοποιείτε το Omi περισσότερο;';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+  String get feedbackSubtitleTooExpensive => 'Τα σχόλιά σας μας βοηθούν να βρούμε τη σωστή ισορροπία.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+  String get feedbackSubtitleMissingFeatures => 'Πάντα χτίζουμε — αυτό μας βοηθά να ιεραρχήσουμε.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+  String get feedbackSubtitleAudioQuality => 'Θα θέλαμε να καταλάβουμε τι πήγε στραβά.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+  String get feedbackSubtitleBatteryDrain => 'Αυτό βοηθά την ομάδα υλικού μας να βελτιωθεί.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+  String get feedbackSubtitleFoundAlternative => 'Θα θέλαμε να μάθουμε τι τράβηξε το μάτι σας.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+  String get feedbackSubtitleNotUsing => 'Θέλουμε να κάνουμε το Omi πιο χρήσιμο για εσάς.';
 }
