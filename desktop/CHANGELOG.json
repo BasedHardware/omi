@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed transcription not auto-starting after proxy migration"
+  ],
   "releases": [
     {
       "version": "0.11.203",
