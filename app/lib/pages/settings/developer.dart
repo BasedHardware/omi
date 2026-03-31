@@ -1877,8 +1877,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 48),
                 ],
               ),
-            ), 
-          );
+            ),
+          ); 
         },
       ),
     );
