@@ -85,7 +85,7 @@ class TaskAssistantSettings {
     /// Shared across Advice, Focus, and Memory assistants (Task extraction uses whitelist instead).
     static let builtInExcludedApps: Set<String> = [
         "Omi",
-        "Omi Beta",
+        "Nooto Beta",
         "omi",
         "Omi Dev",
         "Omi Computer",
