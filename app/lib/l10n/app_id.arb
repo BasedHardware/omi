@@ -573,7 +573,7 @@
     "tryAgain": "Coba Lagi",
     "connectOmiOmiGlass": "Hubungkan Omi / OmiGlass",
     "continueWithoutDevice": "Lanjutkan Tanpa Perangkat",
-    "permissionsRequired": "Izin Diperlukan",
+    "permissionsRequired": "Izin diperlukan",
     "permissionsRequiredDesc": "Aplikasi ini memerlukan izin Bluetooth dan Lokasi agar berfungsi dengan baik. Silakan aktifkan di pengaturan.",
     "openSettings": "Buka Pengaturan",
     "wantDifferentName": "Ingin menggunakan nama lain?",
@@ -2677,6 +2677,18 @@
     "downloadingFromDevice": "Mengunduh dari perangkat",
     "reconnectingToInternet": "Menyambung kembali ke internet...",
     "uploadingToCloud": "Mengunggah {current} dari {total}",
+    "processingOnServer": "Memproses di server...",
+    "processingOnServerProgress": "Memproses... {current}/{total} segmen",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Diproses",
     "corruptedStatus": "Rusak",
     "nPending": "{count} tertunda",
@@ -2867,5 +2879,15 @@
     "storageSection": "PENYIMPANAN",
     "tipKeepPhoneNearby": "Jaga ponsel Anda dekat untuk sinkronisasi lebih cepat",
     "tipStableInternet": "Internet stabil mempercepat unggahan cloud",
-    "tipAutoSync": "Rekaman disinkronkan secara otomatis"
+    "tipAutoSync": "Rekaman disinkronkan secara otomatis",
+    "permissions": "Izin",
+    "permissionEnabled": "Diaktifkan",
+    "permissionEnable": "Aktifkan",
+    "permissionsPageDescription": "Izin ini penting untuk cara kerja Omi. Izin ini mengaktifkan fitur utama seperti notifikasi, pengalaman berbasis lokasi, dan perekaman audio.",
+    "permissionsRequiredDescription": "Omi memerlukan beberapa izin agar dapat berfungsi dengan baik. Silakan berikan izin untuk melanjutkan.",
+    "permissionsSetupTitle": "Dapatkan pengalaman terbaik",
+    "permissionsSetupDescription": "Aktifkan beberapa izin agar Omi dapat bekerja dengan maksimal.",
+    "permissionsChangeAnytime": "Anda dapat mengubahnya kapan saja di Pengaturan > Izin",
+    "location": "Lokasi",
+    "microphone": "Mikrofon"
 }

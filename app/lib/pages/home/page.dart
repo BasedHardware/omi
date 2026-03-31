@@ -60,7 +60,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
@@ -242,6 +241,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
+    if (!SharedPreferencesUtil().permissionsCompleted) {
+      SharedPreferencesUtil().permissionsCompleted = true;
+    }
     updateUserOnboardingState(completed: true);
 
     // Navigate uri
@@ -293,12 +295,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
 
-      if (!PlatformService.isDesktop) {
-        final permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-          await ForegroundUtil.initializeForegroundService();
-          await ForegroundUtil.startForegroundTask();
-        }
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        await ForegroundUtil.initializeForegroundService();
+        await ForegroundUtil.startForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();

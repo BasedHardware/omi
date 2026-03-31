@@ -27,6 +27,7 @@ class MainActivity: FlutterActivity() {
 
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
+        OmiBleManager.isFlutterAlive = true
         OmiBleManager.instance.flutterApi = BleFlutterApi(flutterEngine.dartExecutor.binaryMessenger)
         val hostApi = BleHostApiImpl { this }
         hostApi.initCompanionManager(this)
@@ -58,17 +59,17 @@ class MainActivity: FlutterActivity() {
         // Handle CompanionDeviceManager chooser result
         val address = bleHostApiImpl?.onActivityResult(requestCode, resultCode, data)
         if (address != null) {
-            // Device selected — start foreground service and connect
-            OmiBleForegroundService.startService(this, address)
+            // Device selected — start foreground service (Dart will call manageDevice)
+            OmiBleForegroundService.startService(this, address, caller = "MainActivity.onActivityResult")
         }
     }
 
     override fun onDestroy() {
-        // When user closes the app (swipe away), disconnect BLE and stop the foreground service.
-        // Omi streams via WebSocket which requires the app — no point keeping BLE alive without it.
-        // isFinishing distinguishes user close from config changes (rotation, etc.)
+        // When user closes the app (swipe away), stop the foreground service.
+        // The service handles disconnecting all managed devices in onDestroy.
         if (isFinishing) {
-            OmiBleManager.instance.disconnectAllPeripherals()
+            OmiBleManager.isFlutterAlive = false
+            OmiBleForegroundService.stopService(this)
         }
         super.onDestroy()
     }

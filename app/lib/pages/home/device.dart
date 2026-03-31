@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -314,15 +315,28 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           GestureDetector(
             onTap: () async {
+              // Save device ID before clearing prefs
+              final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+
+              // Clear stored device
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
               SharedPreferencesUtil().deviceName = '';
-              if (provider.connectedDevice != null) {
-                await _bleDisconnectDevice(provider.connectedDevice!);
+
+              // Fully tear down connection, transport, and native service
+              if (deviceId.isNotEmpty) {
+                await ServiceManager.instance().device.forgetDevice(deviceId);
+                try {
+                  BleHostApi().unmanageDevice(deviceId);
+                } catch (_) {}
               }
-              if (context.mounted) {
+
+              if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
-                context.read<DeviceProvider>().setConnectedDevice(null);
+                await context.read<DeviceProvider>().setConnectedDevice(null);
                 context.read<DeviceProvider>().updateConnectingStatus(false);
+              }
+
+              if (mounted) {
                 Navigator.of(context).pop();
               }
               MixpanelManager().disconnectFriendClicked();

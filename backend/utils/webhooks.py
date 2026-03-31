@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import List, Any
 
 import requests
-import websockets
 
 from database.redis_db import (
     get_user_webhook_db,
@@ -60,6 +59,9 @@ def _add_speaker_names_to_payload(uid, payload: dict):
 
 
 def conversation_created_webhook(uid, memory: Conversation):
+    if memory.is_locked:
+        return
+
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
 
     if toggled:
@@ -171,34 +173,6 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             logger.error(f"Error sending audio bytes to developer webhook: {e}")
     else:
         return
-
-
-# continue?
-async def connect_user_webhook_ws(sample_rate: int, language: str, preseconds: int = 0):
-    uri = ''
-
-    try:
-        socket = await websockets.connect(uri, extra_headers={})
-        await socket.send(json.dumps({}))
-
-        async def on_message():
-            try:
-                async for message in socket:
-                    response = json.loads(message)
-            except websockets.exceptions.ConnectionClosedOK:
-                logger.info("Speechmatics connection closed normally.")
-            except Exception as e:
-                logger.error(f"Error receiving from Speechmatics: {e}")
-            finally:
-                if not socket.closed:
-                    await socket.close()
-                    logger.info("Speechmatics WebSocket closed in on_message.")
-
-        asyncio.create_task(on_message())
-        return socket
-    except Exception as e:
-        logger.error(f"Exception in process_audio_speechmatics: {e}")
-        raise
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:

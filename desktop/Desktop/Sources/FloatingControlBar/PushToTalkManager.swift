@@ -72,18 +72,20 @@ class PushToTalkManager: ObservableObject {
     // Remove any existing monitors to make setup() safely re-entrant
     removeEventMonitors()
 
+    let monitorMask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+
     // Global monitor — fires when OTHER apps are focused
-    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) {
+    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: monitorMask) {
       [weak self] event in
       Task { @MainActor in
-        self?.handleFlagsChanged(event)
+        self?.handleShortcutEvent(event)
       }
     }
 
     // Local monitor — fires when THIS app is focused
-    localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+    localMonitor = NSEvent.addLocalMonitorForEvents(matching: monitorMask) { [weak self] event in
       Task { @MainActor in
-        self?.handleFlagsChanged(event)
+        self?.handleShortcutEvent(event)
       }
       return event
     }
@@ -102,25 +104,29 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  // MARK: - Option Key Handling
+  // MARK: - Shortcut Handling
 
-  private func handleFlagsChanged(_ event: NSEvent) {
-    let settings = ShortcutSettings.shared
+  private func handleShortcutEvent(_ event: NSEvent) {
+    guard ShortcutSettings.shared.pttEnabled else { return }
+    let shortcut = ShortcutSettings.shared.pttShortcut
 
     let pttActive: Bool
-    switch settings.pttKey {
-    case .option:
-      // Ignore if other modifiers are held (Cmd, Ctrl, Shift)
-      let otherModifiers: NSEvent.ModifierFlags = [.command, .control, .shift]
-      guard event.modifierFlags.intersection(otherModifiers) == [] else { return }
-      pttActive = event.modifierFlags.contains(.option)
-    case .rightCommand:
-      // Right Cmd: keyCode 54. flagsChanged fires for both left/right Cmd.
-      // Only trigger on right Cmd (keyCode 54), not left (55).
-      guard event.keyCode == 54 || event.keyCode == 55 else { return }
-      pttActive = event.modifierFlags.contains(.command) && event.keyCode == 54
-    case .fn:
-      pttActive = event.modifierFlags.contains(.function)
+    switch event.type {
+    case .flagsChanged:
+      guard shortcut.modifierOnly else { return }
+      pttActive = shortcut.matchesFlagsChanged(event)
+    case .keyDown:
+      guard !shortcut.modifierOnly, !event.isARepeat else { return }
+      pttActive = shortcut.matchesKeyDown(event)
+    case .keyUp:
+      guard !shortcut.modifierOnly else { return }
+      pttActive = false
+      if shortcut.matchesKeyUp(event) {
+        handleShortcutUp()
+      }
+      return
+    default:
+      return
     }
 
     // Let the first shortcut press reveal the compact bar instead of requiring it
@@ -133,13 +139,13 @@ class PushToTalkManager: ObservableObject {
     guard FloatingControlBarManager.shared.isVisible else { return }
 
     if pttActive {
-      handleOptionDown()
-    } else {
-      handleOptionUp()
+      handleShortcutDown()
+    } else if shortcut.modifierOnly {
+      handleShortcutUp()
     }
   }
 
-  private func handleOptionDown() {
+  private func handleShortcutDown() {
     let now = ProcessInfo.processInfo.systemUptime
 
     switch state {
@@ -165,7 +171,7 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func handleOptionUp() {
+  private func handleShortcutUp() {
     let now = ProcessInfo.processInfo.systemUptime
 
     switch state {

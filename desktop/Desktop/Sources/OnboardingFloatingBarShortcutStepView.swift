@@ -1,28 +1,27 @@
-import Combine
 import SwiftUI
 
-/// Onboarding step: configure and test the floating bar shortcut (Cmd+Enter by default).
-/// Only detects the keypress — does NOT open the floating bar, to avoid confusing the user.
+/// Onboarding step: configure and test the floating bar shortcut.
+/// Only detects the keypress and does not open the floating bar.
 struct OnboardingFloatingBarShortcutStepView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
+    var onForceComplete: (() -> Void)?
 
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     @State private var shortcutDetected = false
     @State private var showContinue = false
+    @State private var isRecordingCustomShortcut = false
+    @State private var captureError: String?
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
-                Text("Set your keyboard shortcut")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
 
                 Spacer()
 
@@ -41,7 +40,6 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
             Spacer()
 
-            // Content
             VStack(spacing: 24) {
                 Text("Press this shortcut.\nDo the buttons light up?")
                     .font(.system(size: 22, weight: .semibold))
@@ -51,7 +49,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(OmiColors.backgroundSecondary)
                     .frame(height: 128)
-                    .frame(maxWidth: 400)
+                    .frame(maxWidth: 420)
                     .overlay {
                         shortcutKeyPreview
                     }
@@ -62,9 +60,14 @@ struct OnboardingFloatingBarShortcutStepView: View {
                         .foregroundColor(OmiColors.textSecondary)
 
                     HStack(spacing: 10) {
-                        ForEach(ShortcutSettings.AskOmiKey.allCases, id: \.self) { key in
-                            shortcutChoiceButton(key)
+                        ForEach(ShortcutSettings.askOmiPresets, id: \.self) { shortcut in
+                            shortcutChoiceButton(shortcut)
                         }
+                        customShortcutButton
+                    }
+
+                    if isRecordingCustomShortcut || shortcutSettings.askOmiUsesCustomShortcut || captureError != nil {
+                        customShortcutRecorder
                     }
                 }
 
@@ -90,31 +93,19 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
-            // Unregister the global hotkey so the floating bar does NOT open.
-            // We detect the keypress ourselves via a local NSEvent monitor.
             GlobalShortcutManager.shared.unregisterShortcuts()
             installKeyMonitor()
         }
         .onDisappear {
-            if let monitor = localKeyMonitor {
-                NSEvent.removeMonitor(monitor)
-                localKeyMonitor = nil
-            }
-            if let monitor = globalKeyMonitor {
-                NSEvent.removeMonitor(monitor)
-                globalKeyMonitor = nil
-            }
-            // Re-register the global hotkey for the next step.
+            removeKeyMonitors()
             GlobalShortcutManager.shared.registerShortcuts()
         }
     }
 
-    // MARK: - Shortcut Key Preview
-
     private var shortcutKeyPreview: some View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
-                ForEach(Array(shortcutSettings.askOmiKey.hintKeys.enumerated()), id: \.offset) { _, symbol in
+                ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
                     keyCap(symbol)
                 }
             }
@@ -125,10 +116,73 @@ struct OnboardingFloatingBarShortcutStepView: View {
         }
     }
 
+    private var customShortcutButton: some View {
+        let isSelected = shortcutSettings.askOmiUsesCustomShortcut || isRecordingCustomShortcut
+        return Button(action: beginCustomShortcutCapture) {
+            Text("Custom")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customShortcutRecorder: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(isRecordingCustomShortcut ? "Press your custom shortcut now" : "Custom shortcut")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(OmiColors.textPrimary)
+
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
+                        smallKeyCap(token, active: true)
+                    }
+                }
+
+                Spacer()
+
+                Button(action: beginCustomShortcutCapture) {
+                    Text(isRecordingCustomShortcut ? "Listening..." : "Save")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(OmiColors.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(OmiColors.backgroundPrimary)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text("Use at least one non-modifier key, like J or Return.")
+                .font(.system(size: 12))
+                .foregroundColor(OmiColors.textTertiary)
+
+            if let captureError {
+                Text(captureError)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.red.opacity(0.9))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 420)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(OmiColors.backgroundSecondary)
+        )
+    }
+
     private func keyCap(_ label: String) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
-            .frame(width: 48, height: 48)
+            .frame(minWidth: 48, minHeight: 48)
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
@@ -140,20 +194,34 @@ struct OnboardingFloatingBarShortcutStepView: View {
                 Text(label)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
+                    .padding(.horizontal, label.count > 2 ? 14 : 10)
             }
+            .fixedSize()
     }
 
-    // MARK: - Shortcut Choice Buttons
+    private func smallKeyCap(_ label: String, active: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(active ? Color.white : OmiColors.backgroundTertiary)
+            .frame(minWidth: 36, minHeight: 32)
+            .overlay {
+                Text(label)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(active ? .black : OmiColors.textPrimary)
+                    .padding(.horizontal, label.count > 2 ? 10 : 8)
+            }
+            .fixedSize()
+    }
 
-    private func shortcutChoiceButton(_ key: ShortcutSettings.AskOmiKey) -> some View {
-        let isSelected = shortcutSettings.askOmiKey == key
+    private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
+        let isSelected = shortcutSettings.askOmiShortcut == shortcut && !shortcutSettings.askOmiUsesCustomShortcut
         return Button {
-            shortcutSettings.askOmiKey = key
-            shortcutDetected = false
-            showContinue = false
+            shortcutSettings.askOmiShortcut = shortcut
+            isRecordingCustomShortcut = false
+            captureError = nil
+            resetDetectionState()
         } label: {
             HStack(spacing: 4) {
-                ForEach(Array(key.hintKeys.enumerated()), id: \.offset) { _, symbol in
+                ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
                         .font(.system(size: 13, weight: .medium))
                 }
@@ -169,29 +237,68 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Key Monitor
+    private func beginCustomShortcutCapture() {
+        isRecordingCustomShortcut = true
+        captureError = nil
+        resetDetectionState()
+    }
+
+    private func resetDetectionState() {
+        shortcutDetected = false
+        showContinue = false
+    }
 
     private func installKeyMonitor() {
-        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if handleShortcutEvent(event) {
-                return nil
-            }
-            return event
+        let mask: NSEvent.EventTypeMask = [.keyDown, .flagsChanged]
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { event in
+            handleShortcutEvent(event) ? nil : event
         }
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
             _ = handleShortcutEvent(event)
         }
     }
 
+    private func removeKeyMonitors() {
+        if let monitor = localKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            localKeyMonitor = nil
+        }
+        if let monitor = globalKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalKeyMonitor = nil
+        }
+    }
+
     private func handleShortcutEvent(_ event: NSEvent) -> Bool {
+        if isRecordingCustomShortcut {
+            return captureCustomShortcut(from: event)
+        }
+
         guard !shortcutDetected else { return false }
-        guard shortcutSettings.askOmiKey.matches(event) else { return false }
+        guard shortcutSettings.askOmiShortcut.matchesKeyDown(event) else { return false }
+
         DispatchQueue.main.async {
             shortcutDetected = true
             withAnimation(.easeInOut(duration: 0.3)) {
                 showContinue = true
             }
         }
+        return true
+    }
+
+    private func captureCustomShortcut(from event: NSEvent) -> Bool {
+        if event.type == .flagsChanged {
+            captureError = "Ask omi needs a non-modifier key."
+            return true
+        }
+
+        guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: false) else {
+            return false
+        }
+
+        shortcutSettings.askOmiShortcut = shortcut
+        isRecordingCustomShortcut = false
+        captureError = nil
         return true
     }
 }

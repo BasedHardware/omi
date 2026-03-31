@@ -7,7 +7,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -95,8 +94,6 @@ class ForegroundUtil {
   Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
 
   static Future<void> initializeForegroundService() async {
-    if (PlatformService.isDesktop) return;
-
     if (_isInitialized) {
       Logger.debug('ForegroundService already initialized, skipping');
       return;
@@ -142,8 +139,6 @@ class ForegroundUtil {
   }
 
   static Future<ServiceRequestResult> startForegroundTask() async {
-    if (PlatformService.isDesktop) return const ServiceRequestSuccess();
-
     if (_isStarting) {
       Logger.debug('ForegroundTask already starting, skipping');
       return const ServiceRequestSuccess();
@@ -174,7 +169,6 @@ class ForegroundUtil {
   }
 
   static Future<void> stopForegroundTask() async {
-    if (PlatformService.isDesktop) return;
     Logger.debug('stopForegroundTask');
 
     try {

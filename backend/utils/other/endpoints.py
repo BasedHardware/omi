@@ -2,13 +2,15 @@ import json
 import os
 import time
 
-from fastapi import Header, HTTPException, WebSocketException
+from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 import logging
+import redis as redis_pkg
 
-from database.redis_db import try_acquire_listen_lock
+from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +191,61 @@ def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, win
         return rate_limit_custom(endpoint, request, requests_per_window, window_seconds)
 
     return rate_limit
+
+
+def _enforce_rate_limit(key: str, policy_name: str):
+    """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
+
+    One Redis round-trip per call (Lua script). Fail-open on Redis errors.
+    """
+    max_requests, window = get_effective_limit(policy_name)
+    try:
+        allowed, remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
+    except redis_pkg.exceptions.RedisError as e:
+        logger.error(f"Rate limit Redis error (allowing request): {e}")
+        return
+
+    if not allowed:
+        if RATE_LIMIT_SHADOW:
+            logger.warning(f"[shadow] rate_limit_exceeded policy={policy_name} key={key} retry_after={retry_after}")
+            return
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Try again in {retry_after}s.",
+            headers={
+                "X-RateLimit-Limit": str(max_requests),
+                "X-RateLimit-Remaining": "0",
+                "Retry-After": str(retry_after),
+            },
+        )
+
+
+def with_rate_limit(auth_dependency, policy_name: str):
+    """Wrap an auth dependency with per-UID rate limiting.
+
+    After auth succeeds, checks the rate limit for that UID.
+    One Redis call per request. Fail-open on Redis errors.
+
+    Args:
+        auth_dependency: FastAPI dependency that returns a UID string.
+        policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+    """
+    if policy_name not in RATE_POLICIES:
+        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+    async def dependency(uid: str = Depends(auth_dependency)):
+        _enforce_rate_limit(uid, policy_name)
+        return uid
+
+    return dependency
+
+
+def check_rate_limit_inline(key: str, policy_name: str):
+    """Check rate limit inline (for endpoints with custom auth).
+
+    Use when auth is not a standard Depends() pattern (e.g., MCP, integration).
+    """
+    _enforce_rate_limit(key, policy_name)
 
 
 def timeit(func):

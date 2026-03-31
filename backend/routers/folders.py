@@ -111,6 +111,15 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
+    for conv in conversations:
+        if conv.get('is_locked', False):
+            if 'structured' in conv:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+            conv['apps_results'] = []
+            conv['plugins_results'] = []
+            conv['suggested_summarization_apps'] = []
+            conv['transcript_segments'] = []
     return conversations
 
 

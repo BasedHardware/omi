@@ -10,6 +10,7 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onClearVisibleConversation: () -> Void
 
     @State private var isHovering = false
 
@@ -188,12 +189,12 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
-                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiKey.hintKeys) {
+                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                        compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
                 }
                 .padding(.horizontal, 6)
@@ -251,7 +252,8 @@ struct FloatingControlBarView: View {
                 Text(key)
                     .scaledFont(size: 9)
                     .foregroundColor(.white)
-                    .frame(width: 15, height: 15)
+                    .padding(.horizontal, key.count > 1 ? 4 : 0)
+                    .frame(minWidth: 15, minHeight: 15)
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(3)
             }
@@ -288,7 +290,11 @@ struct FloatingControlBarView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             } else {
-                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
+                Text(
+                    state.isVoiceLocked
+                        ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
+                        : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
+                )
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -301,8 +307,10 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
+            canClearVisibleConversation: state.hasVisibleConversation,
             onSend: { message in
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
@@ -310,7 +318,7 @@ struct FloatingControlBarView: View {
                 }
                 onSendQuery(message)
             },
-            onCancel: onCloseAI,
+            onClearVisibleConversation: onClearVisibleConversation,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -341,7 +349,8 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            onClose: onCloseAI,
+            canClearVisibleConversation: state.hasVisibleConversation,
+            onClearVisibleConversation: onClearVisibleConversation,
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
@@ -350,6 +359,7 @@ struct FloatingControlBarView: View {
                 }
 
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil

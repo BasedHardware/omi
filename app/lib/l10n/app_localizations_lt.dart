@@ -1814,7 +1814,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get skipThisQuestion => 'Praleisti šį klausimą';
 
   @override
-  String get skipForNow => 'Kol kas praleisti';
+  String get skipForNow => 'Praleisti kol kas';
 
   @override
   String get connectionError => 'Ryšio klaida';
@@ -8165,6 +8165,14 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Apdorojama serveryje...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Apdorojama... $current/$total segmentų';
+  }
+
+  @override
   String get processedStatus => 'Apdorota';
 
   @override
@@ -8722,4 +8730,36 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get storageSection => 'SAUGYKLA';
+
+  @override
+  String get permissions => 'Leidimai';
+
+  @override
+  String get permissionEnabled => 'Įjungta';
+
+  @override
+  String get permissionEnable => 'Įjungti';
+
+  @override
+  String get permissionsPageDescription =>
+      'Šie leidimai yra esminiai Omi veikimui. Jie įgalina pagrindines funkcijas, tokias kaip pranešimai, vieta pagrįstos patirtys ir garso įrašymas.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi reikia kelių leidimų, kad tinkamai veiktų. Prašome juos suteikti, kad galėtumėte tęsti.';
+
+  @override
+  String get permissionsSetupTitle => 'Gaukite geriausią patirtį';
+
+  @override
+  String get permissionsSetupDescription => 'Įjunkite kelis leidimus, kad Omi galėtų atlikti savo magiją.';
+
+  @override
+  String get permissionsChangeAnytime => 'Galite tai pakeisti bet kada nustatymuose > Leidimai';
+
+  @override
+  String get location => 'Vieta';
+
+  @override
+  String get microphone => 'Mikrofonas';
 }

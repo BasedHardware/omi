@@ -1821,7 +1821,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get skipThisQuestion => 'Bỏ qua câu hỏi này';
 
   @override
-  String get skipForNow => 'Bỏ qua';
+  String get skipForNow => 'Bỏ qua lúc này';
 
   @override
   String get connectionError => 'Lỗi Kết nối';
@@ -8161,6 +8161,14 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Đang xử lý trên máy chủ...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Đang xử lý... $current/$total phân đoạn';
+  }
+
+  @override
   String get processedStatus => 'Đã xử lý';
 
   @override
@@ -8716,4 +8724,36 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get storageSection => 'BỘ NHỚ';
+
+  @override
+  String get permissions => 'Quyền';
+
+  @override
+  String get permissionEnabled => 'Đã bật';
+
+  @override
+  String get permissionEnable => 'Bật';
+
+  @override
+  String get permissionsPageDescription =>
+      'Các quyền này rất quan trọng đối với hoạt động của Omi. Chúng kích hoạt các tính năng chính như thông báo, trải nghiệm dựa trên vị trí và ghi âm.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi cần một số quyền để hoạt động bình thường. Vui lòng cấp quyền để tiếp tục.';
+
+  @override
+  String get permissionsSetupTitle => 'Trải nghiệm tốt nhất';
+
+  @override
+  String get permissionsSetupDescription => 'Bật một vài quyền để Omi có thể phát huy hết khả năng.';
+
+  @override
+  String get permissionsChangeAnytime => 'Bạn có thể thay đổi bất cứ lúc nào trong Cài đặt > Quyền';
+
+  @override
+  String get location => 'Vị trí';
+
+  @override
+  String get microphone => 'Micrô';
 }

@@ -8,6 +8,7 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
+import 'package:omi/pages/settings/permissions_page.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -392,6 +393,15 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         ),
                       ],
                     );
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.permissions,
+                  icon: const FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    MixpanelManager().permissionsSettingsOpened();
+                    routeToPage(context, const PermissionsPage());
                   },
                 ),
               ],

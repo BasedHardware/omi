@@ -419,3 +419,61 @@ class TestKnowledgeGraphFailureHandling:
 
         llm_kg.extract_knowledge_from_memory.assert_called_once()
         memories_mod.set_memory_kg_extracted.assert_called_once_with(uid, "mem-empty")
+
+
+class TestKnowledgeGraphLockedMemorySkip:
+    """Tests for #6146: KG extraction must skip is_locked memories.
+
+    Note: is_locked is set on memories via `memory_db_obj.is_locked = conversation.is_locked`
+    at line 450 of process_conversation.py. So we control locking via conv.is_locked.
+    """
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extraction_skips_locked_conversation_memories(self, mock_from_memory):
+        """Memories from a locked conversation must not be sent to extract_knowledge_from_memory."""
+        uid = "uid-locked"
+        conv = _make_conversation_mock()
+        conv.is_locked = True  # This propagates to all memories at line 450
+
+        mem1 = _make_memory_mock("mem-1", "Secret content", kg_extracted=False)
+        mem2 = _make_memory_mock("mem-2", "More secret", kg_extracted=False)
+
+        mock_from_memory.side_effect = [mem1, mem2]
+        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock()]
+        vector_db_mod.find_similar_memories.return_value = []
+        memories_mod.get_memory_ids_for_conversation.return_value = []
+        memories_mod.save_memories.reset_mock()
+        utils_analytics.record_usage.reset_mock()
+
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        # No KG extraction for locked conversation's memories
+        llm_kg.extract_knowledge_from_memory.assert_not_called()
+        memories_mod.set_memory_kg_extracted.assert_not_called()
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extraction_proceeds_for_unlocked_conversation(self, mock_from_memory):
+        """Memories from an unlocked conversation should be extracted normally."""
+        uid = "uid-unlocked"
+        conv = _make_conversation_mock()
+        conv.is_locked = False
+
+        mem = _make_memory_mock("mem-ok", "Public content", kg_extracted=False)
+        mock_from_memory.return_value = mem
+
+        _setup_extract_memories(mem)
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        llm_kg.extract_knowledge_from_memory.return_value = {'nodes': [], 'edges': []}
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Public content", "mem-ok", "User")
+        memories_mod.set_memory_kg_extracted.assert_called_once_with(uid, "mem-ok")

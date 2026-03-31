@@ -1820,7 +1820,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get skipThisQuestion => 'Sla deze vraag over';
 
   @override
-  String get skipForNow => 'Voorlopig overslaan';
+  String get skipForNow => 'Nu overslaan';
 
   @override
   String get connectionError => 'Verbindingsfout';
@@ -8184,6 +8184,14 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Verwerken op de server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Verwerken... $current/$total segmenten';
+  }
+
+  @override
   String get processedStatus => 'Verwerkt';
 
   @override
@@ -8742,4 +8750,36 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get storageSection => 'OPSLAG';
+
+  @override
+  String get permissions => 'Machtigingen';
+
+  @override
+  String get permissionEnabled => 'Ingeschakeld';
+
+  @override
+  String get permissionEnable => 'Inschakelen';
+
+  @override
+  String get permissionsPageDescription =>
+      'Deze machtigingen zijn essentieel voor de werking van Omi. Ze maken belangrijke functies mogelijk zoals meldingen, locatiegebaseerde ervaringen en audio-opname.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi heeft een aantal machtigingen nodig om goed te werken. Verleen ze alsjeblieft om door te gaan.';
+
+  @override
+  String get permissionsSetupTitle => 'Krijg de beste ervaring';
+
+  @override
+  String get permissionsSetupDescription => 'Schakel een paar machtigingen in zodat Omi zijn magie kan doen.';
+
+  @override
+  String get permissionsChangeAnytime => 'Je kunt deze op elk moment wijzigen in Instellingen > Machtigingen';
+
+  @override
+  String get location => 'Locatie';
+
+  @override
+  String get microphone => 'Microfoon';
 }

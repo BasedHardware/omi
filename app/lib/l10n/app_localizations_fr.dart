@@ -1829,7 +1829,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get skipThisQuestion => 'Passer cette question';
 
   @override
-  String get skipForNow => 'Passer pour l\'instant';
+  String get skipForNow => 'Passer pour le moment';
 
   @override
   String get connectionError => 'Erreur de connexion';
@@ -8234,6 +8234,14 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Traitement sur le serveur...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Traitement... $current/$total segments';
+  }
+
+  @override
   String get processedStatus => 'Traité';
 
   @override
@@ -8794,4 +8802,36 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get storageSection => 'STOCKAGE';
+
+  @override
+  String get permissions => 'Autorisations';
+
+  @override
+  String get permissionEnabled => 'Activée';
+
+  @override
+  String get permissionEnable => 'Activer';
+
+  @override
+  String get permissionsPageDescription =>
+      'Ces autorisations sont essentielles au fonctionnement d\'Omi. Elles activent des fonctionnalités clés comme les notifications, les expériences basées sur la localisation et la capture audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi a besoin de quelques autorisations pour fonctionner correctement. Veuillez les accorder pour continuer.';
+
+  @override
+  String get permissionsSetupTitle => 'Profitez de la meilleure expérience';
+
+  @override
+  String get permissionsSetupDescription => 'Activez quelques autorisations pour qu\'Omi puisse faire sa magie.';
+
+  @override
+  String get permissionsChangeAnytime => 'Vous pouvez les modifier à tout moment dans Réglages > Autorisations';
+
+  @override
+  String get location => 'Localisation';
+
+  @override
+  String get microphone => 'Microphone';
 }

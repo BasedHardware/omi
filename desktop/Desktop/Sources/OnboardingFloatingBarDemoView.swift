@@ -8,6 +8,7 @@ struct OnboardingFloatingBarDemoView: View {
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
+    var onForceComplete: (() -> Void)?
 
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var barActivated = false
@@ -17,9 +18,7 @@ struct OnboardingFloatingBarDemoView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi which Mac fits you")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
 
                 Spacer()
 
@@ -53,7 +52,7 @@ struct OnboardingFloatingBarDemoView: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Type 'Which computer suits me best?'")
+                        Text("Type in the Floating Bar 'Which computer should I buy?'")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(OmiColors.textPrimary)
                             .multilineTextAlignment(.center)
@@ -65,7 +64,7 @@ struct OnboardingFloatingBarDemoView: View {
                 if !barActivated {
                     VStack(spacing: 12) {
                         HStack(spacing: 6) {
-                            ForEach(Array(shortcutSettings.askOmiKey.hintKeys.enumerated()), id: \.offset) { index, symbol in
+                            ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { index, symbol in
                                 if index > 0 {
                                     Text("+")
                                         .font(.system(size: 15, weight: .medium))

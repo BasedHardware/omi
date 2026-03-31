@@ -101,14 +101,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     _manualDisconnect = true;
-    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return await connection.disconnect();
+    await ServiceManager.instance().device.disconnectDevice();
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
@@ -655,6 +650,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _disconnectDebouncer.cancel();
         _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
+      case DeviceConnectionState.connecting:
+        break;
       case DeviceConnectionState.disconnected:
         _connectDebouncer.cancel();
         // Check if this is the paired device or currently connected device
@@ -663,8 +660,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           _disconnectDebouncer.run(onDeviceDisconnected);
         }
         break;
-      default:
-        Logger.debug("Device connection state is not supported $state");
     }
   }
 

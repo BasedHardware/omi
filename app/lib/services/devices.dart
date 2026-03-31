@@ -32,11 +32,14 @@ abstract class IDeviceService {
   // WiFi sync support - pause BLE reconnection during WiFi transfer
   void setWifiSyncInProgress(bool value);
   Future<void> disconnectDevice();
+
+  /// Fully tear down connection + transport for a device being forgotten/unpaired.
+  Future<void> forgetDevice(String deviceId);
 }
 
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState { connected, disconnected }
+enum DeviceConnectionState { connected, connecting, disconnected }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -214,7 +217,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
@@ -222,22 +224,21 @@ class DeviceService implements IDeviceService {
     try {
       Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
-      // Not force
-      if (!force && _connection != null) {
-        if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
-          return null;
-        }
-
-        // Connected
+      // Connected to this device — return it
+      if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
         return _connection;
       }
 
-      // Force
-      if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        return _connection;
+      // Transport exists for this device but disconnected — native handles reconnection.
+      // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
+      // But if force=true (user-initiated), reconnect explicitly.
+      if (!force && _connection?.device.id == deviceId) {
+        return null;
       }
 
-      // Connect
+      // No connection or different device — only connect on force (user-initiated)
+      if (!force) return null;
+
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
@@ -286,5 +287,28 @@ class DeviceService implements IDeviceService {
       await _connection?.disconnect();
       _connection = null;
     }
+  }
+
+  @override
+  Future<void> forgetDevice(String deviceId) async {
+    Logger.debug("DeviceService: Forgetting device $deviceId");
+    if (_connection != null) {
+      if (_connection!.status == DeviceConnectionState.connected) {
+        try {
+          await _connection!.disconnect();
+        } catch (e) {
+          Logger.debug("DeviceService: disconnect during forget failed: $e");
+        }
+      }
+
+      try {
+        await _connection!.transport.dispose();
+      } catch (e) {
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
+      }
+      _connection = null;
+    }
+
+    _devices.removeWhere((d) => d.id == deviceId);
   }
 }

@@ -1802,7 +1802,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get skipThisQuestion => 'تخطي هذا السؤال';
 
   @override
-  String get skipForNow => 'تخطي الآن';
+  String get skipForNow => 'تخطَّ الآن';
 
   @override
   String get connectionError => 'خطأ في الاتصال';
@@ -8101,6 +8101,14 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'جاري المعالجة على الخادم...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'جاري المعالجة... $current/$total أجزاء';
+  }
+
+  @override
   String get processedStatus => 'تمت المعالجة';
 
   @override
@@ -8655,4 +8663,35 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get storageSection => 'التخزين';
+
+  @override
+  String get permissions => 'أذونات';
+
+  @override
+  String get permissionEnabled => 'مفعّل';
+
+  @override
+  String get permissionEnable => 'تفعيل';
+
+  @override
+  String get permissionsPageDescription =>
+      'هذه الأذونات ضرورية لعمل Omi. فهي تتيح ميزات أساسية مثل الإشعارات وتجارب الموقع والتقاط الصوت.';
+
+  @override
+  String get permissionsRequiredDescription => 'يحتاج Omi إلى بعض الأذونات ليعمل بشكل صحيح. يرجى منحها للمتابعة.';
+
+  @override
+  String get permissionsSetupTitle => 'احصل على أفضل تجربة';
+
+  @override
+  String get permissionsSetupDescription => 'فعّل بعض الأذونات حتى يتمكن Omi من العمل بسحره.';
+
+  @override
+  String get permissionsChangeAnytime => 'يمكنك تغيير هذه في أي وقت من الإعدادات > الأذونات';
+
+  @override
+  String get location => 'الموقع';
+
+  @override
+  String get microphone => 'الميكروفون';
 }

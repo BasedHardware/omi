@@ -1751,7 +1751,7 @@
     },
     "skipForNow": "Skip for now",
     "@skipForNow": {
-        "description": "Button text to skip the entire process temporarily"
+        "description": "Link text to skip the permissions screen"
     },
     "connectionError": "Connection Error",
     "@connectionError": {
@@ -1807,7 +1807,7 @@
     },
     "permissionsRequired": "Permissions Required",
     "@permissionsRequired": {
-        "description": "Title for permissions required dialog"
+        "description": "Title for the permissions interstitial screen shown when permissions are missing"
     },
     "permissionsRequiredDesc": "This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.",
     "@permissionsRequiredDesc": {
@@ -9972,6 +9972,18 @@
             }
         }
     },
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Processed",
     "corruptedStatus": "Corrupted",
     "nPending": "{count} pending",
@@ -10447,5 +10459,45 @@
     "storageSection": "STORAGE",
     "@storageSection": {
         "description": "Section header for storage settings"
+    },
+    "permissions": "Permissions",
+    "@permissions": {
+        "description": "Title for the permissions settings page"
+    },
+    "permissionEnabled": "Enabled",
+    "@permissionEnabled": {
+        "description": "Status text when a permission is enabled"
+    },
+    "permissionEnable": "Enable",
+    "@permissionEnable": {
+        "description": "Action text to enable a permission"
+    },
+    "permissionsPageDescription": "These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.",
+    "@permissionsPageDescription": {
+        "description": "Description text shown at the bottom of the permissions page"
+    },
+    "permissionsRequiredDescription": "Omi needs a few permissions to work properly. Please grant them to continue.",
+    "@permissionsRequiredDescription": {
+        "description": "Description for the permissions interstitial screen"
+    },
+    "permissionsSetupTitle": "Get the best experience",
+    "@permissionsSetupTitle": {
+        "description": "Title for the permissions interstitial screen"
+    },
+    "permissionsSetupDescription": "Enable a few permissions so Omi can work its magic.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "permissionsChangeAnytime": "You can change these anytime in Settings > Permissions",
+    "@permissionsChangeAnytime": {
+        "description": "Reassurance note on the permissions interstitial"
+    },
+    "location": "Location",
+    "@location": {
+        "description": "Label for location permission"
+    },
+    "microphone": "Microphone",
+    "@microphone": {
+        "description": "Label for microphone permission"
     }
 }

@@ -38,6 +38,16 @@ void main() {
     Env.init(_StagingEnvFields());
   });
 
+  group('Env.stagingApiUrl with STAGING_API_URL configured', () {
+    test('returns the env var value', () {
+      expect(Env.stagingApiUrl, 'https://staging.omiapi.com/');
+    });
+
+    test('isStagingConfigured is true', () {
+      expect(Env.isStagingConfigured, isTrue);
+    });
+  });
+
   group('Env.isUsingStagingApi with explicit stagingApiUrl', () {
     test('true when override matches configured stagingApiUrl', () {
       Env.overrideApiBaseUrl('https://staging.omiapi.com/');
@@ -52,12 +62,6 @@ void main() {
     test('false when override points to a different URL', () {
       Env.overrideApiBaseUrl('https://api.prod.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
-    });
-  });
-
-  group('Env.stagingApiUrl getter', () {
-    test('returns explicitly configured staging URL', () {
-      expect(Env.stagingApiUrl, 'https://staging.omiapi.com/');
     });
   });
 }

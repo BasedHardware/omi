@@ -8009,6 +8009,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => '正在服务器上处理...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '处理中... $current/$total 个片段';
+  }
+
+  @override
   String get processedStatus => '已处理';
 
   @override
@@ -8555,4 +8563,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get storageSection => '存储';
+
+  @override
+  String get permissions => '权限';
+
+  @override
+  String get permissionEnabled => '已启用';
+
+  @override
+  String get permissionEnable => '启用';
+
+  @override
+  String get permissionsPageDescription => '这些权限是Omi运作的核心。它们启用通知、基于位置的体验和音频捕获等关键功能。';
+
+  @override
+  String get permissionsRequiredDescription => 'Omi 需要一些权限才能正常工作。请授予权限以继续。';
+
+  @override
+  String get permissionsSetupTitle => '获得最佳体验';
+
+  @override
+  String get permissionsSetupDescription => '启用一些权限，让 Omi 发挥它的魔力。';
+
+  @override
+  String get permissionsChangeAnytime => '您可以随时在设置 > 权限中更改';
+
+  @override
+  String get location => '位置';
+
+  @override
+  String get microphone => '麦克风';
 }

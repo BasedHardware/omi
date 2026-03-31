@@ -559,7 +559,7 @@
     "allDone": "Helemaal klaar!",
     "keepGoing": "Ga zo door, je doet het geweldig",
     "skipThisQuestion": "Sla deze vraag over",
-    "skipForNow": "Voorlopig overslaan",
+    "skipForNow": "Nu overslaan",
     "connectionError": "Verbindingsfout",
     "connectionErrorDesc": "Kan geen verbinding maken met de server. Controleer je internetverbinding en probeer het opnieuw.",
     "invalidRecordingMultipleSpeakers": "Ongeldige opname gedetecteerd",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Downloaden van apparaat",
     "reconnectingToInternet": "Opnieuw verbinden met internet...",
     "uploadingToCloud": "{current} van {total} uploaden",
+    "processingOnServer": "Verwerken op de server...",
+    "processingOnServerProgress": "Verwerken... {current}/{total} segmenten",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Verwerkt",
     "corruptedStatus": "Beschadigd",
     "nPending": "{count} in afwachting",
@@ -2825,5 +2837,15 @@
     "storageSection": "OPSLAG",
     "tipKeepPhoneNearby": "Houd uw telefoon dichtbij voor snellere synchronisatie",
     "tipStableInternet": "Stabiel internet versnelt cloud-uploads",
-    "tipAutoSync": "Opnames worden automatisch gesynchroniseerd"
+    "tipAutoSync": "Opnames worden automatisch gesynchroniseerd",
+    "permissions": "Machtigingen",
+    "permissionEnabled": "Ingeschakeld",
+    "permissionEnable": "Inschakelen",
+    "permissionsPageDescription": "Deze machtigingen zijn essentieel voor de werking van Omi. Ze maken belangrijke functies mogelijk zoals meldingen, locatiegebaseerde ervaringen en audio-opname.",
+    "permissionsRequiredDescription": "Omi heeft een aantal machtigingen nodig om goed te werken. Verleen ze alsjeblieft om door te gaan.",
+    "permissionsSetupTitle": "Krijg de beste ervaring",
+    "permissionsSetupDescription": "Schakel een paar machtigingen in zodat Omi zijn magie kan doen.",
+    "permissionsChangeAnytime": "Je kunt deze op elk moment wijzigen in Instellingen > Machtigingen",
+    "location": "Locatie",
+    "microphone": "Microfoon"
 }

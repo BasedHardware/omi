@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
@@ -327,6 +328,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: manufacturer,
             showChevron: false,
           ),
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: context.l10n.wifiSync,
+              chipValue: context.l10n.available,
+              showChevron: false,
+            ),
+          ],
         ],
       ),
     );
@@ -699,16 +710,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               onTap: _showMicGainSheet,
             ),
           ],
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
-            ),
-          ],
         ],
       ),
     );
@@ -767,13 +768,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             // Disconnect
             GestureDetector(
               onTap: () async {
+                final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                 SharedPreferencesUtil().deviceName = '';
-                if (provider.connectedDevice != null) {
-                  await _bleDisconnectDevice(provider.connectedDevice!);
+
+                if (deviceId.isNotEmpty) {
+                  await ServiceManager.instance().device.forgetDevice(deviceId);
+                  try {
+                    BleHostApi().unmanageDevice(deviceId);
+                  } catch (_) {}
                 }
+
                 provider.setIsConnected(false);
-                provider.setConnectedDevice(null);
+                await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
                 MixpanelManager().disconnectFriendClicked();
                 if (context.mounted) {

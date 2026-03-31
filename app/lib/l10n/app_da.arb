@@ -2644,6 +2644,18 @@
     "downloadingFromDevice": "Downloader fra enhed",
     "reconnectingToInternet": "Genopretter forbindelse til internet...",
     "uploadingToCloud": "Uploader {current} af {total}",
+    "processingOnServer": "Behandler på serveren...",
+    "processingOnServerProgress": "Behandler... {current}/{total} segmenter",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Behandlet",
     "corruptedStatus": "Beskadiget",
     "nPending": "{count} afventende",
@@ -2834,5 +2846,15 @@
     "storageSection": "LAGER",
     "tipKeepPhoneNearby": "Hold din telefon i nærheden for hurtigere synkronisering",
     "tipStableInternet": "Stabilt internet fremskynder cloud-uploads",
-    "tipAutoSync": "Optagelser synkroniseres automatisk"
+    "tipAutoSync": "Optagelser synkroniseres automatisk",
+    "permissions": "Tilladelser",
+    "permissionEnabled": "Aktiveret",
+    "permissionEnable": "Aktivér",
+    "permissionsPageDescription": "Disse tilladelser er centrale for Omis funktion. De aktiverer nøglefunktioner som notifikationer, placeringsbaserede oplevelser og lydoptagelse.",
+    "permissionsRequiredDescription": "Omi har brug for nogle tilladelser for at fungere korrekt. Giv dem venligst for at fortsætte.",
+    "permissionsSetupTitle": "Få den bedste oplevelse",
+    "permissionsSetupDescription": "Aktivér nogle tilladelser, så Omi kan udfolde sin magi.",
+    "permissionsChangeAnytime": "Du kan ændre disse når som helst i Indstillinger > Tilladelser",
+    "location": "Placering",
+    "microphone": "Mikrofon"
 }

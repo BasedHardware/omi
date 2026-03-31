@@ -1798,7 +1798,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get skipThisQuestion => 'इस प्रश्न को छोड़ें';
 
   @override
-  String get skipForNow => 'अभी के लिए छोड़ें';
+  String get skipForNow => 'अभी छोड़ें';
 
   @override
   String get connectionError => 'कनेक्शन त्रुटि';
@@ -1840,7 +1840,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get continueWithoutDevice => 'डिवाइस के बिना जारी रखें';
 
   @override
-  String get permissionsRequired => 'अनुमतियां आवश्यक';
+  String get permissionsRequired => 'अनुमतियाँ आवश्यक';
 
   @override
   String get permissionsRequiredDesc => 'ब्लूटूथ और स्थान की अनुमति आवश्यक है।';
@@ -8137,6 +8137,14 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'सर्वर पर प्रोसेसिंग...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'प्रोसेसिंग... $current/$total सेगमेंट';
+  }
+
+  @override
   String get processedStatus => 'संसाधित';
 
   @override
@@ -8694,4 +8702,36 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get storageSection => 'स्टोरेज';
+
+  @override
+  String get permissions => 'अनुमतियाँ';
+
+  @override
+  String get permissionEnabled => 'सक्षम';
+
+  @override
+  String get permissionEnable => 'सक्षम करें';
+
+  @override
+  String get permissionsPageDescription =>
+      'ये अनुमतियाँ Omi के काम करने के लिए आवश्यक हैं। ये सूचनाएँ, स्थान-आधारित अनुभव और ऑडियो कैप्चर जैसी प्रमुख सुविधाएँ सक्षम करती हैं।';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi को ठीक से काम करने के लिए कुछ अनुमतियों की आवश्यकता है। कृपया जारी रखने के लिए उन्हें प्रदान करें।';
+
+  @override
+  String get permissionsSetupTitle => 'सर्वोत्तम अनुभव प्राप्त करें';
+
+  @override
+  String get permissionsSetupDescription => 'कुछ अनुमतियाँ सक्षम करें ताकि Omi अपना जादू दिखा सके।';
+
+  @override
+  String get permissionsChangeAnytime => 'आप इन्हें कभी भी सेटिंग्स > अनुमतियाँ में बदल सकते हैं';
+
+  @override
+  String get location => 'स्थान';
+
+  @override
+  String get microphone => 'माइक्रोफ़ोन';
 }

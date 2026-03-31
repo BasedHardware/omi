@@ -423,6 +423,75 @@ class SyncLocalFilesResponse {
   }
 }
 
+class SyncJobStartResponse {
+  final String jobId;
+  final String status;
+  final int totalFiles;
+  final int totalSegments;
+  final int pollAfterMs;
+
+  SyncJobStartResponse({
+    required this.jobId,
+    required this.status,
+    required this.totalFiles,
+    required this.totalSegments,
+    required this.pollAfterMs,
+  });
+
+  factory SyncJobStartResponse.fromJson(Map<String, dynamic> json) {
+    return SyncJobStartResponse(
+      jobId: json['job_id'] ?? '',
+      status: json['status'] ?? 'queued',
+      totalFiles: json['total_files'] ?? 0,
+      totalSegments: json['total_segments'] ?? 0,
+      pollAfterMs: json['poll_after_ms'] ?? 3000,
+    );
+  }
+}
+
+class SyncJobStatusResponse {
+  final String jobId;
+  final String status;
+  final int totalSegments;
+  final int processedSegments;
+  final int successfulSegments;
+  final int failedSegments;
+  final SyncLocalFilesResponse? result;
+  final String? error;
+
+  SyncJobStatusResponse({
+    required this.jobId,
+    required this.status,
+    this.totalSegments = 0,
+    this.processedSegments = 0,
+    this.successfulSegments = 0,
+    this.failedSegments = 0,
+    this.result,
+    this.error,
+  });
+
+  bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
+  bool get isSuccess => status == 'completed';
+  bool get isPartialFailure => status == 'partial_failure';
+
+  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
+    SyncLocalFilesResponse? result;
+    if (json['result'] != null) {
+      result = SyncLocalFilesResponse.fromJson(json['result']);
+    }
+    return SyncJobStatusResponse(
+      jobId: json['job_id'] ?? '',
+      status: json['status'] ?? 'unknown',
+      totalSegments: json['total_segments'] ?? 0,
+      processedSegments: json['processed_segments'] ?? 0,
+      successfulSegments: json['successful_segments'] ?? 0,
+      failedSegments: json['failed_segments'] ?? 0,
+      result: result,
+      error: json['error'],
+    );
+  }
+}
+
 enum SyncedConversationType { newConversation, updatedConversation }
 
 class SyncedConversationPointer {

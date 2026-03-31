@@ -1820,7 +1820,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get skipThisQuestion => 'Preskočiť túto otázku';
 
   @override
-  String get skipForNow => 'Preskočiť zatiaľ';
+  String get skipForNow => 'Preskočiť';
 
   @override
   String get connectionError => 'Chyba pripojenia';
@@ -1866,7 +1866,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get continueWithoutDevice => 'Pokračovať bez zariadenia';
 
   @override
-  String get permissionsRequired => 'Vyžadujú sa povolenia';
+  String get permissionsRequired => 'Vyžadované oprávnenia';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8148,6 +8148,14 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Spracovanie na serveri...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Spracovanie... $current/$total segmentov';
+  }
+
+  @override
   String get processedStatus => 'Spracované';
 
   @override
@@ -8702,4 +8710,36 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get storageSection => 'ÚLOŽISKO';
+
+  @override
+  String get permissions => 'Oprávnenia';
+
+  @override
+  String get permissionEnabled => 'Povolené';
+
+  @override
+  String get permissionEnable => 'Povoliť';
+
+  @override
+  String get permissionsPageDescription =>
+      'Tieto oprávnenia sú kľúčové pre fungovanie Omi. Umožňujú kľúčové funkcie ako upozornenia, zážitky založené na polohe a nahrávanie zvuku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potrebuje niekoľko oprávnení, aby správne fungoval. Prosím, udeľte ich pre pokračovanie.';
+
+  @override
+  String get permissionsSetupTitle => 'Získajte najlepší zážitok';
+
+  @override
+  String get permissionsSetupDescription => 'Povoľte niekoľko oprávnení, aby Omi mohol fungovať naplno.';
+
+  @override
+  String get permissionsChangeAnytime => 'Môžete to kedykoľvek zmeniť v Nastavenia > Oprávnenia';
+
+  @override
+  String get location => 'Poloha';
+
+  @override
+  String get microphone => 'Mikrofón';
 }

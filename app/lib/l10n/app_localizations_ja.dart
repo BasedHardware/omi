@@ -8019,6 +8019,14 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'サーバーで処理中...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '処理中... $current/$total セグメント';
+  }
+
+  @override
   String get processedStatus => '処理済み';
 
   @override
@@ -8567,4 +8575,34 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get storageSection => 'ストレージ';
+
+  @override
+  String get permissions => '権限';
+
+  @override
+  String get permissionEnabled => '有効';
+
+  @override
+  String get permissionEnable => '有効にする';
+
+  @override
+  String get permissionsPageDescription => 'これらの権限はOmiの動作に不可欠です。通知、位置情報に基づく体験、音声キャプチャなどの主要機能を有効にします。';
+
+  @override
+  String get permissionsRequiredDescription => 'Omiが正しく動作するためにいくつかの権限が必要です。続行するには許可してください。';
+
+  @override
+  String get permissionsSetupTitle => '最高の体験を手に入れよう';
+
+  @override
+  String get permissionsSetupDescription => 'いくつかの権限を有効にして、Omiの魔法を体験しましょう。';
+
+  @override
+  String get permissionsChangeAnytime => '設定 > 権限からいつでも変更できます';
+
+  @override
+  String get location => '位置情報';
+
+  @override
+  String get microphone => 'マイク';
 }

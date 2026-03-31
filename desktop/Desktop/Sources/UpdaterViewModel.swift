@@ -312,6 +312,13 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
+    // Restore beta for users whose preference was overwritten by the March 27 bug
+    AppBuild.migrateBetaChannelOverwrite()
+
+    if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
+      AppBuild.syncUpdateChannelOnFirstLaunch()
+    }
+
     // Initialize the updater controller with our delegate
     updaterController = SPUStandardUpdaterController(
       startingUpdater: true,
@@ -324,9 +331,9 @@ final class UpdaterViewModel: ObservableObject {
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
     // Initialize update channel from UserDefaults
-    // Normalize legacy "staging" → "beta" for users upgrading from older builds
+    // Normalize legacy "staging" → "beta" and "better" → "beta"
     var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if storedChannel == "staging" { storedChannel = "beta" }
+    if storedChannel == "staging" || storedChannel == "better" { storedChannel = "beta" }
     updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
     // Wire up delegate back-reference

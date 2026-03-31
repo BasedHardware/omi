@@ -2,9 +2,9 @@ import Foundation
 
 enum OnboardingFlow {
   static let steps = [
-    "Trust",
     "Name",
     "Language",
+    "Trust",
     "ScreenRecording",
     "FullDiskAccess",
     "FileScan",
@@ -31,7 +31,8 @@ enum OnboardingFlow {
     hasMergedVoiceInputStep: Bool,
     hasRemovedNotificationStep: Bool,
     hasInsertedFloatingBarShortcutStep: Bool,
-    hasMigratedPagedIntro: Bool
+    hasMigratedPagedIntro: Bool,
+    hasReorderedTrustStep: Bool
   ) -> Int {
     var migratedStep = currentStep
 
@@ -59,6 +60,21 @@ enum OnboardingFlow {
 
     if !hasMigratedPagedIntro, migratedStep > 0 {
       migratedStep += legacyPostIntroOffset
+    }
+
+    // Only reorder for existing users who already had the old Trust-first layout.
+    // New users (all flags false) start with the correct Name-first order.
+    if !hasReorderedTrustStep && hasMigratedPagedIntro {
+      switch migratedStep {
+      case 0:
+        migratedStep = 2
+      case 1:
+        migratedStep = 0
+      case 2:
+        migratedStep = 1
+      default:
+        break
+      }
     }
 
     return min(max(0, migratedStep), lastStepIndex)

@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-03-16 (PR #5624 E2E testing)
+> Last updated: 2026-03-28 (PR #6061 — remove local fallback)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, Deepgram, embedding API). Update when the
@@ -46,6 +46,11 @@ sequenceDiagram
 
 This is the normal path when the client stays connected but stops speaking.
 
+**Key design rule (#6061):** Listen NEVER processes conversations locally.
+All conversation processing routes through pusher via `request_conversation_processing()`.
+When pusher is unavailable, conversations stay buffered in `pending_conversation_requests`
+and are flushed when pusher reconnects.
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -62,19 +67,26 @@ sequenceDiagram
     end
 
     Backend->>Backend: _process_conversation(conversation_id)
-    Backend->>Firestore: Set status=processing
-    Backend->>Pusher: Send process_conversation request
-    Backend->>Firestore: Create new stub conversation
+    alt Pusher available (request_conversation_processing != None)
+        Backend->>Firestore: Set status=processing
+        Backend->>Pusher: Send process_conversation request (opcode 104)
+        Backend->>Firestore: Create new stub conversation
+    else Pusher not configured (HOSTED_PUSHER_API_URL unset)
+        Note over Backend: Skip processing — conversation stays in_progress permanently.<br/>Pusher is required for conversation processing in production.
+    end
 
-    Pusher->>OpenAI: Generate title, overview, category, emoji, action_items
-    OpenAI-->>Pusher: Structured data
-    Pusher->>Firestore: Write structured data + set status=completed
-    Pusher->>OpenAI: Extract memories
-    Pusher->>Firestore: Save embedding vector
-    Pusher-->>Backend: Opcode 201 (conversation processed callback)
-
-    Backend-->>Client: {type: "memory_processing_started"}
-    Backend-->>Client: {type: "memory_created", memory: {...}}
+    alt Pusher connected
+        Pusher->>OpenAI: Generate title, overview, category, emoji, action_items
+        OpenAI-->>Pusher: Structured data
+        Pusher->>Firestore: Write structured data + set status=completed
+        Pusher->>OpenAI: Extract memories
+        Pusher->>Firestore: Save embedding vector
+        Pusher-->>Backend: Opcode 201 (conversation processed callback)
+        Backend-->>Client: {type: "memory_processing_started"}
+        Backend-->>Client: {type: "memory_created", memory: {...}}
+    else Pusher disconnected (RECONNECT_BACKOFF / DEGRADED)
+        Note over Backend: Request buffered in pending_conversation_requests<br/>Resent automatically when pusher reconnects
+    end
 ```
 
 ## 3. Disconnect Path
@@ -91,8 +103,12 @@ sequenceDiagram
     Backend->>Backend: Log "Client disconnected"
 
     alt Multi-channel
-        Backend->>Backend: _process_conversation(current_conversation_id) ✅
-        Backend->>Pusher: Send process_conversation request
+        Backend->>Backend: _process_conversation(current_conversation_id)
+        alt Pusher available
+            Backend->>Pusher: Send process_conversation request (opcode 104)
+        else Pusher not configured
+            Note over Backend: Conversation stays in_progress permanently<br/>until HOSTED_PUSHER_API_URL is configured
+        end
     else Single-channel
         Note over Backend: No explicit _process_conversation() call<br/>Relies on next session to pick up as stale
     end
@@ -101,13 +117,44 @@ sequenceDiagram
     Backend->>Backend: Close Pusher socket
     Backend->>Backend: Cleanup memory (clear caches, buffers)
 
-    Note over Backend: Single-channel: conversation stays<br/>in_progress until next session<br/>picks it up as stale
+    Note over Backend: No local fallback processing (#6061).<br/>Pusher is required for conversation processing.<br/>Without it, conversations stay in_progress permanently.
+```
+
+## 3.1 Pusher Reconnect & Pending Flush
+
+When pusher reconnects after a disconnection, all buffered conversations are replayed.
+
+```mermaid
+sequenceDiagram
+    participant Backend as Backend
+    participant Pusher
+
+    Note over Backend: Pusher disconnects → RECONNECT_BACKOFF
+
+    loop _pusher_reconnect_loop (exponential backoff)
+        Backend->>Pusher: Attempt reconnect
+        alt Connection fails
+            Note over Backend: Increment reconnect_attempts
+            alt attempts >= 6 OR circuit breaker open
+                Note over Backend: Transition to DEGRADED<br/>Pending conversations KEPT buffered
+            end
+        else Connection succeeds
+            Note over Backend: Transition to CONNECTED
+            Backend->>Backend: Flush pending_conversation_requests
+            loop Each buffered conversation
+                Backend->>Pusher: Re-send process_conversation (opcode 104)
+            end
+        end
+    end
+
+    Note over Backend: Retry exhaustion: after MAX_RETRIES (3),<br/>conversation stays buffered with reset sent_at.<br/>cleanup_processing_conversations picks it up next session.
 ```
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
 Speaker identification requires two sessions: one to store the embedding, one
-to match against it.
+to match against it. The user's own voice is also identified via their speech
+profile embedding (loaded at session start alongside person embeddings).
 
 ```mermaid
 sequenceDiagram
@@ -115,6 +162,7 @@ sequenceDiagram
     participant Backend as Backend
     participant Pusher
     participant EmbeddingAPI as Embedding API (wespeaker)
+    participant GCS as Google Cloud Storage
     participant Firestore
 
     Note over Client: SESSION 1: Assign Speaker
@@ -139,12 +187,19 @@ sequenceDiagram
 
     Client->>Backend: WS connect
     Backend->>Firestore: Load person_embeddings_cache (once at session start)
+    Backend->>GCS: Load user speech profile WAV (if exists)
+    Backend->>EmbeddingAPI: Extract user embedding from profile audio
+    Note over Backend: Cache user embedding as 'user' sentinel
     Client->>Backend: Stream audio
     Backend->>EmbeddingAPI: Extract embedding from current speech
     EmbeddingAPI-->>Backend: 256-d embedding
-    Backend->>Backend: Cosine distance vs cached embeddings
+    Backend->>Backend: Cosine distance vs cached embeddings (persons + user)
     Note over Backend: Match if distance < 0.45
-    Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    alt Match is user's own voice
+        Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
+    else Match is known person
+        Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    end
 ```
 
 ## 5. Private Cloud Sync (Audio Upload)
@@ -208,4 +263,8 @@ sequenceDiagram
 | `lifecycle_manager` poll | 5s | transcribe.py:1683 | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
 | Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
+| `PENDING_REQUEST_TIMEOUT` | 120s | transcribe.py | Timeout before retrying a pending request |
+| `MAX_RETRIES_PER_REQUEST` | 3 | transcribe.py | Max retries before keeping buffered |
+| `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | transcribe.py | Reconnect attempts before DEGRADED |
+| `MAX_PENDING_REQUESTS` | 100 | transcribe.py | Max buffered conversations per session |
 

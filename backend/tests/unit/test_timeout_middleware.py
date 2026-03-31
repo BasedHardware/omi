@@ -182,3 +182,78 @@ def test_timeout_returns_504():
     client = TestClient(app)
     response = client.get("/slow")
     assert response.status_code == 504
+
+
+def test_post_timeout_override():
+    """POST requests use HTTP_POST_TIMEOUT when set (#5941)."""
+
+    async def slow_post(request):
+        await asyncio.sleep(10)
+        return PlainTextResponse("slow post")
+
+    app = Starlette(
+        routes=[
+            Route("/upload", slow_post, methods=["POST"]),
+        ],
+    )
+    app.add_middleware(TimeoutMiddleware, methods_timeout={"POST": 0.1})
+    client = TestClient(app)
+    response = client.post("/upload")
+    assert response.status_code == 504
+
+
+def test_post_timeout_none_falls_back_to_default(monkeypatch):
+    """POST with None timeout falls back to HTTP_DEFAULT_TIMEOUT (#5941)."""
+    monkeypatch.setenv("HTTP_DEFAULT_TIMEOUT", "0.1")
+
+    async def slow_post(request):
+        await asyncio.sleep(10)
+        return PlainTextResponse("slow post")
+
+    app = Starlette(
+        routes=[
+            Route("/upload", slow_post, methods=["POST"]),
+        ],
+    )
+    # POST: None mirrors main.py when HTTP_POST_TIMEOUT env var is unset.
+    # _parse_methods_timeout skips None → falls back to default (0.1s)
+    app.add_middleware(TimeoutMiddleware, methods_timeout={"POST": None})
+    client = TestClient(app)
+    response = client.post("/upload")
+    assert response.status_code == 504
+
+
+def test_main_methods_timeout_includes_post():
+    """backend/main.py methods_timeout dict includes POST wired to HTTP_POST_TIMEOUT (#5941).
+
+    AST-parses main.py to verify the POST entry exists in the methods_timeout
+    assignment and is wired to os.environ.get('HTTP_POST_TIMEOUT'), without
+    importing the full app (avoids startup side effects).
+    """
+    import ast
+    from pathlib import Path
+
+    main_py = Path(__file__).resolve().parents[2] / "main.py"
+    tree = ast.parse(main_py.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "methods_timeout":
+                    assert isinstance(node.value, ast.Dict)
+                    key_value_pairs = dict(zip(node.value.keys, node.value.values))
+                    post_key = None
+                    post_value = None
+                    for k, v in zip(node.value.keys, node.value.values):
+                        if isinstance(k, ast.Constant) and k.value == "POST":
+                            post_key = k
+                            post_value = v
+                            break
+                    assert post_key is not None, "POST missing from methods_timeout keys"
+                    # Verify value is os.environ.get('HTTP_POST_TIMEOUT')
+                    assert isinstance(post_value, ast.Call), "POST value should be a function call"
+                    assert isinstance(post_value.args[0], ast.Constant), "First arg should be a string constant"
+                    assert (
+                        post_value.args[0].value == "HTTP_POST_TIMEOUT"
+                    ), f"POST env var should be HTTP_POST_TIMEOUT, got {post_value.args[0].value}"
+                    return
+    raise AssertionError("methods_timeout assignment not found in main.py")

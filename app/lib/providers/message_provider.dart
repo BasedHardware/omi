@@ -28,17 +28,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class MessageProvider extends ChangeNotifier {
-  static late MethodChannel _askAIChannel;
-
-  MessageProvider() {
-    if (PlatformService.isDesktop) {
-      _askAIChannel = const MethodChannel('com.omi/ask_ai');
-      _askAIChannel.setMethodCallHandler(_handleAskAIMethodCall);
-    }
-  }
+  MessageProvider();
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
@@ -209,11 +201,6 @@ class MessageProvider extends ChangeNotifier {
 
   void captureImage() async {
     final l10n = globalNavigatorKey.currentContext?.l10n;
-    if (PlatformService.isDesktop) {
-      AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
-      return;
-    }
-
     try {
       var res = await ImagePicker().pickImage(source: ImageSource.camera);
       if (res != null) {
@@ -248,50 +235,18 @@ class MessageProvider extends ChangeNotifier {
     try {
       List<File> files = [];
 
-      if (PlatformService.isDesktop) {
-        try {
-          FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
-            allowMultiple: true,
-            dialogTitle: 'Select image files',
-            withData: false,
-            withReadStream: false,
-          );
-
-          if (result != null && result.files.isNotEmpty) {
-            for (var file in result.files) {
-              if (file.path != null && files.length < (4 - selectedFiles.length)) {
-                files.add(File(file.path!));
-              }
-            }
-          } else {
-            return;
-          }
-        } on PlatformException catch (e) {
-          AppSnackbar.showSnackbarError(
-            l10n?.msgFilePickerError(e.message ?? '') ?? 'Error opening file picker: ${e.message}',
-          );
-          return;
-        } catch (e) {
-          Logger.debug('FilePicker general error: $e');
-          AppSnackbar.showSnackbarError(l10n?.msgSelectImagesError(e.toString()) ?? 'Error selecting images: $e');
-          return;
+      List res = [];
+      if (4 - selectedFiles.length == 1) {
+        var image = await ImagePicker().pickImage(source: ImageSource.gallery);
+        if (image != null) {
+          res = [image];
         }
       } else {
-        List res = [];
-        if (4 - selectedFiles.length == 1) {
-          var image = await ImagePicker().pickImage(source: ImageSource.gallery);
-          if (image != null) {
-            res = [image];
-          }
-        } else {
-          res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
-        }
+        res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+      }
 
-        for (var r in res) {
-          files.add(File(r.path));
-        }
+      for (var r in res) {
+        files.add(File(r.path));
       }
 
       if (files.isNotEmpty) {
@@ -938,58 +893,5 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
-  }
-
-  Future<void> _handleAskAIMethodCall(MethodCall call) async {
-    if (!PlatformService.isDesktop) {
-      return;
-    }
-    switch (call.method) {
-      case 'sendQuery':
-        final args = call.arguments as Map<dynamic, dynamic>;
-        final message = args['message'] as String;
-        final filePath = args['filePath'] as String?;
-
-        List<String>? fileIds;
-        if (filePath != null && filePath.isNotEmpty) {
-          final file = File(filePath);
-          final uploadedFilesResult = await uploadFiles([file], null);
-          if (uploadedFilesResult != null) {
-            fileIds = uploadedFilesResult.map((f) => f.id).toList();
-          } else {
-            final l10n = globalNavigatorKey.currentContext?.l10n;
-            _askAIChannel.invokeMethod('aiResponseChunk', {
-              'type': 'error',
-              'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
-            });
-            return;
-          }
-        }
-
-        try {
-          await for (var chunk in sendMessageStreamServer(message, filesId: fileIds)) {
-            final chunkMap = {
-              'type': chunk.type.toString().split('.').last,
-              'text': chunk.text,
-              'messageId': chunk.messageId,
-            };
-            if (chunk.type == MessageChunkType.done && chunk.message != null) {
-              chunkMap['text'] = chunk.message!.text;
-            }
-            _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-          }
-        } catch (e) {
-          final failedChunk = ServerMessageChunk.failedMessage();
-          final chunkMap = {
-            'type': failedChunk.type.toString().split('.').last,
-            'text': failedChunk.text,
-            'messageId': failedChunk.messageId,
-          };
-          _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-        }
-        break;
-      default:
-        throw PlatformException(code: 'Unimplemented', details: 'Method ${call.method} not implemented.');
-    }
   }
 }

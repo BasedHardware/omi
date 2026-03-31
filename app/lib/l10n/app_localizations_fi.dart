@@ -8157,6 +8157,14 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Käsitellään palvelimella...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Käsitellään... $current/$total segmenttiä';
+  }
+
+  @override
   String get processedStatus => 'Käsitelty';
 
   @override
@@ -8713,4 +8721,36 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get storageSection => 'TALLENNUSTILA';
+
+  @override
+  String get permissions => 'Käyttöoikeudet';
+
+  @override
+  String get permissionEnabled => 'Käytössä';
+
+  @override
+  String get permissionEnable => 'Ota käyttöön';
+
+  @override
+  String get permissionsPageDescription =>
+      'Nämä käyttöoikeudet ovat keskeisiä Omin toiminnalle. Ne mahdollistavat keskeiset ominaisuudet kuten ilmoitukset, sijaintiin perustuvat kokemukset ja äänen tallennuksen.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi tarvitsee muutamia käyttöoikeuksia toimiakseen oikein. Myönnä ne jatkaaksesi.';
+
+  @override
+  String get permissionsSetupTitle => 'Saat parhaan kokemuksen';
+
+  @override
+  String get permissionsSetupDescription => 'Ota käyttöön muutama lupa, jotta Omi voi tehdä taikojaan.';
+
+  @override
+  String get permissionsChangeAnytime => 'Voit muuttaa näitä milloin tahansa kohdassa Asetukset > Käyttöoikeudet';
+
+  @override
+  String get location => 'Sijainti';
+
+  @override
+  String get microphone => 'Mikrofoni';
 }

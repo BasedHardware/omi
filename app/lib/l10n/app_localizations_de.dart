@@ -8226,6 +8226,14 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Verarbeitung auf dem Server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Verarbeitung... $current/$total Segmente';
+  }
+
+  @override
   String get processedStatus => 'Verarbeitet';
 
   @override
@@ -8789,4 +8797,36 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get storageSection => 'SPEICHER';
+
+  @override
+  String get permissions => 'Berechtigungen';
+
+  @override
+  String get permissionEnabled => 'Aktiviert';
+
+  @override
+  String get permissionEnable => 'Aktivieren';
+
+  @override
+  String get permissionsPageDescription =>
+      'Diese Berechtigungen sind zentral für die Funktionsweise von Omi. Sie ermöglichen wichtige Funktionen wie Benachrichtigungen, standortbasierte Erlebnisse und Audioaufnahme.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi benötigt einige Berechtigungen, um richtig zu funktionieren. Bitte erteile sie, um fortzufahren.';
+
+  @override
+  String get permissionsSetupTitle => 'Hol dir das beste Erlebnis';
+
+  @override
+  String get permissionsSetupDescription => 'Aktiviere ein paar Berechtigungen, damit Omi seine Magie entfalten kann.';
+
+  @override
+  String get permissionsChangeAnytime => 'Du kannst diese jederzeit unter Einstellungen > Berechtigungen ändern';
+
+  @override
+  String get location => 'Standort';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

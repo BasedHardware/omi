@@ -559,7 +559,7 @@
     "allDone": "Kész!",
     "keepGoing": "Csak így tovább, nagyszerűen csinálod",
     "skipThisQuestion": "Kérdés kihagyása",
-    "skipForNow": "Egyelőre kihagyom",
+    "skipForNow": "Kihagyás most",
     "connectionError": "Kapcsolódási hiba",
     "connectionErrorDesc": "Nem sikerült csatlakozni a szerverhez. Kérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
     "invalidRecordingMultipleSpeakers": "Érvénytelen felvétel észlelve",
@@ -2731,6 +2731,18 @@
     "downloadingFromDevice": "Letöltés az eszközről",
     "reconnectingToInternet": "Újracsatlakozás az internethez...",
     "uploadingToCloud": "{current}/{total} feltöltése",
+    "processingOnServer": "Feldolgozás a szerveren...",
+    "processingOnServerProgress": "Feldolgozás... {current}/{total} szegmens",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Feldolgozva",
     "corruptedStatus": "Sérült",
     "nPending": "{count} függőben",
@@ -2921,5 +2933,15 @@
     "storageSection": "TÁRHELY",
     "tipKeepPhoneNearby": "Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz",
     "tipStableInternet": "Stabil internet gyorsítja a felhőbe feltöltést",
-    "tipAutoSync": "A felvételek automatikusan szinkronizálódnak"
+    "tipAutoSync": "A felvételek automatikusan szinkronizálódnak",
+    "permissions": "Engedélyek",
+    "permissionEnabled": "Engedélyezve",
+    "permissionEnable": "Engedélyezés",
+    "permissionsPageDescription": "Ezek az engedélyek alapvetőek az Omi működéséhez. Kulcsfontosságú funkciókat tesznek lehetővé, mint az értesítések, helymeghatározáson alapuló élmények és hangfelvétel.",
+    "permissionsRequiredDescription": "Az Omi néhány engedélyre van szüksége a megfelelő működéshez. Kérjük, add meg őket a folytatáshoz.",
+    "permissionsSetupTitle": "Szerezd meg a legjobb élményt",
+    "permissionsSetupDescription": "Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.",
+    "permissionsChangeAnytime": "Ezeket bármikor módosíthatod a Beállítások > Engedélyek menüben",
+    "location": "Helyzet",
+    "microphone": "Mikrofon"
 }

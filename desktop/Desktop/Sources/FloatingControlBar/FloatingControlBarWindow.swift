@@ -97,10 +97,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        // Esc closes the AI conversation only — never hides the entire bar
+        // Esc clears visible floating-bar history without closing the bar.
         if event.keyCode == 53 { // Escape
-            if state.showingAIConversation {
-                closeAIConversation()
+            if state.showingAIConversation && state.hasVisibleConversation {
+                clearVisibleConversationFromUI()
             }
             return
         }
@@ -114,7 +114,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onAskAI: { [weak self] in self?.handleAskAI() },
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
-            onCloseAI: { [weak self] in self?.closeAIConversation() }
+            onCloseAI: { [weak self] in self?.closeAIConversation() },
+            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -285,10 +286,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
-            state.currentAIMessage = nil
-            state.chatHistory = []
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
+            state.isAILoading = false
         }
         // Suppress hover resizes while the close animation plays, otherwise onHover
         // fires mid-animation, reads an intermediate frame, and causes position drift.
@@ -366,25 +366,44 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func showAIConversation() {
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+
+        let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
+        if !shouldRestoreVisibleConversation && state.hasVisibleConversation {
+            state.clearVisibleConversation()
+        }
+
         // Resize window BEFORE changing state so SwiftUI content doesn't render
         // in the old 28x28 frame (which causes a visible jump).
         // Save center so we can restore exact position when chat closes (avoids drift).
         preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
 
-        // Anchor from top so the control bar stays visually in place, input grows downward.
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        if shouldRestoreVisibleConversation {
+            cancelInputHeightObserver()
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                state.showingAIConversation = true
+                state.showingAIResponse = true
+                state.isAILoading = false
+                state.aiInputText = ""
+            }
+            resizeToResponseHeight(animated: true)
+        } else {
+            // Anchor from top so the control bar stays visually in place, input grows downward.
+            let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+            resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            state.showingAIConversation = true
-            state.showingAIResponse = false
-            state.isAILoading = false
-            state.aiInputText = ""
-            state.currentAIMessage = nil
-            // Match the explicit resize height so the observer doesn't immediately override it
-            state.inputViewHeight = 120
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                state.showingAIConversation = true
+                state.showingAIResponse = false
+                state.isAILoading = false
+                state.aiInputText = ""
+                state.currentAIMessage = nil
+                // Match the explicit resize height so the observer doesn't immediately override it
+                state.inputViewHeight = 120
+            }
+            setupInputHeightObserver()
         }
-        setupInputHeightObserver()
 
         // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
         // The text editor itself handles focusing via updateNSView once it's in the window.
@@ -399,6 +418,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self?.focusInputField()
         }
 
+    }
+
+    func clearVisibleConversationFromUI() {
+        guard state.showingAIConversation else { return }
+
+        FloatingControlBarManager.shared.cancelChat()
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        cancelInputHeightObserver()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.88)) {
+            state.clearVisibleConversation()
+            state.showingAIConversation = true
+            state.inputViewHeight = 120
+        }
+
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        setupInputHeightObserver()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.focusInputField()
+        }
     }
 
     private func setupInputHeightObserver() {
@@ -528,6 +570,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
+            guard !self.state.showingAIConversation,
+                  !self.state.isVoiceListening,
+                  !self.state.isShowingNotification,
+                  !self.suppressHoverResize
+            else { return }
             let newOrigin = NSPoint(
                 x: self.frame.midX - targetSize.width / 2,
                 y: self.frame.midY - targetSize.height / 2
@@ -997,14 +1044,10 @@ class FloatingControlBarManager {
         chatCancellable = nil
         window.cancelInputHeightObserver()
 
-        // Reset state directly (no animation) to avoid contract-then-expand flicker
+        // Reset visible state directly (no animation) to avoid contract-then-expand flicker.
+        // Provider session context remains intact; only the floating-bar UI is reset.
         window.state.showingAIConversation = false
-        window.state.showingAIResponse = false
-        window.state.aiInputText = ""
-        window.state.currentAIMessage = nil
-        window.state.chatHistory = []
-        window.state.isVoiceFollowUp = false
-        window.state.voiceFollowUpTranscript = ""
+        window.state.clearVisibleConversation()
 
         guard let provider = self.chatProvider else { return }
 
@@ -1038,6 +1081,7 @@ class FloatingControlBarManager {
         window.state.isAILoading = true
         window.state.aiInputText = query
         window.state.displayedQuery = query
+        window.state.markConversationActivity()
         window.state.currentAIMessage = nil
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
@@ -1068,6 +1112,7 @@ class FloatingControlBarManager {
 
         // Set up new query
         window.state.displayedQuery = query
+        window.state.markConversationActivity()
         window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
@@ -1190,7 +1235,7 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "main", imageData: screenshotData)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false

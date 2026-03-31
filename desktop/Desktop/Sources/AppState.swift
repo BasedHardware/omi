@@ -594,7 +594,7 @@ class AppState: ObservableObject {
         log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
       }
 
-      // Re-check permission status before opening settings
+      // Re-check permission status after the TCC dialog
       await MainActor.run { [weak self] in
         self?.checkAutomationPermission()
       }
@@ -602,12 +602,17 @@ class AppState: ObservableObject {
       // Small delay to let the check complete
       try? await Task.sleep(nanoseconds: 300_000_000)
 
-      // Open settings so user can toggle if needed
-      await MainActor.run {
-        if let url = URL(
-          string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-        {
-          NSWorkspace.shared.open(url)
+      // Only open Settings if the TCC dialog didn't grant permission
+      let granted = await MainActor.run { [weak self] in
+        self?.hasAutomationPermission ?? false
+      }
+      if !granted {
+        await MainActor.run {
+          if let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+          {
+            NSWorkspace.shared.open(url)
+          }
         }
       }
     }
@@ -793,8 +798,19 @@ class AppState: ObservableObject {
   /// Check screen recording permission status
   func checkScreenRecordingPermission() {
     let tccGranted = CGPreflightScreenCaptureAccess()
+    let shouldForceActualTest = screenRecordingGrantAttempts > 0 || hasScreenRecordingPermission
 
     if !tccGranted {
+      let actualPermission = ScreenCaptureService.checkPermission(
+        forceActualTestIfPreflightDenied: shouldForceActualTest)
+      if actualPermission {
+        hasScreenRecordingPermission = true
+        isScreenCaptureKitBroken = false
+        isScreenRecordingStale = false
+        screenRecordingGrantAttempts = 0
+        return
+      }
+
       hasScreenRecordingPermission = false
       isScreenCaptureKitBroken = false
       // If user already tried Grant once and permission is still not granted,

@@ -1867,7 +1867,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get continueWithoutDevice => 'Teruskan Tanpa Peranti';
 
   @override
-  String get permissionsRequired => 'Kebenaran Diperlukan';
+  String get permissionsRequired => 'Kebenaran diperlukan';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8181,6 +8181,14 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Memproses di pelayan...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Memproses... $current/$total segmen';
+  }
+
+  @override
   String get processedStatus => 'Diproses';
 
   @override
@@ -8738,4 +8746,36 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get storageSection => 'STORAN';
+
+  @override
+  String get permissions => 'Kebenaran';
+
+  @override
+  String get permissionEnabled => 'Didayakan';
+
+  @override
+  String get permissionEnable => 'Dayakan';
+
+  @override
+  String get permissionsPageDescription =>
+      'Kebenaran ini penting untuk cara Omi berfungsi. Ia membolehkan ciri utama seperti pemberitahuan, pengalaman berasaskan lokasi dan rakaman audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi memerlukan beberapa kebenaran untuk berfungsi dengan betul. Sila berikan kebenaran untuk meneruskan.';
+
+  @override
+  String get permissionsSetupTitle => 'Dapatkan pengalaman terbaik';
+
+  @override
+  String get permissionsSetupDescription => 'Dayakan beberapa kebenaran supaya Omi boleh melakukan keajaibannya.';
+
+  @override
+  String get permissionsChangeAnytime => 'Anda boleh menukarnya pada bila-bila masa di Tetapan > Kebenaran';
+
+  @override
+  String get location => 'Lokasi';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

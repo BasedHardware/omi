@@ -129,7 +129,9 @@ def _send_summary_notification(user_data: tuple):
     if not conversations_data or len(conversations_data) == 0:
         return
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    conversations = [Conversation(**convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')]
+    if not conversations:
+        return
 
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 

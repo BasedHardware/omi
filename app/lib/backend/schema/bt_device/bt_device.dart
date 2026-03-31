@@ -263,16 +263,16 @@ class BtDevice {
 
   // create an empty device
   BtDevice.empty()
-    : name = '',
-      id = '',
-      type = DeviceType.omi,
-      rssi = 0,
-      locator = null,
-      _modelNumber = '',
-      _firmwareRevision = '',
-      _hardwareRevision = '',
-      _manufacturerName = '',
-      _serialNumber = '';
+      : name = '',
+        id = '',
+        type = DeviceType.omi,
+        rssi = 0,
+        locator = null,
+        _modelNumber = '',
+        _firmwareRevision = '',
+        _hardwareRevision = '',
+        _manufacturerName = '',
+        _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
