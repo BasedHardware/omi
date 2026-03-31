@@ -222,18 +222,18 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
 
 
 # ============================================================================
-# DESKTOP LLM USAGE
+# BUCKET-BASED LLM USAGE
 #
-# Desktop uses a flat key scheme ("desktop_chat" / "desktop_chat_{account}")
-# with fields: input_tokens, output_tokens, cache_read_tokens,
-# cache_write_tokens, total_tokens, cost_usd, call_count.
+# Flat key scheme ("desktop_chat" / "desktop_chat_{account}") with fields:
+# input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+# total_tokens, cost_usd, call_count.
 #
 # This differs from the {feature}.{model} nesting above.  Both schemas
 # coexist in the same date-keyed documents using Firestore's schemaless design.
 # ============================================================================
 
 
-def record_desktop_llm_usage(
+def record_llm_usage_bucket(
     uid: str,
     input_tokens: int,
     output_tokens: int,
@@ -241,27 +241,26 @@ def record_desktop_llm_usage(
     cache_write_tokens: int = 0,
     total_tokens: int = 0,
     cost_usd: float = 0.0,
+    bucket: str = 'desktop_chat',
     account: str = 'omi',
 ) -> None:
-    """Record desktop LLM token usage with atomic increments.
+    """Record LLM token usage into a flat bucket with atomic increments.
 
-    Matches the Rust backend's field schema exactly so existing analytics
-    and the Swift client see consistent data.
+    Dual-writes to both the primary bucket and a per-account alias
+    (``{bucket}_{account}``) for per-account breakdown.
     """
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     ref = db.collection("users").document(uid).collection("llm_usage").document(today)
 
-    # Rust dual-writes: always increment "desktop_chat" (backward compat for
-    # existing queries) AND "desktop_chat_{account}" (per-account breakdown).
-    acct_key = f'desktop_chat_{account}'
+    acct_key = f'{bucket}_{account}'
     update = {
-        'desktop_chat.input_tokens': firestore.Increment(input_tokens),
-        'desktop_chat.output_tokens': firestore.Increment(output_tokens),
-        'desktop_chat.cache_read_tokens': firestore.Increment(cache_read_tokens),
-        'desktop_chat.cache_write_tokens': firestore.Increment(cache_write_tokens),
-        'desktop_chat.total_tokens': firestore.Increment(total_tokens),
-        'desktop_chat.cost_usd': firestore.Increment(cost_usd),
-        'desktop_chat.call_count': firestore.Increment(1),
+        f'{bucket}.input_tokens': firestore.Increment(input_tokens),
+        f'{bucket}.output_tokens': firestore.Increment(output_tokens),
+        f'{bucket}.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        f'{bucket}.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        f'{bucket}.total_tokens': firestore.Increment(total_tokens),
+        f'{bucket}.cost_usd': firestore.Increment(cost_usd),
+        f'{bucket}.call_count': firestore.Increment(1),
         f'{acct_key}.input_tokens': firestore.Increment(input_tokens),
         f'{acct_key}.output_tokens': firestore.Increment(output_tokens),
         f'{acct_key}.cache_read_tokens': firestore.Increment(cache_read_tokens),
@@ -275,18 +274,17 @@ def record_desktop_llm_usage(
     ref.set(update, merge=True)
 
 
-def get_total_desktop_llm_cost(uid: str) -> float:
-    """Sum cost_usd from the legacy ``desktop_chat`` bucket only.
+def get_total_llm_cost(uid: str, bucket: str = 'desktop_chat') -> float:
+    """Sum cost_usd from the given bucket.
 
-    Since record_desktop_llm_usage() dual-writes to both ``desktop_chat`` and
-    ``desktop_chat_{account}``, summing all ``desktop_chat*`` keys would
-    double-count.  The Rust backend also reads only ``desktop_chat.cost_usd``.
+    When the bucket dual-writes to both ``{bucket}`` and ``{bucket}_{account}``,
+    this reads only the primary bucket to avoid double-counting.
     """
     col = db.collection("users").document(uid).collection("llm_usage")
     total = 0.0
     for doc in col.stream():
         data = doc.to_dict()
-        dc = data.get('desktop_chat')
+        dc = data.get(bucket)
         if isinstance(dc, dict):
             total += dc.get('cost_usd', 0.0)
     return round(total, 6)
