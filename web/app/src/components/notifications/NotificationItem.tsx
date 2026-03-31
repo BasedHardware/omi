@@ -138,14 +138,20 @@ export function NotificationItem({
             {formatNotificationTimestamp(new Date(notification.timestamp))}
           </span>
         </div>
-        <p
-          className={cn(
-            'text-sm mt-0.5 line-clamp-2',
-            notification.read ? 'text-muted-foreground' : 'text-text-tertiary'
-          )}
-        >
-          {notification.body}
-        </p>
+        {notification.body ? (
+          <p
+            className={cn(
+              'text-sm mt-0.5 line-clamp-2',
+              notification.read ? 'text-muted-foreground' : 'text-text-tertiary'
+            )}
+          >
+            {notification.body}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground/50 mt-0.5">
+            No details available
+          </p>
+        )}
       </div>
 
       {/* Unread indicator */}
