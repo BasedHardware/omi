@@ -14,7 +14,7 @@ struct OnboardingResearchStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Second Brain",
       title: "Your 2nd brain is live.",
-      description: "Omi now has real context."
+      description: "Nooto now has real context."
     ) {
       VStack(alignment: .leading, spacing: 14) {
         if let snapshot = coordinator.scanSnapshot, !snapshot.projectNames.isEmpty {
