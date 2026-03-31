@@ -1,6 +1,8 @@
 import asyncio
 import os
 import random
+import threading
+import time
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -121,6 +123,106 @@ deepgram_nova3_languages = {
 
 # Supported values: dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+
+
+class DeepgramCircuitBreaker:
+    """Pod-level circuit breaker for Deepgram connection failures."""
+
+    def __init__(self, failure_threshold: int = 3, reset_timeout_seconds: float = 30.0):
+        self.failure_threshold = max(1, failure_threshold)
+        self.reset_timeout_seconds = max(1.0, reset_timeout_seconds)
+        self._state = "closed"
+        self._consecutive_failures = 0
+        self._opened_at_monotonic: Optional[float] = None
+        self._lock = threading.Lock()
+
+    def allow_request(self) -> bool:
+        with self._lock:
+            if self._state == "closed":
+                return True
+
+            if self._state == "half_open":
+                # Only one probe allowed in half-open; reject others
+                return False
+
+            # state == "open"
+            now = time.monotonic()
+            if self._opened_at_monotonic is None:
+                self._state = "closed"
+                self._consecutive_failures = 0
+                return True
+
+            if now - self._opened_at_monotonic >= self.reset_timeout_seconds:
+                self._state = "half_open"
+                logger.info("DeepgramCircuitBreaker moved to HALF_OPEN after timeout (single probe allowed)")
+                return True
+
+            return False
+
+    def record_success(self):
+        with self._lock:
+            if self._state in ("open", "half_open") or self._consecutive_failures > 0:
+                logger.info("DeepgramCircuitBreaker recorded success and reset to CLOSED (was %s)", self._state)
+            self._state = "closed"
+            self._consecutive_failures = 0
+            self._opened_at_monotonic = None
+
+    def record_failure(self, error: Optional[Exception] = None):
+        with self._lock:
+            self._consecutive_failures += 1
+            if self._state == "half_open":
+                # Probe failed — back to open with fresh timer
+                self._state = "open"
+                self._opened_at_monotonic = time.monotonic()
+                logger.warning(
+                    "DeepgramCircuitBreaker half-open probe FAILED, back to OPEN. error=%s",
+                    error,
+                )
+            elif self._consecutive_failures >= self.failure_threshold:
+                self._state = "open"
+                self._opened_at_monotonic = time.monotonic()
+                logger.warning(
+                    "DeepgramCircuitBreaker moved to OPEN after %s failures. error=%s",
+                    self._consecutive_failures,
+                    error,
+                )
+
+    def is_open(self) -> bool:
+        with self._lock:
+            if self._state == "open":
+                # Check timeout — if elapsed, it would transition to half_open on next allow_request
+                if (
+                    self._opened_at_monotonic is not None
+                    and time.monotonic() - self._opened_at_monotonic >= self.reset_timeout_seconds
+                ):
+                    return False  # Timeout elapsed, will allow probe
+                return True
+            return False
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "state": self._state,
+                "consecutive_failures": self._consecutive_failures,
+                "failure_threshold": self.failure_threshold,
+                "reset_timeout_seconds": self.reset_timeout_seconds,
+            }
+
+    def reset(self):
+        with self._lock:
+            self._state = "closed"
+            self._consecutive_failures = 0
+            self._opened_at_monotonic = None
+
+
+deepgram_circuit_breaker = DeepgramCircuitBreaker(
+    failure_threshold=int(os.getenv('DEEPGRAM_CB_FAILURE_THRESHOLD', '3')),
+    reset_timeout_seconds=float(os.getenv('DEEPGRAM_CB_RESET_TIMEOUT_SECONDS', '30')),
+)
+
+
+def get_deepgram_circuit_breaker() -> DeepgramCircuitBreaker:
+    return deepgram_circuit_breaker
 
 
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
@@ -280,18 +382,35 @@ async def connect_to_deepgram_with_backoff(
     is_active: Optional[Callable[[], bool]] = None,
 ):
     logger.info("connect_to_deepgram_with_backoff")
+    # Check session liveness BEFORE consuming a CB probe slot — a stale session
+    # transitioning CB from open→half_open then aborting would wedge the pod.
+    if is_active is not None and not is_active():
+        logger.warning("Session ended before connect attempt, aborting")
+        return None
+
+    if not deepgram_circuit_breaker.allow_request():
+        logger.warning("Deepgram circuit breaker OPEN, skipping connect attempt")
+        return None
+
     for attempt in range(retries):
         if is_active is not None and not is_active():
             logger.warning("Session ended, aborting Deepgram retry")
             return None
         try:
-            return await asyncio.to_thread(
+            dg_connection = await asyncio.to_thread(
                 connect_to_deepgram, on_message, on_error, language, sample_rate, channels, model, keywords
             )
+            deepgram_circuit_breaker.record_success()
+            return dg_connection
         except Exception as error:
             logger.error(f'An error occurred: {error}')
+            deepgram_circuit_breaker.record_failure(error)
             if attempt == retries - 1:  # Last attempt
                 raise
+            # Re-check CB after failure — if half-open probe failed, CB reopened; stop retrying
+            if not deepgram_circuit_breaker.allow_request():
+                logger.warning("Deepgram circuit breaker reopened after probe failure, aborting retries")
+                return None
         backoff_delay = calculate_backoff_with_jitter(attempt)
         logger.warning(f"Waiting {backoff_delay:.0f}ms before next retry...")
         await asyncio.sleep(backoff_delay / 1000)  # Convert ms to seconds for sleep
