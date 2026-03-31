@@ -16,7 +16,7 @@ struct OnboardingLanguageStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Language",
       title: "Pick your language.",
-      description: "Omi will use it for prompts and transcripts."
+      description: "Nooto will use it for prompts and transcripts."
     ) {
       VStack(alignment: .leading, spacing: 18) {
         HStack(spacing: 12) {
@@ -49,13 +49,13 @@ struct OnboardingLanguageStepView: View {
               .padding(.vertical, 14)
               .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                  .fill(OmiColors.backgroundSecondary)
+                  .fill(NootoColors.backgroundSecondary)
                   .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                       .stroke(Color.white.opacity(0.08), lineWidth: 1)
                   )
               )
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(NootoColors.textPrimary)
 
             Button("Save language") {
               Task {
@@ -72,7 +72,7 @@ struct OnboardingLanguageStepView: View {
         if let error = coordinator.lastActionError {
           Text(error)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(NootoColors.warning)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
