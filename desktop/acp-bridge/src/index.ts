@@ -727,11 +727,19 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
-      // Update model on reuse if the requested model differs from the session's stored model
+      // Update model on reuse if the requested model differs from the session's stored model.
+      // Wrap in try-catch: if the session is stale, delete it and fall through to session/new.
       if (existing && requestedModel && requestedModel !== existing.model) {
-        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-        sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
-        logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${existing.model} -> ${requestedModel})`);
+        try {
+          await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+          sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
+          logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${existing.model} -> ${requestedModel})`);
+        } catch (setModelErr) {
+          logErr(`set_model failed on reuse (stale session?), recreating: ${setModelErr}`);
+          sessions.delete(sessionKey);
+          activeSessionId = "";
+          return handleQuery(msg);
+        }
       }
       logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
     }
