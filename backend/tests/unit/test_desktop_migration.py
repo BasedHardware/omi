@@ -789,6 +789,27 @@ class TestPromoteResponseWireCompat:
         assert result['reason'] is not None
         assert result['promoted_task'] is None
 
+    def test_migrate_returns_status_string(self):
+        """migrate endpoint returns {status: str} matching Swift StatusResponse."""
+        from routers.staged_tasks import migrate_ai_tasks
+
+        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
+            result = migrate_ai_tasks(uid='test-uid')
+
+        assert 'status' in result
+        assert isinstance(result['status'], str)
+
+    def test_migrate_conversation_items_returns_status_migrated_deleted(self):
+        """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
+        from routers.staged_tasks import migrate_conversation_items
+
+        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
+            result = migrate_conversation_items(uid='test-uid')
+
+        assert result['status'] == 'ok'
+        assert result['migrated'] == 10
+        assert 'deleted' in result
+
 
 # ===========================================================================
 # 7. FOCUS STATS WIRE-COMPAT (FocusStatsResponse shape)
