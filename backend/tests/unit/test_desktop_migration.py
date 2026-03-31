@@ -460,6 +460,40 @@ class TestDesktopMessagesWireCompat:
 # ===========================================================================
 
 
+class TestDailyScoreWireCompat:
+    """Verify daily-score returns Swift DailyScore-compatible fields."""
+
+    def _make_mock_doc(self, data):
+        doc = MagicMock()
+        doc.to_dict.return_value = data
+        doc.id = data.get('id', 'doc-1')
+        return doc
+
+    def test_daily_score_uses_completed_tasks_and_total_tasks(self):
+        """get_daily_score returns completed_tasks/total_tasks, not completed/total."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.stream.return_value = [
+            self._make_mock_doc({'completed': True}),
+            self._make_mock_doc({'completed': False}),
+        ]
+        mock_col.where.return_value = mock_query
+
+        with patch.object(action_items_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_daily_score('test-uid', date='2025-01-15')
+
+        assert 'completed_tasks' in result, f"Expected completed_tasks, got keys: {result.keys()}"
+        assert 'total_tasks' in result, f"Expected total_tasks, got keys: {result.keys()}"
+        assert 'completed' not in result, "Should not have raw 'completed' key"
+        assert 'total' not in result, "Should not have raw 'total' key"
+        assert result['completed_tasks'] == 1
+        assert result['total_tasks'] == 2
+        assert result['date'] == '2025-01-15'
+        assert result['score'] == 50
+
+
 class TestScoreComputation:
     """Verify score computation logic."""
 
