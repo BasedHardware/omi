@@ -114,8 +114,8 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     // Reconnection — no hard cap; backoff with jitter, retry while shouldReconnect is true
     private var reconnectTask: Task<Void, Never>?
-    private let maxBackoff: TimeInterval = 60.0
-    private let backoffJitterRange: ClosedRange<Double> = 0.5...1.5
+    private let maxBackoff: TimeInterval = 32.0
+    private let backoffJitterRange: ClosedRange<Double> = 0.8...1.0
 
     // Keepalive
     private var keepaliveTask: Task<Void, Never>?
@@ -134,6 +134,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     // Reconnect audio ring buffer: holds audio produced while disconnected/reconnecting
     // 30s of stereo 16kHz 16-bit = ~1.92MB; cap at 960KB (~15s) to stay conservative
     private var reconnectBuffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
+    private var _isReplaying = false  // True while replaying buffered audio; gates live sends
 
     // MARK: - Initialization
 
@@ -238,6 +239,10 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
             reconnectBuffer.prune()
             switch _connectionState {
             case .connected:
+                if _isReplaying {
+                    reconnectBuffer.append(data)
+                    return false
+                }
                 return true
             case .connecting, .reconnecting:
                 reconnectBuffer.append(data)
@@ -301,9 +306,13 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     private func replayBufferedAudio() {
         let (task, chunks): (URLSessionWebSocketTask?, [Data]) = withState {
             guard _connectionState == .connected else { return (nil, []) }
+            _isReplaying = true
             return (_webSocketTask, reconnectBuffer.drain())
         }
-        guard let task = task, !chunks.isEmpty else { return }
+        guard let task = task, !chunks.isEmpty else {
+            withState { _isReplaying = false }
+            return
+        }
 
         log("TranscriptionService: Replaying \(chunks.count) buffered audio chunks")
         replayChunksSequentially(task: task, chunks: chunks, index: 0)
@@ -311,13 +320,17 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     /// Send chunks one at a time; on first failure, re-buffer the rest and reconnect.
     private func replayChunksSequentially(task: URLSessionWebSocketTask, chunks: [Data], index: Int) {
-        guard index < chunks.count else { return }
+        guard index < chunks.count else {
+            withState { _isReplaying = false }
+            return
+        }
 
         task.send(.data(chunks[index])) { [weak self] error in
             if let error = error {
                 logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
                 if let self = self {
                     self.withState {
+                        self._isReplaying = false
                         for remaining in chunks[index...] {
                             self.reconnectBuffer.append(remaining)
                         }
@@ -388,12 +401,12 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     /// Exposed as static for testability.
     static func reconnectDelay(
         attempt: Int,
-        maxBackoff: TimeInterval = 60.0,
-        jitterRange: ClosedRange<Double> = 0.5...1.5
+        maxBackoff: TimeInterval = 32.0,
+        jitterRange: ClosedRange<Double> = 0.8...1.0
     ) -> TimeInterval {
         let baseDelay = min(pow(2.0, Double(attempt)), maxBackoff)
         let jitter = Double.random(in: jitterRange)
-        return baseDelay * jitter
+        return min(baseDelay * jitter, maxBackoff)
     }
 
     // MARK: - Private Methods
