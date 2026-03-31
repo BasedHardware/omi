@@ -123,7 +123,7 @@ struct ChatPage: View {
                 .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Messages area
             messagesView
@@ -132,31 +132,31 @@ struct ChatPage: View {
             if let error = chatProvider.errorMessage {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(OmiColors.warning)
+                        .foregroundColor(NootoColors.warning)
                         .scaledFont(size: 14)
                     Text(error)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     Spacer()
                     Button {
                         chatProvider.errorMessage = nil
                     } label: {
                         Image(systemName: "xmark")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
             }
 
             // Input area
             inputArea
                 .padding()
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .sheet(item: $citedConversation) { conversation in
             ConversationDetailView(
                 conversation: conversation,
@@ -218,7 +218,7 @@ struct ChatPage: View {
                             .foregroundColor(.white)
                     }
                     .padding(20)
-                    .background(OmiColors.backgroundSecondary)
+                    .background(NootoColors.backgroundSecondary)
                     .cornerRadius(12)
                 }
             }
@@ -240,10 +240,10 @@ struct ChatPage: View {
                         Text("Synced Chat")
                             .scaledFont(size: 11, weight: .medium)
                     }
-                    .foregroundColor(OmiColors.success)
+                    .foregroundColor(NootoColors.success)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(OmiColors.success.opacity(0.15))
+                    .background(NootoColors.success.opacity(0.15))
                     .cornerRadius(6)
                     .help("This chat syncs with your mobile app")
                 } else {
@@ -259,10 +259,10 @@ struct ChatPage: View {
                             Text("Synced")
                                 .scaledFont(size: 11, weight: .medium)
                         }
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
@@ -272,7 +272,7 @@ struct ChatPage: View {
                     if let session = chatProvider.currentSession {
                         Text(session.title)
                             .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .lineLimit(1)
                     }
                 }
@@ -285,7 +285,7 @@ struct ChatPage: View {
                 }) {
                     Image(systemName: "plus")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("New chat session")
@@ -304,7 +304,7 @@ struct ChatPage: View {
                                     .aspectRatio(contentMode: .fill)
                             default:
                                 Circle()
-                                    .fill(OmiColors.backgroundTertiary)
+                                    .fill(NootoColors.backgroundTertiary)
                             }
                         }
                         .frame(width: 32, height: 32)
@@ -313,28 +313,28 @@ struct ChatPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(app.name)
                                 .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             Text("Chat App")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                     } else {
                         // Default Nooto assistant
                         Text("Nooto")
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                     }
 
                     if !appProvider.chatApps.isEmpty {
                         Image(systemName: "chevron.down")
                             .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
                 .cornerRadius(20)
             }
             .buttonStyle(.plain)
@@ -359,10 +359,10 @@ struct ChatPage: View {
             // Model indicator
             Text(chatProvider.currentModel)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
                 .cornerRadius(8)
 
             // Copy conversation button
@@ -372,7 +372,7 @@ struct ChatPage: View {
                 }) {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .scaledFont(size: 14)
-                        .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
+                        .foregroundColor(copied ? NootoColors.success : NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Copy conversation")
@@ -392,7 +392,7 @@ struct ChatPage: View {
                     } else {
                         Image(systemName: "trash")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -405,7 +405,7 @@ struct ChatPage: View {
                 Button(action: { showHistoryPopover.toggle() }) {
                     Image(systemName: "clock.arrow.circlepath")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Chat history")
@@ -423,7 +423,7 @@ struct ChatPage: View {
             }) {
                 Image(systemName: "gear")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
             .buttonStyle(.plain)
             .help("AI Chat settings")
@@ -464,7 +464,7 @@ struct ChatPage: View {
                             .aspectRatio(contentMode: .fill)
                     default:
                         Circle()
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     }
                 }
                 .frame(width: 64, height: 64)
@@ -472,11 +472,11 @@ struct ChatPage: View {
 
                 Text("Chat with \(app.name)")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text(app.description)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .padding(.horizontal, 40)
@@ -490,13 +490,13 @@ struct ChatPage: View {
                         .frame(width: 48, height: 48)
                 }
 
-                Text("Chat with Omi")
+                Text("Chat with Nooto")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text("Your personal AI assistant that knows you through your memories and conversations")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -530,7 +530,7 @@ struct ChatPage: View {
     /// Copy the entire conversation to clipboard
     private func copyConversation() {
         let text: String = chatProvider.messages.map { message in
-            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Nooto")
             return "\(sender): \(message.text)"
         }.joined(separator: "\n\n")
 
@@ -628,7 +628,7 @@ struct ChatBubble: View {
                                 .aspectRatio(contentMode: .fill)
                         default:
                             Circle()
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 32, height: 32)
@@ -641,7 +641,7 @@ struct ChatBubble: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                             .frame(width: 32, height: 32)
-                            .background(OmiColors.backgroundTertiary)
+                            .background(NootoColors.backgroundTertiary)
                             .clipShape(Circle())
                     }
                 }
@@ -660,7 +660,7 @@ struct ChatBubble: View {
                                 SelectableMarkdown(text: text, sender: .ai)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
-                                    .background(OmiColors.backgroundSecondary)
+                                    .background(NootoColors.backgroundSecondary)
                                     .cornerRadius(18)
                             }
                         case .toolCalls(_, let calls):
@@ -695,10 +695,10 @@ struct ChatBubble: View {
                             Image(systemName: "chevron.down")
                                 .scaledFont(size: 9)
                         }
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .background(NootoColors.backgroundTertiary.opacity(0.5))
                         .cornerRadius(18)
                     }
                     .buttonStyle(.plain)
@@ -708,7 +708,7 @@ struct ChatBubble: View {
                         SelectableMarkdown(text: displayText, sender: message.sender)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
-                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                            .background(message.sender == .user ? NootoColors.brandPrimary : NootoColors.backgroundSecondary)
                             .cornerRadius(18)
 
                         // Show more / Show less toggle for long messages
@@ -739,7 +739,7 @@ struct ChatBubble: View {
 
                         Text(message.createdAt, style: .time)
                             .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 } else if message.sender == .ai && !message.isStreaming && !message.text.isEmpty {
                     HStack(spacing: 8) {
@@ -747,12 +747,12 @@ struct ChatBubble: View {
 
                         Text(message.createdAt, style: .time)
                             .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 } else if !message.isStreaming || !message.text.isEmpty {
                     Text(message.createdAt, style: .time)
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -760,9 +760,9 @@ struct ChatBubble: View {
                 // User avatar
                 Image(systemName: "person.fill")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(width: 32, height: 32)
-                    .background(OmiColors.backgroundTertiary)
+                    .background(NootoColors.backgroundTertiary)
                     .clipShape(Circle())
             }
         }
@@ -790,7 +790,7 @@ struct ChatBubble: View {
             }) {
                 Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                     .scaledFont(size: 11)
-                    .foregroundColor(message.rating == 1 ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    .foregroundColor(message.rating == 1 ? NootoColors.brandPrimary : NootoColors.textTertiary)
             }
             .buttonStyle(.plain)
             .help("Helpful response")
@@ -803,7 +803,7 @@ struct ChatBubble: View {
             }) {
                 Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
                     .scaledFont(size: 11)
-                    .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
+                    .foregroundColor(message.rating == -1 ? .red : NootoColors.textTertiary)
             }
             .buttonStyle(.plain)
             .help("Not helpful")
@@ -822,7 +822,7 @@ struct ChatBubble: View {
         }) {
             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                 .scaledFont(size: 11)
-                .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
+                .foregroundColor(showCopied ? .green : NootoColors.textTertiary)
         }
         .buttonStyle(.plain)
         .help("Copy message")
@@ -949,16 +949,16 @@ struct ToolCallsGroup: View {
                     // Current/last tool action
                     Text(currentToolName)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     // Step count (only show when > 1)
                     if calls.count > 1 {
                         Text("·")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                         Text("\(calls.count) steps")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Spacer(minLength: 4)
@@ -966,7 +966,7 @@ struct ToolCallsGroup: View {
                     // Expand chevron
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 9)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -989,7 +989,7 @@ struct ToolCallsGroup: View {
                 .padding(.vertical, 6)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(8)
     }
 }
@@ -1033,17 +1033,17 @@ struct ToolCallCard: View {
                     // Tool name
                     Text(ChatContentBlock.displayName(for: name))
                         .scaledFont(size: 12, design: .monospaced)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     // Inline argument summary
                     if let summary = input?.summary {
                         Text("·")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         Text(summary)
                             .scaledFont(size: 11, design: .monospaced)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -1054,7 +1054,7 @@ struct ToolCallCard: View {
                     if hasExpandableContent {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .scaledFont(size: 9)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -1073,11 +1073,11 @@ struct ToolCallCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Input")
                                 .scaledFont(size: 10, weight: .semibold)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             Text(details)
                                 .scaledFont(size: 11, design: .monospaced)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineLimit(10)
                         }
                     }
@@ -1087,11 +1087,11 @@ struct ToolCallCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Output")
                                 .scaledFont(size: 10, weight: .semibold)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             Text(output)
                                 .scaledFont(size: 11, design: .monospaced)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineLimit(15)
                         }
                     }
@@ -1100,7 +1100,7 @@ struct ToolCallCard: View {
                 .padding(.vertical, 8)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(8)
     }
 }
@@ -1123,18 +1123,18 @@ struct ThinkingBlock: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("Thinking")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .italic()
 
                     Spacer(minLength: 4)
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 9)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -1148,14 +1148,14 @@ struct ThinkingBlock: View {
 
                 Text(text)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .italic()
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .lineLimit(30)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.3))
+        .background(NootoColors.backgroundTertiary.opacity(0.3))
         .cornerRadius(8)
     }
 }
@@ -1181,16 +1181,16 @@ struct DiscoveryCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc.text.magnifyingglass")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Text(summary)
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .lineLimit(2)
                     }
 
@@ -1198,7 +1198,7 @@ struct DiscoveryCard: View {
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -1218,11 +1218,11 @@ struct DiscoveryCard: View {
                 .frame(maxHeight: 300)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+                .stroke(NootoColors.brandPrimary.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -1236,7 +1236,7 @@ struct TypingIndicator: View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .fill(OmiColors.textTertiary)
+                    .fill(NootoColors.textTertiary)
                     .frame(width: 8, height: 8)
                     .scaleEffect(animationPhase == index ? 1.2 : 0.8)
                     .animation(.easeInOut(duration: 0.4).repeatForever().delay(Double(index) * 0.15), value: animationPhase)
@@ -1244,7 +1244,7 @@ struct TypingIndicator: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
         .cornerRadius(18)
         .onAppear {
             animationPhase = 1
@@ -1263,7 +1263,7 @@ struct AppPickerPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Select Assistant")
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
@@ -1298,7 +1298,7 @@ struct AppPickerPopover: View {
             .frame(maxHeight: 300)
         }
         .frame(width: 250)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 }
 
@@ -1318,25 +1318,25 @@ struct DefaultOmiRow: View {
                         .scaledToFit()
                         .frame(width: 22, height: 22)
                         .frame(width: 36, height: 36)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
                 Text("Nooto")
                     .scaledFont(size: 13, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 if isSelected {
                     Image(systemName: "checkmark")
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isSelected || isHovering ? OmiColors.backgroundSecondary : Color.clear)
+            .background(isSelected || isHovering ? NootoColors.backgroundSecondary : Color.clear)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -1361,7 +1361,7 @@ struct AppPickerRow: View {
                             .aspectRatio(contentMode: .fill)
                     default:
                         Circle()
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     }
                 }
                 .frame(width: 36, height: 36)
@@ -1370,11 +1370,11 @@ struct AppPickerRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.name)
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text(app.author)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -1382,12 +1382,12 @@ struct AppPickerRow: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isSelected || isHovering ? OmiColors.backgroundSecondary : Color.clear)
+            .background(isSelected || isHovering ? NootoColors.backgroundSecondary : Color.clear)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -1408,7 +1408,7 @@ struct ChatHistoryPopover: View {
             HStack {
                 Text("Chat History")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -1427,7 +1427,7 @@ struct ChatHistoryPopover: View {
                     } else {
                         Image(systemName: chatProvider.showStarredOnly ? "star.fill" : "star")
                             .scaledFont(size: 12)
-                            .foregroundColor(chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textTertiary)
+                            .foregroundColor(chatProvider.showStarredOnly ? NootoColors.amber : NootoColors.textTertiary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -1442,7 +1442,7 @@ struct ChatHistoryPopover: View {
                 }) {
                     Image(systemName: "plus")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
                 .buttonStyle(.plain)
                 .help("New chat")
@@ -1454,25 +1454,25 @@ struct ChatHistoryPopover: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 TextField("Search chats...", text: $chatProvider.searchQuery)
                     .textFieldStyle(.plain)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !chatProvider.searchQuery.isEmpty {
                     Button(action: { chatProvider.searchQuery = "" }) {
                         Image(systemName: "xmark.circle.fill")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(OmiColors.backgroundSecondary)
+            .background(NootoColors.backgroundSecondary)
             .cornerRadius(6)
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -1487,7 +1487,7 @@ struct ChatHistoryPopover: View {
                         .scaleEffect(0.8)
                     Text("Loading...")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .padding(.top, 8)
                     Spacer()
                 }
@@ -1497,13 +1497,13 @@ struct ChatHistoryPopover: View {
                     Spacer()
                     Image(systemName: emptyStateIcon)
                         .scaledFont(size: 24)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Text(emptyStateTitle)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     Text(emptyStateSubtitle)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Spacer()
                 }
                 .frame(height: 200)
@@ -1514,7 +1514,7 @@ struct ChatHistoryPopover: View {
                             // Group header
                             Text(group)
                                 .scaledFont(size: 11, weight: .semibold)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .padding(.horizontal, 16)
                                 .padding(.top, 12)
                                 .padding(.bottom, 6)
@@ -1556,7 +1556,7 @@ struct ChatHistoryPopover: View {
             }
         }
         .frame(width: 320)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     private var emptyStateIcon: String {
@@ -1626,14 +1626,14 @@ struct HistorySessionRow: View {
                         TextField("Chat title", text: $editedTitle)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                            .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+                            .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textPrimary)
                             .focused($isTitleFocused)
                             .onSubmit { saveTitle() }
                             .onExitCommand { cancelEditing() }
                     } else {
                         Text(session.title)
                             .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                            .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+                            .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textPrimary)
                             .lineLimit(1)
                     }
 
@@ -1647,7 +1647,7 @@ struct HistorySessionRow: View {
                             Text(session.createdAt, style: .relative)
                         }
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .lineLimit(1)
                     }
                 }
@@ -1667,7 +1667,7 @@ struct HistorySessionRow: View {
                         Button(action: startEditing) {
                             Image(systemName: "pencil")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
@@ -1675,7 +1675,7 @@ struct HistorySessionRow: View {
                         Button(action: onToggleStar) {
                             Image(systemName: session.starred ? "star.fill" : "star")
                                 .scaledFont(size: 11)
-                                .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
+                                .foregroundColor(session.starred ? .yellow : NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
@@ -1683,7 +1683,7 @@ struct HistorySessionRow: View {
                         Button(action: { showDeleteConfirm = true }) {
                             Image(systemName: "trash")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -1692,7 +1692,7 @@ struct HistorySessionRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? OmiColors.backgroundSecondary : (isHovering ? OmiColors.backgroundSecondary.opacity(0.5) : Color.clear))
+            .background(isSelected ? NootoColors.backgroundSecondary : (isHovering ? NootoColors.backgroundSecondary.opacity(0.5) : Color.clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1760,14 +1760,14 @@ extension Theme {
     static func aiMessage(scale: CGFloat = 1.0) -> Theme {
         Theme()
             .text {
-                ForegroundColor(OmiColors.textPrimary)
+                ForegroundColor(NootoColors.textPrimary)
                 FontSize(round(14 * scale))
             }
             .code {
                 FontFamilyVariant(.monospaced)
                 FontSize(round(13 * scale))
-                ForegroundColor(OmiColors.textPrimary)
-                BackgroundColor(OmiColors.backgroundTertiary)
+                ForegroundColor(NootoColors.textPrimary)
+                BackgroundColor(NootoColors.backgroundTertiary)
             }
             .codeBlock { configuration in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -1775,18 +1775,18 @@ extension Theme {
                         .markdownTextStyle {
                             FontFamilyVariant(.monospaced)
                             FontSize(round(13 * scale))
-                            ForegroundColor(OmiColors.textPrimary)
+                            ForegroundColor(NootoColors.textPrimary)
                         }
                 }
                 .padding(12)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
             }
             .strong {
                 FontWeight(.semibold)
             }
             .link {
-                ForegroundColor(OmiColors.purplePrimary)
+                ForegroundColor(NootoColors.brandPrimary)
             }
     }
 }
