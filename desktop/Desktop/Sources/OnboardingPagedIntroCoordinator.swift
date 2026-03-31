@@ -190,7 +190,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let result = await executeTool(name: "request_permission", arguments: ["type": type])
     refreshPermissions(appState: appState)
 
-    if result.contains("move omi to /Applications first") {
+    if result.contains("move nooto to /Applications first") {
       lastActionError = result
     }
 
@@ -430,7 +430,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
         let summary =
           result.profileSummary.isEmpty
-          ? "Your calendar is busy enough that Omi can start surfacing deadlines and prep work."
+          ? "Your calendar is busy enough that Nooto can start surfacing deadlines and prep work."
           : result.profileSummary
 
         await self.saveGraph(
