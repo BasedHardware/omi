@@ -137,11 +137,12 @@ async fn main() {
     let firestore = match FirestoreService::new(
         firestore_project_id.clone(),
         config.encryption_secret.clone(),
+        config.service_account_json.as_deref(),
     ).await {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            Arc::new(FirestoreService::new(firestore_project_id, config.encryption_secret.clone()).await.unwrap())
+            Arc::new(FirestoreService::new(firestore_project_id, config.encryption_secret.clone(), config.service_account_json.as_deref()).await.unwrap())
         }
     };
 
