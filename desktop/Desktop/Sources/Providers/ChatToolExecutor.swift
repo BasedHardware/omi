@@ -532,7 +532,7 @@ class ChatToolExecutor {
             if appState.hasScreenRecordingPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Screen Recording for omi in System Settings, then quit and reopen the app"
+                return "pending - user needs to toggle Screen Recording for Nooto in System Settings, then quit and reopen the app"
             }
 
         case "microphone":
@@ -547,7 +547,7 @@ class ChatToolExecutor {
         case "notifications":
             if !isInstalledInApplications() {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
-                return "pending - move omi to /Applications first, reopen it, then retry notifications"
+                return "pending - move Nooto to /Applications first, reopen it, then retry notifications"
             }
             appState.requestNotificationPermission()
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -567,7 +567,7 @@ class ChatToolExecutor {
             if appState.hasAccessibilityPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Accessibility for omi in System Settings"
+                return "pending - user needs to toggle Accessibility for Nooto in System Settings"
             }
 
         case "automation":
@@ -578,7 +578,7 @@ class ChatToolExecutor {
             if appState.hasAutomationPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Automation for omi in System Settings"
+                return "pending - user needs to toggle Automation for Nooto in System Settings"
             }
 
         case "full_disk_access":
