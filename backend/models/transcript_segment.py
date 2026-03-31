@@ -24,6 +24,7 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    stt_session: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -143,6 +144,8 @@ class TranscriptSegment(BaseModel):
             if not a or not b:
                 return a, b
             if b.stt_provider != a.stt_provider:
+                return a, b
+            if a.stt_session and b.stt_session and a.stt_session != b.stt_session:
                 return a, b
 
             if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
