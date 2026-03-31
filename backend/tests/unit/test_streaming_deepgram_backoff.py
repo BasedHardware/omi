@@ -7,7 +7,9 @@ Verifies:
 """
 
 import asyncio
+import os
 import sys
+import time
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -17,6 +19,7 @@ _mock_modules = {}
 for mod_name in [
     'database',
     'database._client',
+    'database.redis_db',
     'database.users',
     'utils.other.storage',
     'deepgram',
@@ -30,14 +33,32 @@ for mod_name in [
         _mock_modules[mod_name] = MagicMock()
         sys.modules[mod_name] = _mock_modules[mod_name]
 
-# Provide expected attributes for type-annotation imports
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+# Only set attributes if not already set by another test file (avoids cross-test contamination)
+if not hasattr(sys.modules['deepgram'], '_mock_initialized'):
+    sys.modules['deepgram'].DeepgramClient = MagicMock
+    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
+    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+    sys.modules['deepgram']._mock_initialized = True
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
+from utils.stt.streaming import get_deepgram_circuit_breaker, calculate_backoff_with_jitter  # noqa: E402
+from utils.stt.streaming import DeepgramCircuitBreaker  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_deepgram_circuit_breaker():
+    cb = get_deepgram_circuit_breaker()
+    original_threshold = cb.failure_threshold
+    original_reset_timeout = cb.reset_timeout_seconds
+    cb.failure_threshold = 3
+    cb.reset_timeout_seconds = 30.0
+    cb.reset()
+    yield
+    cb.failure_threshold = original_threshold
+    cb.reset_timeout_seconds = original_reset_timeout
+    cb.reset()
 
 
 @pytest.mark.asyncio
