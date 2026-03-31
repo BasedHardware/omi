@@ -17,16 +17,16 @@ struct OnboardingFloatingBarDemoView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi which Mac fits you")
+                Text("Ask Nooto which Mac fits you")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onSkip) {
                     Text("Skip")
                         .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -34,7 +34,7 @@ struct OnboardingFloatingBarDemoView: View {
             .padding(.vertical, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             Spacer()
 
@@ -42,20 +42,20 @@ struct OnboardingFloatingBarDemoView: View {
             VStack(spacing: 28) {
                 VStack(spacing: 12) {
                     if !barActivated {
-                        Text("Omi sees your screen and gives you hyper-personalized responses")
+                        Text("Nooto sees your screen and gives you hyper-personalized responses")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 560)
 
-                        Text("Press this shortcut to open Ask Omi.")
+                        Text("Press this shortcut to open Ask Nooto.")
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
                         Text("Type in the Floating Bar 'Which computer should I buy?'")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .multilineTextAlignment(.center)
                             .lineSpacing(4)
                             .frame(maxWidth: 560)
@@ -69,15 +69,15 @@ struct OnboardingFloatingBarDemoView: View {
                                 if index > 0 {
                                     Text("+")
                                         .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(OmiColors.textTertiary)
+                                        .foregroundColor(NootoColors.textTertiary)
                                 }
                                 keyCap(symbol)
                             }
                         }
 
-                        Text("Ask Omi opens at the top of your screen.")
+                        Text("Ask Nooto opens at the top of your screen.")
                             .font(.system(size: 13))
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .padding(.top, 4)
                     .transition(.opacity)
@@ -110,7 +110,7 @@ struct OnboardingFloatingBarDemoView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             // Set up the real floating bar (creates the window if needed)
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -167,15 +167,15 @@ struct OnboardingFloatingBarDemoView: View {
     private func keyCap(_ key: String) -> some View {
         Text(key)
             .font(.system(size: 15, weight: .medium, design: .rounded))
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(NootoColors.textPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundTertiary)
+                    .fill(NootoColors.backgroundTertiary)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             )
@@ -203,7 +203,7 @@ private struct MacLineupPreview: View {
                     .overlay(
                         Text("Mac lineup image unavailable")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     )
             }
         }
