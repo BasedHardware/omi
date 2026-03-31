@@ -458,10 +458,17 @@ class TestDesktopMessagesWireCompat:
 
 
 class TestSessionScopedQueries:
-    """Verify session-scoped queries skip plugin_id filter (regression tests)."""
+    """Verify session-scoped queries use the correct FieldFilter field name."""
 
-    def test_get_messages_session_scoped_skips_plugin_id(self):
-        """get_messages with chat_session_id should NOT filter by plugin_id."""
+    def _get_field_filter_fields(self):
+        """Extract field names from FieldFilter calls since last reset."""
+        return [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
+
+    def setup_method(self):
+        field_filter_stub.FieldFilter.reset_mock()
+
+    def test_get_messages_session_scoped_filters_by_session_not_plugin(self):
+        """get_messages with chat_session_id should filter by chat_session_id, NOT plugin_id."""
         mock_query = MagicMock()
         mock_query.where.return_value = mock_query
         mock_query.order_by.return_value = mock_query
@@ -473,14 +480,11 @@ class TestSessionScopedQueries:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
             chat_db.get_messages('uid', chat_session_id='sess-1', app_id='some-app')
 
-        # Collect all FieldFilter calls
-        filter_calls = [call for call in mock_query.where.call_args_list if 'filter' in call.kwargs]
-        filter_args = [call.kwargs['filter'] for call in filter_calls]
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
 
-        # Should have exactly 1 where() call for chat_session_id, NOT plugin_id
-        assert len(filter_calls) == 1, f"Expected 1 where filter, got {len(filter_calls)}: {filter_args}"
-
-    def test_get_messages_app_scoped_uses_plugin_id(self):
+    def test_get_messages_app_scoped_filters_by_plugin_id(self):
         """get_messages without chat_session_id should filter by plugin_id."""
         mock_query = MagicMock()
         mock_query.where.return_value = mock_query
@@ -493,28 +497,27 @@ class TestSessionScopedQueries:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
             chat_db.get_messages('uid', app_id='my-app')
 
-        filter_calls = [call for call in mock_query.where.call_args_list if 'filter' in call.kwargs]
-        # Should have exactly 1 where() call for plugin_id
-        assert len(filter_calls) == 1, f"Expected 1 where filter, got {len(filter_calls)}"
+        fields = self._get_field_filter_fields()
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
-    def test_delete_messages_session_scoped_skips_plugin_id(self):
-        """delete_messages with session_id should NOT filter by plugin_id."""
+    def test_delete_messages_session_scoped_filters_by_session_not_plugin(self):
+        """delete_messages with session_id should filter by chat_session_id, NOT plugin_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
         mock_col.where.return_value = mock_query
-        mock_query.where.return_value = mock_query
         mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []  # no docs to delete
+        mock_query.stream.return_value = []
 
         with patch.object(chat_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             chat_db.delete_messages('uid', session_id='sess-1')
 
-        # Should have called where() on the collection with chat_session_id, not plugin_id
-        filter_calls = [call for call in mock_col.where.call_args_list if 'filter' in call.kwargs]
-        assert len(filter_calls) == 1, f"Expected 1 where filter on collection, got {len(filter_calls)}"
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
 
-    def test_delete_messages_app_scoped_uses_plugin_id(self):
+    def test_delete_messages_app_scoped_filters_by_plugin_id(self):
         """delete_messages without session_id should filter by plugin_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
@@ -526,12 +529,16 @@ class TestSessionScopedQueries:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             chat_db.delete_messages('uid', app_id='my-app')
 
-        filter_calls = [call for call in mock_col.where.call_args_list if 'filter' in call.kwargs]
-        assert len(filter_calls) == 1, f"Expected 1 where filter on collection, got {len(filter_calls)}"
+        fields = self._get_field_filter_fields()
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
 class TestGetChatSessionsQuery:
     """Verify get_chat_sessions query construction."""
+
+    def setup_method(self):
+        field_filter_stub.FieldFilter.reset_mock()
 
     def test_orders_by_updated_at_descending(self):
         """get_chat_sessions should order by updated_at DESC."""
@@ -549,7 +556,7 @@ class TestGetChatSessionsQuery:
 
         mock_col.order_by.assert_called_once_with('updated_at', direction='DESCENDING')
 
-    def test_filters_by_plugin_id(self):
+    def test_filters_by_plugin_id_field(self):
         """get_chat_sessions should filter by plugin_id == app_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
@@ -563,8 +570,8 @@ class TestGetChatSessionsQuery:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             chat_db.get_chat_sessions('uid', app_id='test-app')
 
-        # Verify at least one where() was called (for plugin_id filter)
-        assert mock_query.where.called, "Expected where() to be called for plugin_id filter"
+        fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
 
 
 # ===========================================================================
