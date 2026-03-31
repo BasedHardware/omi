@@ -9,7 +9,7 @@ struct TaskClassificationBadge: View {
     var body: some View {
         Text(category.capitalized)
             .scaledFont(size: 10, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
     }
 }
 
@@ -58,7 +58,7 @@ struct AgentStatusIndicator: View {
                 } label: {
                     Image(systemName: "terminal")
                         .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
@@ -85,12 +85,12 @@ struct AgentStatusIndicator: View {
                         } else {
                             Image(systemName: "terminal")
                                 .scaledFont(size: 10)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
 
                         Text(isLaunching ? "Launching..." : "Run Agent")
                             .scaledFont(size: 10, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -143,11 +143,11 @@ struct AgentStatusIndicator: View {
 
     private func statusColor(for status: TaskAgentManager.AgentStatus) -> Color {
         switch status {
-        case .pending: return OmiColors.textTertiary
-        case .processing: return OmiColors.textSecondary
-        case .editing: return OmiColors.textSecondary
-        case .completed: return OmiColors.textPrimary
-        case .failed: return OmiColors.textTertiary
+        case .pending: return NootoColors.textTertiary
+        case .processing: return NootoColors.textSecondary
+        case .editing: return NootoColors.textSecondary
+        case .completed: return NootoColors.textPrimary
+        case .failed: return NootoColors.textTertiary
         }
     }
 }
@@ -220,7 +220,7 @@ struct TaskAgentDetailView: View {
             footer
         }
         .frame(width: 550, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onAppear {
             if let session = session {
                 editedPrompt = session.prompt
@@ -235,7 +235,7 @@ struct TaskAgentDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Task Agent")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 4) {
                     ForEach(task.tags.prefix(3), id: \.self) { tag in
@@ -256,16 +256,16 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Task")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Text(task.description)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
+                        .fill(NootoColors.backgroundSecondary)
                 )
         }
     }
@@ -274,7 +274,7 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             HStack(spacing: 16) {
                 // Status badge
@@ -287,24 +287,24 @@ struct TaskAgentDetailView: View {
                         HStack(spacing: 6) {
                             Text(session.status.displayName)
                                 .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             if !session.editedFiles.isEmpty {
                                 Text("\(session.editedFiles.count) files edited")
                                     .scaledFont(size: 11, weight: .medium)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(
                                         Capsule()
-                                            .fill(OmiColors.textSecondary.opacity(0.15))
+                                            .fill(NootoColors.textSecondary.opacity(0.15))
                                     )
                             }
                         }
 
                         Text("Session: \(session.sessionName)")
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
 
@@ -321,12 +321,12 @@ struct TaskAgentDetailView: View {
                             Text("Open Terminal")
                                 .scaledFont(size: 12, weight: .medium)
                         }
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(OmiColors.textSecondary.opacity(0.1))
+                                .fill(NootoColors.textSecondary.opacity(0.1))
                         )
                     }
                     .buttonStyle(.plain)
@@ -341,12 +341,12 @@ struct TaskAgentDetailView: View {
                                 Text("Stop")
                                     .scaledFont(size: 12, weight: .medium)
                             }
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(OmiColors.textSecondary.opacity(0.1))
+                                    .fill(NootoColors.textSecondary.opacity(0.1))
                             )
                         }
                         .buttonStyle(.plain)
@@ -356,7 +356,7 @@ struct TaskAgentDetailView: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -365,27 +365,27 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             VStack(spacing: 12) {
                 Image(systemName: "terminal")
                     .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 Text("No agent running")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Launch a Claude agent to analyze this task and create an implementation plan.")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -394,20 +394,20 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             VStack(spacing: 12) {
                 Image(systemName: "terminal")
                     .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 Text("Task Agent Disabled")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Enable Task Agent in settings to launch Claude agents for code-related tasks.")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
 
                 Button {
@@ -419,7 +419,7 @@ struct TaskAgentDetailView: View {
                 } label: {
                     Text("Open Settings")
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -427,7 +427,7 @@ struct TaskAgentDetailView: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(NootoColors.backgroundSecondary)
             )
         }
     }
@@ -437,7 +437,7 @@ struct TaskAgentDetailView: View {
             HStack {
                 Text("Prompt")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
 
@@ -452,7 +452,7 @@ struct TaskAgentDetailView: View {
                             Text("Edit")
                                 .scaledFont(size: 11, weight: .medium)
                         }
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -466,11 +466,11 @@ struct TaskAgentDetailView: View {
                         .padding(8)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundSecondary)
+                                .fill(NootoColors.backgroundSecondary)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
+                                .stroke(NootoColors.border, lineWidth: 1)
                         )
 
                     HStack {
@@ -501,12 +501,12 @@ struct TaskAgentDetailView: View {
             } else {
                 Text(session.prompt)
                     .scaledFont(size: 12, design: .monospaced)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(OmiColors.backgroundSecondary)
+                            .fill(NootoColors.backgroundSecondary)
                     )
             }
         }
@@ -517,7 +517,7 @@ struct TaskAgentDetailView: View {
             HStack {
                 Text("Agent Output")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
 
@@ -531,7 +531,7 @@ struct TaskAgentDetailView: View {
                         Text("Copy")
                             .scaledFont(size: 11, weight: .medium)
                     }
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -539,7 +539,7 @@ struct TaskAgentDetailView: View {
             ScrollView {
                 Text(output)
                     .scaledFont(size: 11, design: .monospaced)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 200)
@@ -558,7 +558,7 @@ struct TaskAgentDetailView: View {
                     manager.removeSession(taskId: task.id)
                 }
                 .buttonStyle(.bordered)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
             }
 
             Spacer()
@@ -575,11 +575,11 @@ struct TaskAgentDetailView: View {
 
     private func statusColor(for status: TaskAgentManager.AgentStatus) -> Color {
         switch status {
-        case .pending: return OmiColors.textTertiary
-        case .processing: return OmiColors.textSecondary
-        case .editing: return OmiColors.textSecondary
-        case .completed: return OmiColors.textPrimary
-        case .failed: return OmiColors.textTertiary
+        case .pending: return NootoColors.textTertiary
+        case .processing: return NootoColors.textSecondary
+        case .editing: return NootoColors.textSecondary
+        case .completed: return NootoColors.textPrimary
+        case .failed: return NootoColors.textTertiary
         }
     }
 
