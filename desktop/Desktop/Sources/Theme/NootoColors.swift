@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Premium color system matching Flutter's ResponsiveHelper
 /// Sophisticated dark theme with blue accent system
-enum OmiColors {
+enum NootoColors {
     // MARK: - Background Colors
     static let backgroundPrimary = Color(hex: 0x0F0F0F)    // Deep black
     static let backgroundSecondary = Color(hex: 0x1A1A1A)  // Elevated surface
@@ -13,10 +13,13 @@ enum OmiColors {
     static let border = Color(hex: 0x333333)               // Subtle border
 
     // MARK: - Blue Accent System (Nooto brand)
-    static let purplePrimary = Color(hex: 0x3B82F6)    // Main blue
-    static let purpleSecondary = Color(hex: 0x60A5FA)  // Lighter blue
-    static let purpleAccent = Color(hex: 0x2563EB)     // Darker blue
-    static let purpleLight = Color(hex: 0x93C5FD)      // Light blue
+    static let brandPrimary = Color(hex: 0x3B82F6)    // Main blue
+    static let brandSecondary = Color(hex: 0x60A5FA)  // Lighter blue
+    static let brandAccent = Color(hex: 0x2563EB)     // Darker blue
+    static let brandLight = Color(hex: 0x93C5FD)      // Light blue
+
+    /// Legacy alias — upstream code references purplePrimary; maps to brandPrimary after rebrand
+    static let purplePrimary = brandPrimary
 
     // MARK: - Text Colors
     static let textPrimary = Color(hex: 0xFFFFFF)      // Pure white for headers
@@ -47,17 +50,17 @@ enum OmiColors {
     ]
 
     /// User bubble color (purple tinted)
-    static let userBubble = purplePrimary.opacity(0.3)
+    static let userBubble = brandPrimary.opacity(0.3)
 
     // MARK: - Gradients
     static let purpleGradient = LinearGradient(
-        colors: [purplePrimary, purpleAccent],
+        colors: [brandPrimary, brandAccent],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    static let purpleLightGradient = LinearGradient(
-        colors: [purpleSecondary, purpleLight],
+    static let brandLightGradient = LinearGradient(
+        colors: [brandSecondary, brandLight],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
