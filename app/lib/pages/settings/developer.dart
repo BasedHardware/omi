@@ -1917,7 +1917,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   void dispose() {
     killMcuUpdateManager();
     super.dispose();
-  } 
+  }
 
   Future<void> _startFlash() async {
     setState(() {
