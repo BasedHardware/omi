@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed UI freezes caused by dock tile updates when receiving support messages"
+  ],
   "releases": [
     {
       "version": "0.11.186",
