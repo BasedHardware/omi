@@ -583,6 +583,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     private func disconnect() {
         let oldSession: URLSession? = withState {
             _connectionState = .disconnected
+            _connectionGeneration += 1  // Invalidate any in-flight receive callbacks
             let s = _urlSession
             _webSocketTask?.cancel(with: .normalClosure, reason: nil)
             _webSocketTask = nil
@@ -603,6 +604,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
             // Idempotent: if already reconnecting or disconnected, this is a duplicate callback
             guard _connectionState == .connected || _connectionState == .connecting else { return (false, 0) }
 
+            _connectionGeneration += 1  // Invalidate any in-flight receive/keepalive callbacks
             let oldSession = _urlSession
             _connectionState = .reconnecting
             _webSocketTask = nil
@@ -621,6 +623,16 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         keepaliveTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
+
+        // Salvage any partial audio in the coalescing buffer into the reconnect buffer
+        audioBufferLock.lock()
+        let partialAudio = audioBuffer
+        audioBuffer = Data()
+        audioBufferLock.unlock()
+        if !partialAudio.isEmpty {
+            withState { reconnectBuffer.append(partialAudio) }
+        }
+
         onDisconnected?()
 
         guard shouldAttemptReconnect else { return }
