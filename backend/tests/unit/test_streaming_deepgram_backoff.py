@@ -982,3 +982,103 @@ def test_gated_socket_death_reason_delegates_none_when_alive():
         assert gated.death_reason is None
     finally:
         safe.finish()
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker boundary tests (#6052)
+# ---------------------------------------------------------------------------
+
+
+def test_cb_constructor_clamps_threshold_to_minimum():
+    """failure_threshold <= 0 is clamped to 1."""
+    cb = DeepgramCircuitBreaker(failure_threshold=0, reset_timeout_seconds=10.0)
+    assert cb.failure_threshold == 1
+    cb2 = DeepgramCircuitBreaker(failure_threshold=-5, reset_timeout_seconds=10.0)
+    assert cb2.failure_threshold == 1
+
+
+def test_cb_constructor_clamps_timeout_to_minimum():
+    """reset_timeout_seconds <= 0 is clamped to 1.0."""
+    cb = DeepgramCircuitBreaker(failure_threshold=3, reset_timeout_seconds=0)
+    assert cb.reset_timeout_seconds == 1.0
+    cb2 = DeepgramCircuitBreaker(failure_threshold=3, reset_timeout_seconds=-10.0)
+    assert cb2.reset_timeout_seconds == 1.0
+
+
+def test_cb_half_open_probe_failure_reopens():
+    """When half-open probe fails, CB goes back to open with fresh timer."""
+    cb = DeepgramCircuitBreaker(failure_threshold=1, reset_timeout_seconds=1.0)
+    cb.record_failure(Exception('initial'))
+    assert cb.is_open()
+
+    # Force timeout to have elapsed by backdating the open timestamp
+    cb._opened_at_monotonic = time.monotonic() - 2.0
+    assert cb.allow_request()  # Transitions to half_open and allows probe
+    snap = cb.snapshot()
+    assert snap['state'] == 'half_open'
+
+    # Probe fails
+    cb.record_failure(Exception('probe fail'))
+    snap = cb.snapshot()
+    assert snap['state'] == 'open', 'Failed probe must reopen CB'
+
+
+@pytest.mark.asyncio
+async def test_cb_half_open_probe_failure_aborts_retries():
+    """connect_to_deepgram_with_backoff aborts retries when CB reopens after probe failure."""
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 1
+    cb.reset_timeout_seconds = 1.0
+    cb.reset()
+
+    # Trip the CB with one failure
+    cb.record_failure(Exception('initial'))
+    assert cb.is_open()
+
+    # Force timeout elapsed so CB transitions to half_open on allow_request
+    cb._opened_at_monotonic = time.monotonic() - 2.0
+
+    call_count = 0
+
+    def fail_connect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        raise Exception('connect failed')
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=fail_connect):
+        with patch('asyncio.sleep', new_callable=AsyncMock):
+            result = await connect_to_deepgram_with_backoff(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=1,
+                model='nova-3',
+                retries=3,
+            )
+
+    # CB should have reopened after the first (probe) failure, aborting further retries
+    assert result is None, 'Should return None when CB reopens after probe failure'
+    assert call_count == 1, 'Only one attempt (the probe) before CB blocks retries'
+
+
+def test_cb_snapshot_returns_current_state():
+    """snapshot() exposes the internal state for monitoring."""
+    cb = DeepgramCircuitBreaker(failure_threshold=2, reset_timeout_seconds=15.0)
+    snap = cb.snapshot()
+    assert snap == {
+        'state': 'closed',
+        'consecutive_failures': 0,
+        'failure_threshold': 2,
+        'reset_timeout_seconds': 15.0,
+    }
+
+    cb.record_failure()
+    snap = cb.snapshot()
+    assert snap['consecutive_failures'] == 1
+    assert snap['state'] == 'closed'
+
+    cb.record_failure()
+    snap = cb.snapshot()
+    assert snap['state'] == 'open'
+    assert snap['consecutive_failures'] == 2
