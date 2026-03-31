@@ -34,10 +34,10 @@ struct ShortcutsSettingsSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Ask Nooto Shortcut")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Text("Global shortcut to open Ask Nooto from anywhere.")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
 
             HStack(spacing: 12) {
@@ -65,7 +65,7 @@ struct ShortcutsSettingsSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
         .modifier(SettingHighlightModifier(settingId: "floatingbar.shortcut", highlightedSettingId: $highlightedSettingId))
     }
@@ -87,10 +87,10 @@ struct ShortcutsSettingsSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Push to Talk")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Text("Hold the key to speak, release to send your question to AI.")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
 
             HStack(spacing: 12) {
@@ -118,7 +118,7 @@ struct ShortcutsSettingsSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
         .modifier(SettingHighlightModifier(settingId: "floatingbar.ptt", highlightedSettingId: $highlightedSettingId))
     }
@@ -140,20 +140,20 @@ struct ShortcutsSettingsSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Double-tap for Locked Mode")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Text("Double-tap the push-to-talk key to keep listening hands-free. Tap again to send.")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
             Spacer()
             Toggle("", isOn: $settings.doubleTapForLock)
                 .toggleStyle(.switch)
-                .tint(OmiColors.purplePrimary)
+                .tint(NootoColors.purplePrimary)
         }
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
         .opacity(settings.pttEnabled ? 1 : 0.55)
         .disabled(!settings.pttEnabled)
@@ -165,20 +165,20 @@ struct ShortcutsSettingsSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Push-to-Talk Sounds")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Text("Play audio feedback when starting and ending voice input.")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
             Spacer()
             Toggle("", isOn: $settings.pttSoundsEnabled)
                 .toggleStyle(.switch)
-                .tint(OmiColors.purplePrimary)
+                .tint(NootoColors.purplePrimary)
         }
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
         .opacity(settings.pttEnabled ? 1 : 0.55)
         .disabled(!settings.pttEnabled)
@@ -189,7 +189,7 @@ struct ShortcutsSettingsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Keyboard Shortcuts")
                 .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             shortcutRow(label: "Ask Nooto", keys: settings.askOmiEnabled ? settings.askOmiShortcut.displayLabel : "Disabled")
             shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
@@ -201,7 +201,7 @@ struct ShortcutsSettingsSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
         )
     }
 
@@ -209,14 +209,14 @@ struct ShortcutsSettingsSection: View {
         HStack {
             Text(label)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
             Spacer()
             Text(keys)
                 .scaledMonospacedFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(OmiColors.backgroundTertiary.opacity(0.8))
+                .background(NootoColors.backgroundTertiary.opacity(0.8))
                 .cornerRadius(6)
         }
     }
@@ -233,18 +233,18 @@ struct ShortcutsSettingsSection: View {
         } label: {
             Text("Custom")
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill((isSelected || recordingTarget == target)
-                              ? OmiColors.purplePrimary.opacity(0.3)
-                              : OmiColors.backgroundTertiary.opacity(0.5))
+                              ? NootoColors.purplePrimary.opacity(0.3)
+                              : NootoColors.backgroundTertiary.opacity(0.5))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(isSelected || recordingTarget == target ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                        .stroke(isSelected || recordingTarget == target ? NootoColors.purplePrimary : Color.clear, lineWidth: 1.5)
                 )
         }
         .buttonStyle(.plain)
@@ -254,18 +254,18 @@ struct ShortcutsSettingsSection: View {
         Button(action: action) {
             Text("Disable")
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(isDisabled
-                              ? OmiColors.purplePrimary.opacity(0.3)
-                              : OmiColors.backgroundTertiary.opacity(0.5))
+                              ? NootoColors.purplePrimary.opacity(0.3)
+                              : NootoColors.backgroundTertiary.opacity(0.5))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(isDisabled ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                        .stroke(isDisabled ? NootoColors.purplePrimary : Color.clear, lineWidth: 1.5)
                 )
         }
         .buttonStyle(.plain)
@@ -278,18 +278,18 @@ struct ShortcutsSettingsSection: View {
                     .scaledFont(size: 13, weight: .medium)
             }
         }
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(NootoColors.textPrimary)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isSelected
-                      ? OmiColors.purplePrimary.opacity(0.3)
-                      : OmiColors.backgroundTertiary.opacity(0.5))
+                      ? NootoColors.purplePrimary.opacity(0.3)
+                      : NootoColors.backgroundTertiary.opacity(0.5))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                .stroke(isSelected ? NootoColors.purplePrimary : Color.clear, lineWidth: 1.5)
         )
     }
 
@@ -303,19 +303,19 @@ struct ShortcutsSettingsSection: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             HStack(spacing: 10) {
                 HStack(spacing: 6) {
                     ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, token in
                         Text(token)
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, token.count > 2 ? 10 : 8)
                             .padding(.vertical, 7)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.backgroundPrimary)
+                                    .fill(NootoColors.backgroundPrimary)
                             )
                     }
                 }
@@ -325,12 +325,12 @@ struct ShortcutsSettingsSection: View {
                 Button(action: action) {
                     Text(isRecording ? "Listening..." : "Save")
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(OmiColors.backgroundPrimary)
+                                .fill(NootoColors.backgroundPrimary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -338,7 +338,7 @@ struct ShortcutsSettingsSection: View {
 
             Text(helperText)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             if let captureError, isRecording {
                 Text(captureError)
@@ -349,7 +349,7 @@ struct ShortcutsSettingsSection: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundSecondary.opacity(0.85))
+                .fill(NootoColors.backgroundSecondary.opacity(0.85))
         )
     }
 
