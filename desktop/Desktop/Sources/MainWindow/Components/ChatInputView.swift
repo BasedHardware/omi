@@ -36,7 +36,7 @@ struct ChatInputView: View {
         HStack(alignment: .bottom, spacing: 8) {
             // Input field with floating toggle
             ZStack(alignment: .topTrailing) {
-                // Hidden Text drives the SwiftUI height; OmiTextEditor overlays it exactly.
+                // Hidden Text drives the SwiftUI height; NootoTextEditor overlays it exactly.
                 // This lets SwiftUI measure height from text content without fighting AppKit's
                 // scroll view layout — the onHeightChange pattern caused layout loops inside
                 // the TaskChatPanel VStack with frame(maxHeight: .infinity).
@@ -54,24 +54,24 @@ struct ChatInputView: View {
                         if inputText.isEmpty {
                             Text(placeholder)
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .padding(.horizontal, inputPaddingH)
                                 .padding(.vertical, inputPaddingV)
                                 .allowsHitTesting(false)
                         }
                     }
                     .overlay {
-                        OmiTextEditor(
+                        NootoTextEditor(
                             text: $inputText,
                             fontSize: round(14 * fontScale),
-                            textColor: NSColor(OmiColors.textPrimary),
+                            textColor: NSColor(NootoColors.textPrimary),
                             textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                             onSubmit: handleSubmit
                         )
                     }
                     .frame(maxHeight: 200)
                     .clipped()
-                    .background(OmiColors.backgroundSecondary)
+                    .background(NootoColors.backgroundSecondary)
                     .cornerRadius(12)
 
                 // Floating Ask/Act toggle (top-right, inside the input area)
@@ -100,7 +100,7 @@ struct ChatInputView: View {
                 Button(action: handleSubmit) {
                     Image(systemName: "arrow.up.circle.fill")
                         .scaledFont(size: 24)
-                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                        .foregroundColor(hasText ? NootoColors.brandPrimary : NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!hasText)
@@ -152,7 +152,7 @@ struct ChatModeToggle: View {
             modeButton(for: .ask, label: "Ask")
             modeButton(for: .act, label: "Act")
         }
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
         .cornerRadius(14)
     }
 
@@ -160,10 +160,10 @@ struct ChatModeToggle: View {
         Button(action: { mode = targetMode }) {
             Text(label)
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
+                .foregroundColor(mode == targetMode ? .white : NootoColors.textTertiary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(mode == targetMode ? OmiColors.purplePrimary : Color.clear)
+                .background(mode == targetMode ? NootoColors.brandPrimary : Color.clear)
                 .cornerRadius(12)
         }
         .buttonStyle(.plain)
