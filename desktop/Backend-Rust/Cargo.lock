@@ -1088,6 +1088,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "nooto-desktop-backend"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-stream",
+ "axum",
+ "base64 0.21.7",
+ "chrono",
+ "chrono-tz",
+ "dotenvy",
+ "flate2",
+ "futures",
+ "hex",
+ "hkdf",
+ "hmac",
+ "jsonwebtoken",
+ "redis",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "time",
+ "tokio",
+ "tokio-tungstenite",
+ "tower-http",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "ulid",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1137,41 +1172,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "omi-desktop-backend"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "async-stream",
- "axum",
- "base64 0.21.7",
- "chrono",
- "chrono-tz",
- "dotenvy",
- "flate2",
- "futures",
- "hex",
- "hkdf",
- "hmac",
- "jsonwebtoken",
- "redis",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "time",
- "tokio",
- "tokio-tungstenite",
- "tower-http",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "ulid",
- "urlencoding",
- "uuid",
 ]
 
 [[package]]
