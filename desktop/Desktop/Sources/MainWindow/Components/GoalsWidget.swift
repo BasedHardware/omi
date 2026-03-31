@@ -23,13 +23,13 @@ struct GoalsWidget: View {
             HStack {
                 Text("Goals")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 // Add goal button (only if less than 3 goals)
                 if goals.count < 4 {
-                    GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
+                    GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: NootoColors.textTertiary) {
                         showingCreateSheet = true
                     }
                 }
@@ -44,10 +44,10 @@ struct GoalsWidget: View {
                             Spacer()
                             Image(systemName: "plus")
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                             Text("Tap to add goal")
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                             Spacer()
                         }
                         .frame(maxWidth: .infinity)
@@ -69,12 +69,12 @@ struct GoalsWidget: View {
                             Text(isGeneratingGoal ? "Generating..." : "Generate AI Goal")
                                 .scaledFont(size: 12, weight: .medium)
                         }
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.purplePrimary.opacity(0.1))
+                                .fill(NootoColors.brandPrimary.opacity(0.1))
                         )
                     }
                     .buttonStyle(.plain)
@@ -103,10 +103,10 @@ struct GoalsWidget: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.3))
+                .fill(NootoColors.backgroundTertiary.opacity(0.3))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
                 )
         )
         .sheet(isPresented: $showingCreateSheet) {
@@ -188,7 +188,7 @@ struct GoalRowView: View {
         } else if progress >= 0.2 {
             return Color(red: 0.976, green: 0.451, blue: 0.086) // #F97316 Orange
         } else {
-            return OmiColors.textTertiary
+            return NootoColors.textTertiary
         }
     }
 
@@ -208,7 +208,7 @@ struct GoalRowView: View {
             // Emoji icon - tapping opens edit sheet
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.6))
+                    .fill(NootoColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 32, height: 32)
                 Text(goalEmoji)
                     .scaledFont(size: 16)
@@ -220,7 +220,7 @@ struct GoalRowView: View {
                 HStack {
                     Text(goal.title)
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
                         .onTapGesture { onTap() }
 
@@ -235,7 +235,7 @@ struct GoalRowView: View {
                         }) {
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                 .scaledFont(size: 9, weight: .medium)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -254,7 +254,7 @@ struct GoalRowView: View {
                     // Progress value (current/target)
                     Text(dragProgressText)
                         .scaledFont(size: 11)
-                        .foregroundColor(isDragging ? OmiColors.textPrimary : OmiColors.textTertiary)
+                        .foregroundColor(isDragging ? NootoColors.textPrimary : NootoColors.textTertiary)
                         .animation(.easeInOut(duration: 0.15), value: isDragging)
                 }
 
@@ -312,7 +312,7 @@ struct GoalRowView: View {
                         if let desc = goal.description, !desc.isEmpty {
                             Text(desc)
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                                 .lineLimit(3)
                         }
 
@@ -321,18 +321,18 @@ struct GoalRowView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Linked Tasks")
                                     .scaledFont(size: 10, weight: .semibold)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                                     .textCase(.uppercase)
 
                                 ForEach(linkedTasks) { task in
                                     HStack(spacing: 6) {
                                         Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
                                             .scaledFont(size: 11)
-                                            .foregroundColor(task.completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : OmiColors.textTertiary)
+                                            .foregroundColor(task.completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : NootoColors.textTertiary)
 
                                         Text(task.description)
                                             .scaledFont(size: 12)
-                                            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                                            .foregroundColor(task.completed ? NootoColors.textTertiary : NootoColors.textPrimary)
                                             .strikethrough(task.completed)
                                             .lineLimit(1)
                                     }
@@ -349,7 +349,7 @@ struct GoalRowView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(OmiColors.backgroundTertiary.opacity(isHovering ? 0.5 : 0.3))
+                .fill(NootoColors.backgroundTertiary.opacity(isHovering ? 0.5 : 0.3))
         )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -573,16 +573,16 @@ struct GoalEditSheet: View {
             HStack {
                 Text(isNewGoal ? "Add Goal" : "Edit Goal")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .background(NootoColors.backgroundTertiary.opacity(0.5))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -592,7 +592,7 @@ struct GoalEditSheet: View {
             .padding(.bottom, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -602,17 +602,17 @@ struct GoalEditSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Goal Title")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         TextField("Enter goal title", text: $title)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                                    .fill(NootoColors.backgroundTertiary.opacity(0.5))
                             )
                     }
 
@@ -621,34 +621,34 @@ struct GoalEditSheet: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Current")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             TextField("0", text: $currentValue)
                                 .textFieldStyle(.plain)
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
                                 )
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Target")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             TextField("100", text: $targetValue)
                                 .textFieldStyle(.plain)
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
                                 )
                         }
                     }
@@ -657,7 +657,7 @@ struct GoalEditSheet: View {
             }
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Actions
             HStack(spacing: 12) {
@@ -680,7 +680,7 @@ struct GoalEditSheet: View {
                 Button(action: onDismiss) {
                     Text("Cancel")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
 
@@ -698,7 +698,7 @@ struct GoalEditSheet: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(OmiColors.purplePrimary)
+                                .fill(NootoColors.brandPrimary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -708,7 +708,7 @@ struct GoalEditSheet: View {
             .padding(20)
         }
         .frame(width: 400, height: isNewGoal ? 320 : 420)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
         .onAppear {
             if let goal = goal {
                 title = goal.title
@@ -743,7 +743,7 @@ struct GoalAdviceSheet: View {
                         .foregroundColor(.yellow)
                     Text("Goal Advice")
                         .scaledFont(size: 18, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
 
                 Spacer()
@@ -751,9 +751,9 @@ struct GoalAdviceSheet: View {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 28, height: 28)
-                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .background(NootoColors.backgroundTertiary.opacity(0.5))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -763,19 +763,19 @@ struct GoalAdviceSheet: View {
             .padding(.bottom, 16)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Goal info
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goal.title)
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     Text("\(Int(goal.currentValue))/\(Int(goal.targetValue)) (\(Int(goal.progress))%)")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -783,17 +783,17 @@ struct GoalAdviceSheet: View {
                 // Progress indicator
                 ZStack {
                     Circle()
-                        .stroke(OmiColors.backgroundTertiary, lineWidth: 3)
+                        .stroke(NootoColors.backgroundTertiary, lineWidth: 3)
                     Circle()
                         .trim(from: 0, to: min(goal.progress / 100, 1.0))
-                        .stroke(OmiColors.purplePrimary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(NootoColors.brandPrimary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
                 .frame(width: 36, height: 36)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(OmiColors.backgroundTertiary.opacity(0.3))
+            .background(NootoColors.backgroundTertiary.opacity(0.3))
 
             // Content
             VStack(spacing: 16) {
@@ -803,7 +803,7 @@ struct GoalAdviceSheet: View {
                             .scaleEffect(1.2)
                         Text("Getting personalized advice...")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let error = errorMessage {
@@ -813,7 +813,7 @@ struct GoalAdviceSheet: View {
                             .foregroundColor(.orange)
                         Text(error)
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -821,11 +821,11 @@ struct GoalAdviceSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("This week's action:")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         Text(advice)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(20)
@@ -835,7 +835,7 @@ struct GoalAdviceSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Actions
             HStack(spacing: 12) {
@@ -847,7 +847,7 @@ struct GoalAdviceSheet: View {
                         Text("Refresh")
                     }
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
@@ -863,7 +863,7 @@ struct GoalAdviceSheet: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(OmiColors.purplePrimary)
+                                .fill(NootoColors.brandPrimary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -871,7 +871,7 @@ struct GoalAdviceSheet: View {
             .padding(20)
         }
         .frame(width: 400, height: 380)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
         .onAppear {
             loadAdvice()
         }
@@ -927,12 +927,12 @@ private struct GoalHeaderButton: View {
             if isHovered {
                 Text(tooltip)
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                     )
                     .fixedSize()
@@ -958,5 +958,5 @@ private struct GoalHeaderButton: View {
     )
     .frame(width: 350)
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
