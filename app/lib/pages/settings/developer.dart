@@ -24,6 +24,7 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -1867,12 +1868,21 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ],
 
                   // Manual Firmware Flash (only when device connected)
-                  if (provider.isConnected && provider.pairedDevice != null) ...[
-                    const SizedBox(height: 24),
-                    _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
-                    const SizedBox(height: 8),
-                    _buildManualFirmwareFlash(provider),
-                  ],
+                  Builder(builder: (context) {
+                    final deviceProvider = context.watch<DeviceProvider>();
+                    if (deviceProvider.isConnected && deviceProvider.pairedDevice != null) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
+                          const SizedBox(height: 8),
+                          _buildManualFirmwareFlash(deviceProvider),
+                        ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }),
 
                   const SizedBox(height: 48),
                 ],
@@ -1963,9 +1973,11 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.fileName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                        Text(widget.fileName,
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        Text('Target: ${widget.device.name}', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                        Text('Target: ${widget.device.name}',
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -2006,7 +2018,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Flash Firmware', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: const Text('Flash Firmware',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -2038,7 +2051,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                   children: [
                     Icon(Icons.check_circle, color: Colors.green, size: 64),
                     SizedBox(height: 16),
-                    Text('Firmware flashed successfully!', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    Text('Firmware flashed successfully!',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                     SizedBox(height: 8),
                     Text('Your device will restart.', style: TextStyle(color: Colors.grey, fontSize: 14)),
                   ],
