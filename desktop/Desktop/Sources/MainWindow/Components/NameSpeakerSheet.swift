@@ -50,7 +50,7 @@ struct NameSpeakerSheet: View {
             HStack {
                 Text("Name Speaker")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
@@ -59,7 +59,7 @@ struct NameSpeakerSheet: View {
             .padding(.bottom, 12)
 
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -78,7 +78,7 @@ struct NameSpeakerSheet: View {
             }
 
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             // Action buttons
             HStack {
@@ -87,7 +87,7 @@ struct NameSpeakerSheet: View {
                     onDismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
 
@@ -101,12 +101,12 @@ struct NameSpeakerSheet: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(canSave ? .black : OmiColors.textTertiary)
+                .foregroundColor(canSave ? .black : NootoColors.textTertiary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
                 .background(
                     Capsule()
-                        .fill(canSave ? Color.white : OmiColors.backgroundTertiary)
+                        .fill(canSave ? Color.white : NootoColors.backgroundTertiary)
                 )
                 .disabled(!canSave || isSaving)
             }
@@ -114,7 +114,7 @@ struct NameSpeakerSheet: View {
             .padding(.vertical, 14)
         }
         .frame(width: 400, height: 450)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     // MARK: - Speaker Info
@@ -123,21 +123,21 @@ struct NameSpeakerSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(OmiColors.backgroundQuaternary)
+                    .fill(NootoColors.backgroundQuaternary)
                     .frame(width: 28, height: 28)
                     .overlay(
                         Text(String(segment.speakerId))
                             .scaledFont(size: 12, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                     )
                 Text("Speaker \(segment.speakerId)")
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
             }
 
             Text("\"\(previewText)\"")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .italic()
                 .lineLimit(3)
         }
@@ -145,7 +145,7 @@ struct NameSpeakerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
         )
     }
 
@@ -155,7 +155,7 @@ struct NameSpeakerSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Who is this?")
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             FlowLayout(spacing: 8) {
                 // "You" chip
@@ -194,16 +194,16 @@ struct NameSpeakerSheet: View {
                         TextField("Person name", text: $newPersonName)
                             .textFieldStyle(.plain)
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(OmiColors.backgroundSecondary)
+                                    .fill(NootoColors.backgroundSecondary)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(duplicateWarning != nil ? OmiColors.error : OmiColors.border, lineWidth: 1)
+                                    .stroke(duplicateWarning != nil ? NootoColors.error : NootoColors.border, lineWidth: 1)
                             )
                             .onChange(of: newPersonName) { _, newValue in
                                 validateName(newValue)
@@ -227,12 +227,12 @@ struct NameSpeakerSheet: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .foregroundColor(canCreate ? .black : OmiColors.textTertiary)
+                        .foregroundColor(canCreate ? .black : NootoColors.textTertiary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
                             Capsule()
-                                .fill(canCreate ? Color.white : OmiColors.backgroundTertiary)
+                                .fill(canCreate ? Color.white : NootoColors.backgroundTertiary)
                         )
                         .disabled(!canCreate || isCreating)
                     }
@@ -240,7 +240,7 @@ struct NameSpeakerSheet: View {
                     if let warning = duplicateWarning {
                         Text(warning)
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.error)
+                            .foregroundColor(NootoColors.error)
                     }
                 }
             }
@@ -253,7 +253,7 @@ struct NameSpeakerSheet: View {
         Toggle(isOn: $tagAllFromSpeaker) {
             Text("Also tag \(sameSpeakerSegments.count - 1) other segment\(sameSpeakerSegments.count - 1 == 1 ? "" : "s") from this speaker")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
         }
         .toggleStyle(.checkbox)
     }
@@ -301,16 +301,16 @@ struct NameSpeakerSheet: View {
         Button(action: action) {
             Text(label)
                 .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                .foregroundColor(isSelected ? .black : (isAction ? OmiColors.purplePrimary : OmiColors.textPrimary))
+                .foregroundColor(isSelected ? .black : (isAction ? NootoColors.brandPrimary : NootoColors.textPrimary))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.white : OmiColors.backgroundTertiary)
+                        .fill(isSelected ? Color.white : NootoColors.backgroundTertiary)
                 )
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? OmiColors.border : (isAction ? OmiColors.purplePrimary.opacity(0.3) : Color.clear), lineWidth: 1)
+                        .stroke(isSelected ? NootoColors.border : (isAction ? NootoColors.brandPrimary.opacity(0.3) : Color.clear), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
