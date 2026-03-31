@@ -18,7 +18,7 @@ private class AutoFocusScrollView: NSScrollView {
 }
 
 /// Unified NSTextView wrapper used by both the main chat input and the floating control bar.
-struct OmiTextEditor: NSViewRepresentable {
+struct NootoTextEditor: NSViewRepresentable {
     @Binding var text: String
 
     // Appearance
