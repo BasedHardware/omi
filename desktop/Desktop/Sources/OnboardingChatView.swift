@@ -55,6 +55,20 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.bool(forKey: explorationCompletedKey)
     }
 
+    // MARK: - Goal Persistence
+
+    private static let goalCompletedKey = "onboardingGoalCompleted"
+
+    /// Mark that the user has set their monthly goal
+    static func markGoalCompleted() {
+        UserDefaults.standard.set(true, forKey: goalCompletedKey)
+    }
+
+    /// Whether the user already set their monthly goal
+    static var isGoalCompleted: Bool {
+        UserDefaults.standard.bool(forKey: goalCompletedKey)
+    }
+
     // MARK: - Tool Completion
 
     /// Mark that `complete_onboarding` tool was called (so button shows on restart)
@@ -74,6 +88,7 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.removeObject(forKey: explorationTextKey)
         UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
         UserDefaults.standard.removeObject(forKey: toolCompletedKey)
+        UserDefaults.standard.removeObject(forKey: goalCompletedKey)
         // Clean up legacy messages key if present
         UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
     }

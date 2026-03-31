@@ -321,7 +321,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Register Carbon-based global shortcuts for floating control bar (Cmd+\)
         GlobalShortcutManager.shared.registerShortcuts()
         toggleBarObserver = NotificationCenter.default.addObserver(
-            forName: GlobalShortcutManager.toggleFloatingBarNotification,
+            forName: GlobalShortcutManager.askAINotification,
             object: nil,
             queue: .main
         ) { _ in
@@ -1079,7 +1079,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.appBecameActive()
         // Sync remote assistant settings so server-side changes take effect promptly
         Task { await SettingsSyncManager.shared.syncFromServer() }
-        UpdaterViewModel.shared.syncUpdateChannelFromServer()
+        // UpdaterViewModel.shared.syncUpdateChannelFromServer() // Not yet available upstream
     }
 
     func applicationWillResignActive(_ notification: Notification) {

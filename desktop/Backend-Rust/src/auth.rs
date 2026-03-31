@@ -132,6 +132,16 @@ impl FirebaseAuth {
             message: format!("Unknown key id: {}", kid),
         })?;
 
+        // Decode without validation first to log claims for debugging
+        let mut debug_validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+        debug_validation.insecure_disable_signature_validation();
+        debug_validation.validate_aud = false;
+        debug_validation.validate_exp = false;
+        if let Ok(debug_data) = decode::<FirebaseClaims>(token, &DecodingKey::from_secret(b""), &debug_validation) {
+            tracing::debug!("Token issuer: {:?}, audience: {:?}, sub: {}",
+                debug_data.claims.iss, debug_data.claims.aud, debug_data.claims.sub);
+        }
+
         // Set up validation
         let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
         validation.set_audience(&[&self.project_id]);
@@ -144,7 +154,7 @@ impl FirebaseAuth {
         let token_data = decode::<FirebaseClaims>(token, key, &validation).map_err(|e| {
             AuthError {
                 error: "invalid_token".to_string(),
-                message: format!("Token validation failed: {}", e),
+                message: format!("Token validation failed: {} (expected issuer: https://securetoken.google.com/{})", e, self.project_id),
             }
         })?;
 
@@ -201,7 +211,10 @@ where
             })?;
 
         // Verify token
-        let (uid, name, email) = firebase_auth.0.verify_token(token).await?;
+        let (uid, name, email) = firebase_auth.0.verify_token(token).await.map_err(|e| {
+            tracing::error!("Token verification failed: {} - token prefix: {}...", e.message, &token[..std::cmp::min(20, token.len())]);
+            e
+        })?;
 
         Ok(AuthUser { uid, name, email })
     }

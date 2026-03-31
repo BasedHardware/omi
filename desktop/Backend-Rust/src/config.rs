@@ -87,7 +87,7 @@ impl Config {
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
-            firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
+            firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok().filter(|s| !s.is_empty()),
             firebase_api_key: env::var("FIREBASE_API_KEY").ok(),
             base_api_url: env::var("BASE_API_URL").ok(),
             apple_client_id: env::var("APPLE_CLIENT_ID").ok(),

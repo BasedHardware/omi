@@ -240,7 +240,10 @@ struct SettingsContentView: View {
         case notifications = "Notifications"
         case privacy = "Privacy"
         case account = "Account"
+        case planUsage = "Plan & Usage"
         case aiChat = "AI Chat"
+        case floatingBar = "Floating Bar"
+        case shortcuts = "Shortcuts"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -359,6 +362,18 @@ struct SettingsContentView: View {
                     accountSection
                 case .aiChat:
                     aiChatSection
+                case .planUsage:
+                    Text("Plan & Usage settings coming soon.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                case .floatingBar:
+                    Text("Floating Bar settings coming soon.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                case .shortcuts:
+                    Text("Shortcuts settings coming soon.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 case .advanced:
                     advancedSection
                 case .about:
@@ -4522,8 +4537,7 @@ struct SettingsContentView: View {
                     isLoadingSettings = false
                 }
 
-                // Sync update channel from user profile (separate from assistant settings)
-                UpdaterViewModel.shared.syncUpdateChannelFromServer()
+                // Update channel sync handled by AppBuild.syncUpdateChannelOnFirstLaunch()
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {

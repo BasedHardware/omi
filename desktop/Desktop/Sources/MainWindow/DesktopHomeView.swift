@@ -389,7 +389,6 @@ struct DesktopHomeView: View {
                 if isInSettings {
                     SettingsSidebar(
                         selectedSection: $selectedSettingsSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         onBack: {
                             withAnimation(.easeInOut(duration: 0.2)) {

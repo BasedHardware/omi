@@ -120,12 +120,12 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
-                    compactButton(title: "Ask Nooto", keys: shortcutSettings.askOmiKey.hintKeys) {
+                    compactButton(title: "Ask Nooto", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                        compactLabel("Push to talk", keys: [shortcutSettings.pttShortcut.displayLabel])
                     }
                 }
                 .padding(.horizontal, 6)
@@ -220,7 +220,7 @@ struct FloatingControlBarView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             } else {
-                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
+                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send" : "Release \(shortcutSettings.pttShortcut.displayLabel) to send")
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }

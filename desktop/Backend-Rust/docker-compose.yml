@@ -4,8 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile.coolify
     container_name: nooto-desktop-backend
-    expose:
-      - "8080"
+    ports:
+      - "10201:8080"
+    volumes:
+      - ./google-credentials.json:/app/google-credentials.json:ro
     environment:
       - PORT=8080
       # Firebase / Firestore

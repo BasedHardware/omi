@@ -43,8 +43,16 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Production: Cloud Run backend
-    private let apiBaseURL: String = "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    // Reads from OMI_API_URL env var (set in .env.app.dev), falls back to Cloud Run
+    private let apiBaseURL: String = {
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        if let envURL = ProcessInfo.processInfo.environment["OMI_API_URL"], !envURL.isEmpty {
+            return envURL.hasSuffix("/") ? envURL : envURL + "/"
+        }
+        return "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    }()
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }

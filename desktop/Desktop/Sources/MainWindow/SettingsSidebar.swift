@@ -315,6 +315,8 @@ struct SettingsSidebarItem: View {
     private var icon: String {
         switch section {
         case .general: return "gearshape"
+        case .device: return "flipphone"
+        case .focus: return "eye"
         case .rewind: return "clock.arrow.circlepath"
         case .transcription: return "waveform"
         case .notifications: return "bell"
