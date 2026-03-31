@@ -1935,7 +1935,9 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       _error = null;
     });
     try {
-      await startDfu(widget.device, zipFilePath: widget.zipFilePath);
+      // Manual flash always uses MCU DFU — modern firmware ZIPs contain
+      // manifest.json which NordicDfu (legacy) cannot parse.
+      await startMCUDfu(widget.device, zipFilePath: widget.zipFilePath);
     } catch (e) {
       if (mounted) {
         setState(() => _error = e.toString());
