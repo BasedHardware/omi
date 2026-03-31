@@ -25,7 +25,7 @@ struct OnboardingView: View {
   var body: some View {
     ZStack {
       // Full dark background
-      OmiColors.backgroundPrimary
+      NootoColors.backgroundPrimary
         .ignoresSafeArea()
 
       Group {
@@ -458,16 +458,16 @@ struct OnboardingTrustPreviewCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
           RoundedRectangle(cornerRadius: 16)
-            .stroke(OmiColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
+            .stroke(NootoColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
         )
 
       Rectangle()
         .fill(
           LinearGradient(
             colors: [
-              OmiColors.backgroundQuaternary.opacity(0),
-              OmiColors.backgroundQuaternary.opacity(0.4),
-              OmiColors.backgroundQuaternary.opacity(0),
+              NootoColors.backgroundQuaternary.opacity(0),
+              NootoColors.backgroundQuaternary.opacity(0.4),
+              NootoColors.backgroundQuaternary.opacity(0),
             ],
             startPoint: .leading,
             endPoint: .trailing
@@ -479,14 +479,14 @@ struct OnboardingTrustPreviewCard: View {
       HStack(spacing: 8) {
         Image(systemName: "shield.lefthalf.filled")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
         Text("Trust & Privacy")
           .font(.system(size: 17, weight: .medium))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
           .lineLimit(1)
-        Text("omi protects your data")
+        Text("nooto protects your data")
           .font(.system(size: 15, weight: .regular))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(NootoColors.textTertiary)
           .lineLimit(1)
           .minimumScaleFactor(0.85)
       }
@@ -507,7 +507,7 @@ struct OnboardingTrustPreviewCard: View {
       .padding(16)
       .background(
         RoundedRectangle(cornerRadius: 16)
-          .fill(OmiColors.backgroundTertiary.opacity(0.75))
+          .fill(NootoColors.backgroundTertiary.opacity(0.75))
           .overlay(
             RoundedRectangle(cornerRadius: 16)
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
@@ -523,30 +523,30 @@ struct OnboardingTrustPreviewCard: View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
         .frame(width: 20, height: 20)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(NootoColors.textPrimary)
         if title == "Open Source" {
           HStack(spacing: 0) {
             Text(detail)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(NootoColors.textSecondary)
             if let url = URL(string: "https://github.com/basedhardware/omi/") {
               Link("public", destination: url)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .underline()
             }
             Text(" and auditable.")
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(NootoColors.textSecondary)
           }
           .font(.system(size: 12))
         } else {
           Text(detail)
             .font(.system(size: 12))
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
         }
       }
       Spacer()
@@ -640,18 +640,18 @@ struct OnboardingPrivacySheet: View {
       HStack {
         Image(systemName: "shield.lefthalf.filled")
           .scaledFont(size: 16)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
 
         Text("Data & Privacy")
           .scaledFont(size: 16, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(NootoColors.textPrimary)
 
         Spacer()
 
         Button(action: { isPresented = false }) {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: 18)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
         }
         .buttonStyle(.plain)
       }
@@ -666,7 +666,7 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: 10) {
               Label("Encryption", systemImage: "lock.shield")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
               HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
@@ -674,7 +674,7 @@ struct OnboardingPrivacySheet: View {
                   .foregroundColor(.green)
                 Text("Server-side encryption")
                   .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(NootoColors.textSecondary)
                 Text("Active")
                   .scaledFont(size: 10, weight: .semibold)
                   .foregroundColor(.green)
@@ -686,7 +686,7 @@ struct OnboardingPrivacySheet: View {
 
               Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .padding(.top, 2)
             }
           }
@@ -696,7 +696,7 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: 8) {
               Label("What We Track", systemImage: "list.bullet")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
               VStack(alignment: .leading, spacing: 4) {
                 sheetTrackingItem("Onboarding steps completed")
@@ -719,7 +719,7 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: 8) {
               Label("Privacy Guarantees", systemImage: "hand.raised.fill")
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
               VStack(alignment: .leading, spacing: 5) {
                 sheetBullet("Anonymous tracking with randomly generated IDs")
@@ -734,7 +734,7 @@ struct OnboardingPrivacySheet: View {
       }
     }
     .frame(width: 400, height: 480)
-    .background(OmiColors.backgroundSecondary)
+    .background(NootoColors.backgroundSecondary)
   }
 
   private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -743,10 +743,10 @@ struct OnboardingPrivacySheet: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: 10)
-          .fill(OmiColors.backgroundTertiary.opacity(0.5))
+          .fill(NootoColors.backgroundTertiary.opacity(0.5))
           .overlay(
             RoundedRectangle(cornerRadius: 10)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+              .stroke(NootoColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
           )
       )
   }
@@ -754,11 +754,11 @@ struct OnboardingPrivacySheet: View {
   private func sheetTrackingItem(_ text: String) -> some View {
     HStack(spacing: 6) {
       Circle()
-        .fill(OmiColors.textTertiary.opacity(0.5))
+        .fill(NootoColors.textTertiary.opacity(0.5))
         .frame(width: 3, height: 3)
       Text(text)
         .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(NootoColors.textTertiary)
     }
   }
 
@@ -769,7 +769,7 @@ struct OnboardingPrivacySheet: View {
         .foregroundColor(.green)
       Text(text)
         .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(NootoColors.textSecondary)
     }
   }
 }
