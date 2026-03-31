@@ -27,7 +27,7 @@ fn parse_or_repair_json<T: DeserializeOwned>(response: &str, label: &str) -> Res
         let mut in_string = false;
         let mut escape_next = false;
         let mut stack: Vec<char> = Vec::new();
-        let mut last_was_string_content = false;
+        let mut _last_was_string_content = false;
 
         for ch in trimmed.chars() {
             if escape_next {
@@ -40,14 +40,14 @@ fn parse_or_repair_json<T: DeserializeOwned>(response: &str, label: &str) -> Res
             }
             if ch == '"' {
                 in_string = !in_string;
-                last_was_string_content = false;
+                _last_was_string_content = false;
                 continue;
             }
             if in_string {
-                last_was_string_content = true;
+                _last_was_string_content = true;
                 continue;
             }
-            last_was_string_content = false;
+            _last_was_string_content = false;
             match ch {
                 '{' => stack.push('}'),
                 '[' => stack.push(']'),
