@@ -1891,8 +1891,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
 class _ManualFirmwareFlashPage extends StatefulWidget {
   final String zipFilePath;
-  final String fileName; 
-  final BtDevice device;
+  final String fileName;
+  final BtDevice device; 
 
   const _ManualFirmwareFlashPage({
     required this.zipFilePath,
