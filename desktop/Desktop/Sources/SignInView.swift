@@ -6,7 +6,7 @@ struct SignInView: View {
     var body: some View {
         ZStack {
             // Full background
-            OmiColors.backgroundPrimary
+            NootoColors.backgroundPrimary
                 .ignoresSafeArea()
 
             // Centered sign in card
@@ -25,11 +25,11 @@ struct SignInView: View {
 
                     Text("Nooto")
                         .scaledFont(size: 48, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text("Sign in to continue")
                         .font(.title3)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -105,14 +105,14 @@ struct SignInView: View {
                     // Loading overlay for both buttons
                     if authState.isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: OmiColors.textPrimary))
+                            .progressViewStyle(CircularProgressViewStyle(tint: NootoColors.textPrimary))
                             .padding(.top, 8)
                     }
 
                     if let error = authState.error {
                         Text(error)
                             .font(.caption)
-                            .foregroundColor(OmiColors.error)
+                            .foregroundColor(NootoColors.error)
                             .multilineTextAlignment(.center)
                             .padding(.top, 4)
                     }
