@@ -881,7 +881,6 @@ class BleHostApi {
     }
   }
 
-  /// Stop managing a device. Disconnects, cancels retries, and removes from managed set.
   Future<void> unmanageDevice(String uuid) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -905,7 +904,6 @@ class BleHostApi {
     }
   }
 
-  /// Request bonding/pairing for a connected peripheral.
   Future<bool> requestBond(String uuid) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1088,7 +1086,6 @@ class BleHostApi {
   }
 
   /// (Android only) Check if any CompanionDeviceManager association exists.
-  /// Returns true on iOS (state restoration handles background reconnection).
   Future<bool> hasCompanionDeviceAssociation() async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1118,9 +1115,6 @@ class BleHostApi {
   }
 
   /// (Android only) Initiate CompanionDeviceManager association for a device.
-  /// Shows the system chooser dialog filtered to this device's address.
-  /// Returns the associated device address on success, empty string on failure/cancel.
-  /// On iOS, returns empty string (state restoration handles background reconnection).
   Future<String> requestCompanionDeviceAssociation(String deviceAddress) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1150,7 +1144,6 @@ class BleHostApi {
   }
 }
 
-/// Native → Dart: events pushed from the native BLE module to Flutter.
 abstract class BleFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
@@ -1164,7 +1157,6 @@ abstract class BleFlutterApi {
 
   void onCharacteristicValueUpdated(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
 
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
   void onStateRestored(List<String> peripheralUuids);
 
   static void setUp(BleFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {

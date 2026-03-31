@@ -610,20 +610,8 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
 interface BleHostApi {
   fun startScan(timeoutSeconds: Long, serviceUuids: List<String>)
   fun stopScan()
-  /**
-   * Tell native to keep this device connected. Native owns the full lifecycle:
-   * scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
-   * Fires onDeviceReady when the device is fully ready for characteristic operations.
-   * Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
-   */
   fun manageDevice(uuid: String, requiresBond: Boolean)
-  /** Stop managing a device. Disconnects, cancels retries, and removes from managed set. */
   fun unmanageDevice(uuid: String)
-  /**
-   * Request bonding/pairing for a connected peripheral.
-   * Kept as a Dart-callable fallback; primary bonding now happens natively
-   * when requiresBond=true is passed to manageDevice.
-   */
   fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit)
   fun readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, callback: (Result<ByteArray>) -> Unit)
   fun writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -631,17 +619,9 @@ interface BleHostApi {
   fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
   fun getBluetoothState(): String
   fun isPeripheralConnected(uuid: String): Boolean
-  /**
-   * (Android only) Check if any CompanionDeviceManager association exists.
-   * Returns true on iOS (state restoration handles background reconnection).
-   */
+  /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
-  /**
-   * (Android only) Initiate CompanionDeviceManager association for a device.
-   * Shows the system chooser dialog filtered to this device's address.
-   * Returns the associated device address on success, empty string on failure/cancel.
-   * On iOS, returns empty string (state restoration handles background reconnection).
-   */
+  /** (Android only) Initiate CompanionDeviceManager association for a device. */
   fun requestCompanionDeviceAssociation(deviceAddress: String, callback: (Result<String>) -> Unit)
 
   companion object {
@@ -899,11 +879,7 @@ interface BleHostApi {
     }
   }
 }
-/**
- * Native → Dart: events pushed from the native BLE module to Flutter.
- *
- * Generated class from Pigeon that represents Flutter messages that can be called from Kotlin.
- */
+/** Generated class from Pigeon that represents Flutter messages that can be called from Kotlin. */
 class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val messageChannelSuffix: String = "") {
   companion object {
     /** The codec used by BleFlutterApi. */
@@ -945,11 +921,6 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
       } 
     }
   }
-  /**
-   * Fired when a managed device is fully ready: connected + services discovered +
-   * bonded (if required) + MTU negotiated. Replaces the old separate
-   * onPeripheralConnected + onServicesDiscovered events.
-   */
   fun onDeviceReady(peripheralUuidArg: String, servicesArg: List<BleService>, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
@@ -984,7 +955,6 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
       } 
     }
   }
-  /** Individual characteristic value update (non-audio characteristics). */
   fun onCharacteristicValueUpdated(peripheralUuidArg: String, serviceUuidArg: String, characteristicUuidArg: String, valueArg: ByteArray, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
@@ -1002,7 +972,6 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
       } 
     }
   }
-  /** Called after app relaunch when iOS restores previously-connected peripherals. */
   fun onStateRestored(peripheralUuidsArg: List<String>, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""

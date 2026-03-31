@@ -645,16 +645,8 @@ class WatchRecorderFlutterAPI: WatchRecorderFlutterAPIProtocol {
 protocol BleHostApi {
   func startScan(timeout timeoutSeconds: Int64, serviceUuids: [String]) throws
   func stopScan() throws
-  /// Tell native to keep this device connected. Native owns the full lifecycle:
-  /// scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
-  /// Fires onDeviceReady when the device is fully ready for characteristic operations.
-  /// Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
   func manageDevice(uuid: String, requiresBond: Bool) throws
-  /// Stop managing a device. Disconnects, cancels retries, and removes from managed set.
   func unmanageDevice(uuid: String) throws
-  /// Request bonding/pairing for a connected peripheral.
-  /// Kept as a Dart-callable fallback; primary bonding now happens natively
-  /// when requiresBond=true is passed to manageDevice.
   func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void)
   func readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   func writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void)
@@ -663,12 +655,8 @@ protocol BleHostApi {
   func getBluetoothState() throws -> String
   func isPeripheralConnected(uuid: String) throws -> Bool
   /// (Android only) Check if any CompanionDeviceManager association exists.
-  /// Returns true on iOS (state restoration handles background reconnection).
   func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
-  /// Shows the system chooser dialog filtered to this device's address.
-  /// Returns the associated device address on success, empty string on failure/cancel.
-  /// On iOS, returns empty string (state restoration handles background reconnection).
   func requestCompanionDeviceAssociation(deviceAddress: String, completion: @escaping (Result<String, Error>) -> Void)
 }
 
@@ -707,10 +695,6 @@ class BleHostApiSetup {
     } else {
       stopScanChannel.setMessageHandler(nil)
     }
-    /// Tell native to keep this device connected. Native owns the full lifecycle:
-    /// scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
-    /// Fires onDeviceReady when the device is fully ready for characteristic operations.
-    /// Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
     let manageDeviceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.manageDevice\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       manageDeviceChannel.setMessageHandler { message, reply in
@@ -727,7 +711,6 @@ class BleHostApiSetup {
     } else {
       manageDeviceChannel.setMessageHandler(nil)
     }
-    /// Stop managing a device. Disconnects, cancels retries, and removes from managed set.
     let unmanageDeviceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       unmanageDeviceChannel.setMessageHandler { message, reply in
@@ -743,9 +726,6 @@ class BleHostApiSetup {
     } else {
       unmanageDeviceChannel.setMessageHandler(nil)
     }
-    /// Request bonding/pairing for a connected peripheral.
-    /// Kept as a Dart-callable fallback; primary bonding now happens natively
-    /// when requiresBond=true is passed to manageDevice.
     let requestBondChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       requestBondChannel.setMessageHandler { message, reply in
@@ -865,7 +845,6 @@ class BleHostApiSetup {
       isPeripheralConnectedChannel.setMessageHandler(nil)
     }
     /// (Android only) Check if any CompanionDeviceManager association exists.
-    /// Returns true on iOS (state restoration handles background reconnection).
     let hasCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       hasCompanionDeviceAssociationChannel.setMessageHandler { _, reply in
@@ -880,9 +859,6 @@ class BleHostApiSetup {
       hasCompanionDeviceAssociationChannel.setMessageHandler(nil)
     }
     /// (Android only) Initiate CompanionDeviceManager association for a device.
-    /// Shows the system chooser dialog filtered to this device's address.
-    /// Returns the associated device address on success, empty string on failure/cancel.
-    /// On iOS, returns empty string (state restoration handles background reconnection).
     let requestCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       requestCompanionDeviceAssociationChannel.setMessageHandler { message, reply in
@@ -902,20 +878,13 @@ class BleHostApiSetup {
     }
   }
 }
-/// Native → Dart: events pushed from the native BLE module to Flutter.
-///
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
 protocol BleFlutterApiProtocol {
   func onBluetoothStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDiscovered(peripheral peripheralArg: BlePeripheral, completion: @escaping (Result<Void, PigeonError>) -> Void)
-  /// Fired when a managed device is fully ready: connected + services discovered +
-  /// bonded (if required) + MTU negotiated. Replaces the old separate
-  /// onPeripheralConnected + onServicesDiscovered events.
   func onDeviceReady(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
-  /// Individual characteristic value update (non-audio characteristics).
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class BleFlutterApi: BleFlutterApiProtocol {
@@ -964,9 +933,6 @@ class BleFlutterApi: BleFlutterApiProtocol {
       }
     }
   }
-  /// Fired when a managed device is fully ready: connected + services discovered +
-  /// bonded (if required) + MTU negotiated. Replaces the old separate
-  /// onPeripheralConnected + onServicesDiscovered events.
   func onDeviceReady(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
@@ -1003,7 +969,6 @@ class BleFlutterApi: BleFlutterApiProtocol {
       }
     }
   }
-  /// Individual characteristic value update (non-audio characteristics).
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
@@ -1022,7 +987,6 @@ class BleFlutterApi: BleFlutterApiProtocol {
       }
     }
   }
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
