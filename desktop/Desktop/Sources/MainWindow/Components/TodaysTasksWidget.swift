@@ -26,7 +26,7 @@ struct TasksWidget: View {
             HStack {
                 Text("Tasks")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
             }
 
             if totalTaskCount == 0 {
@@ -37,10 +37,10 @@ struct TasksWidget: View {
                     VStack(spacing: 8) {
                         Image(systemName: "checkmark.circle")
                             .scaledFont(size: 28)
-                            .foregroundColor(OmiColors.textQuaternary)
+                            .foregroundColor(NootoColors.textQuaternary)
                         Text("No incomplete tasks")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Spacer(minLength: 0)
@@ -72,10 +72,10 @@ struct TasksWidget: View {
                             Spacer()
                             Text("View all tasks")
                                 .scaledFont(size: 12, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Image(systemName: "chevron.right")
                                 .scaledFont(size: 10)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                         }
                     }
@@ -91,10 +91,10 @@ struct TasksWidget: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                        .stroke(NootoColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
     }
@@ -121,7 +121,7 @@ struct TaskRowView: View {
             }) {
                 Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
                     .scaledFont(size: 18)
-                    .foregroundColor(task.completed ? OmiColors.textPrimary : OmiColors.textTertiary)
+                    .foregroundColor(task.completed ? NootoColors.textPrimary : NootoColors.textTertiary)
             }
             .buttonStyle(.plain)
             .disabled(isToggling)
@@ -131,26 +131,26 @@ struct TaskRowView: View {
                 HStack(spacing: 6) {
                     Text(task.description)
                         .scaledFont(size: 13)
-                        .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                        .foregroundColor(task.completed ? NootoColors.textTertiary : NootoColors.textPrimary)
                         .strikethrough(task.completed)
                         .lineLimit(2)
 
                     if task.recurrenceRule == "daily" {
                         Image(systemName: "repeat")
                             .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.purplePrimary.opacity(0.7))
+                            .foregroundColor(NootoColors.brandPrimary.opacity(0.7))
                     }
                 }
 
                 if task.recurrenceRule == "daily" {
                     Text("Daily")
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
+                        .foregroundColor(NootoColors.brandPrimary.opacity(0.8))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(OmiColors.purplePrimary.opacity(0.1))
+                                .fill(NootoColors.brandPrimary.opacity(0.1))
                         )
                 }
             }
@@ -161,7 +161,7 @@ struct TaskRowView: View {
         .padding(.horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(task.completed ? OmiColors.backgroundQuaternary.opacity(0.3) : Color.clear)
+                .fill(task.completed ? NootoColors.backgroundQuaternary.opacity(0.3) : Color.clear)
         )
     }
 }
@@ -175,5 +175,5 @@ struct TaskRowView: View {
     )
     .frame(width: 350)
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
