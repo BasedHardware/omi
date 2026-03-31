@@ -1,4 +1,3 @@
-import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -60,7 +59,7 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: str = 
             'cancellation_feedback': {
                 'reason': reason,
                 'reason_details': reason_details,
-                'timestamp': time.time(),
+                'timestamp': datetime.now(timezone.utc),
             }
         },
         merge=True,
