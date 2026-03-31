@@ -21,7 +21,7 @@ struct AppIconView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .task {
@@ -148,5 +148,5 @@ actor AppIconCache {
         AppIconView(appName: "Terminal", size: 32)
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
