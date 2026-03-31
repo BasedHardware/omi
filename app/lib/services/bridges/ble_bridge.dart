@@ -6,7 +6,7 @@ import 'package:omi/utils/logger.dart';
 /// Callback signature for characteristic value updates.
 typedef CharacteristicValueCallback = void Function(String serviceUuid, String characteristicUuid, Uint8List value);
 
-/// Callback signature for connection state changes (disconnection only in new model).
+/// Callback signature for connection state changes
 typedef ConnectionStateCallback = void Function(bool connected, String? error);
 
 /// Callback signature for device ready (connected + services + bonded + MTU done).

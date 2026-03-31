@@ -61,11 +61,10 @@ class OmiBleManager private constructor(private val application: Application) {
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
-    // ── Listener for the foreground service (single connection owner) ──
+    // ── Listener for the foreground service ──
 
     interface BleConnectionListener {
         fun onGattConnected(address: String, gatt: BluetoothGatt)
-        /** @param gattHash hashCode of the GATT object that disconnected (for stale callback rejection) */
         fun onGattDisconnected(address: String, gattHash: Int, status: Int)
         fun onGattServicesDiscovered(address: String, services: List<BleService>)
         fun onMtuChanged(address: String, mtu: Int, status: Int)
@@ -225,21 +224,17 @@ class OmiBleManager private constructor(private val application: Application) {
         scanCallback = null
     }
 
-    // ── GATT connection methods (called by foreground service) ──
+    // ── GATT connection methods ──
 
     fun connectGatt(address: String, autoConnect: Boolean): BluetoothGatt? {
         val addr = address.uppercase()
         val adapter = bluetoothAdapter ?: return null
         // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
-        // After BT toggle, Android clears the BLE cache for unbonded devices and defaults to
-        // PUBLIC address type. Omi uses a static random address — wrong type = silent failure.
         val device = if (android.os.Build.VERSION.SDK_INT >= 34) {
             adapter.getRemoteLeDevice(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM)
         } else {
             adapter.getRemoteDevice(addr)
         }
-        // Create a fresh callback per connection attempt. Reusing a singleton callback
-        // across close+reopen can cause the BLE stack to not fire onConnectionStateChange.
         val callback = createGattCallback()
         val gatt = device.connectGatt(application, autoConnect, callback, BluetoothDevice.TRANSPORT_LE)
         if (gatt != null) {
@@ -441,8 +436,6 @@ class OmiBleManager private constructor(private val application: Application) {
     @Synchronized
     private fun processNextCommand() {
         if (isProcessingCommand) return
-        // peek() to look without removing. Command stays in queue until
-        // completeCommand() calls poll(). Prevents command loss if execution throws.
         val cmd = gattQueue.peek() ?: return
         isProcessingCommand = true
         try {
@@ -486,7 +479,7 @@ class OmiBleManager private constructor(private val application: Application) {
         isProcessingCommand = false
     }
 
-    // ── GATT callback factory — creates a fresh callback per connection ──
+    // ── GATT callback factory ──
 
     private fun createGattCallback() = object : BluetoothGattCallback() {
 
@@ -499,7 +492,7 @@ class OmiBleManager private constructor(private val application: Application) {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
 
-                    // Discover services (enqueued — one GATT op at a time)
+                    // Discover services
                     enqueueCommand {
                         if (!gatt.discoverServices()) {
                             Log.e(TAG, "discoverServices returned false for $address")
@@ -568,7 +561,6 @@ class OmiBleManager private constructor(private val application: Application) {
 
             completeCommand()
 
-            // Notify the connection owner (foreground service handles MTU, bonding, then onDeviceReady)
             connectionListener?.onGattServicesDiscovered(address, bleServices)
         }
 

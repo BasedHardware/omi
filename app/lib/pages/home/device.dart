@@ -330,13 +330,13 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 } catch (_) {}
               }
 
-              if (context.mounted) {
+              if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
                 await context.read<DeviceProvider>().setConnectedDevice(null);
                 context.read<DeviceProvider>().updateConnectingStatus(false);
               }
-              // Pop AFTER notifyListeners has fired so the home page rebuilds correctly
-              if (context.mounted) {
+
+              if (mounted) {
                 Navigator.of(context).pop();
               }
               MixpanelManager().disconnectFriendClicked();

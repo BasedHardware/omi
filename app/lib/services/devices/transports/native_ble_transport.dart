@@ -3,14 +3,13 @@ import 'dart:typed_data';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 /// BLE transport backed by native platform APIs via Pigeon.
 /// Uses the intent-based manageDevice/unmanageDevice API.
 /// Native owns the connection lifecycle (retry, reconnect, bonding).
-/// This transport is long-lived — not recreated on reconnection.
+/// This transport is long-lived
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final bool requiresBond;
@@ -24,7 +23,6 @@ class NativeBleTransport extends DeviceTransport {
   /// Discovered services from native.
   List<BleService> _services = [];
 
-  /// Completer for initial connect — resolved when onDeviceReady fires.
   Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
@@ -63,9 +61,6 @@ class NativeBleTransport extends DeviceTransport {
       rethrow;
     }
 
-    // Wait for onDeviceReady from native (generous timeout — native owns retry).
-    // No "already connected" fast-path needed: Omi uses START_NOT_STICKY, so the
-    // service stops when the app dies. Device is never connected when app reopens.
     try {
       _services = await _deviceReadyCompleter!.future.timeout(
         const Duration(seconds: 60),
@@ -127,8 +122,6 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
-  /// Request bonding — kept as a Dart-callable fallback.
-  /// Primary bonding now happens natively when requiresBond=true.
   @override
   Future<bool> requestBond() async {
     try {
@@ -238,8 +231,6 @@ class NativeBleTransport extends DeviceTransport {
   final Set<String> _activeSubscriptionKeys = {};
 
   void _handleConnectionState(bool connected, String? error) {
-    // In the new model, connected=true is signaled by onDeviceReady, not here.
-    // This callback only handles disconnection.
     if (!connected) {
       // Remember active subscriptions before closing streams
       _activeSubscriptionKeys.clear();

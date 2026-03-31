@@ -17,8 +17,6 @@ final class BleHostApiImpl: BleHostApi {
     }
 
     func manageDevice(uuid: String, requiresBond: Bool) throws {
-        // On iOS, manageDevice maps to connectPeripheral with auto-reconnect.
-        // CoreBluetooth handles reconnection natively via state restoration.
         bleManager.connectPeripheral(uuid: uuid)
     }
 

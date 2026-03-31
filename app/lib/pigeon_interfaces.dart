@@ -90,29 +90,18 @@ class BleService {
 /// Dart → Native: commands sent from Flutter to the native BLE module.
 @HostApi()
 abstract class BleHostApi {
-  // Scanning
   @SwiftFunction('startScan(timeout:serviceUuids:)')
   void startScan(int timeoutSeconds, List<String> serviceUuids);
 
   @SwiftFunction('stopScan()')
   void stopScan();
 
-  // Connection lifecycle (intent-based)
-
-  /// Tell native to keep this device connected. Native owns the full lifecycle:
-  /// scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
-  /// Fires onDeviceReady when the device is fully ready for characteristic operations.
-  /// Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
   @SwiftFunction('manageDevice(uuid:requiresBond:)')
   void manageDevice(String uuid, bool requiresBond);
 
-  /// Stop managing a device. Disconnects, cancels retries, and removes from managed set.
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
 
-  /// Request bonding/pairing for a connected peripheral.
-  /// Kept as a Dart-callable fallback; primary bonding now happens natively
-  /// when requiresBond=true is passed to manageDevice.
   @async
   @SwiftFunction('requestBond(uuid:)')
   bool requestBond(String uuid);
@@ -140,34 +129,25 @@ abstract class BleHostApi {
   bool isPeripheralConnected(String uuid);
 
   /// (Android only) Check if any CompanionDeviceManager association exists.
-  /// Returns true on iOS (state restoration handles background reconnection).
   @SwiftFunction('hasCompanionDeviceAssociation()')
   bool hasCompanionDeviceAssociation();
 
   /// (Android only) Initiate CompanionDeviceManager association for a device.
-  /// Shows the system chooser dialog filtered to this device's address.
-  /// Returns the associated device address on success, empty string on failure/cancel.
-  /// On iOS, returns empty string (state restoration handles background reconnection).
   @async
   @SwiftFunction('requestCompanionDeviceAssociation(deviceAddress:)')
   String requestCompanionDeviceAssociation(String deviceAddress);
 }
 
-/// Native → Dart: events pushed from the native BLE module to Flutter.
 @FlutterApi()
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
-  /// Fired when a managed device is fully ready: connected + services discovered +
-  /// bonded (if required) + MTU negotiated. Replaces the old separate
-  /// onPeripheralConnected + onServicesDiscovered events.
   void onDeviceReady(String peripheralUuid, List<BleService> services);
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
 
-  /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(
     String peripheralUuid,
     String serviceUuid,
@@ -175,6 +155,5 @@ abstract class BleFlutterApi {
     Uint8List value,
   );
 
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
   void onStateRestored(List<String> peripheralUuids);
 }

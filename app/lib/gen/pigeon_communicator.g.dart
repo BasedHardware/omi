@@ -858,10 +858,6 @@ class BleHostApi {
     }
   }
 
-  /// Tell native to keep this device connected. Native owns the full lifecycle:
-  /// scan → connect (autoConnect=true) → discover services → bond (if requiresBond) → MTU.
-  /// Fires onDeviceReady when the device is fully ready for characteristic operations.
-  /// Idempotent: calling again for an already-managed device triggers reconnection if disconnected.
   Future<void> manageDevice(String uuid, bool requiresBond) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.manageDevice$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -910,8 +906,6 @@ class BleHostApi {
   }
 
   /// Request bonding/pairing for a connected peripheral.
-  /// Kept as a Dart-callable fallback; primary bonding now happens natively
-  /// when requiresBond=true is passed to manageDevice.
   Future<bool> requestBond(String uuid) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1164,14 +1158,10 @@ abstract class BleFlutterApi {
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
-  /// Fired when a managed device is fully ready: connected + services discovered +
-  /// bonded (if required) + MTU negotiated. Replaces the old separate
-  /// onPeripheralConnected + onServicesDiscovered events.
   void onDeviceReady(String peripheralUuid, List<BleService> services);
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
 
-  /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
 
   /// Called after app relaunch when iOS restores previously-connected peripherals.

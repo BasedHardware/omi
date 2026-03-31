@@ -651,7 +651,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
       case DeviceConnectionState.connecting:
-        // Native is handling connection — no action needed from Dart
         break;
       case DeviceConnectionState.disconnected:
         _connectDebouncer.cancel();

@@ -330,8 +330,6 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
         peripheral.delegate = self
-        // Don't notify Dart yet — wait for service discovery to complete,
-        // then fire onDeviceReady with services.
         peripheral.discoverServices(nil)
     }
 
@@ -389,7 +387,7 @@ extension OmiBleManager: CBPeripheralDelegate {
                     characteristicUuids: svc.characteristics?.map { self.fullUuidString($0.uuid) } ?? []
                 )
             }
-            // iOS handles bonding automatically — fire onDeviceReady directly
+            
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             startRssiKeepAlive(for: peripheral)
         }

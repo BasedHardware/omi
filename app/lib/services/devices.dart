@@ -34,7 +34,6 @@ abstract class IDeviceService {
   Future<void> disconnectDevice();
 
   /// Fully tear down connection + transport for a device being forgotten/unpaired.
-  /// Works regardless of connection state (even if device is already off).
   Future<void> forgetDevice(String deviceId);
 }
 
@@ -294,7 +293,6 @@ class DeviceService implements IDeviceService {
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     if (_connection != null) {
-      // Disconnect if connected
       if (_connection!.status == DeviceConnectionState.connected) {
         try {
           await _connection!.disconnect();
@@ -302,7 +300,7 @@ class DeviceService implements IDeviceService {
           Logger.debug("DeviceService: disconnect during forget failed: $e");
         }
       }
-      // Dispose the transport (unregisters from BleBridge)
+
       try {
         await _connection!.transport.dispose();
       } catch (e) {
@@ -310,7 +308,7 @@ class DeviceService implements IDeviceService {
       }
       _connection = null;
     }
-    // Remove from discovered devices list
+
     _devices.removeWhere((d) => d.id == deviceId);
   }
 }
