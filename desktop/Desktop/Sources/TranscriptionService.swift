@@ -356,6 +356,34 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         return withState { _connectionState == .connected }
     }
 
+    // MARK: - Test accessors (internal for @testable import)
+
+    /// Current connection state (read-only, for testing)
+    var testConnectionState: ConnectionState {
+        withState { _connectionState }
+    }
+
+    /// Current generation token (read-only, for testing)
+    var testConnectionGeneration: UInt64 {
+        withState { _connectionGeneration }
+    }
+
+    /// Directly set state for testing state machine behavior.
+    /// Only callable from tests via @testable import.
+    func testSetState(_ state: ConnectionState) {
+        withState { _connectionState = state }
+    }
+
+    /// Expose handleDisconnection for idempotency testing
+    func testHandleDisconnection() {
+        handleDisconnection()
+    }
+
+    /// Expose shouldReconnect setter for testing
+    func testSetShouldReconnect(_ value: Bool) {
+        withState { _shouldReconnect = value }
+    }
+
     /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
     /// Exposed as static for testability.
     static func reconnectDelay(
