@@ -1,5 +1,5 @@
 [package]
-name = "omi-desktop-backend"
+name = "nooto-desktop-backend"
 version = "0.1.0"
 edition = "2021"
 
