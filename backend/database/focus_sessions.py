@@ -69,6 +69,7 @@ def get_focus_stats(uid: str, date: str = None) -> dict:
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
+    total_distracted_seconds = 0
     distractions = {}
 
     for s in sessions:
@@ -77,14 +78,22 @@ def get_focus_stats(uid: str, date: str = None) -> dict:
             total_focus_seconds += s.get('duration_seconds') or 0
         elif s.get('status') == 'distracted':
             distracted_count += 1
+            total_distracted_seconds += s.get('duration_seconds') or 60
             app = s.get('app_or_site', 'Unknown')
-            entry = distractions.setdefault(app, {'duration_seconds': 0, 'count': 0})
-            entry['duration_seconds'] += s.get('duration_seconds') or 60
+            entry = distractions.setdefault(app, {'total_seconds': 0, 'count': 0})
+            entry['total_seconds'] += s.get('duration_seconds') or 60
             entry['count'] += 1
 
+    top = sorted(distractions.items(), key=lambda x: x[1]['total_seconds'], reverse=True)[:5]
+
     return {
+        'date': date or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        'focused_minutes': total_focus_seconds // 60,
+        'distracted_minutes': total_distracted_seconds // 60,
+        'session_count': focused_count + distracted_count,
         'focused_count': focused_count,
         'distracted_count': distracted_count,
-        'total_focus_seconds': total_focus_seconds,
-        'top_distractions': sorted(distractions.items(), key=lambda x: x[1]['duration_seconds'], reverse=True)[:5],
+        'top_distractions': [
+            {'app_or_site': app, 'total_seconds': v['total_seconds'], 'count': v['count']} for app, v in top
+        ],
     }
