@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.201",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state"
+      ]
+    },
     {
       "version": "0.11.200",
       "date": "2026-03-31",
