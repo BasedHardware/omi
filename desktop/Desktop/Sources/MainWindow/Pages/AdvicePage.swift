@@ -127,20 +127,20 @@ struct AdvicePage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Advice")
                     .scaledFont(size: 24, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 8) {
                     Text("\(viewModel.totalCount) tips")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     if viewModel.unreadCount > 0 {
                         Text("\(viewModel.unreadCount) new")
                             .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(OmiColors.textPrimary.opacity(0.15))
+                            .background(NootoColors.textPrimary.opacity(0.15))
                             .cornerRadius(4)
                     }
                 }
@@ -159,7 +159,7 @@ struct AdvicePage: View {
                             Text("Mark All Read")
                         }
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -178,7 +178,7 @@ struct AdvicePage: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .scaledFont(size: 18)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
                 .menuStyle(.borderlessButton)
             }
@@ -195,25 +195,25 @@ struct AdvicePage: View {
             // Search field
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 TextField("Search advice...", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !viewModel.searchText.isEmpty {
                     Button {
                         viewModel.searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(8)
 
             // Category tabs
@@ -250,19 +250,19 @@ struct AdvicePage: View {
                 if count > 0 {
                     Text("\(count)")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+                        .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textTertiary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(isSelected ? OmiColors.textPrimary.opacity(0.15) : OmiColors.textTertiary.opacity(0.1))
+                                .fill(isSelected ? NootoColors.textPrimary.opacity(0.15) : NootoColors.textTertiary.opacity(0.1))
                         )
                 }
             }
-            .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(isSelected ? OmiColors.textPrimary.opacity(0.15) : Color.clear)
+            .background(isSelected ? NootoColors.textPrimary.opacity(0.15) : Color.clear)
             .cornerRadius(6)
         }
         .buttonStyle(.plain)
@@ -300,15 +300,15 @@ struct AdvicePage: View {
         VStack(spacing: 16) {
             Image(systemName: "lightbulb.fill")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Advice Yet")
                 .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Proactive advice from your AI assistant will appear here.\nMake sure the Advice Assistant is enabled in Settings.")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -319,7 +319,7 @@ struct AdvicePage: View {
                 Text("Go to Settings > Proactive Assistants to configure")
                     .scaledFont(size: 13)
             }
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -329,15 +329,15 @@ struct AdvicePage: View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .scaledFont(size: 36)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Results")
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Try a different search or filter")
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             if viewModel.selectedCategory != nil || !viewModel.searchText.isEmpty {
                 Button("Clear Filters") {
@@ -345,7 +345,7 @@ struct AdvicePage: View {
                     viewModel.searchText = ""
                 }
                 .buttonStyle(.bordered)
-                .tint(OmiColors.textSecondary)
+                .tint(NootoColors.textSecondary)
                 .padding(.top, 8)
             }
         }
@@ -377,7 +377,7 @@ struct AdvicePage: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 20)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -385,7 +385,7 @@ struct AdvicePage: View {
             // Main advice
             Text(advice.advice.advice)
                 .scaledFont(size: 18, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -394,17 +394,17 @@ struct AdvicePage: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Why this advice?")
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .textCase(.uppercase)
 
                     Text(reasoning)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(8)
             }
 
@@ -412,49 +412,49 @@ struct AdvicePage: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Context")
                     .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .textCase(.uppercase)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "app.fill")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.advice.sourceApp)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .textSelection(.enabled)
                     }
 
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "figure.walk")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.currentActivity)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .textSelection(.enabled)
                     }
 
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "doc.text")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.contextSummary)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .textSelection(.enabled)
                     }
                 }
             }
             .padding(12)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
             .cornerRadius(8)
 
             // Footer
@@ -466,25 +466,25 @@ struct AdvicePage: View {
                     Text("\(Int(advice.advice.confidence * 100))% confidence")
                         .scaledFont(size: 12)
                 }
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
                 Spacer()
 
                 // Date
                 Text(formatDate(advice.createdAt))
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(24)
         .frame(width: 450)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - Helpers
 
     private func categoryColor(_ category: AdviceCategory) -> Color {
-        return OmiColors.textSecondary
+        return NootoColors.textSecondary
     }
 
     private func formatDate(_ date: Date) -> String {
@@ -506,7 +506,7 @@ struct AdviceCard: View {
     @State private var showDeleteConfirmation = false
 
     private var categoryColor: Color {
-        return OmiColors.textSecondary
+        return NootoColors.textSecondary
     }
 
     var body: some View {
@@ -529,13 +529,13 @@ struct AdviceCard: View {
                         // Unread indicator
                         if !advice.isRead {
                             Circle()
-                                .fill(OmiColors.textPrimary)
+                                .fill(NootoColors.textPrimary)
                                 .frame(width: 8, height: 8)
                         }
 
                         Text(advice.advice.advice)
                             .scaledFont(size: 14, weight: advice.isRead ? .regular : .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
 
@@ -550,7 +550,7 @@ struct AdviceCard: View {
                             Text(advice.advice.sourceApp)
                                 .scaledFont(size: 11)
                         }
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                         // Confidence
                         HStack(spacing: 4) {
@@ -559,14 +559,14 @@ struct AdviceCard: View {
                             Text("\(Int(advice.advice.confidence * 100))%")
                                 .scaledFont(size: 11)
                         }
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                         Spacer()
 
                         // Date
                         Text(formatDate(advice.createdAt))
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 }
 
@@ -578,7 +578,7 @@ struct AdviceCard: View {
                         } label: {
                             Image(systemName: "eye.slash")
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                         .help("Dismiss")
@@ -588,7 +588,7 @@ struct AdviceCard: View {
                         } label: {
                             Image(systemName: "trash")
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                         .help("Delete")
@@ -599,12 +599,12 @@ struct AdviceCard: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundTertiary.opacity(0.6))
+                    .fill(isHovering ? NootoColors.backgroundTertiary : NootoColors.backgroundTertiary.opacity(0.6))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(
-                        advice.isDismissed ? OmiColors.textTertiary.opacity(0.3) : Color.clear,
+                        advice.isDismissed ? NootoColors.textTertiary.opacity(0.3) : Color.clear,
                         lineWidth: 1
                     )
             )
@@ -643,5 +643,5 @@ struct AdviceCard: View {
 #Preview {
     AdvicePage()
         .frame(width: 800, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }
