@@ -47,7 +47,7 @@ struct AskAIInputView: View {
                             .padding(.vertical, 8)
                     }
 
-                    OmiTextEditor(
+                    NootoTextEditor(
                         text: $localInput,
                         lineFragmentPadding: 8,
                         onSubmit: {
