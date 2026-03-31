@@ -109,7 +109,7 @@ struct AIResponseView: View {
                     .scaledFont(size: 14)
                     .foregroundColor(.secondary)
             } else {
-                Text("omi says")
+                Text("nooto says")
                     .scaledFont(size: 14)
                     .foregroundColor(.secondary)
             }
