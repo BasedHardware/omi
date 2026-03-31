@@ -104,15 +104,15 @@ struct ConversationDetailView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "doc.text")
                                 .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                             Text("Conversation Details")
                                 .scaledFont(size: 13, weight: .medium)
-                                .foregroundColor(OmiColors.textSecondary)
+                                .foregroundColor(NootoColors.textSecondary)
                             Spacer()
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(OmiColors.backgroundTertiary.opacity(0.4))
+                        .background(NootoColors.backgroundTertiary.opacity(0.4))
 
                         VStack(alignment: .leading, spacing: 24) {
                             summaryContent
@@ -121,12 +121,12 @@ struct ConversationDetailView: View {
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(OmiColors.backgroundSecondary.opacity(0.6))
+                            .fill(NootoColors.backgroundSecondary.opacity(0.6))
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
+                            .stroke(NootoColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
                     )
                     .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 8)
                     .padding(24)
@@ -137,7 +137,7 @@ struct ConversationDetailView: View {
             // Transcript drawer (slides in from right)
             if showTranscriptDrawer {
                 Rectangle()
-                    .fill(OmiColors.border)
+                    .fill(NootoColors.border)
                     .frame(width: 1)
 
                 transcriptDrawerView
@@ -258,7 +258,7 @@ struct ConversationDetailView: View {
                     Text("Back")
                         .scaledFont(size: 14, weight: .medium)
                 }
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(NootoColors.brandPrimary)
             }
             .buttonStyle(.plain)
 
@@ -271,7 +271,7 @@ struct ConversationDetailView: View {
                 HStack(spacing: 8) {
                     Text(displayConversation.title)
                         .scaledFont(size: 18, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     // Edit title button (inline with title)
@@ -281,7 +281,7 @@ struct ConversationDetailView: View {
                     }) {
                         Image(systemName: "pencil")
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                     .help("Edit title")
@@ -289,7 +289,7 @@ struct ConversationDetailView: View {
 
                 Text(formattedTimeRange)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Spacer()
@@ -307,7 +307,7 @@ struct ConversationDetailView: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .background(NootoColors.backgroundTertiary.opacity(0.5))
         .alert("Edit Conversation Title", isPresented: $showEditDialog) {
             TextField("Title", text: $editedTitle)
             Button("Cancel", role: .cancel) { }
@@ -342,12 +342,12 @@ struct ConversationDetailView: View {
                 Text(showTranscriptDrawer ? "Hide Transcript" : "View Transcript")
                     .scaledFont(size: 12, weight: .medium)
             }
-            .foregroundColor(showTranscriptDrawer ? .white : OmiColors.textSecondary)
+            .foregroundColor(showTranscriptDrawer ? .white : NootoColors.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(showTranscriptDrawer ? OmiColors.purplePrimary : OmiColors.backgroundTertiary)
+                    .fill(showTranscriptDrawer ? NootoColors.brandPrimary : NootoColors.backgroundTertiary)
             )
         }
         .buttonStyle(.plain)
@@ -361,11 +361,11 @@ struct ConversationDetailView: View {
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     )
             }
             .buttonStyle(.plain)
@@ -376,11 +376,11 @@ struct ConversationDetailView: View {
             Button(action: copyTranscript) {
                 Image(systemName: "doc.on.doc")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     )
             }
             .buttonStyle(.plain)
@@ -414,11 +414,11 @@ struct ConversationDetailView: View {
                 } label: {
                     Image(systemName: displayConversation.folderId != nil ? "folder.fill" : "folder")
                         .scaledFont(size: 14)
-                        .foregroundColor(displayConversation.folderId != nil ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                        .foregroundColor(displayConversation.folderId != nil ? NootoColors.brandPrimary : NootoColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
                             Circle()
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         )
                 }
                 .menuStyle(.borderlessButton)
@@ -430,11 +430,11 @@ struct ConversationDetailView: View {
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.error)
+                    .foregroundColor(NootoColors.error)
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     )
             }
             .buttonStyle(.plain)
@@ -520,13 +520,13 @@ struct ConversationDetailView: View {
     private var statusColor: Color {
         switch displayConversation.status {
         case .completed:
-            return OmiColors.success
+            return NootoColors.success
         case .processing, .merging:
-            return OmiColors.info
+            return NootoColors.info
         case .inProgress:
-            return OmiColors.warning
+            return NootoColors.warning
         case .failed:
-            return OmiColors.error
+            return NootoColors.error
         }
     }
 
@@ -565,21 +565,21 @@ struct ConversationDetailView: View {
             HStack(spacing: 10) {
                 Image(systemName: "text.quote")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Transcript")
                     .scaledFont(size: 15, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 // Segment count badge
                 Text("\(displayConversation.transcriptSegments.count)")
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(
                         Capsule()
-                            .fill(OmiColors.purplePrimary.opacity(0.15))
+                            .fill(NootoColors.brandPrimary.opacity(0.15))
                     )
 
                 Spacer()
@@ -588,11 +588,11 @@ struct ConversationDetailView: View {
                 Button(action: copyTranscript) {
                     Image(systemName: "doc.on.doc")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
                             Circle()
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -606,11 +606,11 @@ struct ConversationDetailView: View {
                 }) {
                     Image(systemName: "xmark")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
                             Circle()
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         )
                 }
                 .buttonStyle(.plain)
@@ -618,7 +618,7 @@ struct ConversationDetailView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(NootoColors.backgroundTertiary.opacity(0.5))
 
             // Drawer content
             if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
@@ -626,11 +626,11 @@ struct ConversationDetailView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "text.quote")
                         .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.5))
 
                     Text("No transcript available")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if isLoadingConversation {
@@ -641,7 +641,7 @@ struct ConversationDetailView: View {
 
                     Text("Loading transcript...")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -655,7 +655,7 @@ struct ConversationDetailView: View {
                 }
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     // MARK: - Transcript Bubbles (shared)
@@ -690,7 +690,7 @@ struct ConversationDetailView: View {
 
                 Text("Summary")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
 
             SelectableMarkdown(text: displayConversation.overview, sender: .ai)
@@ -745,17 +745,17 @@ struct ConversationDetailView: View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text(text)
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(OmiColors.backgroundTertiary)
+                .fill(NootoColors.backgroundTertiary)
         )
     }
 
@@ -766,7 +766,7 @@ struct ConversationDetailView: View {
             HStack {
                 Text("App Insights")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
 
@@ -777,7 +777,7 @@ struct ConversationDetailView: View {
                         Text("Reprocess")
                             .scaledFont(size: 12)
                     }
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(isReprocessing)
@@ -799,7 +799,7 @@ struct ConversationDetailView: View {
             HStack {
                 Text("Try with Apps")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
             }
@@ -812,12 +812,12 @@ struct ConversationDetailView: View {
             if memoryApps.isEmpty && !appProvider.isLoading {
                 Text("Enable apps with memory capability to get additional insights")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(OmiColors.backgroundSecondary)
+                            .fill(NootoColors.backgroundSecondary)
                     )
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -871,21 +871,21 @@ struct ConversationDetailView: View {
             HStack(spacing: 8) {
                 Image(systemName: "checklist")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 Text("Action Items")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
 
                 // Count badge
                 Text("\(activeItems.count)")
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(
                         Capsule()
-                            .fill(OmiColors.purplePrimary.opacity(0.15))
+                            .fill(NootoColors.brandPrimary.opacity(0.15))
                     )
 
                 Spacer()
@@ -896,23 +896,23 @@ struct ConversationDetailView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
                             .scaledFont(size: 16)
-                            .foregroundColor(item.completed ? OmiColors.success : OmiColors.textTertiary)
+                            .foregroundColor(item.completed ? NootoColors.success : NootoColors.textTertiary)
 
                         Text(item.description)
                             .scaledFont(size: 14)
-                            .foregroundColor(item.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(item.completed ? NootoColors.textTertiary : NootoColors.textPrimary)
                             .textSelection(.enabled)
-                            .strikethrough(item.completed, color: OmiColors.textTertiary)
+                            .strikethrough(item.completed, color: NootoColors.textTertiary)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
+                            .stroke(NootoColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
                     )
                 }
             }
@@ -926,7 +926,7 @@ struct ConversationDetailView: View {
         onBack: { }
     )
     .frame(width: 600, height: 800)
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
 
 // Preview helper
@@ -959,7 +959,7 @@ struct AppResultCard: View {
                                 .aspectRatio(contentMode: .fill)
                         default:
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 32, height: 32)
@@ -968,23 +968,23 @@ struct AppResultCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(app.name)
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Text(app.author)
                             .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "app.fill")
                         .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     Text("App")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                 }
 
                 Spacer()
@@ -992,7 +992,7 @@ struct AppResultCard: View {
                 Button(action: { withAnimation { isExpanded.toggle() } }) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -1001,13 +1001,13 @@ struct AppResultCard: View {
             if isExpanded || result.content.count < 200 {
                 Text(result.content)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .textSelection(.enabled)
                     .lineSpacing(4)
             } else {
                 Text(result.content.prefix(200) + "...")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .textSelection(.enabled)
                     .lineSpacing(4)
             }
@@ -1023,7 +1023,7 @@ struct AppResultCard: View {
                                 .aspectRatio(contentMode: .fill)
                         default:
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 16, height: 16)
@@ -1031,20 +1031,20 @@ struct AppResultCard: View {
 
                     Text("Generated by \(app.name)")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(
                     Capsule()
-                        .fill(OmiColors.backgroundTertiary.opacity(0.6))
+                        .fill(NootoColors.backgroundTertiary.opacity(0.6))
                 )
             }
         }
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
         )
     }
 }
@@ -1070,7 +1070,7 @@ struct SuggestedAppCard: View {
                                 .aspectRatio(contentMode: .fill)
                         default:
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(OmiColors.backgroundTertiary)
+                                .fill(NootoColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 56, height: 56)
@@ -1089,7 +1089,7 @@ struct SuggestedAppCard: View {
 
                 Text(app.name)
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .lineLimit(1)
             }
             .frame(width: 80)
@@ -1097,7 +1097,7 @@ struct SuggestedAppCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+                    .fill(isHovering ? NootoColors.backgroundTertiary : NootoColors.backgroundSecondary)
             )
         }
         .buttonStyle(.plain)
@@ -1122,36 +1122,36 @@ struct AppSelectorSheet: View {
             HStack {
                 Text("Select App")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 20)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
             .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Apps list
             if apps.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "square.grid.2x2")
                         .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("No Apps Available")
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
 
                     Text("Enable apps with memory capability to reprocess conversations")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1176,7 +1176,7 @@ struct AppSelectorSheet: View {
             }
         }
         .frame(width: 320, height: 400)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 }
 
@@ -1199,7 +1199,7 @@ struct AppSelectorRow: View {
                             .aspectRatio(contentMode: .fill)
                     default:
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(OmiColors.backgroundTertiary)
+                            .fill(NootoColors.backgroundTertiary)
                     }
                 }
                 .frame(width: 44, height: 44)
@@ -1208,11 +1208,11 @@ struct AppSelectorRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.name)
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
 
                     Text(app.author)
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -1223,14 +1223,14 @@ struct AppSelectorRow: View {
                 } else if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .scaledFont(size: 18)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(NootoColors.brandPrimary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected || isHovering ? OmiColors.backgroundTertiary : Color.clear)
+                    .fill(isSelected || isHovering ? NootoColors.backgroundTertiary : Color.clear)
             )
         }
         .buttonStyle(.plain)
