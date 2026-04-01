@@ -1,5 +1,68 @@
 import SwiftUI
 import Combine
+import CoreText
+
+// MARK: - Inter Font Registration
+
+/// Registers the Inter variable font from the app bundle at launch.
+/// Call `InterFont.register()` once from app startup.
+enum InterFont {
+    static var isRegistered = false
+
+    static func register() {
+        guard !isRegistered else { return }
+        isRegistered = true
+
+        let fontNames = ["InterVariable", "InterVariable-Italic"]
+        for name in fontNames {
+            guard let url = Bundle.resourceBundle.url(forResource: name, withExtension: "ttf") else {
+                print("[Font] \(name).ttf not found in resource bundle")
+                continue
+            }
+            var error: Unmanaged<CFError>?
+            if CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
+                print("[Font] Registered \(name)")
+            } else {
+                print("[Font] Failed to register \(name): \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
+            }
+        }
+    }
+
+    /// Create an Inter font with the given size and weight.
+    /// Falls back to system font if Inter is not available.
+    static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let nsFont = nsFont(size: size, weight: weight)
+        return Font(nsFont)
+    }
+
+    /// NSFont variant for AppKit contexts (NootoTextEditor, etc.)
+    static func nsFont(size: CGFloat, weight: Font.Weight = .regular) -> NSFont {
+        // Inter variable font uses weight axis
+        let traits: [NSFontDescriptor.TraitKey: Any] = [
+            .weight: nsFontWeight(from: weight)
+        ]
+        let descriptor = NSFontDescriptor(fontAttributes: [
+            .family: "Inter",
+            .traits: traits
+        ])
+        return NSFont(descriptor: descriptor, size: size) ?? NSFont.systemFont(ofSize: size, weight: nsFontWeight(from: weight))
+    }
+
+    private static func nsFontWeight(from weight: Font.Weight) -> NSFont.Weight {
+        switch weight {
+        case .ultraLight: return .ultraLight
+        case .thin: return .thin
+        case .light: return .light
+        case .regular: return .regular
+        case .medium: return .medium
+        case .semibold: return .semibold
+        case .bold: return .bold
+        case .heavy: return .heavy
+        case .black: return .black
+        default: return .regular
+        }
+    }
+}
 
 // MARK: - Font Scale Settings
 
@@ -35,7 +98,7 @@ extension EnvironmentValues {
     }
 }
 
-// MARK: - Scaled Font Modifier
+// MARK: - Scaled Font Modifier (uses Inter)
 
 struct ScaledFontModifier: ViewModifier {
     @Environment(\.fontScale) private var fontScale
@@ -44,7 +107,12 @@ struct ScaledFontModifier: ViewModifier {
     var design: Font.Design = .default
 
     func body(content: Content) -> some View {
-        content.font(.system(size: round(size * fontScale), weight: weight, design: design))
+        let scaledSize = round(size * fontScale)
+        if design == .monospaced {
+            content.font(.system(size: scaledSize, weight: weight, design: .monospaced))
+        } else {
+            content.font(InterFont.font(size: scaledSize, weight: weight))
+        }
     }
 }
 
@@ -62,7 +130,7 @@ struct ScaledMonospacedDigitFontModifier: ViewModifier {
     var weight: Font.Weight = .regular
 
     func body(content: Content) -> some View {
-        content.font(.system(size: round(size * fontScale), weight: weight).monospacedDigit())
+        content.font(InterFont.font(size: round(size * fontScale), weight: weight))
     }
 }
 
