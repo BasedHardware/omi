@@ -43,14 +43,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
-    // Limitless requires an encrypted link — bond before accessing characteristics
-    final bonded = await transport.requestBond();
-    if (!bonded) {
-      Logger.debug('Limitless: bonding failed — encrypted characteristics may not work');
-    }
-
-    await Future.delayed(const Duration(seconds: 1));
-
     _rxSubscription =
         transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
 

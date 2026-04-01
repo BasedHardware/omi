@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -21,6 +22,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   bool _locationGranted = false;
   bool _microphoneGranted = false;
   bool _bluetoothGranted = false;
+  bool _backgroundGranted = false;
 
   @override
   void initState() {
@@ -55,12 +57,18 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
       bluetooth = scan && connect;
     }
 
+    bool background = false;
+    if (Platform.isAndroid) {
+      background = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+    }
+
     if (mounted) {
       setState(() {
         _notificationsGranted = notifications;
         _locationGranted = location;
         _microphoneGranted = microphone;
         _bluetoothGranted = bluetooth;
+        _backgroundGranted = background;
         _isLoading = false;
       });
     }
@@ -97,6 +105,16 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
       }
       await _checkPermissions();
       MixpanelManager().permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
+    }
+  }
+
+  Future<void> _handleBackgroundTap() async {
+    if (_backgroundGranted) {
+      await openAppSettings();
+    } else {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      await _checkPermissions();
+      MixpanelManager().permissionChanged(permission: 'background', granted: _backgroundGranted);
     }
   }
 
@@ -172,6 +190,15 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                           isGranted: _microphoneGranted,
                           onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
                         ),
+                        if (Platform.isAndroid) ...[
+                          const Divider(height: 1, color: Color(0xFF3C3C43)),
+                          _buildPermissionRow(
+                            icon: FontAwesomeIcons.batteryFull,
+                            title: context.l10n.backgroundActivity,
+                            isGranted: _backgroundGranted,
+                            onTap: _handleBackgroundTap,
+                          ),
+                        ],
                       ],
                     ),
                   ),

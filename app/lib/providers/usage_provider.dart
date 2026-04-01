@@ -155,7 +155,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> cancelUserSubscription() async {
+  Future<bool> cancelUserSubscription({String? reason, String? reasonDetails}) async {
     if (_isPaymentLoading) return false;
 
     _isPaymentLoading = true;
@@ -163,7 +163,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await cancelSubscription();
+      final success = await cancelSubscription(reason: reason, reasonDetails: reasonDetails);
       if (success) {
         await fetchSubscription();
         await loadAvailablePlans();

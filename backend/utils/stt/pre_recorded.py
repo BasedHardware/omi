@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from io import BytesIO
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 import fal_client
 from deepgram import DeepgramClient, DeepgramClientOptions
@@ -115,6 +115,7 @@ def deepgram_prerecorded(
     diarize: bool = True,
     language: Optional[str] = None,
     model: str = "nova-3",
+    keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
@@ -127,6 +128,7 @@ def deepgram_prerecorded(
         return_language: If True, returns (words, language) tuple
         language: Language code to force, or 'multi' for multilingual auto-detection
         diarize: If True, enable speaker diarization
+        keywords: Custom vocabulary words to boost transcription accuracy
 
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
@@ -148,6 +150,12 @@ def deepgram_prerecorded(
         }
         if language and not is_multi:
             options["language"] = language
+
+        if keywords:
+            if model in ('nova-3',):
+                options["keyterm"] = list(keywords)
+            else:
+                options["keywords"] = list(keywords)
 
         response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
 
@@ -205,6 +213,7 @@ def deepgram_prerecorded(
                 diarize,
                 language,
                 model,
+                keywords,
             )
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
 

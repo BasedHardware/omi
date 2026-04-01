@@ -1,6 +1,12 @@
+import time
 from typing import Dict, Optional
 
-from utils.translation import detect_language
+from utils.translation import (
+    detect_language,
+    detect_language_with_confidence,
+    CONFIDENCE_TARGET_SKIP,
+    CONFIDENCE_FOREIGN_TRANSLATE,
+)
 
 
 def _normalize_base_language(language: Optional[str]) -> Optional[str]:
@@ -81,3 +87,72 @@ class TranscriptSegmentLanguageCache:
     def delete_cache(self, segment_id: str) -> None:
         if segment_id in self.cache:
             del self.cache[segment_id]
+
+
+class ConversationLanguageState:
+    """Conversation-level + speaker-level language state for the monolingual gate.
+
+    Replaces per-segment detection with conversation-wide tracking:
+    - After MONOLINGUAL_THRESHOLD consecutive confident target-language detections,
+      enter monolingual mode (skip translation entirely).
+    - Exit immediately on any confident foreign-language detection.
+    - Periodic probes in monolingual mode to detect code-switching.
+    """
+
+    MONOLINGUAL_THRESHOLD = 4  # consecutive confident target detections to enter mono mode
+    PROBE_INTERVAL_SECONDS = 30.0  # re-check language every N seconds during monolingual mode
+
+    def __init__(self, target_language: str):
+        self.target_base = _normalize_base_language(target_language) or ''
+        self.consecutive_target = 0
+        self.monolingual = False
+        self.last_probe_time = 0.0
+        # Per-speaker tracking for multi-speaker conversations
+        self.speaker_state: Dict[int, bool] = {}  # speaker_id -> is_foreign
+
+    def observe(self, text: str, speaker_id: Optional[int] = None) -> bool:
+        """Observe a segment and return True if translation should be skipped.
+
+        Returns True = skip translation (monolingual gate active).
+        Returns False = translation may be needed.
+        """
+        detected_lang, confidence = detect_language_with_confidence(text, remove_non_lexical=True)
+
+        if detected_lang is None:
+            # Can't detect — don't break the gate, don't increment
+            return self.monolingual
+
+        detected_base = _normalize_base_language(detected_lang) or ''
+
+        if detected_base == self.target_base and confidence >= CONFIDENCE_TARGET_SKIP:
+            self.consecutive_target += 1
+            if speaker_id is not None:
+                self.speaker_state.pop(speaker_id, None)  # not foreign
+            if self.consecutive_target >= self.MONOLINGUAL_THRESHOLD:
+                self.monolingual = True
+            return self.monolingual
+
+        if confidence >= CONFIDENCE_FOREIGN_TRANSLATE and detected_base != self.target_base:
+            # Foreign detected — exit monolingual mode immediately
+            self.consecutive_target = 0
+            self.monolingual = False
+            if speaker_id is not None:
+                self.speaker_state[speaker_id] = True  # mark as foreign
+            return False
+
+        # Low confidence — don't change gate state, but don't skip either
+        return False
+
+    def should_probe(self) -> bool:
+        """In monolingual mode, periodically allow a detection check."""
+        if not self.monolingual:
+            return False
+        now = time.monotonic()
+        if now - self.last_probe_time >= self.PROBE_INTERVAL_SECONDS:
+            self.last_probe_time = now
+            return True
+        return False
+
+    def is_speaker_foreign(self, speaker_id: int) -> bool:
+        """Check if a specific speaker was last detected as foreign."""
+        return self.speaker_state.get(speaker_id, False)

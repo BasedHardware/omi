@@ -118,6 +118,7 @@ app.include_router(fair_use_admin.router)
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
+    "POST": os.environ.get('HTTP_POST_TIMEOUT'),
     "PUT": os.environ.get('HTTP_PUT_TIMEOUT'),
     "PATCH": os.environ.get('HTTP_PATCH_TIMEOUT'),
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),

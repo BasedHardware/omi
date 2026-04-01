@@ -2635,6 +2635,18 @@
   "downloadingFromDevice": "กำลังดาวน์โหลดจากอุปกรณ์",
   "reconnectingToInternet": "กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...",
   "uploadingToCloud": "กำลังอัปโหลด {current} จาก {total}",
+  "processingOnServer": "กำลังประมวลผลบนเซิร์ฟเวอร์...",
+  "processingOnServerProgress": "กำลังประมวลผล... {current}/{total} เซ็กเมนต์",
+  "@processingOnServerProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "processedStatus": "ประมวลผลแล้ว",
   "corruptedStatus": "เสียหาย",
   "nPending": "{count} รอดำเนินการ",
@@ -2836,6 +2848,40 @@
   "permissionsChangeAnytime": "คุณสามารถเปลี่ยนได้ทุกเมื่อในการตั้งค่า > สิทธิ์",
   "location": "ตำแหน่ง",
   "microphone": "ไมโครโฟน",
+  "cancelBillingPeriodInfo": "แผนของคุณจะยังคงใช้งานได้จนถึง {date} หลังจากนั้นคุณจะถูกย้ายไปเวอร์ชันฟรีที่มีฟีเจอร์จำกัด",
+  "cancelConsequenceBattery": "ใช้แบตเตอรี่มากขึ้น 7 เท่า (ประมวลผลบนอุปกรณ์)",
+  "cancelConsequenceDelay": "หน่วงเวลาประมวลผล 5-7 วินาที (โมเดลบนอุปกรณ์)",
+  "cancelConsequenceNoAccess": "ไม่มีการเข้าถึงแบบไม่จำกัดเมื่อสิ้นสุดรอบการเรียกเก็บเงิน",
+  "cancelConsequencePhoneCalls": "ไม่มีการถอดเสียงโทรศัพท์แบบเรียลไทม์",
+  "cancelConsequenceQuality": "คุณภาพการถอดเสียงต่ำลง 30% (โมเดลบนอุปกรณ์)",
+  "cancelConsequenceSpeakers": "ไม่สามารถระบุผู้พูดได้",
+  "cancelConsequencesSubtitle": "เราแนะนำอย่างยิ่งให้สำรวจตัวเลือกอื่นแทนการยกเลิก",
+  "cancelReasonAudioQuality": "คุณภาพเสียง/การถอดเสียง",
+  "cancelReasonBatteryDrain": "ความกังวลเรื่องแบตเตอรี่หมด",
+  "cancelReasonDetailHint": "เราขอบคุณทุกความคิดเห็น...",
+  "cancelReasonFoundAlternative": "พบทางเลือกอื่น",
+  "cancelReasonMissingFeatures": "ขาดฟีเจอร์",
+  "cancelReasonNotUsing": "ไม่ได้ใช้มากพอ",
+  "cancelReasonOther": "อื่นๆ",
+  "cancelReasonSubtitle": "คุณบอกเราได้ไหมว่าทำไมถึงจากไป?",
+  "cancelReasonTooExpensive": "แพงเกินไป",
+  "confirmAndCancel": "ยืนยันและยกเลิก",
+  "feedbackSubtitleAudioQuality": "เราอยากเข้าใจว่าอะไรผิดพลาด",
+  "feedbackSubtitleBatteryDrain": "สิ่งนี้ช่วยทีมฮาร์ดแวร์ปรับปรุง",
+  "feedbackSubtitleFoundAlternative": "เราอยากรู้ว่าอะไรดึงดูดคุณ",
+  "feedbackSubtitleMissingFeatures": "เราสร้างอยู่เสมอ — สิ่งนี้ช่วยจัดลำดับความสำคัญ",
+  "feedbackSubtitleNotUsing": "เราต้องการทำให้ Omi มีประโยชน์มากขึ้นสำหรับคุณ",
+  "feedbackSubtitleTooExpensive": "ความคิดเห็นของคุณช่วยเราหาจุดสมดุลที่เหมาะสม",
+  "feedbackTitleAudioQuality": "คุณพบปัญหาอะไรบ้าง?",
+  "feedbackTitleBatteryDrain": "บอกเราเกี่ยวกับปัญหาแบตเตอรี่",
+  "feedbackTitleFoundAlternative": "คุณเปลี่ยนไปใช้อะไร?",
+  "feedbackTitleMissingFeatures": "คุณขาดฟีเจอร์อะไร?",
+  "feedbackTitleNotUsing": "อะไรจะทำให้คุณใช้ Omi มากขึ้น?",
+  "feedbackTitleTooExpensive": "ราคาเท่าไหร่จึงจะเหมาะกับคุณ?",
+  "ifYouCancel": "หากคุณยกเลิก:",
+  "justAMoment": "สักครู่",
+  "tellUsMore": "บอกเราเพิ่มเติม (ไม่บังคับ)",
+  "whyAreYouCanceling": "ทำไมคุณถึงยกเลิก?",
   "officialTeamName": "Nooto Team",
   "conversationsEmptyStateMessage": "เริ่มการสนทนากับ Nooto หรือบันทึกการสนทนาด้วยอุปกรณ์ของคุณ"
 }

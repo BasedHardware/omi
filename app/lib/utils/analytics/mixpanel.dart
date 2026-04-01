@@ -513,6 +513,20 @@ class MixpanelManager {
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
 
+  void subscriptionCancelFlowStarted() => track('Subscription Cancel Flow Started');
+
+  void subscriptionCancelReasonSelected({required String reason}) =>
+      track('Subscription Cancel Reason Selected', properties: {'reason': reason});
+
+  void subscriptionCancelConfirmed({required String reason, String? details}) =>
+      track('Subscription Cancel Confirmed', properties: {'reason': reason, 'reason_details': details});
+
+  void subscriptionCancelKeptPlan({required int step, String? reason}) =>
+      track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
+
+  void subscriptionCancelAbandoned({required int step, String? reason}) =>
+      track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
+
   void getFriendClicked() => track('Get Friend Clicked');
 
   void connectFriendClicked() => track('Connect Friend Clicked');

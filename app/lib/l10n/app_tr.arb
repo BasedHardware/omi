@@ -2670,6 +2670,18 @@
   "downloadingFromDevice": "Cihazdan indiriliyor",
   "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
   "uploadingToCloud": "{current}/{total} yükleniyor",
+  "processingOnServer": "Sunucuda işleniyor...",
+  "processingOnServerProgress": "İşleniyor... {current}/{total} segment",
+  "@processingOnServerProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "processedStatus": "İşlendi",
   "corruptedStatus": "Bozuk",
   "nPending": "{count} beklemede",
@@ -2871,6 +2883,40 @@
   "permissionsChangeAnytime": "Bunları istediğiniz zaman Ayarlar > İzinler bölümünden değiştirebilirsiniz",
   "location": "Konum",
   "microphone": "Mikrofon",
+  "cancelBillingPeriodInfo": "Planınız {date} tarihine kadar aktif kalacaktır. Bundan sonra sınırlı özelliklerle ücretsiz sürüme geçirileceksiniz.",
+  "cancelConsequenceBattery": "7 kat daha fazla pil tüketimi (cihazda işleme)",
+  "cancelConsequenceDelay": "5-7 saniye işleme gecikmesi (cihaz modelleri)",
+  "cancelConsequenceNoAccess": "Fatura dönemi sonunda sınırsız erişim olmayacak.",
+  "cancelConsequencePhoneCalls": "Gerçek zamanlı telefon görüşmesi transkripsiyon yok",
+  "cancelConsequenceQuality": "%30 daha düşük transkripsiyon kalitesi (cihaz modelleri)",
+  "cancelConsequenceSpeakers": "Konuşmacıları tanımlayamaz.",
+  "cancelConsequencesSubtitle": "İptal etmek yerine diğer seçeneklerinizi keşfetmenizi şiddetle tavsiye ediyoruz.",
+  "cancelReasonAudioQuality": "Ses/transkripsiyon kalitesi",
+  "cancelReasonBatteryDrain": "Pil tükenme endişeleri",
+  "cancelReasonDetailHint": "Her türlü geri bildirimi takdir ediyoruz...",
+  "cancelReasonFoundAlternative": "Bir alternatif buldum",
+  "cancelReasonMissingFeatures": "Eksik özellikler",
+  "cancelReasonNotUsing": "Yeterince kullanmıyorum",
+  "cancelReasonOther": "Diğer",
+  "cancelReasonSubtitle": "Neden ayrıldığınızı bize söyleyebilir misiniz?",
+  "cancelReasonTooExpensive": "Çok pahalı",
+  "confirmAndCancel": "Onayla ve iptal et",
+  "feedbackSubtitleAudioQuality": "Neyin yanlış gittiğini anlamak isteriz.",
+  "feedbackSubtitleBatteryDrain": "Bu, donanım ekibimizin gelişmesine yardımcı olur.",
+  "feedbackSubtitleFoundAlternative": "Dikkatinizi çeken şeyi öğrenmek isteriz.",
+  "feedbackSubtitleMissingFeatures": "Her zaman inşa ediyoruz — bu önceliklendirmemize yardımcı olur.",
+  "feedbackSubtitleNotUsing": "Omi'yi sizin için daha yararlı hale getirmek istiyoruz.",
+  "feedbackSubtitleTooExpensive": "Geri bildiriminiz doğru dengeyi bulmamıza yardımcı olur.",
+  "feedbackTitleAudioQuality": "Ne tür sorunlar yaşadınız?",
+  "feedbackTitleBatteryDrain": "Pil sorunlarını bize anlatın",
+  "feedbackTitleFoundAlternative": "Neye geçiyorsunuz?",
+  "feedbackTitleMissingFeatures": "Hangi özellikleri kaçırıyorsunuz?",
+  "feedbackTitleNotUsing": "Omi'yi daha fazla kullanmanızı ne sağlardı?",
+  "feedbackTitleTooExpensive": "Sizin için hangi fiyat uygun olurdu?",
+  "ifYouCancel": "İptal ederseniz:",
+  "justAMoment": "Bir dakika, lütfen",
+  "tellUsMore": "Daha fazla anlatın (isteğe bağlı)",
+  "whyAreYouCanceling": "Neden iptal ediyorsunuz?",
   "officialTeamName": "Nooto Team",
   "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin"
 }

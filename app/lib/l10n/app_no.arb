@@ -2635,6 +2635,18 @@
   "downloadingFromDevice": "Laster ned fra enhet",
   "reconnectingToInternet": "Kobler til internett på nytt...",
   "uploadingToCloud": "Laster opp {current} av {total}",
+  "processingOnServer": "Behandler på serveren...",
+  "processingOnServerProgress": "Behandler... {current}/{total} segmenter",
+  "@processingOnServerProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "processedStatus": "Behandlet",
   "corruptedStatus": "Ødelagt",
   "nPending": "{count} ventende",
@@ -2836,6 +2848,40 @@
   "permissionsChangeAnytime": "Du kan endre disse når som helst i Innstillinger > Tillatelser",
   "location": "Posisjon",
   "microphone": "Mikrofon",
+  "cancelBillingPeriodInfo": "Planen din forblir aktiv til {date}. Etter det vil du bli flyttet til gratisversjonen med begrensede funksjoner.",
+  "cancelConsequenceBattery": "7x mer batteribruk (behandling på enheten)",
+  "cancelConsequenceDelay": "5-7 sekunders behandlingsforsinkelse (modeller på enheten)",
+  "cancelConsequenceNoAccess": "Ikke lenger ubegrenset tilgang ved slutten av faktureringsperioden.",
+  "cancelConsequencePhoneCalls": "Ingen sanntids transkripsjon av telefonsamtaler",
+  "cancelConsequenceQuality": "30% lavere transkripsjonskvalitet (modeller på enheten)",
+  "cancelConsequenceSpeakers": "Kan ikke identifisere talere.",
+  "cancelConsequencesSubtitle": "Vi anbefaler sterkt at du utforsker andre alternativer i stedet for å avbestille.",
+  "cancelReasonAudioQuality": "Lyd-/transkripsjonskvalitet",
+  "cancelReasonBatteryDrain": "Bekymringer om batteriforbruk",
+  "cancelReasonDetailHint": "Vi setter pris på all tilbakemelding...",
+  "cancelReasonFoundAlternative": "Fant et alternativ",
+  "cancelReasonMissingFeatures": "Manglende funksjoner",
+  "cancelReasonNotUsing": "Bruker det ikke nok",
+  "cancelReasonOther": "Annet",
+  "cancelReasonSubtitle": "Kan du fortelle oss hvorfor du forlater?",
+  "cancelReasonTooExpensive": "For dyrt",
+  "confirmAndCancel": "Bekreft og avbestill",
+  "feedbackSubtitleAudioQuality": "Vi vil gjerne forstå hva som gikk galt.",
+  "feedbackSubtitleBatteryDrain": "Dette hjelper maskinvareteamet vårt med å forbedre seg.",
+  "feedbackSubtitleFoundAlternative": "Vi vil gjerne vite hva som fanget oppmerksomheten din.",
+  "feedbackSubtitleMissingFeatures": "Vi bygger alltid — dette hjelper oss å prioritere.",
+  "feedbackSubtitleNotUsing": "Vi ønsker å gjøre Omi mer nyttig for deg.",
+  "feedbackSubtitleTooExpensive": "Tilbakemeldingen din hjelper oss å finne riktig balanse.",
+  "feedbackTitleAudioQuality": "Hvilke problemer opplevde du?",
+  "feedbackTitleBatteryDrain": "Fortell oss om batteriproblemene",
+  "feedbackTitleFoundAlternative": "Hva bytter du til?",
+  "feedbackTitleMissingFeatures": "Hvilke funksjoner savner du?",
+  "feedbackTitleNotUsing": "Hva ville fått deg til å bruke Omi mer?",
+  "feedbackTitleTooExpensive": "Hvilken pris ville passet deg?",
+  "ifYouCancel": "Hvis du avbestiller:",
+  "justAMoment": "Et øyeblikk",
+  "tellUsMore": "Fortell oss mer (valgfritt)",
+  "whyAreYouCanceling": "Hvorfor avbestiller du?",
   "officialTeamName": "Nooto Team",
   "conversationsEmptyStateMessage": "Start en samtale med Nooto eller ta opp en med enheten din"
 }

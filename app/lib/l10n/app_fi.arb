@@ -2635,6 +2635,18 @@
   "downloadingFromDevice": "Ladataan laitteesta",
   "reconnectingToInternet": "Yhdistetään uudelleen internetiin...",
   "uploadingToCloud": "Ladataan {current}/{total}",
+  "processingOnServer": "Käsitellään palvelimella...",
+  "processingOnServerProgress": "Käsitellään... {current}/{total} segmenttiä",
+  "@processingOnServerProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "processedStatus": "Käsitelty",
   "corruptedStatus": "Vioittunut",
   "nPending": "{count} odottaa",
@@ -2836,6 +2848,40 @@
   "permissionsChangeAnytime": "Voit muuttaa näitä milloin tahansa kohdassa Asetukset > Käyttöoikeudet",
   "location": "Sijainti",
   "microphone": "Mikrofoni",
+  "cancelBillingPeriodInfo": "Tilauksesi pysyy aktiivisena {date} asti. Sen jälkeen sinut siirretään ilmaisversioon rajoitetuilla ominaisuuksilla.",
+  "cancelConsequenceBattery": "7x enemmän akunkäyttöä (laitteella käsittely)",
+  "cancelConsequenceDelay": "5-7 sekunnin käsittelyviive (laitteen mallit)",
+  "cancelConsequenceNoAccess": "Ei enää rajoittamatonta pääsyä laskutusjakson lopussa.",
+  "cancelConsequencePhoneCalls": "Ei reaaliaikaista puhelutranskripiota",
+  "cancelConsequenceQuality": "30% heikompi transkriptiolaatu (laitteen mallit)",
+  "cancelConsequenceSpeakers": "Ei voi tunnistaa puhujia.",
+  "cancelConsequencesSubtitle": "Suosittelemme vahvasti tutustumaan muihin vaihtoehtoihisi peruutuksen sijaan.",
+  "cancelReasonAudioQuality": "Äänen/transkription laatu",
+  "cancelReasonBatteryDrain": "Huoli akun kulumisesta",
+  "cancelReasonDetailHint": "Arvostamme kaikkea palautetta...",
+  "cancelReasonFoundAlternative": "Löysin vaihtoehdon",
+  "cancelReasonMissingFeatures": "Puuttuvat ominaisuudet",
+  "cancelReasonNotUsing": "En käytä tarpeeksi",
+  "cancelReasonOther": "Muu",
+  "cancelReasonSubtitle": "Voitko kertoa meille, miksi lähdet?",
+  "cancelReasonTooExpensive": "Liian kallis",
+  "confirmAndCancel": "Vahvista ja peruuta",
+  "feedbackSubtitleAudioQuality": "Haluaisimme ymmärtää, mikä meni pieleen.",
+  "feedbackSubtitleBatteryDrain": "Tämä auttaa laitteistotiimiämme parantamaan.",
+  "feedbackSubtitleFoundAlternative": "Haluaisimme tietää, mikä kiinnitti huomiosi.",
+  "feedbackSubtitleMissingFeatures": "Rakennamme aina — tämä auttaa meitä priorisoimaan.",
+  "feedbackSubtitleNotUsing": "Haluamme tehdä Omista hyödyllisemmän sinulle.",
+  "feedbackSubtitleTooExpensive": "Palautteesi auttaa meitä löytämään oikean tasapainon.",
+  "feedbackTitleAudioQuality": "Mitä ongelmia koit?",
+  "feedbackTitleBatteryDrain": "Kerro meille akkuongelmista",
+  "feedbackTitleFoundAlternative": "Mihin vaihdat?",
+  "feedbackTitleMissingFeatures": "Mitä ominaisuuksia kaipaat?",
+  "feedbackTitleNotUsing": "Mikä saisi sinut käyttämään Omia enemmän?",
+  "feedbackTitleTooExpensive": "Mikä hinta sopisi sinulle?",
+  "ifYouCancel": "Jos peruutat:",
+  "justAMoment": "Hetkinen",
+  "tellUsMore": "Kerro meille lisää (valinnainen)",
+  "whyAreYouCanceling": "Miksi peruutat?",
   "officialTeamName": "Nooto Team",
   "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi"
 }

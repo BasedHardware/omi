@@ -2,6 +2,77 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.206",
+      "date": "2026-04-01",
+      "changes": [
+        "Fixed floating bar follow-up input not auto-focusing when restoring a conversation"
+      ]
+    },
+    {
+      "version": "0.11.205",
+      "date": "2026-03-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.204",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed transcription not auto-starting after proxy migration"
+      ]
+    },
+    {
+      "version": "0.11.203",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed batch transcription failing on long speech (50s+) by splitting large audio chunks automatically"
+      ]
+    },
+    {
+      "version": "0.11.202",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state",
+        "Fixed UI freezes caused by dock tile updates when receiving support messages"
+      ]
+    },
+    {
+      "version": "0.11.200",
+      "date": "2026-03-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.199",
+      "date": "2026-03-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.198",
+      "date": "2026-03-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.197",
+      "date": "2026-03-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.196",
+      "date": "2026-03-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.195",
       "date": "2026-03-29",
       "changes": [
