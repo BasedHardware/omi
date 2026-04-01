@@ -401,35 +401,25 @@ struct DesktopHomeView: View {
             .fixedSize(horizontal: true, vertical: false)
             .clipped()
 
-            // Main content area with rounded container
-            ZStack {
-                // Content container background
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(NootoColors.backgroundSecondary.opacity(0.4))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(NootoColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
+            // Sidebar/content separator
+            Rectangle()
+                .fill(NootoColors.textTertiary.opacity(0.1))
+                .frame(width: 0.5)
 
-                // Page content - switch recreates views on tab change
-                // Extracted into a separate struct so that pages like TasksPage
-                // are not re-rendered when AppState publishes unrelated changes.
-                PageContentView(
-                    selectedIndex: selectedIndex,
-                    appState: appState,
-                    viewModelContainer: viewModelContainer,
-                    selectedSettingsSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
-                    highlightedSettingId: $highlightedSettingId,
-                    selectedTabIndex: $selectedIndex
-                )
-                .id(selectedIndex)
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
-                .animation(.easeInOut(duration: 0.2), value: selectedIndex)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            }
-            .padding(12)
+            // Main content area
+            PageContentView(
+                selectedIndex: selectedIndex,
+                appState: appState,
+                viewModelContainer: viewModelContainer,
+                selectedSettingsSection: $selectedSettingsSection,
+                selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                highlightedSettingId: $highlightedSettingId,
+                selectedTabIndex: $selectedIndex
+            )
+            .id(selectedIndex)
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.15), value: selectedIndex)
+            .background(NootoColors.backgroundPrimary)
         }
         .overlay {
             // Goal completion celebration overlay
