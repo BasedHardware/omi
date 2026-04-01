@@ -25,7 +25,7 @@ struct TasksWidget: View {
             // Header
             HStack(alignment: .center) {
                 Text("Tasks")
-                    .scaledFont(size: 15, weight: .semibold)
+                    .scaledFont(size: 15, weight: .medium)
                     .foregroundColor(NootoColors.textPrimary)
                 if totalTaskCount > 0 {
                     Text("\(totalTaskCount)")
