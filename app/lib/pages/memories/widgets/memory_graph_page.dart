@@ -541,9 +541,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       // Draw graph image
       canvas.drawImage(image, Offset.zero, paint);
 
-      // Draw minimal branding "omi.me" at top center
+      // Draw minimal branding "nooto.togodynamics.com" at top center
       final textSpan = TextSpan(
-        text: 'omi.me',
+        text: 'nooto.togodynamics.com',
         style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
@@ -580,7 +580,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       extendBodyBehindAppBar: widget.showAppBar,
       appBar: widget.showAppBar
           ? AppBar(
-              title: const Text('omi.me', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              title: const Text('nooto.togodynamics.com', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
               centerTitle: true,
               backgroundColor: Colors.transparent,
               elevation: 0,
