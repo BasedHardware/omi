@@ -1,5 +1,5 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase/client';
+import { getFirebaseStorage } from '@/lib/firebase/client';
 
 /**
  * Upload an image to Firebase Storage
@@ -12,7 +12,7 @@ export async function uploadImage(file: File, folder: string = 'announcements'):
   const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `${folder}/${timestamp}_${safeName}`;
   
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   
   const snapshot = await uploadBytes(storageRef, file);
   const downloadURL = await getDownloadURL(snapshot.ref);
