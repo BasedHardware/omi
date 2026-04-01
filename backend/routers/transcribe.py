@@ -1768,13 +1768,6 @@ async def _stream_handler(
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],
                     }
-            # Log dimension mix for observability (compare_embeddings safely handles mismatches)
-            dims = {pid: data['embedding'].shape[1] for pid, data in person_embeddings_cache.items()}
-            unique_dims = set(dims.values())
-            if len(unique_dims) > 1:
-                logger.warning(
-                    f"Speaker ID: mixed embedding dimensions {dict(sorted(((d, sum(1 for v in dims.values() if v == d)) for d in unique_dims)))} {uid} {session_id}"
-                )
             logger.info(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings {uid} {session_id}")
         except Exception as e:
             logger.error(f"Speaker ID: failed to load embeddings: {e} {uid} {session_id}")
