@@ -709,12 +709,9 @@ final class VADGateService {
         let emittedDurationSec = Double(completedBuffer.count / bytesPerFrame) / Double(sampleRate)
         batchSpeechStartWallTime = startTime + emittedDurationSec
 
-        // Always transition to .speech for continued accumulation.
-        // If we were in .hangover, staying there would emit a silence-only follow-up chunk.
-        batchState = .speech
-        // Reset lastSpeechMs to current cursor so the hangover timer starts fresh.
-        // Without this, the next silent chunk would immediately trigger hangover→silence
-        // and emit an empty/silence-only buffer.
+        // Preserve current state: .speech stays .speech, .hangover stays .hangover.
+        // Reset lastSpeechMs to current cursor so the hangover timer restarts fresh
+        // from this point, preventing an immediate silence-only follow-up batch.
         batchLastSpeechMs = batchAudioCursorMs
         batchAudioBuffer = Data()
 
