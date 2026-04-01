@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed 2s+ UI freezes caused by dock tile updates during chat polling"
+  ],
   "releases": [
     {
       "version": "0.11.206",
