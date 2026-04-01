@@ -8858,4 +8858,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Haluamme tehdä Omista hyödyllisemmän sinulle.';
+
+  @override
+  String get transcriptionDegraded => 'Litterointi tilapäisesti heikentynyt';
 }

@@ -8861,4 +8861,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Queremos tornar o Omi mais útil para você.';
+
+  @override
+  String get transcriptionDegraded => 'Transcrição temporariamente degradada';
 }

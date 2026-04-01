@@ -8887,4 +8887,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Мы хотим сделать Omi более полезным для вас.';
+
+  @override
+  String get transcriptionDegraded => 'Транскрипция временно ухудшена';
 }

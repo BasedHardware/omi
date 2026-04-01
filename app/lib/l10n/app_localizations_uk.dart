@@ -8872,4 +8872,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Ми хочемо зробити Omi кориснішим для вас.';
+
+  @override
+  String get transcriptionDegraded => 'Транскрипція тимчасово погіршена';
 }

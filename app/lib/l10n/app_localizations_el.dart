@@ -8923,4 +8923,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Θέλουμε να κάνουμε το Omi πιο χρήσιμο για εσάς.';
+
+  @override
+  String get transcriptionDegraded => 'Η μεταγραφή είναι προσωρινά υποβαθμισμένη';
 }

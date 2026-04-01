@@ -8697,4 +8697,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => '我们想让 Omi 对您更有用。';
+
+  @override
+  String get transcriptionDegraded => '转录暂时降级';
 }

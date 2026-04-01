@@ -8866,4 +8866,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Norime padaryti Omi naudingesnį jums.';
+
+  @override
+  String get transcriptionDegraded => 'Transkripcija laikinai pablogėjusi';
 }

@@ -8863,4 +8863,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vi vill göra Omi mer användbar för dig.';
+
+  @override
+  String get transcriptionDegraded => 'Transkription tillfälligt försämrad';
 }

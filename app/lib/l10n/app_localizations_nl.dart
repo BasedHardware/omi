@@ -8887,4 +8887,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'We willen Omi nuttiger maken voor je.';
+
+  @override
+  String get transcriptionDegraded => 'Transcriptie tijdelijk verslechterd';
 }

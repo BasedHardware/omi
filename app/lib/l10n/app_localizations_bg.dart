@@ -8894,4 +8894,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Искаме да направим Omi по-полезен за вас.';
+
+  @override
+  String get transcriptionDegraded => 'Транскрипцията временно е влошена';
 }

@@ -8939,4 +8939,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Nous voulons rendre Omi plus utile pour vous.';
+
+  @override
+  String get transcriptionDegraded => 'Transcription temporairement dégradée';
 }

@@ -8813,4 +8813,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'เราต้องการทำให้ Omi มีประโยชน์มากขึ้นสำหรับคุณ';
+
+  @override
+  String get transcriptionDegraded => 'การถอดเสียงลดประสิทธิภาพชั่วคราว';
 }

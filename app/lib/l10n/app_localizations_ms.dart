@@ -8883,4 +8883,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Kami mahu menjadikan Omi lebih berguna untuk anda.';
+
+  @override
+  String get transcriptionDegraded => 'Transkripsi terjejas buat sementara';
 }

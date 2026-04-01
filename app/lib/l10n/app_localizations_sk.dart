@@ -8846,4 +8846,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chceme, aby bol Omi pre vás užitočnejší.';
+
+  @override
+  String get transcriptionDegraded => 'Prepis dočasne zhoršený';
 }

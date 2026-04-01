@@ -8844,4 +8844,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vi vil gøre Omi mere nyttig for dig.';
+
+  @override
+  String get transcriptionDegraded => 'Transskription midlertidigt forringet';
 }

@@ -8869,4 +8869,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Kami ingin membuat Omi lebih berguna untuk Anda.';
+
+  @override
+  String get transcriptionDegraded => 'Transkripsi sementara terganggu';
 }

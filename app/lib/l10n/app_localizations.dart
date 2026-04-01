@@ -16532,6 +16532,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'We want to make Omi more useful for you.'**
   String get feedbackSubtitleNotUsing;
+
+  /// Status text shown when STT service is in degraded batch mode
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription temporarily degraded'**
+  String get transcriptionDegraded;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

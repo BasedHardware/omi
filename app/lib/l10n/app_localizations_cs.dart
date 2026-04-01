@@ -8855,4 +8855,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chceme, aby byl Omi pro vás užitečnější.';
+
+  @override
+  String get transcriptionDegraded => 'Přepis dočasně zhoršen';
 }

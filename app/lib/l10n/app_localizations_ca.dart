@@ -8910,4 +8910,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Volem fer Omi més útil per a tu.';
+
+  @override
+  String get transcriptionDegraded => 'Transcripció temporalment degradada';
 }

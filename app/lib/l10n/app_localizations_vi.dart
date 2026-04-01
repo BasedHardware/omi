@@ -8860,4 +8860,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
+
+  @override
+  String get transcriptionDegraded => 'Phiên âm tạm thời bị giảm chất lượng';
 }

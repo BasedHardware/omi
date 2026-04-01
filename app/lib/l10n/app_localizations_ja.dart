@@ -8709,4 +8709,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omiをもっと便利にしたいです。';
+
+  @override
+  String get transcriptionDegraded => '文字起こしが一時的に低下しています';
 }

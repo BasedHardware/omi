@@ -8840,4 +8840,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'हम Omi को आपके लिए अधिक उपयोगी बनाना चाहते हैं।';
+
+  @override
+  String get transcriptionDegraded => 'प्रतिलेखन अस्थायी रूप से प्रभावित';
 }

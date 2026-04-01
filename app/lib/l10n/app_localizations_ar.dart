@@ -8798,4 +8798,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'نريد جعل Omi أكثر فائدة لك.';
+
+  @override
+  String get transcriptionDegraded => 'النسخ النصي متأثر مؤقتاً';
 }

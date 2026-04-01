@@ -8897,4 +8897,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
+
+  @override
+  String get transcriptionDegraded => 'Átírás átmenetileg korlátozott';
 }

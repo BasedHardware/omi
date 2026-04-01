@@ -8901,4 +8901,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
+
+  @override
+  String get transcriptionDegraded => 'Transcriere temporar degradată';
 }

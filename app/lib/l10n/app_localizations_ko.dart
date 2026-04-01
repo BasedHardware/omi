@@ -8711,4 +8711,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omi를 더 유용하게 만들고 싶습니다.';
+
+  @override
+  String get transcriptionDegraded => '전사가 일시적으로 저하됨';
 }

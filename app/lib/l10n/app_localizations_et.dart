@@ -8856,4 +8856,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
+
+  @override
+  String get transcriptionDegraded => 'Transkriptsioon ajutiselt halvenenud';
 }

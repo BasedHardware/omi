@@ -8872,4 +8872,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omi\'yi sizin için daha yararlı hale getirmek istiyoruz.';
+
+  @override
+  String get transcriptionDegraded => 'Transkripsiyon geçici olarak düşük kalitede';
 }
