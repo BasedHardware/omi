@@ -636,13 +636,10 @@ class TestPusherHeaderDemux:
     def test_header_102_memory_id_does_not_overwrite_conversation_id(self):
         """header_type 102 must NOT overwrite current_conversation_id (#6190 Bug 2).
         Only header_type 103 is authoritative for conversation tracking."""
+        from utils.speaker_assignment import resolve_transcript_conversation_id
+
         current_conversation_id = 'old-conv'
-        payload = {'segments': [], 'memory_id': 'new-conv-from-memory'}
-        res = payload
-        memory_id = res.get('memory_id')
-        # Fix: do NOT overwrite current_conversation_id from memory_id
-        # Transcript queue uses memory_id independently via conversation_or_memory_id
-        conversation_or_memory_id = memory_id or current_conversation_id
+        conversation_or_memory_id = resolve_transcript_conversation_id('new-conv-from-memory', current_conversation_id)
         assert current_conversation_id == 'old-conv'  # must stay unchanged
         assert conversation_or_memory_id == 'new-conv-from-memory'  # transcript queue uses memory_id
 
