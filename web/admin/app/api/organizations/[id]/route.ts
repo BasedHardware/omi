@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 import { getStripe } from '@/lib/stripe';
 import { updateUserSubscriptionDetails } from '@/lib/utils/user-subscription';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const db = getDb();
     const body = await request.json();

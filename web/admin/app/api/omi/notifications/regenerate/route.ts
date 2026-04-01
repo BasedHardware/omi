@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import OpenAI from 'openai';
 
 export const dynamic = 'force-dynamic';
@@ -346,6 +347,9 @@ async function processItem(
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import admin, { getDb, getAdminAuth } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 import { getStripe } from '@/lib/stripe';
 import { updateUserSubscriptionDetails } from '@/lib/utils/user-subscription';
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,10 @@ async function fetchStripePaymentDetails(paymentId: string) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const db = getDb();
     const organizationsRef = db.collection('organisations');
@@ -60,6 +64,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const db = getDb();
     const body = await request.json();

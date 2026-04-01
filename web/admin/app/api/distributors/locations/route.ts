@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyAdmin } from '@/lib/auth'
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request)
+  if (authResult instanceof NextResponse) return authResult
+
   try {
     const domain = process.env.SHOPIFY_STORE
     const token = process.env.SHOPIFY_ACCESS_TOKEN

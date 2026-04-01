@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import { reviewApp } from '@/lib/services/omi-api/apps';
 
 export const dynamic = 'force-dynamic'; // Necessary because we read headers
@@ -10,38 +10,18 @@ interface ReviewRequestBody {
 }
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { app_id: string } }
 ) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const { app_id } = params;
   if (!app_id) {
     return NextResponse.json({ error: 'App ID is required' }, { status: 400 });
   }
 
-  // 1. Verify Firebase Token
-  const authorization = request.headers.get('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing Bearer token' }, { status: 401 });
-  }
-  const idToken = authorization.split('Bearer ')[1];
-
-  let userUid: string;
-  try {
-    const decodedToken = await verifyFirebaseToken(idToken);
-    if (!decodedToken) {
-        return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-    }
-    userUid = decodedToken.uid;
-    // Optionally, add further checks here to ensure the user is an authorized admin
-    // based on your Firestore structure (`adminData/omi/users/{userUid}`) if needed.
-    // For simplicity, we assume verifyFirebaseToken implies sufficient permission for this example.
-  } catch (error) {
-    console.error('Firebase Auth Error during verification:', error);
-    // Catch potential errors within verifyFirebaseToken itself, though it should return null on failure
-    return NextResponse.json({ error: 'Unauthorized: Error verifying token' }, { status: 401 });
-  }
-
-  // 2. Parse Request Body
+  // Parse Request Body
   let requestBody: ReviewRequestBody;
   try {
     requestBody = await request.json();
@@ -62,7 +42,7 @@ export async function POST(
 
   // 3. Call Omi API Service
   try {
-    const result = await reviewApp(userUid, app_id, action, reason);
+    const result = await reviewApp(authResult.uid, app_id, action, reason);
 
     if (result.success) {
       return NextResponse.json({ message: `App ${action}d successfully.` }, { status: 200 });

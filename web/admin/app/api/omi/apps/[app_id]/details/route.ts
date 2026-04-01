@@ -1,36 +1,22 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { app_id: string } }
 ) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const { app_id } = params;
   if (!app_id) {
     return NextResponse.json({ error: 'App ID is required' }, { status: 400 });
   }
 
-  // 1. Verify Firebase Token
-  const authorization = request.headers.get('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing Bearer token' }, { status: 401 });
-  }
-  const idToken = authorization.split('Bearer ')[1];
-
-  try {
-    const decodedToken = await verifyFirebaseToken(idToken);
-    if (!decodedToken) {
-        return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-    }
-    // userUid = decodedToken.uid; // User UID available if needed for further checks
-  } catch (error) {
-    console.error('Firebase Auth Error during verification:', error);
-    return NextResponse.json({ error: 'Unauthorized: Error verifying token' }, { status: 401 });
-  }
-
-  // 2. Fetch App Details from Firestore
+  // Fetch App Details from Firestore
   try {
     const db = getDb();
     const appDocRef = db.collection('plugins_data').doc(app_id);

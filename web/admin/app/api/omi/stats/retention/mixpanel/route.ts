@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const secret = process.env.MIXPANEL_SECRET;
     const apiBase = process.env.MIXPANEL_API_BASE || 'https://mixpanel.com/api/2.0';

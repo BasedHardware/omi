@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import admin, { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import admin, { getDb } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,16 +46,9 @@ async function fetchAppsByIds(ids: string[]) {
   return allDocs;
 }
 
-export async function GET(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-  const decoded = await verifyFirebaseToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const ids = await fetchSummaryAppIds();
@@ -69,16 +63,9 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-  const decoded = await verifyFirebaseToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
+export async function PATCH(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await request.json();
@@ -105,16 +92,9 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-  const decoded = await verifyFirebaseToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
+export async function POST(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await request.json();
@@ -149,16 +129,9 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-  const decoded = await verifyFirebaseToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
+export async function DELETE(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await request.json();

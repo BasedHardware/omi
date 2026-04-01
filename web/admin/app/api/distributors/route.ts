@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import admin, { getDb } from '@/lib/firebase/admin'
+import { verifyAdmin } from '@/lib/auth'
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request)
+  if (authResult instanceof NextResponse) return authResult
+
   try {
     const db = getDb();
     const snapshot = await db.collection('distributors').orderBy('createdAt', 'desc').get()
@@ -22,6 +26,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await verifyAdmin(request)
+  if (authResult instanceof NextResponse) return authResult
+
   try {
     const db = getDb();
     const body = await request.json()
@@ -76,6 +83,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const authResult = await verifyAdmin(request)
+  if (authResult instanceof NextResponse) return authResult
+
   try {
     const db = getDb();
     const body = await request.json()

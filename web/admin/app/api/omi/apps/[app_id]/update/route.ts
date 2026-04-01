@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 const OMI_API_BASE_URL = process.env.NEXT_PUBLIC_OMI_API_URL;
 const OMI_API_SECRET_KEY_BASE = process.env.OMI_API_SECRET_KEY;
 
 export async function POST(req: NextRequest, { params }: { params: { app_id: string } }) {
+  const authResult = await verifyAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
+
   if (!OMI_API_BASE_URL) {
     return NextResponse.json({ error: 'OMI API base URL not configured' }, { status: 500 });
   }

@@ -1,29 +1,18 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const OMI_API_URL = process.env.NEXT_PUBLIC_OMI_API_URL;
 const OMI_SECRET_KEY = process.env.OMI_API_SECRET_KEY;
 
-async function verifyAuth(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return null;
-  }
-  const token = authorization.split('Bearer ')[1];
-  return verifyFirebaseToken(token);
-}
-
 // GET /api/omi/announcements/[id] - Get single announcement
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const decoded = await verifyAuth(request);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const res = await fetch(`${OMI_API_URL}/v1/announcements/${params.id}`, {
@@ -48,13 +37,11 @@ export async function GET(
 
 // PUT /api/omi/announcements/[id] - Update announcement
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const decoded = await verifyAuth(request);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await request.json();
@@ -83,13 +70,11 @@ export async function PUT(
 
 // DELETE /api/omi/announcements/[id] - Delete announcement
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const decoded = await verifyAuth(request);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const url = new URL(request.url);

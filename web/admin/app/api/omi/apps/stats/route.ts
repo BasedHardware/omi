@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import { getApps, getUnapprovedApps } from '@/lib/services/omi-api/apps';
 import { OmiApiError } from '@/lib/services/omi-api/client';
 
@@ -18,28 +18,15 @@ export async function OPTIONS() {
   return withCors(new NextResponse(null, { status: 204 }));
 }
 
-export async function GET(request: Request) {
-  // 1. Get token from Authorization header
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return withCors(
-      NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 })
-    );
-  }
-  const token = authorization.split('Bearer ')[1];
-
-  // 2. Verify the token using Firebase Admin SDK
-  const decodedToken = await verifyFirebaseToken(token);
-  if (!decodedToken) {
-    return withCors(NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 }));
-  }
-  const uid = decodedToken.uid;
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return withCors(authResult);
 
   try {
     // Fetch both regular apps and unapproved apps
     const [apps, unapprovedApps] = await Promise.all([
-      getApps(uid),
-      getUnapprovedApps(uid)
+      getApps(authResult.uid),
+      getUnapprovedApps(authResult.uid)
     ]);
 
     // Filter out persona apps from regular apps

@@ -1,28 +1,17 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin'; // Import the verifier
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import { getApps } from '@/lib/services/omi-api/apps'; // Import your Omi service
 import { OmiApiError } from '@/lib/services/omi-api/client'; // Import custom error
 
 // Force dynamic rendering for this route as it uses request headers
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
-  // 1. Get token from Authorization header
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-
-  // 2. Verify the token using Firebase Admin SDK
-  const decodedToken = await verifyFirebaseToken(token);
-  if (!decodedToken) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
-  const uid = decodedToken.uid;
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const apps = await getApps(uid);
+    const apps = await getApps(authResult.uid);
     return NextResponse.json(apps);
 
   } catch (error) {

@@ -1,38 +1,22 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import omiApiClient from '@/lib/services/omi-api/client';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { app_id: string } }
 ) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const { app_id } = params;
   if (!app_id) {
     return NextResponse.json({ error: 'App ID is required' }, { status: 400 });
   }
 
-  // 1. Verify Firebase Token
-  const authorization = request.headers.get('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing Bearer token' }, { status: 401 });
-  }
-  const idToken = authorization.split('Bearer ')[1];
-
-  let userUid: string;
-  try {
-    const decodedToken = await verifyFirebaseToken(idToken);
-    if (!decodedToken) {
-        return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-    }
-    userUid = decodedToken.uid;
-  } catch (error) {
-    console.error('Firebase Auth Error during verification:', error);
-    return NextResponse.json({ error: 'Unauthorized: Error verifying token' }, { status: 401 });
-  }
-
-  // 2. Parse request body to get the value
+  // Parse request body to get the value
   let requestBody;
   try {
     requestBody = await request.json();
@@ -48,7 +32,7 @@ export async function PATCH(
   // 3. Call the Omi API to mark app as popular
   try {
     const endpoint = `/v1/apps/${app_id}/popular?value=${value}`;
-    const result = await omiApiClient(endpoint, userUid, {
+    const result = await omiApiClient(endpoint, authResult.uid, {
       method: 'PATCH',
     });
 

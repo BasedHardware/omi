@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAdminAuth } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 import crypto from 'crypto';
 import zlib from 'zlib';
 
@@ -100,6 +101,9 @@ function buildConvoContext(convo: any, id: string, uid: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const db = getDb();
     const uid = request.nextUrl.searchParams.get('uid');

@@ -1,26 +1,15 @@
-import { NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const OMI_API_URL = process.env.NEXT_PUBLIC_OMI_API_URL;
 const OMI_SECRET_KEY = process.env.OMI_API_SECRET_KEY;
 
-async function verifyAuth(request: Request) {
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return null;
-  }
-  const token = authorization.split('Bearer ')[1];
-  return verifyFirebaseToken(token);
-}
-
 // GET /api/omi/announcements - List all announcements
-export async function GET(request: Request) {
-  const decoded = await verifyAuth(request);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const url = new URL(request.url);
@@ -52,11 +41,9 @@ export async function GET(request: Request) {
 }
 
 // POST /api/omi/announcements - Create announcement
-export async function POST(request: Request) {
-  const decoded = await verifyAuth(request);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function POST(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await request.json();

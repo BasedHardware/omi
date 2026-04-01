@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 // Ensure these environment variables are set in your .env.local or deployment environment
@@ -13,7 +14,9 @@ interface TypesenseCollectionResponse {
   // other fields might exist but are not needed here
 }
 
-export async function GET(request: Request) { // Use named export GET
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   if (!TYPESENSE_HOST || !TYPESENSE_API_KEY) {
     console.error('TYPESENSE_HOST or TYPESENSE_API_KEY environment variables are not set.');

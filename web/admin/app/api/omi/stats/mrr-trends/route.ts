@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const stripe = getStripe();
   try {
     const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;

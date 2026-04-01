@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
+import { getDb } from '@/lib/firebase/admin';
+import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
@@ -12,20 +13,11 @@ interface PayoutWithAppInfo {
 }
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const stripe = getStripe();
   const db = getDb();
-  // 1. Get token from Authorization header
-  const authorization = request.headers.get('Authorization');
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
-  }
-  const token = authorization.split('Bearer ')[1];
-
-  // 2. Verify the token using Firebase Admin SDK
-  const decodedToken = await verifyFirebaseToken(token);
-  if (!decodedToken) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
-  }
 
   try {
     const { searchParams } = new URL(request.url);
