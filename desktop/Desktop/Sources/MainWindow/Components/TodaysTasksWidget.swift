@@ -21,7 +21,7 @@ struct TasksWidget: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack {
                 Text("Tasks")
@@ -53,7 +53,7 @@ struct TasksWidget: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    VStack(spacing: 6) {
+                    VStack(spacing: 10) {
                         ForEach(Array(allTasks)) { task in
                             TaskRowView(
                                 task: task,
@@ -71,7 +71,7 @@ struct TasksWidget: View {
                         HStack {
                             Spacer()
                             Text("View all tasks")
-                                .scaledFont(size: 12, weight: .medium)
+                                .scaledFont(size: 12, weight: .semibold)
                                 .foregroundColor(OmiColors.textSecondary)
                             Image(systemName: "chevron.right")
                                 .scaledFont(size: 10)
@@ -87,16 +87,9 @@ struct TasksWidget: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(20)
+        .padding(22)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
-                )
-        )
+        .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }
 
@@ -109,7 +102,7 @@ struct TaskRowView: View {
     @State private var isToggling = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             // Checkbox
             Button(action: {
                 guard !isToggling else { return }
@@ -157,11 +150,11 @@ struct TaskRowView: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(task.completed ? OmiColors.backgroundQuaternary.opacity(0.3) : Color.clear)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(task.completed ? OmiColors.backgroundRaised.opacity(0.55) : OmiColors.backgroundTertiary.opacity(0.45))
         )
     }
 }

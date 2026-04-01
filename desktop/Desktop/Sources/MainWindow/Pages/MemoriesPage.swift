@@ -1017,15 +1017,9 @@ struct MemoriesPage: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .omiPanel(fill: OmiColors.backgroundSecondary, radius: 20, stroke: OmiColors.border.opacity(0.18), shadowOpacity: 0.18, shadowRadius: 14, shadowY: 8)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1036,7 +1030,7 @@ struct MemoriesPage: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             // Search field
             HStack(spacing: 10) {
                 if viewModel.isSearching || viewModel.isLoadingFiltered {
@@ -1062,10 +1056,10 @@ struct MemoriesPage: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(minHeight: 46)
+            .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
 
             // Category filter dropdown
             Button {
@@ -1082,13 +1076,13 @@ struct MemoriesPage: View {
                         .scaledFont(size: 10)
                 }
                 .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(minHeight: 46)
+                .omiControlSurface(
+                    fill: viewModel.selectedTags.isEmpty ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
+                    radius: 18,
+                    stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.purplePrimary.opacity(0.28)
                 )
             }
             .buttonStyle(.plain)
@@ -1103,9 +1097,8 @@ struct MemoriesPage: View {
                 Image(systemName: "brain")
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
+                    .frame(width: 42, height: 42)
+                    .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
             }
             .buttonStyle(.plain)
             .help("View Memory Graph")
@@ -1117,13 +1110,9 @@ struct MemoriesPage: View {
                 Image(systemName: "plus")
                     .scaledFont(size: 14)
                     .foregroundColor(.black)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
-                    )
+                    .frame(width: 42, height: 42)
+                    .background(OmiColors.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .help("Add Memory")
@@ -1135,22 +1124,18 @@ struct MemoriesPage: View {
                 Image(systemName: "chevron.down")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.black)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
-                    )
+                    .frame(width: 42, height: 42)
+                    .background(OmiColors.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
                 managementMenuPopover
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-        .padding(.bottom, 16)
+        .padding(.horizontal, 28)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
         .alert("Delete All Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete All", role: .destructive) {
@@ -1434,7 +1419,7 @@ struct MemoriesPage: View {
 
     private var memoryList: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: 14) {
                 ForEach(viewModel.filteredMemories) { memory in
                     MemoryCardView(
                         memory: memory,
@@ -1479,8 +1464,7 @@ struct MemoriesPage: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
@@ -1497,8 +1481,7 @@ struct MemoriesPage: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
@@ -1506,8 +1489,8 @@ struct MemoriesPage: View {
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 28)
+            .padding(.bottom, 28)
         }
     }
 
@@ -1687,58 +1670,53 @@ private struct MemoryCardView: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Content
-            Group {
-                if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
-                    Text("Protected memory")
-                        .italic()
-                        .foregroundColor(OmiColors.textTertiary)
-                } else {
-                    Text(memory.content)
-                        .foregroundColor(OmiColors.textPrimary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Group {
+                    if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
+                        Text("Protected memory")
+                            .italic()
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text(memory.content)
+                            .foregroundColor(OmiColors.textPrimary)
+                    }
                 }
-            }
                 .scaledFont(size: 14)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // New badge
-            if isNewlyCreated {
-                NewBadge()
+                if isNewlyCreated {
+                    NewBadge()
+                }
             }
 
-            Spacer(minLength: 4)
+            HStack(spacing: 10) {
+                Text(formatDate(memory.createdAt))
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textSecondary)
 
-            // Date
-            Text(formatDate(memory.createdAt))
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textSecondary)
-                .fixedSize()
+                Spacer(minLength: 4)
 
-            // Info icon with hover popover for details
-            MemoryDetailButton(
-                memory: memory,
-                categoryIcon: categoryIcon,
-                categoryColor: categoryColor,
-                tagColorFor: tagColorFor
-            )
+                MemoryDetailButton(
+                    memory: memory,
+                    categoryIcon: categoryIcon,
+                    categoryColor: categoryColor,
+                    tagColorFor: tagColorFor
+                )
 
-            // Click hint on hover
-            if isHovered {
-                Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                if isHovered {
+                    Image(systemName: "arrow.up.right")
+                        .scaledFont(size: 10, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border, lineWidth: 1)
-        )
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
+        .background(isHovered ? OmiColors.backgroundRaised : (isNewlyCreated ? OmiColors.userBubble.opacity(0.24) : OmiColors.backgroundSecondary))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(isHovered ? 0.18 : 0.1), radius: isHovered ? 16 : 10, x: 0, y: isHovered ? 10 : 6)
         .contentShape(Rectangle())
         .onHover { hovering in
             // No animation wrapper - simple state update for instant response
