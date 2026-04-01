@@ -589,4 +589,27 @@ mod tests {
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
     }
+
+    // --- ProxyCloseOrigin ---
+
+    #[test]
+    fn proxy_close_origin_debug_variants() {
+        // Verify all variants exist and produce distinct debug output
+        let variants = [
+            ProxyCloseOrigin::ClientClosed,
+            ProxyCloseOrigin::UpstreamClosed,
+            ProxyCloseOrigin::ClientError,
+            ProxyCloseOrigin::UpstreamError,
+        ];
+        let debug_strs: Vec<String> = variants.iter().map(|v| format!("{:?}", v)).collect();
+        assert_eq!(debug_strs.len(), 4);
+        // All distinct
+        let unique: std::collections::HashSet<&String> = debug_strs.iter().collect();
+        assert_eq!(unique.len(), 4, "All ProxyCloseOrigin variants should have distinct Debug output");
+        // Verify expected names
+        assert!(debug_strs.contains(&"ClientClosed".to_string()));
+        assert!(debug_strs.contains(&"UpstreamClosed".to_string()));
+        assert!(debug_strs.contains(&"ClientError".to_string()));
+        assert!(debug_strs.contains(&"UpstreamError".to_string()));
+    }
 }
