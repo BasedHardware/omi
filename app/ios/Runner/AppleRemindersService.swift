@@ -256,9 +256,14 @@ class AppleRemindersService {
                     "exists": true,
                     "completed": reminder.isCompleted,
                     "title": reminder.title ?? "",
+                    "notes": reminder.notes ?? "",
                 ]
                 if let completionDate = reminder.completionDate {
                     status["completionDate"] = AppleRemindersService.iso8601DateFormatter.string(from: completionDate)
+                }
+                if let dueDateComponents = reminder.dueDateComponents,
+                   let dueDate = Calendar.current.date(from: dueDateComponents) {
+                    status["dueDate"] = AppleRemindersService.iso8601DateFormatter.string(from: dueDate)
                 }
                 statuses[actionItemId] = status
             } else {
@@ -266,6 +271,7 @@ class AppleRemindersService {
                     "exists": false,
                     "completed": false,
                     "title": "",
+                    "notes": "",
                 ]
             }
         }
