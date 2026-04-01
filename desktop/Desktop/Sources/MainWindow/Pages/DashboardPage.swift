@@ -237,7 +237,7 @@ struct DashboardPage: View {
     }
 
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             if shouldShowSuggestionBanner {
                 PromptSuggestionBanner(
                     suggestions: postOnboardingSuggestions,
@@ -299,8 +299,8 @@ struct DashboardPage: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
         .padding(.bottom, 8)
     }
 
