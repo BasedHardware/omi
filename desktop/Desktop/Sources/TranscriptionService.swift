@@ -408,6 +408,26 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         withState { _shouldReconnect = value }
     }
 
+    /// Current _isReplaying flag (read-only, for testing)
+    var testIsReplaying: Bool {
+        withState { _isReplaying }
+    }
+
+    /// Set _isReplaying flag for testing replay gating behavior
+    func testSetIsReplaying(_ value: Bool) {
+        withState { _isReplaying = value }
+    }
+
+    /// Append data to reconnectBuffer for testing
+    func testAppendToReconnectBuffer(_ data: Data) {
+        withState { reconnectBuffer.append(data) }
+    }
+
+    /// Drain reconnectBuffer for testing
+    func testDrainReconnectBuffer() -> [Data] {
+        withState { reconnectBuffer.drain() }
+    }
+
     /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
     /// Exposed as static for testability.
     static func reconnectDelay(
