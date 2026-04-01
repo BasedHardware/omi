@@ -662,7 +662,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Your ${widget.device?.name ?? "OmiGlass"} has been updated successfully. The device will restart automatically.',
+                  'Your ${widget.device?.name ?? "Nooto Glass"} has been updated successfully. The device will restart automatically.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, color: Colors.grey.shade400, height: 1.4),
                 ),
