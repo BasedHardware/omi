@@ -10,7 +10,7 @@ Trusted by 300,000+ professionals.
 
 <br>
 
-[<img src="https://img.shields.io/badge/Download-macOS_App-000000?style=for-the-badge&logo=apple&logoColor=white" height="40">](https://omi.me/download)
+[<img src="https://img.shields.io/badge/Download-macOS_App-000000?style=for-the-badge&logo=apple&logoColor=white" height="40">](https://macos.omi.me/beta)
 
 <br>
 
