@@ -29,6 +29,7 @@ from utils.webhooks import (
 )
 from utils.other.storage import upload_audio_chunk, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.speaker_assignment import resolve_transcript_conversation_id
 from utils.speaker_identification import extract_speaker_samples
 import logging
 
@@ -411,8 +412,7 @@ async def _websocket_util_trigger(
                     # private cloud sync chunk paths (#6190 Bug 2).
                     if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: transcript_queue size {len(transcript_queue)} {uid}")
-                    # Use memory_id if available, otherwise use current_conversation_id for conversations
-                    conversation_or_memory_id = memory_id or current_conversation_id
+                    conversation_or_memory_id = resolve_transcript_conversation_id(memory_id, current_conversation_id)
                     transcript_queue.append({'segments': segments, 'memory_id': conversation_or_memory_id})
                     continue
 
