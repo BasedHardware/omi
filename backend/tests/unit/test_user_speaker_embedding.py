@@ -647,73 +647,62 @@ class TestDimensionMismatchGuard:
         result = find_best_match(query, candidates)
         assert result is None  # all return 2.0, above threshold
 
-    def test_person_cache_loading_filters_mismatched_dims(self):
-        """Person embeddings with wrong dimension should be filtered out during cache loading.
+    def test_mixed_dim_cache_loads_all_relies_on_compare_guard(self):
+        """Cache loads ALL embeddings regardless of dimension; compare_embeddings handles mismatches.
 
-        Simulates the transcribe.py cache loading path where user has 256-dim
-        and some contacts have stale 512-dim embeddings.
+        No cache-level filtering — avoids order-dependent behavior where a stale
+        first entry could poison the filter and drop valid embeddings.
         """
+        from utils.stt.speaker_embedding import compare_embeddings, SPEAKER_MATCH_THRESHOLD
+
         person_embeddings_cache = {}
+        # User has 256-dim (current v3 model)
         user_embedding = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        person_embeddings_cache['user'] = {
-            'embedding': user_embedding,
-            'name': 'User',
-        }
+        person_embeddings_cache['user'] = {'embedding': user_embedding, 'name': 'User'}
 
-        # Simulate loading persons with mixed dimensions
+        # Load ALL persons into cache, including stale 512-dim
         persons = [
-            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(256))},  # v3, correct
-            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(512))},  # stale v2
-            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': list(np.random.randn(256))},  # v3, correct
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(256))},
+            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(512))},  # stale
+            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': list(np.random.randn(256))},
         ]
-
-        skipped = []
         for person in persons:
             emb = person.get('speaker_embedding')
             if emb:
-                emb_array = np.array(emb, dtype=np.float32).reshape(1, -1)
-                # Mirror the dimension filter from transcribe.py
-                if (
-                    person_embeddings_cache
-                    and next(iter(person_embeddings_cache.values()))['embedding'].shape[1] != emb_array.shape[1]
-                ):
-                    skipped.append(person['id'])
-                    continue
                 person_embeddings_cache[person['id']] = {
-                    'embedding': emb_array,
+                    'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                     'name': person['name'],
                 }
 
-        # Alice and Carol loaded, Bob skipped
-        assert 'p1' in person_embeddings_cache
-        assert 'p2' not in person_embeddings_cache
-        assert 'p3' in person_embeddings_cache
-        assert skipped == ['p2']
+        # All loaded — no filtering at cache level
+        assert len(person_embeddings_cache) == 4  # user + 3 persons
 
-    def test_person_cache_loading_no_filter_when_cache_empty(self):
-        """When cache is empty (no user embedding), all persons should be loaded regardless of dim."""
+        # compare_embeddings safely handles the 256 vs 512 mismatch
+        query = np.random.RandomState(42).randn(1, 256).astype(np.float32)
+        d_alice = compare_embeddings(query, person_embeddings_cache['p1']['embedding'])
+        d_bob = compare_embeddings(query, person_embeddings_cache['p2']['embedding'])
+        assert 0.0 <= d_alice <= 2.0  # same dim, real distance
+        assert d_bob == 2.0  # mismatch, max distance — never matches
+
+    def test_stale_user_embedding_does_not_poison_matching(self):
+        """Even if user has stale 512-dim embedding, valid 256-dim contacts still match each other.
+
+        Regression test for the Codex-flagged 'poisonous anchor' edge case:
+        a stale user embedding must not prevent valid person-to-person matching.
+        """
+        from utils.stt.speaker_embedding import compare_embeddings
+
         person_embeddings_cache = {}
+        # Stale 512-dim user embedding (pre-v3 migration)
+        stale_user = np.random.RandomState(1).randn(1, 512).astype(np.float32)
+        person_embeddings_cache['user'] = {'embedding': stale_user, 'name': 'User'}
 
-        persons = [
-            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(512))},
-            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(256))},
-        ]
+        # Valid 256-dim person embeddings
+        alice_emb = np.random.RandomState(2).randn(1, 256).astype(np.float32)
+        person_embeddings_cache['alice'] = {'embedding': alice_emb, 'name': 'Alice'}
 
-        for person in persons:
-            emb = person.get('speaker_embedding')
-            if emb:
-                emb_array = np.array(emb, dtype=np.float32).reshape(1, -1)
-                if (
-                    person_embeddings_cache
-                    and next(iter(person_embeddings_cache.values()))['embedding'].shape[1] != emb_array.shape[1]
-                ):
-                    continue
-                person_embeddings_cache[person['id']] = {
-                    'embedding': emb_array,
-                    'name': person['name'],
-                }
+        # Alice vs stale user → 2.0 (dimension mismatch, correctly no-match)
+        assert compare_embeddings(alice_emb, stale_user) == 2.0
 
-        # Both loaded since cache was empty when first person loaded
-        assert 'p1' in person_embeddings_cache
-        # p2 gets filtered because after p1 loads (512), p2 (256) mismatches
-        assert 'p2' not in person_embeddings_cache
+        # Alice vs herself → ~0.0 (correctly matches)
+        assert compare_embeddings(alice_emb, alice_emb) < 0.001
