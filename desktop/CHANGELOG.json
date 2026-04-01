@@ -1,5 +1,7 @@
 {
-"unreleased": [],
+  "unreleased": [
+    "Added copy and share buttons to floating bar AI responses for quick Q&A sharing"
+  ],
   "releases": [
     {
       "version": "0.11.206",
