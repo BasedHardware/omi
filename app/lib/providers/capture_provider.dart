@@ -708,7 +708,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Create audio source for BLE device
     final pd = await device.getDeviceInfo(connection);
-    final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Nooto";
     if (device.type == DeviceType.omi || device.type == DeviceType.openglass) {
       _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel);
     }
