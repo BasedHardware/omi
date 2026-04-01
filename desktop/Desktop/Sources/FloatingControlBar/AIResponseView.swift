@@ -329,8 +329,18 @@ struct AIResponseView: View {
 
     // MARK: - Follow-Up Input
 
+    @State private var showCopiedFeedback = false
+
     private var followUpInputView: some View {
         HStack(spacing: 6) {
+            Button(action: { copyResponse() }) {
+                Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                    .scaledFont(size: 13)
+                    .foregroundColor(showCopiedFeedback ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Copy response")
+
             TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
@@ -353,6 +363,18 @@ struct AIResponseView: View {
             }
             .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .buttonStyle(.plain)
+        }
+    }
+
+    private func copyResponse() {
+        let text = currentMessage?.text ?? ""
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        AnalyticsManager.shared.shareAction(category: "floating_bar_response")
+        withAnimation { showCopiedFeedback = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showCopiedFeedback = false }
         }
     }
 
