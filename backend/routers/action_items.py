@@ -122,6 +122,11 @@ def get_pending_sync_items(
     if default_app != 'apple_reminders':
         return {"pending_export": [], "synced_items": []}
 
+    # Only export items created after the user connected Apple Reminders.
+    # This prevents dumping all existing action items when the integration is first enabled.
+    integration = users_db.get_task_integration(uid, 'apple_reminders')
+    connected_at = integration.get('created_at') if integration else None
+
     pending_export = action_items_db.get_unexported_action_items(uid, limit=50)
     synced_items = action_items_db.get_action_items_with_reminder_id(uid, limit=50)
 
@@ -133,6 +138,7 @@ def get_pending_sync_items(
             "completed": item.get("completed", False),
         }
         for item in pending_export
+        if connected_at is None or (item.get("created_at") and item["created_at"] >= connected_at)
     ]
 
     synced_items_response = [
@@ -141,6 +147,7 @@ def get_pending_sync_items(
             "description": item.get("description", ""),
             "apple_reminder_id": item.get("apple_reminder_id", ""),
             "completed": item.get("completed", False),
+            "due_at": item["due_at"].isoformat() if item.get("due_at") else None,
             "updated_at": item["updated_at"].isoformat() if item.get("updated_at") else None,
         }
         for item in synced_items
