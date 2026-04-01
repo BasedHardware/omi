@@ -2520,11 +2520,13 @@ async def _stream_handler(
                                 # Only when can_assign is true (has speech_profile_processed segment)
                                 # Use segment_conversation_map to resolve the conversation the segments
                                 # actually belong to — current_conversation_id may have advanced on rollover.
-                                sample_conv_id = (
-                                    segment_conversation_map.get(segment_ids[0], current_conversation_id)
-                                    if segment_ids
-                                    else current_conversation_id
-                                )
+                                # Iterate all segment_ids to find a mapped conv — first ID may be unknown/stale.
+                                sample_conv_id = current_conversation_id
+                                for sid in segment_ids:
+                                    mapped = segment_conversation_map.get(sid)
+                                    if mapped:
+                                        sample_conv_id = mapped
+                                        break
                                 if (
                                     can_assign
                                     and person_id
