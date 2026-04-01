@@ -71,6 +71,35 @@ class TestSegmentConversationMap:
         assert segment_conversation_map.get('seg-1', current_conversation_id) == 'conv-A'
         assert segment_conversation_map.get('seg-3', current_conversation_id) == 'conv-B'
 
+    def test_mixed_segment_ids_first_unknown_resolves_from_later(self):
+        """If first segment_id is unknown but later ones are in the map, resolve correctly."""
+        segment_conversation_map = {'seg-2': 'conv-A', 'seg-3': 'conv-A'}
+        current_conversation_id = 'conv-B'
+
+        segment_ids = ['unknown-seg', 'seg-2', 'seg-3']
+        # Iterate all segment_ids to find a mapped conv (mirrors fix in transcribe.py)
+        sample_conv_id = current_conversation_id
+        for sid in segment_ids:
+            mapped = segment_conversation_map.get(sid)
+            if mapped:
+                sample_conv_id = mapped
+                break
+        assert sample_conv_id == 'conv-A'
+
+    def test_all_unknown_segments_fall_back_to_current(self):
+        """If no segment_ids are in the map, fall back to current_conversation_id."""
+        segment_conversation_map = {'seg-1': 'conv-A'}
+        current_conversation_id = 'conv-B'
+
+        segment_ids = ['unknown-1', 'unknown-2']
+        sample_conv_id = current_conversation_id
+        for sid in segment_ids:
+            mapped = segment_conversation_map.get(sid)
+            if mapped:
+                sample_conv_id = mapped
+                break
+        assert sample_conv_id == 'conv-B'
+
     def test_map_populated_at_segment_creation(self):
         """Verify the map is populated when segments are first processed, not later."""
         segment_conversation_map = {}
