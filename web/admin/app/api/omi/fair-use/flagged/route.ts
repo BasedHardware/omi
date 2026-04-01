@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const stage = searchParams.get('stage');
-  const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
+  const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+  const limit = Math.min(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 200);
 
   try {
     const db = getDb();
