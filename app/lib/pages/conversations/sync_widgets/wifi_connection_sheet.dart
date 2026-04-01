@@ -10,12 +10,12 @@ class WifiConnectionSheet extends StatefulWidget {
   final String deviceName;
   final VoidCallback? onCancel;
 
-  const WifiConnectionSheet({super.key, this.deviceName = 'Omi', this.onCancel});
+  const WifiConnectionSheet({super.key, this.deviceName = 'Nooto', this.onCancel});
 
   /// Shows the WiFi connection sheet and returns a controller to update progress
   static Future<WifiConnectionSheetController> show(
     BuildContext context, {
-    String deviceName = 'Omi',
+    String deviceName = 'Nooto',
     VoidCallback? onCancel,
     VoidCallback? onRetry,
   }) async {
