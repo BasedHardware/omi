@@ -292,7 +292,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         if (!provider.startedRecording) ...[
                           // Intro text
                           Text(
-                            'Omi needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
+                            'Nooto needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
