@@ -32,8 +32,8 @@ class _FCMNotificationService implements NotificationInterface {
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Omi Notifications',
-    channelDescription: 'Notification channel for Omi',
+    channelName: 'Nooto Notifications',
+    channelDescription: 'Notification channel for Nooto',
     defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
