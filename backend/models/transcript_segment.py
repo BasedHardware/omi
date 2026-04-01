@@ -11,10 +11,10 @@ from models.other import Person
 SENTENCE_ENDERS = frozenset('.?!。！？؟۔।॥')
 
 # Pre-compiled regex character class built from SENTENCE_ENDERS for use in re.split/re.findall.
-_SENTENCE_ENDERS_CLASS = '[' + re.escape(''.join(SENTENCE_ENDERS)) + ']'
-_SENTENCE_SPLIT_RE = re.compile(r'(?<=' + _SENTENCE_ENDERS_CLASS + r')\s*')
-_SENTENCE_FINDALL_RE = re.compile(
-    r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + _SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
+SENTENCE_ENDERS_CLASS = '[' + re.escape(''.join(SENTENCE_ENDERS)) + ']'
+SENTENCE_SPLIT_RE = re.compile(r'(?<=' + SENTENCE_ENDERS_CLASS + r')\s*')
+SENTENCE_FINDALL_RE = re.compile(
+    r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
 )
 
 
@@ -91,7 +91,7 @@ class TranscriptSegment(BaseModel):
             text = text.strip()
             if not text:
                 return None, ""
-            parts = [p for p in _SENTENCE_SPLIT_RE.split(text) if p]
+            parts = [p for p in SENTENCE_SPLIT_RE.split(text) if p]
             if not parts:
                 return None, text
             last = parts[-1]
@@ -104,7 +104,7 @@ class TranscriptSegment(BaseModel):
             text = text.strip()
             if not text:
                 return "", ""
-            parts = [p for p in _SENTENCE_SPLIT_RE.split(text) if p]
+            parts = [p for p in SENTENCE_SPLIT_RE.split(text) if p]
             if not parts:
                 return "", ""
             first = parts[0]
