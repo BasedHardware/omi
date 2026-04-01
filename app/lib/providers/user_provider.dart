@@ -343,7 +343,7 @@ class UserProvider with ChangeNotifier {
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: ctx?.l10n.omiSays ?? 'omi says',
+        title: ctx?.l10n.omiSays ?? 'nooto says',
         body: ctx?.l10n.migratingToProtection(targetLevel) ?? 'Migrating to $targetLevel protection...',
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
@@ -386,7 +386,7 @@ class UserProvider with ChangeNotifier {
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: ctx?.l10n.omiSays ?? 'omi says',
+        title: ctx?.l10n.omiSays ?? 'nooto says',
         body: ctx?.l10n.migrationErrorOccurred ?? 'An error occurred during data migration. Please try again.',
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
@@ -410,7 +410,7 @@ class UserProvider with ChangeNotifier {
 
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
-      title: ctx?.l10n.omiSays ?? 'omi says',
+      title: ctx?.l10n.omiSays ?? 'nooto says',
       body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
           'Your data is now protected with the new $targetLevel settings.',
       layout: NotificationLayout.Default,
