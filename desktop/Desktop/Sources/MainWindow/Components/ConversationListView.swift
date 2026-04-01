@@ -169,9 +169,8 @@ struct ConversationListView: View {
     }
 
     private var conversationListContent: some View {
-        let items = flatListItems
-        return LazyVStack(alignment: .leading, spacing: 8) {
-            ForEach(items) { item in
+        LazyVStack(alignment: .leading, spacing: 8, pinnedViews: []) {
+            ForEach(flatListItems) { item in
                 switch item {
                 case .header(let key, let isFirst):
                     Text(key)
