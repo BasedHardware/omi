@@ -4284,27 +4284,25 @@ struct SettingsContentView: View {
                 }
             }
 
-            if AnalyticsManager.isDevBuild {
-                settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Voice Answers (Experimental)")
-                                .scaledFont(size: 16, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
-                            Text("Speak shortcut-based floating-bar replies aloud. Saves your ElevenLabs settings to your backend profile so this dev build reconnects automatically.")
-                                .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textSecondary)
-                            if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("No ElevenLabs key saved yet, so this build will use the local Samantha voice.")
-                                    .scaledFont(size: 12)
-                                    .foregroundColor(OmiColors.textTertiary)
-                            }
+            settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Voice Answers (Experimental)")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Speak shortcut-based floating-bar replies aloud. Saves your ElevenLabs settings to your backend profile so the app reconnects automatically.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                        if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("No ElevenLabs key saved yet, so the app will use the local Samantha voice.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
                         }
-                        Spacer()
-                        Toggle("", isOn: floatingBarVoiceAnswersBinding)
-                            .toggleStyle(.switch)
-                            .tint(OmiColors.purplePrimary)
                     }
+                    Spacer()
+                    Toggle("", isOn: floatingBarVoiceAnswersBinding)
+                        .toggleStyle(.switch)
+                        .tint(OmiColors.purplePrimary)
                 }
             }
 
@@ -4329,22 +4327,20 @@ struct SettingsContentView: View {
                 value: $devAnthropicKey
             )
 
-            if AnalyticsManager.isDevBuild {
-                developerKeyField(
-                    title: "ElevenLabs API Key",
-                    subtitle: "For experimental floating-bar voice answers",
-                    settingId: "advanced.devkeys.elevenlabs",
-                    value: syncedElevenLabsKeyBinding
-                )
+            developerKeyField(
+                title: "ElevenLabs API Key",
+                subtitle: "For experimental floating-bar voice answers",
+                settingId: "advanced.devkeys.elevenlabs",
+                value: syncedElevenLabsKeyBinding
+            )
 
-                developerTextField(
-                    title: "ElevenLabs Voice ID",
-                    subtitle: "Optional override. Leave blank to use the default Rachel voice.",
-                    placeholder: "21m00Tcm4TlvDq8ikWAM",
-                    settingId: "advanced.devkeys.elevenlabsvoice",
-                    value: syncedElevenLabsVoiceIDBinding
-                )
-            }
+            developerTextField(
+                title: "ElevenLabs Voice ID",
+                subtitle: "Optional override. Leave blank to use the default Rachel voice.",
+                placeholder: "21m00Tcm4TlvDq8ikWAM",
+                settingId: "advanced.devkeys.elevenlabsvoice",
+                value: syncedElevenLabsVoiceIDBinding
+            )
 
             if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty || !devElevenLabsVoiceID.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
