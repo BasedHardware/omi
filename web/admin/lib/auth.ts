@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
 
 /**
  * Verify that the request comes from an authenticated admin user.
- * Checks valid Firebase ID token in Authorization header.
- * The adminData collection check is done client-side by auth-provider.
+ * Checks: (1) valid Firebase ID token in Authorization header,
+ * (2) user's UID exists in the adminData collection.
  * Returns the decoded token on success, or a NextResponse error on failure.
  */
 export async function verifyAdmin(request: NextRequest): Promise<
@@ -21,9 +21,16 @@ export async function verifyAdmin(request: NextRequest): Promise<
     if (!decodedToken) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
+
+    const db = getDb();
+    const adminDoc = await db.collection('adminData').doc(decodedToken.uid).get();
+    if (!adminDoc.exists) {
+      return NextResponse.json({ error: 'Forbidden: Not an admin' }, { status: 403 });
+    }
+
     return { uid: decodedToken.uid };
   } catch (error) {
-    console.error('Error verifying admin token:', error);
+    console.error('Error verifying admin:', error);
     return NextResponse.json({ error: 'Internal server error during auth' }, { status: 500 });
   }
 }
