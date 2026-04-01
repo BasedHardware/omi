@@ -20,7 +20,7 @@ use crate::models::{
     NotificationSettings, PersonaDB, Structured, TranscriptSegment, TranscriptionPreferences,
     AIUserProfile, UserProfile,
     AssistantSettingsData, SharedAssistantSettingsData, FocusSettingsData, TaskSettingsData,
-    AdviceSettingsData, MemorySettingsData,
+    AdviceSettingsData, MemorySettingsData, FloatingBarSettingsData,
 };
 
 /// Service account credentials from JSON file
@@ -4907,6 +4907,12 @@ impl FirestoreService {
             excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
         });
 
+        let floating_bar = self.parse_sub_map(sf, "floating_bar").map(|f| FloatingBarSettingsData {
+            voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
+            elevenlabs_api_key: self.parse_string(f, "elevenlabs_api_key"),
+            elevenlabs_voice_id: self.parse_string(f, "elevenlabs_voice_id"),
+        });
+
         // Read top-level update_channel from user doc (not from assistant_settings sub-map)
         let update_channel = self.parse_string(fields, "update_channel");
 
@@ -4916,6 +4922,7 @@ impl FirestoreService {
             task,
             advice,
             memory,
+            floating_bar,
             update_channel,
         })
     }
@@ -5033,6 +5040,21 @@ impl FirestoreService {
             if let Some(v) = ea { m.insert("excluded_apps".into(), self.build_string_array_value(&v)); }
             if !m.is_empty() {
                 top_fields.insert("memory".into(), self.build_sub_map_value(m));
+            }
+        }
+
+        if data.floating_bar.is_some() || current.floating_bar.is_some() {
+            let cur = current.floating_bar.unwrap_or_default();
+            let new = data.floating_bar.clone().unwrap_or_default();
+            let mut m = serde_json::Map::new();
+            let vae = new.voice_answers_enabled.or(cur.voice_answers_enabled);
+            if let Some(v) = vae { m.insert("voice_answers_enabled".into(), json!({"booleanValue": v})); }
+            let api_key = new.elevenlabs_api_key.or(cur.elevenlabs_api_key);
+            if let Some(v) = api_key { m.insert("elevenlabs_api_key".into(), json!({"stringValue": v})); }
+            let voice_id = new.elevenlabs_voice_id.or(cur.elevenlabs_voice_id);
+            if let Some(v) = voice_id { m.insert("elevenlabs_voice_id".into(), json!({"stringValue": v})); }
+            if !m.is_empty() {
+                top_fields.insert("floating_bar".into(), self.build_sub_map_value(m));
             }
         }
 

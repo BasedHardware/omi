@@ -3893,16 +3893,30 @@ struct MemorySettingsResponse: Codable {
     }
 }
 
+struct FloatingBarSettingsResponse: Codable {
+    var voiceAnswersEnabled: Bool?
+    var elevenLabsApiKey: String?
+    var elevenLabsVoiceID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case voiceAnswersEnabled = "voice_answers_enabled"
+        case elevenLabsApiKey = "elevenlabs_api_key"
+        case elevenLabsVoiceID = "elevenlabs_voice_id"
+    }
+}
+
 struct AssistantSettingsResponse: Codable {
     var shared: SharedAssistantSettingsResponse?
     var focus: FocusSettingsResponse?
     var task: TaskSettingsResponse?
     var advice: AdviceSettingsResponse?
     var memory: MemorySettingsResponse?
+    var floatingBar: FloatingBarSettingsResponse?
     var updateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case shared, focus, task, advice, memory
+        case floatingBar = "floating_bar"
         case updateChannel = "update_channel"
     }
 }

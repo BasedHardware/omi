@@ -541,6 +541,20 @@ async fn update_assistant_settings(
             }
         }
     }
+    if let Some(ref floating_bar) = request.floating_bar {
+        if let Some(ref api_key) = floating_bar.elevenlabs_api_key {
+            if api_key.len() > 512 {
+                tracing::warn!("ElevenLabs API key too long: {} chars (max 512)", api_key.len());
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+        if let Some(ref voice_id) = floating_bar.elevenlabs_voice_id {
+            if voice_id.len() > 128 {
+                tracing::warn!("ElevenLabs voice id too long: {} chars (max 128)", voice_id.len());
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    }
 
     match state
         .firestore
