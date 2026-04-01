@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/firebase/admin';
+import { invalidateEnforcementCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await ref.set(updates, { merge: true });
+    await invalidateEnforcementCache(uid);
 
     return NextResponse.json({ status: 'updated', stage });
   } catch (error) {
