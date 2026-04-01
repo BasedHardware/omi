@@ -3,10 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesFiveSteps() {
+  func testMergedFlowUsesSeventeenSteps() {
     XCTAssertEqual(
-      OnboardingFlow.steps, ["Chat", "Notifications", "FloatingBar", "VoiceShortcut", "Tasks"])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 4)
+      OnboardingFlow.steps,
+      [
+        "Name", "Language", "Trust", "ScreenRecording", "FullDiskAccess",
+        "FileScan", "Microphone", "Notifications", "Accessibility", "Automation",
+        "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo",
+        "Research", "Goal", "Tasks",
+      ])
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 16)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -14,7 +20,11 @@ final class OnboardingFlowTests: XCTestCase {
       currentStep: 4,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
-      hasMergedVoiceInputStep: false
+      hasMergedVoiceInputStep: false,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true
     )
 
     XCTAssertEqual(migrated, 3)
@@ -22,10 +32,14 @@ final class OnboardingFlowTests: XCTestCase {
 
   func testMigrationClampsOverflowToTasksStep() {
     let migrated = OnboardingFlow.migratedStep(
-      currentStep: 9,
+      currentStep: 99,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
-      hasMergedVoiceInputStep: true
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true
     )
 
     XCTAssertEqual(migrated, OnboardingFlow.lastStepIndex)
