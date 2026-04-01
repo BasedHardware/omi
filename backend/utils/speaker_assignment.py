@@ -106,6 +106,26 @@ def resolve_conversation_for_segments(
     return current_conversation_id
 
 
+def resolve_transcript_conversation_id(
+    memory_id: Optional[str],
+    current_conversation_id: Optional[str],
+) -> Optional[str]:
+    """Resolve the conversation ID for a transcript queue entry.
+
+    header_type 102 carries an optional memory_id that identifies which
+    conversation the transcript belongs to.  This must NOT overwrite
+    current_conversation_id (which is set only by header_type 103).
+
+    Args:
+        memory_id: The memory_id from the 102 payload (may be None).
+        current_conversation_id: The authoritative conversation ID from 103.
+
+    Returns:
+        memory_id if present, otherwise current_conversation_id.
+    """
+    return memory_id or current_conversation_id
+
+
 def should_update_speaker_to_person_map(speaker_id: Optional[int]) -> bool:
     """Check if speaker_to_person_map should be updated for text detection.
 
