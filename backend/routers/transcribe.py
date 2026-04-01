@@ -1826,6 +1826,14 @@ async def _stream_handler(
 
             buffer_start_ts, buffer_end_ts = time_range
 
+            # Log timing inputs for clock-source alignment analysis (#6190)
+            logger.info(
+                f"Speaker ID timing: seg_abs=[{seg_start:.3f},{seg_end:.3f}] "
+                f"buf=[{buffer_start_ts:.3f},{buffer_end_ts:.3f}] "
+                f"drift_start={seg_start - buffer_start_ts:.3f}s drift_end={seg_end - buffer_end_ts:.3f}s "
+                f"duration={duration:.2f}s {uid} {session_id}"
+            )
+
             # Calculate extraction range - stay within segment bounds, max 10 seconds from center
             MAX_EXTRACT_DURATION = 10.0
 
@@ -1841,18 +1849,26 @@ async def _stream_handler(
                 extract_end = center + half_duration
 
             # Clamp to buffer availability
+            pre_clamp_duration = extract_end - extract_start
             extract_start = max(buffer_start_ts, extract_start)
             extract_end = min(buffer_end_ts, extract_end)
 
             if extract_end <= extract_start:
-                logger.info(f"Speaker ID: no audio to extract {uid} {session_id}")
+                logger.info(
+                    f"Speaker ID: no audio to extract "
+                    f"(pre_clamp={pre_clamp_duration:.2f}s, clamped_range=[{extract_start:.3f},{extract_end:.3f}]) "
+                    f"{uid} {session_id}"
+                )
                 return
 
             # Reject clips too short for speaker embedding (issue #4572)
             extracted_duration = extract_end - extract_start
             if extracted_duration < SPEAKER_ID_MIN_AUDIO:
                 logger.info(
-                    f"Speaker ID: extracted audio too short ({extracted_duration:.2f}s < {SPEAKER_ID_MIN_AUDIO}s) after buffer clamping {uid} {session_id}"
+                    f"Speaker ID: extracted audio too short ({extracted_duration:.2f}s < {SPEAKER_ID_MIN_AUDIO}s) "
+                    f"after buffer clamping (pre_clamp={pre_clamp_duration:.2f}s, "
+                    f"start_clipped={seg_start < buffer_start_ts}, end_clipped={seg_end > buffer_end_ts}) "
+                    f"{uid} {session_id}"
                 )
                 return
 
