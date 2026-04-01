@@ -1021,10 +1021,6 @@ struct MemoriesPage: View {
             .padding(.vertical, 12)
             .background(OmiColors.backgroundTertiary)
             .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
-            )
             .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
@@ -1065,7 +1061,7 @@ struct MemoriesPage: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
+            .cornerRadius(10)
 
             // Category filter dropdown
             Button {
@@ -1085,9 +1081,9 @@ struct MemoriesPage: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
+                .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 10)
                         .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
                 )
             }
@@ -1105,7 +1101,7 @@ struct MemoriesPage: View {
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 32, height: 32)
                     .background(OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
             }
             .buttonStyle(.plain)
             .help("View Memory Graph")
@@ -1116,14 +1112,10 @@ struct MemoriesPage: View {
             } label: {
                 Image(systemName: "plus")
                     .scaledFont(size: 14)
-                    .foregroundColor(.black)
+                    .foregroundColor(OmiColors.textPrimary)
                     .frame(width: 32, height: 32)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
-                    )
+                    .background(OmiColors.backgroundTertiary.opacity(0.5))
+                    .cornerRadius(10)
             }
             .buttonStyle(.plain)
             .help("Add Memory")
@@ -1134,14 +1126,10 @@ struct MemoriesPage: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(.black)
+                    .foregroundColor(OmiColors.textPrimary)
                     .frame(width: 32, height: 32)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(OmiColors.border, lineWidth: 1)
-                    )
+                    .background(OmiColors.backgroundTertiary.opacity(0.5))
+                    .cornerRadius(10)
             }
             .buttonStyle(.plain)
             .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
@@ -1331,11 +1319,11 @@ struct MemoriesPage: View {
                 } label: {
                     Text("Apply")
                         .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(.black)
+                        .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color.white)
-                        .cornerRadius(6)
+                        .background(OmiColors.purplePrimary)
+                        .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
@@ -1434,7 +1422,7 @@ struct MemoriesPage: View {
 
     private var memoryList: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: 12) {
                 ForEach(viewModel.filteredMemories) { memory in
                     MemoryCardView(
                         memory: memory,
@@ -1480,7 +1468,7 @@ struct MemoriesPage: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .cornerRadius(10)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
@@ -1498,7 +1486,7 @@ struct MemoriesPage: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .cornerRadius(10)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
@@ -1583,7 +1571,7 @@ struct MemoriesPage: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .background(OmiColors.purplePrimary)
-                .cornerRadius(8)
+                .cornerRadius(10)
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
@@ -1658,7 +1646,7 @@ struct MemoriesPage: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .background(OmiColors.purplePrimary)
-                .cornerRadius(8)
+                .cornerRadius(10)
             }
             .buttonStyle(.plain)
         }
@@ -1731,14 +1719,10 @@ private struct MemoryCardView: View {
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border, lineWidth: 1)
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.1) : OmiColors.backgroundTertiary.opacity(0.5)))
+        .cornerRadius(12)
         .contentShape(Rectangle())
         .onHover { hovering in
             // No animation wrapper - simple state update for instant response
@@ -1996,7 +1980,7 @@ struct MemoryDetailSheet: View {
                             .scrollContentBackground(.hidden)
                             .padding(8)
                             .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .cornerRadius(10)
                             .frame(minHeight: 80)
 
                         HStack(spacing: 8) {
@@ -2018,11 +2002,11 @@ struct MemoryDetailSheet: View {
                             } label: {
                                 Text("Save")
                                     .scaledFont(size: 13, weight: .medium)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(.white)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)
-                                    .background(Color.white)
-                                    .cornerRadius(6)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(10)
                             }
                             .buttonStyle(.plain)
                             .disabled(editContentText.isEmpty)
@@ -2060,7 +2044,7 @@ struct MemoryDetailSheet: View {
                     }
                     .padding(12)
                     .background(OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
 
                 // Context
@@ -2090,7 +2074,7 @@ struct MemoryDetailSheet: View {
                     }
                     .padding(12)
                     .background(OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
 
                 // Metadata
@@ -2172,7 +2156,7 @@ struct MemoryDetailSheet: View {
                 }
                 .padding(12)
                 .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
+                .cornerRadius(10)
 
                 // Action Buttons
                 VStack(spacing: 10) {
@@ -2245,7 +2229,7 @@ private struct MemoryActionRow: View {
         .foregroundColor(textColor)
         .padding(12)
         .background(backgroundColor)
-        .cornerRadius(8)
+        .cornerRadius(10)
         .opacity(isPressed ? 0.7 : 1.0)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -2316,7 +2300,7 @@ struct AddMemorySheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(12)
                 .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
+                .cornerRadius(10)
                 .frame(height: 150)
 
             HStack(spacing: 12) {
@@ -2337,9 +2321,9 @@ struct AddMemorySheet: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
                         .background(viewModel.newMemoryText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 10)
                                 .stroke(viewModel.newMemoryText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
                         )
                 }
@@ -2388,7 +2372,7 @@ struct EditMemorySheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(12)
                 .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
+                .cornerRadius(10)
                 .frame(height: 150)
 
             HStack(spacing: 12) {
@@ -2409,9 +2393,9 @@ struct EditMemorySheet: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
                         .background(viewModel.editText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 10)
                                 .stroke(viewModel.editText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
                         )
                 }
