@@ -199,7 +199,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           storage: WalStorage.mem,
           status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
-          deviceModel: _deviceModel ?? "Omi",
+          deviceModel: _deviceModel ?? "Nooto",
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
