@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
-from models.transcript_segment import TranscriptSegment, Translation
+from models.transcript_segment import TranscriptSegment, Translation, SENTENCE_ENDERS
 from utils.translation import (
     TranslationNeed,
     classify_translation_need,
@@ -68,7 +68,7 @@ def _is_text_stable(text: str, signals: set) -> bool:
         return True
     # Auto-detect sentence-ending punctuation
     stripped = text.rstrip()
-    if stripped and stripped[-1] in '.?!':
+    if stripped and stripped[-1] in SENTENCE_ENDERS:
         return True
     return False
 
@@ -79,7 +79,7 @@ def _compute_stability_signals(
     """Compute stability signals from text content and timing."""
     signals = set()
     stripped = text.rstrip()
-    if stripped and stripped[-1] in '.?!':
+    if stripped and stripped[-1] in SENTENCE_ENDERS:
         signals.add(STABILITY_PUNCTUATION)
     if prev_speaker_id is not None and curr_speaker_id is not None and prev_speaker_id != curr_speaker_id:
         signals.add(STABILITY_SPEAKER_SWITCH)
