@@ -44,8 +44,8 @@ final class VADGateAutoEmitTests: XCTestCase {
         XCTAssertTrue(result.output.isComplete)
         XCTAssertEqual(result.output.audioBuffer?.count, 1_500_000)
 
-        // Should transition to .speech (not stay in .hangover)
-        XCTAssertEqual(result.resultState, .speech)
+        // Should stay in .hangover (preserving original state)
+        XCTAssertEqual(result.resultState, .hangover)
     }
 
     func testAutoEmitResetsBatchLastSpeechMs() {
