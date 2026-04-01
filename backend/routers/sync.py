@@ -729,7 +729,9 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     people = users_db.get_people(uid)
     for person in people or []:
         emb = person.get('speaker_embedding')
-        if emb:
+        # Only load embedding if person has speech samples — contacts without
+        # samples may have stale embeddings from a pre-v3 model (#6238)
+        if emb and person.get('speech_samples'):
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],
