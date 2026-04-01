@@ -402,6 +402,7 @@ async def _stream_handler(
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
     current_session_segments: Dict[str, bool] = {}  # Store only speech_profile_processed status
+    segment_conversation_map: Dict[str, str] = {}  # segment_id → conversation_id snapshot (prevents race on rollover)
     suggested_segments: Set[str] = set()
     first_audio_byte_timestamp: Optional[float] = None
     last_usage_record_timestamp: Optional[float] = None
@@ -2079,6 +2080,7 @@ async def _stream_handler(
 
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg.speech_profile_processed
+                    segment_conversation_map[seg.id] = current_conversation_id
                 transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
@@ -2516,18 +2518,25 @@ async def _stream_handler(
                                 # Forward to pusher for speech sample extraction (non-blocking)
                                 # Only for real people (not 'user') and when private cloud sync is enabled
                                 # Only when can_assign is true (has speech_profile_processed segment)
+                                # Use segment_conversation_map to resolve the conversation the segments
+                                # actually belong to — current_conversation_id may have advanced on rollover.
+                                sample_conv_id = (
+                                    segment_conversation_map.get(segment_ids[0], current_conversation_id)
+                                    if segment_ids
+                                    else current_conversation_id
+                                )
                                 if (
                                     can_assign
                                     and person_id
                                     and person_id != 'user'
                                     and private_cloud_sync_enabled
                                     and send_speaker_sample_request is not None
-                                    and current_conversation_id
+                                    and sample_conv_id
                                 ):
                                     spawn(
                                         send_speaker_sample_request(
                                             person_id=person_id,
-                                            conv_id=current_conversation_id,
+                                            conv_id=sample_conv_id,
                                             segment_ids=segment_ids,
                                         )
                                     )
