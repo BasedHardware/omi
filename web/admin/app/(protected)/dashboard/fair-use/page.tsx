@@ -25,9 +25,14 @@ interface FlaggedUser {
 interface FairUseEvent {
   id: string;
   case_ref?: string;
-  stage?: string;
-  classifier_score?: number;
-  classifier_type?: string;
+  new_stage?: string;
+  previous_stage?: string;
+  enforcement_action?: string;
+  trigger?: string;
+  classifier?: {
+    misuse_score?: number;
+    usage_type?: string;
+  };
   resolved?: boolean;
   resolved_at?: string;
   resolved_by?: string;
@@ -324,9 +329,9 @@ export default function FairUsePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Case Ref</TableHead>
-                    <TableHead>Stage</TableHead>
+                    <TableHead>Stage Change</TableHead>
                     <TableHead>Score</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Trigger</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Action</TableHead>
@@ -336,9 +341,13 @@ export default function FairUsePage() {
                   {selectedUser.events.map((event) => (
                     <TableRow key={event.id}>
                       <TableCell className="font-mono text-xs">{event.case_ref || '-'}</TableCell>
-                      <TableCell>{stageBadge(event.stage || 'none')}</TableCell>
-                      <TableCell>{event.classifier_score?.toFixed(2) ?? '-'}</TableCell>
-                      <TableCell>{event.classifier_type || '-'}</TableCell>
+                      <TableCell>
+                        {event.previous_stage && event.new_stage
+                          ? <span>{stageBadge(event.previous_stage)} <span className="mx-1">→</span> {stageBadge(event.new_stage)}</span>
+                          : stageBadge(event.new_stage || 'none')}
+                      </TableCell>
+                      <TableCell>{event.classifier?.misuse_score?.toFixed(2) ?? '-'}</TableCell>
+                      <TableCell>{event.trigger || event.classifier?.usage_type || '-'}</TableCell>
                       <TableCell className="text-xs">{formatDate(event.created_at)}</TableCell>
                       <TableCell>
                         {event.resolved ? (
