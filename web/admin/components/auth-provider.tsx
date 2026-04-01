@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
 
 interface AuthContextProps {
@@ -47,16 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const auth = getFirebaseAuth();
-    const db = getFirebaseDb();
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
       if (currentUser) {
         console.log('currentUser', currentUser);
-        // Check if user is an Omi admin by looking for their UID in the specific product path
-        const adminDocRef = doc(db, 'adminData', currentUser.uid);
+        // Check admin status via server-side API (Admin SDK bypasses Firestore security rules)
         try {
-          const adminDoc = await getDoc(adminDocRef);
-          if (adminDoc.exists()) {
+          const idToken = await currentUser.getIdToken();
+          const res = await fetch('/api/auth/check-admin', {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+          const data = await res.json();
+          if (data.isAdmin) {
             setUser(currentUser);
             setIsAdmin(true);
             console.log(`Admin user ${currentUser.email} signed in.`);
@@ -65,14 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await firebaseSignOut(auth);
             setUser(null);
             setIsAdmin(false);
-            router.push('/login?error=unauthorized'); // Redirect non-admin to login
+            router.push('/login?error=unauthorized');
           }
         } catch (error) {
           console.error('Error checking admin status:', error);
           await firebaseSignOut(auth);
           setUser(null);
           setIsAdmin(false);
-          router.push('/login?error=check_failed'); // Redirect on error
+          router.push('/login?error=check_failed');
         }
       } else {
         setUser(null);
