@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added \"How did you hear about us?\" onboarding step for K-factor tracking"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.207",
+      "date": "2026-04-01",
+      "changes": [
+        "Added \"How did you hear about us?\" onboarding step for K-factor tracking"
+      ]
+    },
     {
       "version": "0.11.206",
       "date": "2026-04-01",
