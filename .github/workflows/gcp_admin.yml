@@ -13,6 +13,7 @@ env:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
     permissions:
       contents: 'read'
