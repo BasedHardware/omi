@@ -237,7 +237,7 @@ struct DashboardPage: View {
     }
 
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 28) {
             if shouldShowSuggestionBanner {
                 PromptSuggestionBanner(
                     suggestions: postOnboardingSuggestions,
@@ -247,7 +247,7 @@ struct DashboardPage: View {
                 )
             }
 
-            Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+            Grid(horizontalSpacing: 20, verticalSpacing: 20) {
                 // Top row: Tasks + Goals
                 GridRow {
                     TasksWidget(
@@ -299,9 +299,9 @@ struct DashboardPage: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 30)
+        .padding(.top, 40)
+        .padding(.bottom, 16)
     }
 
     private var postOnboardingSuggestions: [String] {

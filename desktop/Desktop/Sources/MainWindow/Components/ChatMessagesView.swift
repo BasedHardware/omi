@@ -132,11 +132,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     @ViewBuilder
     private func scrollContent(proxy: ScrollViewProxy) -> some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: 18) {
                 loadMoreButton
                 messageContent
             }
-            .padding()
+            .padding(.horizontal, 24)
+            .padding(.vertical, 22)
             .textSelection(.enabled)
             .background(scrollDetectors)
 
@@ -271,12 +272,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     Text("Try Again")
                         .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.purplePrimary)
-                        )
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
                 }
                 .buttonStyle(.plain)
             }
