@@ -1221,6 +1221,10 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
+                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                    aiMessage,
+                    isFinal: !aiMessage.isStreaming
+                )
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1273,7 +1277,10 @@ class FloatingControlBarManager {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
 
-        FloatingBarVoicePlaybackService.shared.playResponseIfEnabled(barWindow.state.currentAIMessage)
+        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+            barWindow.state.currentAIMessage,
+            isFinal: true
+        )
     }
 }
 
