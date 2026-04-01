@@ -92,6 +92,18 @@ class SettingsSyncManager {
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
 
+        if let floatingBar = remote.floatingBar {
+            if let v = floatingBar.voiceAnswersEnabled {
+                ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = v
+            }
+            if let v = floatingBar.elevenLabsApiKey {
+                UserDefaults.standard.set(v, forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey)
+            }
+            if let v = floatingBar.elevenLabsVoiceID {
+                UserDefaults.standard.set(v, forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey)
+            }
+        }
+
         // Update channel (server-authoritative override)
         // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
         if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
@@ -148,12 +160,19 @@ class SettingsSyncManager {
             excludedApps: Array(MemoryAssistantSettings.shared.excludedApps)
         )
 
+        let floatingBar = FloatingBarSettingsResponse(
+            voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled,
+            elevenLabsApiKey: UserDefaults.standard.string(forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey) ?? "",
+            elevenLabsVoiceID: UserDefaults.standard.string(forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey) ?? ""
+        )
+
         return AssistantSettingsResponse(
             shared: shared,
             focus: focus,
             task: task,
             advice: advice,
             memory: memory,
+            floatingBar: floatingBar,
             updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
         )
     }

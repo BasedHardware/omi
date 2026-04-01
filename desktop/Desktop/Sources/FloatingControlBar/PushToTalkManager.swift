@@ -206,6 +206,7 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Listening Lifecycle
 
   private func startListening() {
+    FloatingBarVoicePlaybackService.shared.stop()
     state = .listening
     transcriptSegments = []
     lastInterimText = ""
@@ -235,6 +236,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func enterLockedListening() {
+    FloatingBarVoicePlaybackService.shared.stop()
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
     state = .lockedListening

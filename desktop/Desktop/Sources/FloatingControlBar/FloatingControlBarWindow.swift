@@ -983,6 +983,7 @@ class FloatingControlBarManager {
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.stop()
     }
 
     /// Toggle visibility.
@@ -1180,6 +1181,8 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        FloatingBarVoicePlaybackService.shared.stop()
+
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
         // and avoid promoting the main Omi window while capturing a clean screenshot.
         let previousAlpha = barWindow.alphaValue
@@ -1261,6 +1264,8 @@ class FloatingControlBarManager {
             }
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
+
+        FloatingBarVoicePlaybackService.shared.playResponseIfEnabled(barWindow.state.currentAIMessage)
     }
 }
 
