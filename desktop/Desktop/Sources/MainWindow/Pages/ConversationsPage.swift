@@ -261,7 +261,7 @@ struct ConversationsPage: View {
                 // Regular conversation list
                 ZStack(alignment: .bottom) {
                     ConversationListView(
-                        conversations: appState.conversations,
+                        conversations: embedded ? Array(appState.conversations.prefix(20)) : appState.conversations,
                         isLoading: appState.isLoadingConversations,
                         error: appState.conversationsError,
                         folders: appState.folders,
