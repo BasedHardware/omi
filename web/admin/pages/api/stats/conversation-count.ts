@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
 
 // Ensure these environment variables are set in your .env.local or deployment environment
 const TYPESENSE_HOST = process.env.TYPESENSE_HOST;
 const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY;
 // Default collection name, can be overridden by an env var if needed
-const COLLECTION_NAME = process.env.TYPESENSE_CONVERSATION_COLLECTION || 'conversations'; 
+const COLLECTION_NAME = process.env.TYPESENSE_CONVERSATION_COLLECTION || 'conversations';
 
 interface TypesenseCollectionResponse {
   name: string;
@@ -16,6 +17,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
     return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+
+  // Verify admin auth
+  const authorization = req.headers.authorization;
+  if (!authorization || !authorization.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized: Missing or invalid token' });
+  }
+  const token = authorization.split('Bearer ')[1];
+  const decodedToken = await verifyFirebaseToken(token);
+  if (!decodedToken) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+  }
+  const db = getDb();
+  const adminDoc = await db.collection('adminData').doc(decodedToken.uid).get();
+  if (!adminDoc.exists) {
+    return res.status(403).json({ message: 'Forbidden: Not an admin' });
   }
 
   if (!TYPESENSE_HOST || !TYPESENSE_API_KEY) {
