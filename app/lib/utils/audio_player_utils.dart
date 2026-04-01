@@ -200,7 +200,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     final result = await Share.shareXFiles(
       [XFile(audioFilePath)],
       text:
-          'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toString().split('.')[0]}',
+          'Nooto Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toString().split('.')[0]}',
     );
 
     if (result.status == ShareResultStatus.success) {
