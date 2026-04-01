@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
 
 interface AuthContextProps {
@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(getFirebaseAuth());
       setUser(null);
       setIsAdmin(false);
       router.push('/login'); // Redirect to login after sign out
@@ -46,6 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const auth = getFirebaseAuth();
+    const db = getFirebaseDb();
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
       if (currentUser) {
@@ -58,10 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(currentUser);
             setIsAdmin(true);
             console.log(`Admin user ${currentUser.email} signed in.`);
-            // Optional: Redirect admin to a specific page upon successful login
-            // if (window.location.pathname === '/login') {
-            //   router.push('/');
-            // }
           } else {
             console.warn(`User ${currentUser.email} is not an admin. Signing out.`);
             await firebaseSignOut(auth);
@@ -79,9 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null);
         setIsAdmin(false);
-        // Optional: Redirect non-logged-in users trying to access protected routes
-        // Consider adding logic here or in specific page components/middleware
-        // Example: if (!['/login'].includes(window.location.pathname)) { router.push('/login'); }
       }
       setLoading(false);
     });
