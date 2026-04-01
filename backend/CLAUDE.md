@@ -4,54 +4,92 @@ Inherits all rules from the root `../CLAUDE.md`. This file adds backend-specific
 
 ## Setup
 
-### Prerequisites
-Python 3.11 (not 3.12+ — Dockerfile pins 3.11), FFmpeg, Opus (`opuslib`), Redis (optional)
+Python 3.11 required (not 3.12+ — Dockerfile pins 3.11). Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
 
-### Quick Start
 ```bash
-cp .env.template .env          # Fill in required values
+cp .env.template .env          # Fill in required values (see .env.template for full list)
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
-### Key Env Vars
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `OPENAI_API_KEY` | Yes | LLM calls (not `OPENAI_ADMIN_KEY` — that's for billing) |
-| `DEEPGRAM_API_KEY` | Yes | Speech-to-text |
-| `ENCRYPTION_SECRET` | Yes (for tests) | AES-256-GCM key derivation |
-| `REDIS_DB_HOST` | Recommended | Cache + rate limiting (fail-open without it) |
-| `ADMIN_KEY` | For local dev | Bypass Firebase auth with token `ADMIN_KEY<uid>` |
-| `SERVICE_ACCOUNT_JSON` | For GCS/Firestore | JSON content or `GOOGLE_APPLICATION_CREDENTIALS` path |
-
-See `.env.template` for the full list.
+Key env vars: `OPENAI_API_KEY` (LLM calls — not `OPENAI_ADMIN_KEY` which is billing-only), `DEEPGRAM_API_KEY` (STT), `ENCRYPTION_SECRET` (required for tests), `REDIS_DB_HOST` (cache/rate-limiting, fail-open without it), `ADMIN_KEY` (local dev auth bypass via token `ADMIN_KEY<uid>`), `SERVICE_ACCOUNT_JSON` (Firestore/GCS credentials).
 
 ## Directory Structure
 
 ```
 backend/
-  main.py              # FastAPI entry, middleware, router registration
-  models/              # Pydantic BaseModel definitions
-  database/            # All persistence (Firestore, Redis, Pinecone, Neo4j)
-    _client.py         #   Firestore singleton
-    redis_db.py        #   Cache, rate limiting, pub/sub
-  routers/             # FastAPI route handlers (one file per feature)
-    transcribe.py      #   /v4/listen WebSocket — audio streaming
-    chat.py            #   /v1/messages — AI chat
-    memories.py        #   /v3/memories — CRUD + search
-  utils/               # Domain utilities (never import from routers/)
-    llm/clients.py     #   LLM model instances (OpenAI, Anthropic, OpenRouter)
-    stt/               #   Speech-to-text pipeline (Deepgram, VAD)
-    other/endpoints.py #   Auth dependencies, rate limiting
-    log_sanitizer.py   #   sanitize() / sanitize_pii()
-    encryption.py      #   AES-256-GCM per-user encryption
-  pusher/              # Subservice: conversation processor (separate Docker)
-  diarizer/            # Subservice: speaker identification (GPU)
-  agent-proxy/         # Subservice: WebSocket bridge to user agent VMs
-  tests/unit/          # Unit tests (no external deps)
-  tests/integration/   # Integration tests (need Redis, Firebase, API keys)
-  test.sh              # Test runner — source of truth for CI
-  test-preflight.sh    # Env validator
+  main.py                 # FastAPI entry, middleware, 45+ router registrations
+  models/                 # Pydantic request/response schemas (22 files: conversation, memory, app, chat, user subscription, etc.)
+  database/               # All persistence — 25+ domain modules
+    _client.py            #   Firestore singleton + document_id_from_seed utility
+    redis_db.py           #   Cache, rate limiting (Lua scripts), pub/sub, locks, geolocation
+    helpers.py            #   Decorators: data protection levels, encryption/decryption on read/write
+    conversations.py      #   Conversations with encrypted segments, photos, processing status
+    memories.py           #   User facts/learnings with categories, visibility, encryption
+    users.py              #   Profiles, subscriptions, people/contacts, private cloud sync settings
+    apps.py               #   Custom apps/personas, reviews, payment (Stripe), usage history
+    action_items.py       #   Tasks with due dates, completion status
+    vector_db.py          #   Pinecone integration for semantic search
+    knowledge_graph.py    #   Neo4j entity relationships
+    fair_use.py           #   Usage limits and soft-cap tracking
+    ...                   #   + folders, goals, phone_calls, daily_summaries, trends, imports, etc.
+  routers/                # FastAPI route handlers — 42 files, one per feature domain
+    transcribe.py         #   /v4/listen WebSocket — core audio streaming + transcription pipeline (2900 LOC)
+    chat.py               #   /v2/messages — AI chat with tool use, voice messages, file uploads
+    conversations.py      #   /v1/conversations — CRUD, merge, search, action items, photos
+    memories.py           #   /v3/memories — CRUD, visibility, semantic search
+    apps.py               #   App marketplace, personas, reviews, payment (2000 LOC)
+    sync.py               #   /v1/sync — mobile client data sync (1500 LOC)
+    auth.py               #   Google/Apple OAuth callbacks, session management
+    users.py              #   Profile, subscription, settings (1200 LOC)
+    task_integrations.py  #   Todoist, Microsoft Tasks sync (1200 LOC)
+    mcp.py, mcp_sse.py    #   Model Context Protocol server endpoints
+    ...                   #   + action_items, goals, knowledge_graph, payment, integrations, etc.
+  utils/                  # Business logic — 60+ files (never import from routers/)
+    llm/                  #   LLM orchestration (14 files): chat processing, conversation post-processing,
+                          #   memory extraction, persona management, proactive notifications, goal tracking,
+                          #   app generation, fair-use classification, usage tracking
+      clients.py          #     Model instances: OpenAI (gpt-4.1-mini, o4-mini), Anthropic (claude-sonnet-4-6),
+                          #     OpenRouter (gemini-flash), with prompt caching and usage callbacks
+    stt/                  #   Speech-to-text (7 files): Deepgram streaming, VAD gating, speech profiles,
+                          #   pre-recorded batch transcription, speaker embeddings
+    conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
+                          #   merge, post-processing, search
+    retrieval/            #   RAG pipeline (25+ files): agentic RAG via Claude with 18 tool types —
+                          #   action items, calendar, Gmail, Apple Health, conversations, memories,
+                          #   screen activity, files, Perplexity web search, notifications, etc.
+    other/                #   Storage (GCS), auth dependencies, timeout middleware, Hume emotion detection
+    log_sanitizer.py      #   sanitize() / sanitize_pii() — required for all logging
+    encryption.py         #   AES-256-GCM per-user encryption (HKDF-SHA256 key derivation)
+    fair_use.py           #   Rolling speech-hour tracking via Redis minute buckets, soft-cap enforcement
+    prompts.py            #   LLM prompt templates for memory extraction, categorization, etc.
+    translation.py        #   Multi-language translation coordination
+    speaker_identification.py  # Speaker diarization + person matching against speech profiles
+  pusher/                 # Subservice: real-time data distribution hub (separate Docker)
+                          #   - Receives audio + transcripts from backend-listen via binary WebSocket protocol
+                          #   - Routes transcripts to integrations/webhooks in 1s batches
+                          #   - Streams audio to ML services and developer webhooks (4s accumulation)
+                          #   - Runs LLM-powered conversation analysis (memories, action items, insights)
+                          #   - Batches + uploads audio to private cloud storage (60s batches, 3 retries)
+                          #   - Queues speaker sample extraction (120s age minimum)
+                          #   - 5 concurrent background tasks per WebSocket connection
+  diarizer/              # Subservice: speaker audio analysis (separate Docker, GPU/CUDA)
+                          #   - POST /v1/diarization — speaker boundary detection (pyannote/speaker-diarization)
+                          #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
+                          #   - POST /v2/embedding — alt speaker vectors (wespeaker-voxceleb-resnet34-LM)
+  agent-proxy/           # Subservice: WebSocket bridge between mobile app and user's agent VM
+                          #   - Firebase auth → Firestore VM lookup → GCE lifecycle (start/reset/health)
+                          #   - Bidirectional message pump with keepalive (120s)
+                          #   - Chat history injection (last 10 messages on first query)
+                          #   - Optional AES-256-GCM message encryption
+  modal/                 # Serverless GPU services (deployed on Modal)
+                          #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
+                          #   - VAD: voice activity detection (pyannote/voice-activity-detection)
+                          #   - Cron: hourly notification job
+  tests/unit/            # 50+ unit tests (no external service deps)
+  tests/integration/     # Integration tests (need Redis, Firebase, API keys)
+  test.sh                # Test runner — source of truth for CI
+  test-preflight.sh      # Env validator (Python, pytest, packages, Redis)
 ```
 
 ## Import Rules
@@ -60,83 +98,34 @@ All imports at module top level — never inside functions. Strict hierarchy:
 
 ```
 database/  →  utils/  →  routers/  →  main.py
-  (lower)                              (higher)
 ```
 
-Higher imports from lower, never reverse. Cross-importing between routers will break. Shared code paths exist across backend, pusher, and backend-listen — trace imports before assuming a change only affects one service.
+Higher imports from lower, never reverse. Cross-importing between routers will break. Code paths are shared across backend, pusher, and diarizer — trace imports before assuming a change only affects one service.
 
 ## Database
 
-### Firestore (primary store)
-```python
-from database._client import db
-docs = db.collection('users').document(uid).collection('memories').stream()
-db.collection('users').document(uid).set(data, merge=True)
-```
-- Collection group queries need explicit Firestore indexes — will 500 with no helpful error
-- Segments are encrypted at rest — direct reads return opaque blobs; use REST API with auth for decrypted data
-- Feature gating via user fields: e.g., translation requires `users/{uid}.language` non-empty — silently disabled if missing
+**Firestore** (primary store): `from database._client import db` — sync client. Collection group queries need explicit indexes (will 500 with no useful error). Segments are encrypted at rest — direct Firestore reads return opaque blobs. Feature gating via user fields: e.g., translation requires `users/{uid}.language` non-empty — silently disabled if missing.
 
-### Redis (cache, rate limiting, locks)
-```python
-from database import redis_db
-redis_db.set_generic_cache(path, data, ttl=60)
-data = redis_db.get_generic_cache(path)  # Returns None on miss or error
-```
-- **Fail-open**: All Redis errors caught and logged; requests proceed without caching/rate-limiting
-- Rate limiting: Lua scripts for atomic increment + window check
-- Locks: `try_acquire_listen_lock(uid)` prevents duplicate WS connections
+**Redis** (cache/rate-limiting/locks): `from database import redis_db` — **fail-open** (all errors caught and logged, requests proceed). Rate limiting via Lua scripts. `try_acquire_listen_lock(uid)` prevents duplicate WS connections.
 
 ## Auth
 
-### HTTP Endpoints
-```python
-from utils.other.endpoints import get_current_user_uid
+HTTP endpoints: `uid: str = Depends(get_current_user_uid)` from `utils.other.endpoints`.
 
-@router.get('/v3/memories')
-def get_memories(uid: str = Depends(get_current_user_uid)):
-    ...
-```
+WebSocket endpoints: use `WebSocketException(code=1008)`, **not** `HTTPException` — HTTPException exits ASGI without handshake, causing LB 5xx.
 
-### WebSocket Endpoints
-```python
-# Use WebSocketException, NOT HTTPException
-# HTTPException exits ASGI without handshake → 5xx instead of clean close
-raise WebSocketException(code=1008, reason="Invalid token")
-```
-
-### Rate Limiting
-```python
-uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message"))
-# Policies in utils/rate_limit_config.py
-```
+Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"))` — policies in `utils/rate_limit_config.py`.
 
 ## Testing
 
 ```bash
-bash test-preflight.sh   # Verify env (Python, pytest, packages, Redis)
-bash test.sh             # Run all tests — this is what CI runs
+bash test-preflight.sh   # Verify env
+bash test.sh             # Run all tests (CI source of truth)
 ```
 
 **New test files must be added to `test.sh`** or they won't run in CI.
 
-### Mock Patterns
-```python
-# Pre-mock heavy deps BEFORE importing the module under test
-import types, sys
-from unittest.mock import MagicMock
-
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
-
-# NOW import the module
-from utils import fair_use as fair_use_mod
-```
-
-Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported by the target module.
-
-When modules construct objects at import time, use lazy getters to avoid triggering heavy initialization in tests.
+Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
 
 ## Formatting
 
@@ -144,15 +133,15 @@ When modules construct objects at import time, use lazy getters to avoid trigger
 black --line-length 120 --skip-string-normalization <files>
 ```
 
-`--skip-string-normalization` is critical — without it, black flips all quotes and the diff explodes.
+`--skip-string-normalization` is critical — without it, black flips all quotes and diffs explode.
 
 ## Common Gotchas
 
-1. **Python 3.11 only**: No 3.12+ syntax (e.g., nested same-type quotes in f-strings break in the Docker build)
-2. **Never `time.sleep()` in async handlers**: Blocks the uvicorn event loop. Use `asyncio.sleep()`. For blocking work (LLM calls, heavy processing), use `asyncio.to_thread()` + semaphore
-3. **WAL files must be opus-encoded**: Opus decoder silently errors on raw PCM but returns HTTP 200 — sync tests pass for the wrong reason. Use opus `.bin` with 4-byte LE length-prefixed frames
-4. **Firestore collection group queries**: Need explicit indexes — will 500 with no useful error in logs
-5. **Mutable WebSocket state races**: Snapshot `nonlocal` variables before spawning async work — mutable closures + rollover events cause race conditions
-6. **Silent fire-and-forget drops**: Functions gating on connection state must log when dropping work (speaker samples, etc.)
-7. **Unbounded queues for user data**: `deque(maxlen=N)` silently drops audio. Data-safety queues must stay unbounded
-8. **`langdetect` unreliable on short text**: Don't use on <20 chars or gate paid API calls on interim streaming text
+1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)
+2. **Never `time.sleep()` in async handlers** — blocks uvicorn's event loop. Use `asyncio.sleep()`. For blocking work, use `asyncio.to_thread()` + semaphore
+3. **WAL files must be opus-encoded** — opus decoder silently errors on raw PCM but returns HTTP 200, so sync tests pass for the wrong reason
+4. **Firestore collection group queries** need explicit indexes — 500 with no useful error
+5. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
+6. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
+7. **Unbounded queues for user data** — `deque(maxlen=N)` silently drops audio; data-safety queues must stay unbounded
+8. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
