@@ -2,102 +2,168 @@
 
 # **omi**
 
-Meet Omi, the world’s leading open-source AI wearable that captures conversations, gives summaries, action items and does actions for you. Simply connect Omi to your mobile device and enjoy automatic, high-quality
-transcriptions of meetings, chats, and voice memos wherever you are.
+### A 2nd brain you trust more than your 1st
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59" alt="Omi" width="49%" />
-  <img src="https://github.com/user-attachments/assets/fdad4226-e5ce-4c55-b547-9101edfa3203" alt="Image" width="49%" />
+Omi captures your screen and conversations, transcribes in real-time, generates summaries and action items, and gives you an AI chat that remembers everything you've seen and heard. Works on desktop, phone and wearables. Fully open source.
 
-</p>
+Trusted by 300,000+ professionals.
 
-![CleanShot 2025-02-08 at 18 22 23](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
+<br>
 
-[![Discord Follow](https://img.shields.io/discord/1192313062041067520?label=Discord)](http://discord.omi.me) &ensp;&ensp;&ensp;
-[![Twitter Follow](https://img.shields.io/twitter/follow/kodjima33)](https://x.com/kodjima33) &ensp;&ensp;&ensp;
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
-[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)&ensp;&ensp;&ensp;
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BasedHardware/omi)
+[<img src="https://img.shields.io/badge/Download-macOS_App-000000?style=for-the-badge&logo=apple&logoColor=white" height="40">](https://omi.me/download)
 
-<h3>
+<br>
 
-[Site](https://omi.me/) |   [Download](https://omi.me/download)   | [Docs](https://docs.omi.me/) | [Buy omi Dev Kit](https://www.omi.me/products/omi-dev-kit-2) | [Buy Omi Glass Dev Kit](https://www.omi.me/glass)
+[![Discord](https://img.shields.io/discord/1192313062041067520?label=Discord&logo=discord&logoColor=white&style=for-the-badge)](http://discord.omi.me)&ensp;
+[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi?style=for-the-badge)](https://github.com/BasedHardware/Omi)&ensp;
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-</h3>
+[Website](https://omi.me/) · [Docs](https://docs.omi.me/) · [Discord](http://discord.omi.me) · [Twitter](https://x.com/kodjima33) · [DeepWiki](https://deepwiki.com/BasedHardware/omi)
 
 </div>
 
-[//]: # "## Features"
-[//]: #
-[//]: # "- **Real-Time AI Audio Processing**: Leverage powerful on-device AI capabilities for real-time audio analysis."
-[//]: # "- **Low-powered Bluetooth**: Capture audio for 24h+ on a small button battery"
-[//]: # "- **Open-Source Software**: Access and contribute to the pin's software stack, designed with openness and community collaboration in mind."
-[//]: # "- **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear."
+---
 
-## 🚀 Quick Start for Developers (2 min)
-
-Get the omi app running locally:
+## Quick Start
 
 ```bash
-git clone https://github.com/BasedHardware/omi.git
-cd omi/app
-
-bash setup.sh ios     # android
+git clone https://github.com/BasedHardware/omi.git && cd omi/desktop && ./run.sh --yolo
 ```
 
-## Create your own App (1 min)
+Builds the macOS app, connects to the cloud backend, and launches. No env files, no credentials, no local backend.
 
-Download omi App
+> **Requirements:** macOS 14+, [Xcode](https://developer.apple.com/xcode/) (includes Swift & code signing), [Node.js](https://nodejs.org/)
 
-[<img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' height="50px" width="180px">](https://play.google.com/store/apps/details?id=com.friend.ios)
-[<img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" height="50px" width="180px">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+### Full Installation
 
-Create webhook using [webhook.site](https://webhook.site) and copy this url
+For local development with the full backend stack:
 
-<img src="https://github.com/user-attachments/assets/083a6ec4-4694-4c7a-843a-4a1a0c254453" width="500">
+```bash
+# 1. Install prerequisites
+xcode-select --install
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-In omi App:
+# 2. Clone and configure
+git clone https://github.com/BasedHardware/omi.git
+cd omi/desktop
+cp Backend-Rust/.env.example Backend-Rust/.env
 
-| Explore => Create an App                                                                                | Select Capability                                                                                       | Paste Webhook URL                                                                                         | Install App                                                                                             |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| <img src="https://github.com/user-attachments/assets/31809b81-7de2-4381-b5fc-5c9714972211" width="200"> | <img src="https://github.com/user-attachments/assets/59cfbe8e-7e3b-437f-81f7-25eb50ccdd7d" width="200"> | <img src="https://github.com/user-attachments/assets/3d864ee8-555f-4ded-b4db-87ff78128323" width = "200"> | <img src="https://github.com/user-attachments/assets/58cf6da6-e245-415e-92e7-dc1f46583cfc" width="200"> |
+# 3. Build and run (starts Rust backend + auth + Cloudflare tunnel + Swift app)
+./run.sh
+```
 
-Start speaking, you'll see Real-time transcript on [webhook.site ](https://webhook.site).
+See [desktop/README.md](desktop/README.md) for environment variables and credential setup.
 
-## In this repo:
+### Mobile App
 
-- [omi device](omi) - nRF chips, zephyr, c/c++
-- [omi glass](omiGlass) esp32-s3, c/c++
-- [omi app](app) - flutter
-- [omi backend](backend) - python, fastapi, firebase, pinecone, redis, deepgram, speechmatic, soniox, openai-compatible apis, langchain, silero vad
-- [SDKs](sdks) - react native, swift, python
-- [ai personas (web)](web/personas-open-source) - nextjs
+```bash
+cd app && bash setup.sh ios    # or: bash setup.sh android
+```
 
-## Documentation:
+[App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) · [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios) · [Try in Browser](https://app.omi.me)
 
+---
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Your Devices                       │
+│                                                         │
+│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │ Omi      │  │ macOS App    │  │ Mobile App        │  │
+│  │ Wearable │  │ (Swift/Rust) │  │ (Flutter)         │  │
+│  └────┬─────┘  └──────┬───────┘  └────────┬──────────┘  │
+│       │    BLE         │   HTTPS/WS        │             │
+└───────┼────────────────┼───────────────────┼─────────────┘
+        │                │                   │
+        ▼                ▼                   ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Omi Backend (Python)                  │
+│                                                         │
+│  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
+│  │ Listen  │  │ Pusher   │  │ VAD     │  │ Diarizer │  │
+│  │ (REST)  │  │ (WS)     │  │ (GPU)   │  │ (GPU)    │  │
+│  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
+│                                                         │
+│  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
+│  │ Deepgram│  │ Firestore│  │ Redis   │  │ LLMs     │  │
+│  │ (STT)   │  │ (DB)     │  │ (Cache) │  │ (AI)     │  │
+│  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+| Component | Path | Stack |
+|-----------|------|-------|
+| **macOS app** | [`desktop/`](desktop/) | Swift, SwiftUI, Rust backend |
+| Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
+| Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
+| Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
+| Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
+| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
+| AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
+
+## Create Your Own App (1 min)
+
+1. Download the Omi app and create a webhook at [webhook.site](https://webhook.site)
+2. In the app: **Explore → Create an App → Select Capability → Paste Webhook URL → Install**
+3. Start speaking — real-time transcript appears on webhook.site
+
+See the [full guide](https://docs.omi.me/doc/developer/apps/Introduction).
+
+## Documentation
+
+### Getting Started
 - [Introduction](https://docs.omi.me/)
-- [omi App setup](https://docs.omi.me/doc/developer/AppSetup)
-- [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide/)
-- [Build the device](https://docs.omi.me/doc/assembly/Build_the_device/)
-- [Install firmware](https://docs.omi.me/doc/get_started/Flash_device/)
-- [Create your own app in 1 minute](https://docs.omi.me/doc/developer/apps/Introduction).
-- [Integrate your own wearable with omi](https://docs.omi.me/doc/integrations)
+- [Quick Start Guide](https://docs.omi.me/quickstart)
+- [macOS App Development](desktop/README.md)
+- [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
+- [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
+- [Contributing](https://docs.omi.me/doc/developer/Contribution)
 
-## Contributions
+### API & SDKs
+- [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
+- [Python SDK](sdks/python/)
+- [Swift SDK](sdks/swift/)
+- [React Native SDK](sdks/react-native/)
+- [MCP Server](mcp/) — Model Context Protocol integration
 
-- Check out our [contributions guide](https://docs.omi.me/doc/developer/Contribution/).
-- Earn from contributing! Check the [paid bounties 🤑](https://omi.me/bounties).
-- Check out the [current issues](https://github.com/BasedHardware/Omi/issues).
-- Join the [Discord](http://discord.omi.me).
-- Build your own [Plugins/Integrations](https://docs.omi.me/doc/developer/apps/Introduction).
+### Building Apps
+- [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)
+- [Example Apps](https://docs.omi.me/doc/developer/apps/examples/Github) — GitHub, Slack, OmiMentor
+- [Audio Streaming Apps](https://docs.omi.me/doc/developer/apps/AudioStreaming)
+- [Custom Chat Tools](https://docs.omi.me/doc/developer/apps/ChatTools)
+- [Submit to App Store](https://docs.omi.me/doc/developer/apps/Submitting)
 
-[//]: # "## More links:"
-[//]: #
-[//]: # "- [Contributing](https://docs.omi.me/doc/developer/Contribution/)"
-[//]: # "- [Support](https://docs.omi.me/doc/info/Support/)"
-[//]: # "- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol/)"
-[//]: # "- [Plugins](https://docs.omi.me/doc/developer/Plugins/)"
+### Architecture
+- [Backend Deep Dive](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- [Transcription Pipeline](https://docs.omi.me/doc/developer/backend/transcription)
+- [Chat System](https://docs.omi.me/doc/developer/backend/chat_system)
+- [Audio Streaming Pipeline](https://docs.omi.me/doc/developer/backend/listen_pusher_pipeline)
+- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol)
 
-## Licensing
+### Hardware
+- [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide)
+- [Build the Device](https://docs.omi.me/doc/assembly/Build_the_device)
+- [Flash Firmware](https://docs.omi.me/doc/get_started/Flash_device)
+- [Integrate Your Wearable](https://docs.omi.me/doc/integrations)
+- [Hardware Specs](https://docs.omi.me/doc/hardware/DevKit2)
 
-Omi is available under <a href="https://github.com/BasedHardware/omi/blob/main/LICENSE">MIT License</a>
+## Omi Hardware
+
+Open-source AI wearables that pair with the mobile app for 24h+ continuous capture.
+
+- [Buy Omi Dev Kit](https://www.omi.me/products/omi-dev-kit-2) — nRF, BLE, coin cell battery
+- [Buy Omi Glass Dev Kit](https://www.omi.me/glass) — ESP32-S3, camera + audio
+- [Open Source Hardware Designs](https://docs.omi.me/doc/hardware/consumer/electronics)
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59" alt="Omi Wearable" width="49%" />
+  <img src="https://github.com/user-attachments/assets/fdad4226-e5ce-4c55-b547-9101edfa3203" alt="Omi Glass" width="49%" />
+</p>
+
+![Omi](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
+
+## License
+
+MIT — see [LICENSE](LICENSE)
