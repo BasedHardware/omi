@@ -2093,6 +2093,8 @@ async def _stream_handler(
 
             if removed_ids:
                 _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
+                for rid in removed_ids:
+                    segment_conversation_map.pop(rid, None)
 
             if transcript_segments:
                 await websocket.send_json([segment.dict() for segment in updated_segments])
@@ -2746,6 +2748,7 @@ async def _stream_handler(
             speaker_to_person_map.clear()
             segment_person_assignment_map.clear()
             current_session_segments.clear()
+            segment_conversation_map.clear()
             suggested_segments.clear()
             realtime_segment_buffers.clear()
             realtime_photo_buffers.clear()
