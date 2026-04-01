@@ -13,7 +13,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Lazy initialization to avoid build-time failures when env vars are not set
+// Lazy initialization via getter functions.
+// Proxies break Firebase SDK's instanceof checks in doc()/getDoc()/onAuthStateChanged(),
+// so we return real instances directly.
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
 let _db: Firestore | null = null;
@@ -27,37 +29,30 @@ function getFirebaseApp(): FirebaseApp {
   return _app;
 }
 
-// Use Object.defineProperty for lazy getters that maintain the same export API
-const app = new Proxy({} as FirebaseApp, {
-  get(_, prop) { return (getFirebaseApp() as any)[prop]; },
-});
+function getFirebaseAuth(): Auth {
+  if (!_auth) _auth = getAuth(getFirebaseApp());
+  return _auth;
+}
 
-const auth = new Proxy({} as Auth, {
-  get(_, prop) {
-    if (!_auth) _auth = getAuth(getFirebaseApp());
-    return (_auth as any)[prop];
-  },
-});
+function getFirebaseDb(): Firestore {
+  if (!_db) _db = getFirestore(getFirebaseApp());
+  return _db;
+}
 
-const db = new Proxy({} as Firestore, {
-  get(_, prop) {
-    if (!_db) _db = getFirestore(getFirebaseApp());
-    return (_db as any)[prop];
-  },
-});
+function getFirebaseFunctions(): Functions {
+  if (!_functions) _functions = getFunctions(getFirebaseApp());
+  return _functions;
+}
 
-const functions = new Proxy({} as Functions, {
-  get(_, prop) {
-    if (!_functions) _functions = getFunctions(getFirebaseApp());
-    return (_functions as any)[prop];
-  },
-});
+function getFirebaseStorage(): FirebaseStorage {
+  if (!_storage) _storage = getStorage(getFirebaseApp());
+  return _storage;
+}
 
-const storage = new Proxy({} as FirebaseStorage, {
-  get(_, prop) {
-    if (!_storage) _storage = getStorage(getFirebaseApp());
-    return (_storage as any)[prop];
-  },
-});
-
-export { app, auth, db, functions, storage }; 
+export {
+  getFirebaseApp,
+  getFirebaseAuth,
+  getFirebaseDb,
+  getFirebaseFunctions,
+  getFirebaseStorage,
+}; 
