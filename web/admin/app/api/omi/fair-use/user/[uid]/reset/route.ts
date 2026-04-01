@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/firebase/admin';
+import { invalidateEnforcementCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,8 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       { merge: true }
     );
 
-    // Note: Redis enforcement cache (fair_use:stage:{uid}) has 60s TTL and will expire naturally.
-    // Backend will re-read from Firestore on next check.
+    await invalidateEnforcementCache(uid);
 
     return NextResponse.json({ status: 'reset' });
   } catch (error) {
