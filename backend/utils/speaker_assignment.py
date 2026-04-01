@@ -76,6 +76,36 @@ def update_speaker_assignment_maps(
     return True
 
 
+def resolve_conversation_for_segments(
+    segment_ids: List[str],
+    segment_conversation_map: Dict[str, str],
+    current_conversation_id: Optional[str],
+) -> Optional[str]:
+    """Resolve which conversation a set of segments belongs to.
+
+    After conversation rollover, current_conversation_id points to the NEW
+    conversation, but speaker_assigned responses may reference segments from
+    the PREVIOUS conversation.  segment_conversation_map snapshots which
+    conversation each segment was created in.
+
+    Iterates all segment_ids (not just the first) because the first ID may
+    be unknown/stale.
+
+    Args:
+        segment_ids: Segment IDs from the speaker_assigned event.
+        segment_conversation_map: segment_id → conversation_id snapshot.
+        current_conversation_id: Fallback when no segment is in the map.
+
+    Returns:
+        The resolved conversation ID, or current_conversation_id as fallback.
+    """
+    for sid in segment_ids:
+        mapped = segment_conversation_map.get(sid)
+        if mapped:
+            return mapped
+    return current_conversation_id
+
+
 def should_update_speaker_to_person_map(speaker_id: Optional[int]) -> bool:
     """Check if speaker_to_person_map should be updated for text detection.
 
