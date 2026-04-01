@@ -591,13 +591,16 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
   return null;
 }
 
-Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource}) async {
+Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource, bool? deviceOnboardingCompleted}) async {
   Map<String, dynamic> body = {};
   if (completed != null) {
     body['completed'] = completed;
   }
   if (acquisitionSource != null) {
     body['acquisition_source'] = acquisitionSource;
+  }
+  if (deviceOnboardingCompleted != null) {
+    body['device_onboarding_completed'] = deviceOnboardingCompleted;
   }
 
   var response = await makeApiCall(
