@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed 2s+ UI freezes caused by dock tile updates during chat polling"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.214",
+      "date": "2026-04-01",
+      "changes": [
+        "Fixed 2s+ UI freezes caused by dock tile updates during chat polling"
+      ]
+    },
     {
       "version": "0.11.213",
       "date": "2026-04-01",
