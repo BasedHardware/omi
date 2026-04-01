@@ -483,7 +483,7 @@ class _ConversationListItemCompactState extends State<ConversationListItemCompac
   String _getSourceLabel(ConversationSource source) {
     switch (source) {
       case ConversationSource.omi:
-        return 'Omi';
+        return 'Nooto';
       case ConversationSource.friend:
         return 'Friend';
       case ConversationSource.openglass:
