@@ -113,6 +113,30 @@ class TestSplitIntoSentences:
         result = split_into_sentences("Hello! How are you? Fine, thanks.")
         assert len(result) == 3
 
+    def test_chinese_sentence_enders(self):
+        result = split_into_sentences("你好世界。这是测试。再见！")
+        assert len(result) == 3
+
+    def test_chinese_question_mark(self):
+        result = split_into_sentences("你好吗？我很好。")
+        assert len(result) == 2
+
+    def test_hindi_danda(self):
+        result = split_into_sentences("नमस्ते दुनिया। यह एक परीक्षा है।")
+        assert len(result) == 2
+
+    def test_arabic_question_mark(self):
+        result = split_into_sentences("كيف حالك؟ أنا بخير.")
+        assert len(result) == 2
+
+    def test_mixed_english_cjk(self):
+        result = split_into_sentences("Hello world. 你好世界。")
+        assert len(result) == 2
+
+    def test_cjk_no_punctuation(self):
+        result = split_into_sentences("これはテストです")
+        assert len(result) == 1
+
 
 class TestDetectLanguage:
     def setup_method(self):
