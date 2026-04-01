@@ -4,6 +4,7 @@ enum OnboardingFlow {
   static let steps = [
     "Name",
     "Language",
+    "HowDidYouHear",
     "Trust",
     "ScreenRecording",
     "FullDiskAccess",
@@ -20,7 +21,7 @@ enum OnboardingFlow {
     "Goal",
     "Tasks",
   ]
-  static let introStepCount = 12
+  static let introStepCount = 13
   static let legacyPostIntroOffset = 11
   static let lastStepIndex = steps.count - 1
 
@@ -32,7 +33,8 @@ enum OnboardingFlow {
     hasRemovedNotificationStep: Bool,
     hasInsertedFloatingBarShortcutStep: Bool,
     hasMigratedPagedIntro: Bool,
-    hasReorderedTrustStep: Bool
+    hasReorderedTrustStep: Bool,
+    hasInsertedHowDidYouHearStep: Bool = true
   ) -> Int {
     var migratedStep = currentStep
 
@@ -60,6 +62,11 @@ enum OnboardingFlow {
 
     if !hasMigratedPagedIntro, migratedStep > 0 {
       migratedStep += legacyPostIntroOffset
+    }
+
+    // HowDidYouHear step inserted at index 2; shift users at 2+ up
+    if !hasInsertedHowDidYouHearStep, migratedStep >= 2 {
+      migratedStep += 1
     }
 
     // Only reorder for existing users who already had the old Trust-first layout.

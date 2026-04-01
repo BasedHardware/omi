@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added \"How did you hear about us?\" onboarding step for K-factor tracking"
+  ],
   "releases": [
     {
       "version": "0.11.206",
