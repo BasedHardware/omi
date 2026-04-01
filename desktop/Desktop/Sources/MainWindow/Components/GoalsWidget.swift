@@ -22,7 +22,7 @@ struct GoalsWidget: View {
             // Header
             HStack {
                 Text("Goals")
-                    .scaledFont(size: 15, weight: .semibold)
+                    .scaledFont(size: 15, weight: .medium)
                     .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
