@@ -39,19 +39,19 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
                 MixpanelManager().pageOpened('About Privacy Policy');
                 routeToPage(
                   context,
-                  PageWebView(url: 'https://www.omi.me/pages/privacy', title: context.l10n.privacyPolicyTitle),
+                  PageWebView(url: 'https://nooto.togodynamics.com/privacy', title: context.l10n.privacyPolicyTitle),
                 );
               },
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               title: Text(context.l10n.visitWebsite, style: const TextStyle(color: Colors.white)),
-              subtitle: const Text('https://omi.me'),
+              subtitle: const Text('https://nooto.togodynamics.com'),
               trailing: const Icon(Icons.language_outlined, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Visit Website');
-                // routeToPage(context, const PageWebView(url: 'https://www.omi.me/', title: 'omi'));
-                launchUrl(Uri.parse('https://www.omi.me/'));
+                // routeToPage(context, const PageWebView(url: 'https://nooto.togodynamics.com/', title: 'nooto'));
+                launchUrl(Uri.parse('https://nooto.togodynamics.com/'));
               },
             ),
             ListTile(
