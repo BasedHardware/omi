@@ -234,7 +234,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
-    final deviceName = device?.name ?? 'Omi DevKit';
+    final deviceName = device?.name ?? 'Nooto DevKit';
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
 
     String truncateId(String id) {
@@ -300,7 +300,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Widget _buildHardwareInfoSection(BtDevice? device) {
     final hardwareRevision = device?.hardwareRevision ?? 'XIAO';
-    final modelNumber = device?.modelNumber ?? 'Omi DevKit';
+    final modelNumber = device?.modelNumber ?? 'Nooto DevKit';
     final manufacturer = device?.manufacturerName ?? 'Based Hardware';
 
     return Container(
