@@ -109,6 +109,9 @@ class CaptureProvider extends ChangeNotifier
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
+  bool _sttDegraded = false;
+  bool get isSttDegraded => _sttDegraded;
+
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
 
@@ -984,6 +987,7 @@ class CaptureProvider extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    _sttDegraded = false;
 
     if (closeCode == 4002) {
       usageProvider?.markAsOutOfCreditsAndRefresh();
@@ -1044,6 +1048,7 @@ class CaptureProvider extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    _sttDegraded = false;
 
     notifyListeners();
     _startKeepAliveServices();
@@ -1128,6 +1133,14 @@ class CaptureProvider extends ChangeNotifier
         final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({'status_text': event.statusText});
         _handleFreemiumThresholdReached(thresholdEvent);
         return;
+      }
+
+      // Track degraded STT state separately — degraded means WS is up but STT
+      // is using fallback batch transcription, not fully disconnected.
+      if (event.status == 'stt_degraded') {
+        _sttDegraded = true;
+      } else if (event.status == 'stt_recovered' || event.status == 'ready') {
+        _sttDegraded = false;
       }
 
       _transcriptionServiceStatuses.add(event);
