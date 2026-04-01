@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.206",
+      "date": "2026-04-01",
+      "changes": [
+        "Fixed floating bar follow-up input not auto-focusing when restoring a conversation"
+      ]
+    },
+    {
+      "version": "0.11.205",
+      "date": "2026-03-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.204",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed transcription not auto-starting after proxy migration"
+      ]
+    },
+    {
       "version": "0.11.203",
       "date": "2026-03-31",
       "changes": [

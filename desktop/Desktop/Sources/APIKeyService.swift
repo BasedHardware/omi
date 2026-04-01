@@ -156,9 +156,10 @@ final class APIKeyService: ObservableObject {
             ?? (getenv("ANTHROPIC_API_KEY").flatMap { String(validatingUTF8: $0) })
     }
 
-    /// True once fetchKeys() has called applyToEnvironment() (proxy: env var is set).
+    /// True when the app has enough configuration to start transcription and screen analysis.
+    /// In proxy mode (OMI_API_URL set), no client-side Deepgram/Gemini keys are needed.
     nonisolated static var keysAvailable: Bool {
-        getenv("GEMINI_API_KEY") != nil || getenv("DEEPGRAM_API_KEY") != nil
+        getenv("GEMINI_API_KEY") != nil || getenv("DEEPGRAM_API_KEY") != nil || getenv("OMI_API_URL") != nil
     }
 
     private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
