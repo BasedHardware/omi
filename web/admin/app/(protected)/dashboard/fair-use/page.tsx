@@ -115,6 +115,7 @@ export default function FairUsePage() {
     if (!user) return;
     try {
       setUserLoading(true);
+      setError(null);
       const idToken = await user.getIdToken();
       const res = await fetch(`/api/omi/fair-use/user/${uid}`, {
         headers: { Authorization: `Bearer ${idToken}` },
@@ -170,6 +171,7 @@ export default function FairUsePage() {
     if (!user || !confirm('Reset this user\'s fair use state to clean? This will clear all enforcement.')) return;
     try {
       setActionLoading('reset');
+      setError(null);
       const idToken = await user.getIdToken();
       const res = await fetch(`/api/omi/fair-use/user/${uid}/reset`, {
         method: 'POST',
@@ -189,6 +191,7 @@ export default function FairUsePage() {
     if (!user || !confirm(`Set this user's stage to "${stage}"?`)) return;
     try {
       setActionLoading(`stage-${stage}`);
+      setError(null);
       const idToken = await user.getIdToken();
       const res = await fetch(`/api/omi/fair-use/user/${uid}/set-stage?stage=${stage}`, {
         method: 'POST',
@@ -208,6 +211,7 @@ export default function FairUsePage() {
     if (!user || !confirm('Mark this event as resolved?')) return;
     try {
       setActionLoading(`resolve-${eventId}`);
+      setError(null);
       const idToken = await user.getIdToken();
       const res = await fetch(`/api/omi/fair-use/user/${uid}/resolve-event/${eventId}`, {
         method: 'POST',
