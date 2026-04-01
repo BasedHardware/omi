@@ -15,21 +15,21 @@ class ConnectionGuideSheet extends StatelessWidget {
     return [
       DeviceGuideProduct(
         id: 'omi',
-        name: 'Omi',
+        name: 'Nooto',
         pairingTitle: l10n.pairingTitleOmi,
         pairingDescription: l10n.pairingDescOmi,
         localImagePath: Assets.images.omiWithoutRope.path,
       ),
       DeviceGuideProduct(
         id: 'omi_devkit',
-        name: 'Omi DevKit',
+        name: 'Nooto DevKit',
         pairingTitle: l10n.pairingTitleOmiDevkit,
         pairingDescription: l10n.pairingDescOmiDevkit,
         localImagePath: Assets.images.omiDevkitWithoutRope.path,
       ),
       DeviceGuideProduct(
         id: 'omi_glass',
-        name: 'Omi Glass',
+        name: 'Nooto Glass',
         pairingTitle: l10n.pairingTitleOmiGlass,
         pairingDescription: l10n.pairingDescOmiGlass,
         localImagePath: Assets.images.omiGlass.path,
