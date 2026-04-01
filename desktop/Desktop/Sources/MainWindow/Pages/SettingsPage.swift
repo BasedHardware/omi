@@ -4336,8 +4336,8 @@ struct SettingsContentView: View {
 
             developerTextField(
                 title: "ElevenLabs Voice ID",
-                subtitle: "Optional override. Leave blank to use the default Rachel voice.",
-                placeholder: "21m00Tcm4TlvDq8ikWAM",
+                subtitle: "Optional override. Leave blank to use the default Sloane voice.",
+                placeholder: "BAMYoBHLZM7lJgJAmFz0",
                 settingId: "advanced.devkeys.elevenlabsvoice",
                 value: syncedElevenLabsVoiceIDBinding
             )
