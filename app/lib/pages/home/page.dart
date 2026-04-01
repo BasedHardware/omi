@@ -42,6 +42,7 @@ import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -208,11 +209,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Sync Apple Reminders on foreground resume (non-blocking, debounced)
       if (mounted && PlatformService.isApple) {
-        AppleRemindersSyncService().syncOnForegroundResume().then((_) {
-          if (mounted) {
-            Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
-          }
-        });
+        final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+        if (taskProvider.selectedApp == TaskIntegrationApp.appleReminders) {
+          AppleRemindersSyncService().syncOnForegroundResume().then((_) {
+            if (mounted) {
+              Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
+            }
+          });
+        }
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -825,8 +829,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -835,8 +839,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );
