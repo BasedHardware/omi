@@ -1579,15 +1579,11 @@ struct MemoriesPage: View {
                     Text("Add Your First Memory")
                 }
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(.white)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(Color.white)
+                .background(OmiColors.purplePrimary)
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(OmiColors.border, lineWidth: 1)
-                )
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
@@ -1658,15 +1654,11 @@ struct MemoriesPage: View {
                     Text("Retry")
                 }
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(.white)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(Color.white)
+                .background(OmiColors.purplePrimary)
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(OmiColors.border, lineWidth: 1)
-                )
             }
             .buttonStyle(.plain)
         }
