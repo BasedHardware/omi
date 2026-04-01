@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added copy and share buttons to floating bar AI responses for quick Q&A sharing"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.209",
+      "date": "2026-04-01",
+      "changes": [
+        "Added copy and share buttons to floating bar AI responses for quick Q&A sharing"
+      ]
+    },
     {
       "version": "0.11.208",
       "date": "2026-04-01",
