@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart';
@@ -59,6 +61,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     MixpanelManager().deviceOnboardingCompleted();
     MixpanelManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
+    SharedPreferencesUtil().deviceOnboardingCompleted = true;
+    updateUserOnboardingState(deviceOnboardingCompleted: true);
     Navigator.of(context).pop();
   }
 
