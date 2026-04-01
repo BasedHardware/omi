@@ -406,9 +406,9 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
-                    # Update conversation_id from transcript if provided
-                    if memory_id:
-                        current_conversation_id = memory_id
+                    # Do NOT overwrite current_conversation_id from memory_id here —
+                    # the authoritative source is header_type 103. Overwriting corrupts
+                    # private cloud sync chunk paths (#6190 Bug 2).
                     if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: transcript_queue size {len(transcript_queue)} {uid}")
                     # Use memory_id if available, otherwise use current_conversation_id for conversations
