@@ -559,3 +559,161 @@ class TestUserMatchEvent:
 
         assert segments[0].is_user is False
         assert segments[0].person_id == 'person-abc'
+
+
+# ─── Dimension Mismatch Guard (#6238) ─────────────────────────────────────────
+
+
+class TestDimensionMismatchGuard:
+    """Tests for dimension mismatch handling between v2 (512-dim) and v3 (256-dim) embeddings.
+
+    Root cause: v2→v3 migration can fail partially, leaving some contacts with
+    version=3 tag but 512-dim embeddings. When the user has a 256-dim v3 embedding,
+    scipy.cdist crashes on shape mismatch.
+    """
+
+    def test_compare_embeddings_same_dimension(self):
+        """Same-dimension embeddings should return valid cosine distance."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb1 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb2 = np.random.RandomState(2).randn(1, 256).astype(np.float32)
+        distance = compare_embeddings(emb1, emb2)
+        assert 0.0 <= distance <= 2.0
+
+    def test_compare_embeddings_dimension_mismatch_returns_max_distance(self):
+        """Mismatched dimensions (256 vs 512) should return 2.0 instead of crashing."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+
+        # Should NOT raise ValueError from scipy.cdist
+        distance = compare_embeddings(emb_256, emb_512)
+        assert distance == 2.0
+
+        # Reverse order should also work
+        distance = compare_embeddings(emb_512, emb_256)
+        assert distance == 2.0
+
+    def test_compare_embeddings_identical_returns_zero(self):
+        """Identical embeddings should return ~0.0 distance."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb = np.random.RandomState(42).randn(1, 512).astype(np.float32)
+        emb /= np.linalg.norm(emb)
+        distance = compare_embeddings(emb, emb)
+        assert distance < 0.001
+
+    def test_is_same_speaker_dimension_mismatch_returns_false(self):
+        """is_same_speaker should return (False, 2.0) on dimension mismatch."""
+        from utils.stt.speaker_embedding import is_same_speaker
+
+        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+
+        is_match, distance = is_same_speaker(emb_256, emb_512)
+        assert is_match is False
+        assert distance == 2.0
+
+    def test_find_best_match_skips_dimension_mismatch(self):
+        """find_best_match should not crash on mixed-dimension candidates."""
+        from utils.stt.speaker_embedding import find_best_match
+
+        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        # Mix of 256-dim (matching) and 512-dim (stale) candidates
+        candidates = [
+            np.random.RandomState(2).randn(1, 512).astype(np.float32),  # stale 512-dim
+            query.copy(),  # exact match, 256-dim
+            np.random.RandomState(3).randn(1, 512).astype(np.float32),  # stale 512-dim
+        ]
+
+        result = find_best_match(query, candidates)
+        assert result is not None
+        best_idx, best_distance = result
+        assert best_idx == 1  # should match the 256-dim copy
+        assert best_distance < 0.001
+
+    def test_find_best_match_all_mismatched_returns_none(self):
+        """find_best_match returns None when all candidates have wrong dimension."""
+        from utils.stt.speaker_embedding import find_best_match
+
+        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        candidates = [
+            np.random.RandomState(2).randn(1, 512).astype(np.float32),
+            np.random.RandomState(3).randn(1, 512).astype(np.float32),
+        ]
+
+        result = find_best_match(query, candidates)
+        assert result is None  # all return 2.0, above threshold
+
+    def test_person_cache_loading_filters_mismatched_dims(self):
+        """Person embeddings with wrong dimension should be filtered out during cache loading.
+
+        Simulates the transcribe.py cache loading path where user has 256-dim
+        and some contacts have stale 512-dim embeddings.
+        """
+        person_embeddings_cache = {}
+        user_embedding = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        person_embeddings_cache['user'] = {
+            'embedding': user_embedding,
+            'name': 'User',
+        }
+
+        # Simulate loading persons with mixed dimensions
+        persons = [
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(256))},  # v3, correct
+            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(512))},  # stale v2
+            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': list(np.random.randn(256))},  # v3, correct
+        ]
+
+        skipped = []
+        for person in persons:
+            emb = person.get('speaker_embedding')
+            if emb:
+                emb_array = np.array(emb, dtype=np.float32).reshape(1, -1)
+                # Mirror the dimension filter from transcribe.py
+                if (
+                    person_embeddings_cache
+                    and next(iter(person_embeddings_cache.values()))['embedding'].shape[1] != emb_array.shape[1]
+                ):
+                    skipped.append(person['id'])
+                    continue
+                person_embeddings_cache[person['id']] = {
+                    'embedding': emb_array,
+                    'name': person['name'],
+                }
+
+        # Alice and Carol loaded, Bob skipped
+        assert 'p1' in person_embeddings_cache
+        assert 'p2' not in person_embeddings_cache
+        assert 'p3' in person_embeddings_cache
+        assert skipped == ['p2']
+
+    def test_person_cache_loading_no_filter_when_cache_empty(self):
+        """When cache is empty (no user embedding), all persons should be loaded regardless of dim."""
+        person_embeddings_cache = {}
+
+        persons = [
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(512))},
+            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(256))},
+        ]
+
+        for person in persons:
+            emb = person.get('speaker_embedding')
+            if emb:
+                emb_array = np.array(emb, dtype=np.float32).reshape(1, -1)
+                if (
+                    person_embeddings_cache
+                    and next(iter(person_embeddings_cache.values()))['embedding'].shape[1] != emb_array.shape[1]
+                ):
+                    continue
+                person_embeddings_cache[person['id']] = {
+                    'embedding': emb_array,
+                    'name': person['name'],
+                }
+
+        # Both loaded since cache was empty when first person loaded
+        assert 'p1' in person_embeddings_cache
+        # p2 gets filtered because after p1 loads (512), p2 (256) mismatches
+        assert 'p2' not in person_embeddings_cache

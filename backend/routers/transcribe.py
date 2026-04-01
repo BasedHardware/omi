@@ -1762,8 +1762,18 @@ async def _stream_handler(
 
                 emb = person.get('speaker_embedding')
                 if emb:
+                    emb_array = np.array(emb, dtype=np.float32).reshape(1, -1)
+                    # Skip stale embeddings from old model (512-dim) that weren't re-extracted during v2→v3 migration
+                    if (
+                        person_embeddings_cache
+                        and next(iter(person_embeddings_cache.values()))['embedding'].shape[1] != emb_array.shape[1]
+                    ):
+                        logger.warning(
+                            f"Speaker ID: skipping person {person['id']} with {emb_array.shape[1]}-dim embedding (expected {next(iter(person_embeddings_cache.values()))['embedding'].shape[1]}-dim) {uid} {session_id}"
+                        )
+                        continue
                     person_embeddings_cache[person['id']] = {
-                        'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                        'embedding': emb_array,
                         'name': person['name'],
                     }
             logger.info(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings {uid} {session_id}")

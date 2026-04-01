@@ -118,8 +118,11 @@ def compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
 
     Returns:
         Cosine distance (0.0 = identical, 2.0 = opposite)
-        Lower values indicate more similar speakers
+        Lower values indicate more similar speakers.
+        Returns 2.0 (max distance) if embeddings have different dimensions.
     """
+    if embedding1.shape[1] != embedding2.shape[1]:
+        return 2.0
     distance = cdist(embedding1, embedding2, metric="cosine")[0, 0]
     return float(distance)
 
