@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { db } from '@/lib/firebase/client';
+import { getFirebaseDb } from '@/lib/firebase/client';
 import { collection, getDocs, DocumentData } from 'firebase/firestore';
 
 export interface TeamMember {
@@ -27,7 +27,7 @@ export function useTeamMembers() {
         setError(null);
         try {
           // Fetch from adminData collection
-          const usersCollection = collection(db, 'adminData');
+          const usersCollection = collection(getFirebaseDb(), 'adminData');
           const querySnapshot = await getDocs(usersCollection);
           
           const members = querySnapshot.docs.map(doc => {
