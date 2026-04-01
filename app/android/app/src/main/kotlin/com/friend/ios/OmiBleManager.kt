@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
@@ -346,10 +347,21 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         enqueueCommand {
-            val result = gatt.writeCharacteristic(characteristic, data, writeType)
-            if (result != BluetoothStatusCodes.SUCCESS) {
-                Log.e(TAG, "writeCharacteristic returned $result for $key")
-                writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected: $result")))
+            @Suppress("deprecation")
+            val success = if (Build.VERSION.SDK_INT >= 33) {
+                val result = gatt.writeCharacteristic(characteristic, data, writeType)
+                if (result != BluetoothStatusCodes.SUCCESS) {
+                    Log.e(TAG, "writeCharacteristic returned $result for $key")
+                }
+                result == BluetoothStatusCodes.SUCCESS
+            } else {
+                characteristic.value = data
+                characteristic.writeType = writeType
+                gatt.writeCharacteristic(characteristic)
+            }
+            if (!success) {
+                Log.e(TAG, "writeCharacteristic failed for $key")
+                writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected")))
                 completeCommand()
             } else if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
                 completeCommand()
@@ -370,7 +382,7 @@ class OmiBleManager private constructor(private val application: Application) {
         enqueueCommand {
             gatt.setCharacteristicNotification(characteristic, true)
             if (descriptor != null) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             } else {
                 completeCommand()
             }
@@ -386,7 +398,7 @@ class OmiBleManager private constructor(private val application: Application) {
         enqueueCommand {
             gatt.setCharacteristicNotification(characteristic, false)
             if (descriptor != null) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
             } else {
                 completeCommand()
             }
@@ -456,6 +468,20 @@ class OmiBleManager private constructor(private val application: Application) {
     private fun findCharacteristic(gatt: BluetoothGatt?, serviceUuid: String, characteristicUuid: String): BluetoothGattCharacteristic? {
         val service = gatt?.getService(UUID.fromString(serviceUuid)) ?: return null
         return service.getCharacteristic(UUID.fromString(characteristicUuid))
+    }
+
+    @Suppress("deprecation")
+    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
+        val success = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
+        } else {
+            descriptor.value = value
+            gatt.writeDescriptor(descriptor)
+        }
+        if (!success) {
+            Log.e(TAG, "writeDescriptor failed for ${descriptor.uuid}")
+            completeCommand()
+        }
     }
 
     fun cleanupPeripheral(address: String) {
