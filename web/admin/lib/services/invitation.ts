@@ -1,5 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/lib/firebase/client';
+import { getFirebaseFunctions } from '@/lib/firebase/client';
 
 /**
  * Data structure for inviting a user to an organization
@@ -59,7 +59,7 @@ interface InviteUserResponse {
  * ```
  */
 export const sendOrganizationInvitation = async (data: InviteUserData): Promise<InviteUserResponse> => {
-  const inviteUser = httpsCallable<InviteUserData, InviteUserResponse>(functions, 'inviteUser');
+  const inviteUser = httpsCallable<InviteUserData, InviteUserResponse>(getFirebaseFunctions(), 'inviteUser');
   
   try {
     const result = await inviteUser(data);
