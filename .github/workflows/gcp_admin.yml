@@ -6,15 +6,6 @@ on:
     paths:
       - 'web/admin/**'
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
-        type: choice
-        options:
-          - main
-          - development
 
 env:
   SERVICE: omi-admin-dashboard
@@ -22,7 +13,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.event.inputs.branch == 'development' || github.ref == 'refs/heads/development') && 'development' || 'prod' }}
+    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -31,8 +22,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-        with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Google Auth
         id: auth
