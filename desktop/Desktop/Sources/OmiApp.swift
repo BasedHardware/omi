@@ -86,6 +86,10 @@ struct OMIApp: App {
         return version.isEmpty ? baseName : "\(baseName) v\(version)"
     }
 
+    init() {
+        InterFont.register()
+    }
+
     /// Window size based on launch mode
     private var defaultWindowSize: CGSize {
         Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : CGSize(width: 1200, height: 800)
