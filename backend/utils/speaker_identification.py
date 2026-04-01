@@ -360,6 +360,17 @@ async def extract_speaker_samples(
             abs_start = started_at_ts + sample_start
             abs_end = started_at_ts + sample_end
 
+            # Log timing inputs for clock-source alignment analysis (#6190)
+            chunk_ts_range = (
+                (min(c['timestamp'] for c in chunks), max(c['timestamp'] for c in chunks)) if chunks else (0, 0)
+            )
+            logger.info(
+                f"Speaker sample timing: seg_rel=[{segment_start:.3f},{segment_end:.3f}] "
+                f"abs=[{abs_start:.3f},{abs_end:.3f}] started_at_ts={started_at_ts:.3f} "
+                f"chunk_range=[{chunk_ts_range[0]:.3f},{chunk_ts_range[1]:.3f}] "
+                f"n_chunks={len(chunks)} {uid} {conversation_id}"
+            )
+
             # Find relevant chunks
             sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
 
@@ -381,7 +392,8 @@ async def extract_speaker_samples(
 
             if not relevant_timestamps:
                 logger.info(
-                    f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s {uid} {conversation_id}"
+                    f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s "
+                    f"abs=[{abs_start:.3f},{abs_end:.3f}] {uid} {conversation_id}"
                 )
                 continue
 
@@ -399,7 +411,15 @@ async def extract_speaker_samples(
             # Use av for sample-accurate trimming
             trim_start = abs_start - buffer_start
             trim_end = abs_end - buffer_start
+            merged_duration = len(merged) / (sample_rate * 2) if merged else 0
             sample_audio = _trim_pcm_audio(merged, sample_rate, trim_start, trim_end)
+            sample_duration = len(sample_audio) / (sample_rate * 2) if sample_audio else 0
+
+            logger.info(
+                f"Speaker sample trim: merged={merged_duration:.2f}s "
+                f"trim=[{trim_start:.3f},{trim_end:.3f}] result={sample_duration:.2f}s "
+                f"buffer_start={buffer_start:.3f} {uid} {conversation_id}"
+            )
 
             # Ensure minimum sample length (8 seconds)
             min_sample_seconds = 8.0
