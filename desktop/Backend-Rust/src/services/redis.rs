@@ -198,6 +198,52 @@ impl RedisService {
         }
     }
 
+    /// Store chat share data in Redis with 30-day TTL
+    /// Key format: chat_share:{token}
+    pub async fn store_chat_share(
+        &self,
+        token: &str,
+        uid: &str,
+        display_name: &str,
+        question: &str,
+        answer: &str,
+    ) -> Result<(), redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+        let key = format!("chat_share:{}", token);
+        let value = serde_json::json!({
+            "uid": uid,
+            "display_name": display_name,
+            "question": question,
+            "answer": answer,
+        });
+        let _: () = conn.set_ex(&key, value.to_string(), 30 * 24 * 60 * 60).await?;
+        tracing::info!("Stored chat share: {}", token);
+        Ok(())
+    }
+
+    /// Get chat share data from Redis
+    pub async fn get_chat_share(
+        &self,
+        token: &str,
+    ) -> Result<Option<(String, String, String)>, redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+        let key = format!("chat_share:{}", token);
+        let raw: Option<String> = conn.get(&key).await?;
+        match raw {
+            Some(data) => {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                    let display_name = parsed["display_name"].as_str().unwrap_or("Someone").to_string();
+                    let question = parsed["question"].as_str().unwrap_or("").to_string();
+                    let answer = parsed["answer"].as_str().unwrap_or("").to_string();
+                    Ok(Some((display_name, question, answer)))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Atomically try to accept a task share for a user
     /// Returns true if this is a new acceptance, false if already accepted
     pub async fn try_accept_task_share(

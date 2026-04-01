@@ -825,9 +825,70 @@ async fn get_basic_context(
 // ROUTER
 // ============================================================================
 
+// ============================================================================
+// CHAT SHARE
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct ShareChatRequest {
+    question: String,
+    answer: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ShareChatResponse {
+    url: String,
+    token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SharedChatResponse {
+    sender_name: String,
+    question: String,
+    answer: String,
+}
+
+async fn share_chat(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(request): Json<ShareChatRequest>,
+) -> Result<Json<ShareChatResponse>, StatusCode> {
+    let redis = state.redis.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let display_name = user.name.clone().unwrap_or_else(|| "Someone".to_string());
+    let token = uuid::Uuid::new_v4().to_string().replace("-", "");
+
+    if let Err(e) = redis.store_chat_share(&token, &user.uid, &display_name, &request.question, &request.answer).await {
+        tracing::error!("Failed to store chat share: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let url = format!("https://h.omi.me/chat/{}", token);
+    Ok(Json(ShareChatResponse { url, token }))
+}
+
+async fn get_shared_chat(
+    State(state): State<AppState>,
+    axum::extract::Path(token): axum::extract::Path<String>,
+) -> Result<Json<SharedChatResponse>, StatusCode> {
+    let redis = state.redis.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+
+    match redis.get_chat_share(&token).await {
+        Ok(Some((display_name, question, answer))) => {
+            Ok(Json(SharedChatResponse { sender_name: display_name, question, answer }))
+        }
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!("Failed to get chat share: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub fn chat_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat-context", post(get_chat_context))
         .route("/v2/chat/initial-message", post(generate_initial_message))
         .route("/v2/chat/generate-title", post(generate_session_title))
+        .route("/v1/chat/share", post(share_chat))
+        .route("/v1/chat/shared/:token", axum::routing::get(get_shared_chat))
 }
