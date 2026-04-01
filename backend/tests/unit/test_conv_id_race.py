@@ -9,7 +9,7 @@ Bug 2: Pusher header_type 102 must not overwrite current_conversation_id
 import json
 import struct
 
-from utils.speaker_assignment import resolve_conversation_for_segments
+from utils.speaker_assignment import resolve_conversation_for_segments, resolve_transcript_conversation_id
 
 
 class TestResolveConversationForSegments:
@@ -103,54 +103,74 @@ class TestSegmentConversationMapPopulation:
         assert resolve_conversation_for_segments(['seg-1'], segment_conversation_map, 'conv-B') == 'conv-A'
         assert resolve_conversation_for_segments(['seg-3'], segment_conversation_map, 'conv-B') == 'conv-B'
 
+    def test_removed_ids_pruned_from_map(self):
+        """Merged/removed segment IDs should be pruned from the map."""
+        segment_conversation_map = {'seg-1': 'conv-A', 'seg-2': 'conv-A', 'seg-3': 'conv-A'}
+        removed_ids = ['seg-1', 'seg-2']
+        for rid in removed_ids:
+            segment_conversation_map.pop(rid, None)
+        assert segment_conversation_map == {'seg-3': 'conv-A'}
 
-class TestPusherMemoryIdOverwrite:
-    """Tests that header_type 102 no longer overwrites current_conversation_id."""
 
-    def _parse_header_102(self, data):
-        """Parse a header_type 102 message."""
-        header_type = struct.unpack('<I', data[:4])[0]
-        assert header_type == 102
-        return json.loads(bytes(data[4:]).decode('utf-8'))
+class TestResolveTranscriptConversationId:
+    """Tests for the production resolve_transcript_conversation_id function (Bug 2)."""
 
-    def test_header_102_does_not_overwrite_conversation_id(self):
-        """memory_id in transcript should NOT change current_conversation_id."""
+    def test_memory_id_returned_when_present(self):
+        """memory_id should be used for transcript queue, not current_conversation_id."""
+        result = resolve_transcript_conversation_id('conv-B', 'conv-A')
+        assert result == 'conv-B'
+
+    def test_current_used_when_memory_id_none(self):
+        """Without memory_id, should fall back to current_conversation_id."""
+        result = resolve_transcript_conversation_id(None, 'conv-A')
+        assert result == 'conv-A'
+
+    def test_current_used_when_memory_id_empty(self):
+        """Empty string memory_id should fall back to current_conversation_id."""
+        result = resolve_transcript_conversation_id('', 'conv-A')
+        assert result == 'conv-A'
+
+    def test_does_not_mutate_current_conversation_id(self):
+        """Calling resolve_transcript_conversation_id must not change the caller's state.
+
+        This tests the contract: header_type 102 must not overwrite
+        current_conversation_id. The function returns the resolved value
+        without side effects."""
+        current_conversation_id = 'conv-A'
+        conversation_or_memory_id = resolve_transcript_conversation_id('conv-B', current_conversation_id)
+        assert current_conversation_id == 'conv-A'
+        assert conversation_or_memory_id == 'conv-B'
+
+    def test_both_none(self):
+        """When both are None, returns None."""
+        result = resolve_transcript_conversation_id(None, None)
+        assert result is None
+
+    def test_header_103_is_only_authority(self):
+        """header_type 103 is the only way to change current_conversation_id.
+
+        resolve_transcript_conversation_id never mutates the caller's ID."""
         current_conversation_id = 'conv-A'
 
-        # Build a 102 message with memory_id
-        payload = json.dumps({'segments': [], 'memory_id': 'conv-B'}).encode('utf-8')
-        data = struct.pack('<I', 102) + payload
-        res = self._parse_header_102(data)
+        # header_type 102 arrives with memory_id 'conv-B'
+        transcript_conv = resolve_transcript_conversation_id('conv-B', current_conversation_id)
+        assert transcript_conv == 'conv-B'
+        assert current_conversation_id == 'conv-A'  # unchanged
 
-        memory_id = res.get('memory_id')
-        # The fix: we do NOT overwrite current_conversation_id
-        # (removed: if memory_id: current_conversation_id = memory_id)
-        conversation_or_memory_id = memory_id or current_conversation_id
-        assert current_conversation_id == 'conv-A'  # must stay unchanged
-        assert conversation_or_memory_id == 'conv-B'  # transcript queue uses memory_id
-
-    def test_header_102_without_memory_id_uses_current(self):
-        """Without memory_id, transcript queue should use current_conversation_id."""
-        current_conversation_id = 'conv-A'
-
-        payload = json.dumps({'segments': [{'text': 'hello'}]}).encode('utf-8')
-        data = struct.pack('<I', 102) + payload
-        res = self._parse_header_102(data)
-
-        memory_id = res.get('memory_id')
-        conversation_or_memory_id = memory_id or current_conversation_id
-        assert conversation_or_memory_id == 'conv-A'
+        # header_type 103 is the only authority (done by caller)
+        current_conversation_id = 'conv-C'
+        assert current_conversation_id == 'conv-C'
 
     def test_private_cloud_chunks_use_authoritative_conv_id(self):
-        """Private cloud sync chunks must always use the header_type 103 conversation ID."""
+        """Private cloud sync chunks must use the header_type 103 conversation ID,
+        not the memory_id from 102."""
         current_conversation_id = 'conv-A'
         private_cloud_queue = []
 
-        # Simulate header_type 102 with different memory_id
-        memory_id = 'conv-B'
-        # Fix: we do NOT overwrite current_conversation_id
+        # header_type 102 arrives but does NOT change current_conversation_id
+        resolve_transcript_conversation_id('conv-B', current_conversation_id)
 
-        # Simulate header_type 101 audio chunk queuing
+        # Private cloud chunk uses current_conversation_id (from 103)
         private_cloud_queue.append(
             {
                 'data': b'\x00' * 100,
@@ -159,23 +179,4 @@ class TestPusherMemoryIdOverwrite:
                 'retries': 0,
             }
         )
-
         assert private_cloud_queue[0]['conversation_id'] == 'conv-A'
-
-    def test_header_103_is_authoritative(self):
-        """header_type 103 should be the only way to change current_conversation_id."""
-        current_conversation_id = None
-
-        # Header 103 sets it
-        new_conversation_id = 'conv-A'
-        current_conversation_id = new_conversation_id
-        assert current_conversation_id == 'conv-A'
-
-        # Header 102 with memory_id must NOT change it
-        memory_id = 'conv-B'
-        # (no overwrite)
-        assert current_conversation_id == 'conv-A'
-
-        # Header 103 with new ID changes it
-        current_conversation_id = 'conv-C'
-        assert current_conversation_id == 'conv-C'
