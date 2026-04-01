@@ -18,11 +18,11 @@ struct GoalsWidget: View {
     @State private var selectedGoalForAdvice: Goal? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
                 Text("Goals")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: 15, weight: .semibold)
                     .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
@@ -83,7 +83,7 @@ struct GoalsWidget: View {
                 .padding(.vertical, 12)
             } else {
                 // Goals list
-                VStack(spacing: 12) {
+                VStack(spacing: 6) {
                     ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
                         GoalRowView(
                             goal: goal,
@@ -99,14 +99,14 @@ struct GoalsWidget: View {
                 }
             }
         }
-        .padding(16)
+        .padding(14)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(NootoColors.backgroundTertiary.opacity(0.3))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(NootoColors.backgroundSecondary)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(NootoColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(NootoColors.border.opacity(0.4), lineWidth: 1)
                 )
         )
         .sheet(isPresented: $showingCreateSheet) {
