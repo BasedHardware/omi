@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Fixed transcription not auto-starting after proxy migration",
-    "Fixed floating bar follow-up input not auto-focusing when restoring a conversation"
+    "Fixed floating bar follow-up input not auto-focusing when restoring a conversation",
+    "Added \"How did you hear about us?\" onboarding step for K-factor tracking"
   ],
   "releases": [
     {
