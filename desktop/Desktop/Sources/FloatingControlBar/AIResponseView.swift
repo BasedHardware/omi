@@ -330,6 +330,7 @@ struct AIResponseView: View {
     // MARK: - Follow-Up Input
 
     @State private var showCopiedFeedback = false
+    @State private var showShareFeedback = false
 
     private var followUpInputView: some View {
         HStack(spacing: 6) {
@@ -340,6 +341,14 @@ struct AIResponseView: View {
             }
             .buttonStyle(.plain)
             .help("Copy response")
+
+            Button(action: { shareResponse() }) {
+                Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
+                    .scaledFont(size: 13)
+                    .foregroundColor(showShareFeedback ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Share response")
 
             TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
@@ -375,6 +384,19 @@ struct AIResponseView: View {
         withAnimation { showCopiedFeedback = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation { showCopiedFeedback = false }
+        }
+    }
+
+    private func shareResponse() {
+        let answer = currentMessage?.text ?? ""
+        guard !answer.isEmpty else { return }
+        let combined = "Q: \(userInput)\n\nA: \(answer)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(combined, forType: .string)
+        AnalyticsManager.shared.shareAction(category: "floating_bar_share")
+        withAnimation { showShareFeedback = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showShareFeedback = false }
         }
     }
 
