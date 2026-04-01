@@ -48,11 +48,17 @@ class UnknownEvent extends MessageEvent {
 class MessageServiceStatusEvent extends MessageEvent {
   final String status;
   final String? statusText;
+  final Map<String, dynamic>? metadata;
 
-  MessageServiceStatusEvent({required this.status, this.statusText}) : super(eventType: 'service_status');
+  MessageServiceStatusEvent({required this.status, this.statusText, this.metadata})
+    : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
-    return MessageServiceStatusEvent(status: json['status'], statusText: json['status_text']);
+    return MessageServiceStatusEvent(
+      status: json['status'],
+      statusText: json['status_text'],
+      metadata: json['metadata'] != null ? Map<String, dynamic>.from(json['metadata']) : null,
+    );
   }
 }
 
