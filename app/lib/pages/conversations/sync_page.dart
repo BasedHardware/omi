@@ -696,7 +696,7 @@ class _SyncPageState extends State<SyncPage> {
 
       final controller = await WifiConnectionSheet.show(
         context,
-        deviceName: 'Omi',
+        deviceName: 'Nooto',
         onCancel: () {
           syncProvider.cancelSync();
         },
