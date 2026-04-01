@@ -214,7 +214,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         return wals;
       }
       var pd = await _device!.getDeviceInfo(connection);
-      String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+      String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Nooto";
 
       wals.add(
         Wal(
