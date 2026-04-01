@@ -1,0 +1,82 @@
+name: Deploy Admin Dashboard to Cloud Run
+
+on:
+  push:
+    branches: [ "main", "development" ]
+    paths:
+      - 'web/admin/**'
+  workflow_dispatch:
+
+env:
+  SERVICE: omi-admin-dashboard
+  REGION: us-central1
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
+    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - run: gcloud auth configure-docker
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: web/admin
+          push: true
+          platforms: linux/amd64
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          build-args: |
+            NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+            NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+            NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
+            NEXT_PUBLIC_PLUGINS_APP_ID=${{ secrets.NEXT_PUBLIC_PLUGINS_APP_ID }}
+            OMI_API_SECRET_KEY=${{ secrets.OMI_API_SECRET_KEY }}
+            NEXT_PUBLIC_OMI_API_URL=${{ secrets.NEXT_PUBLIC_OMI_API_URL }}
+            FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+            FIREBASE_CLIENT_EMAIL=${{ secrets.FIREBASE_CLIENT_EMAIL }}
+            FIREBASE_PRIVATE_KEY=${{ secrets.FIREBASE_PRIVATE_KEY }}
+            TYPESENSE_HOST=${{ secrets.TYPESENSE_HOST }}
+            TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }}
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            STRIPE_UNLIMITED_MONTHLY_PRICE_ID=${{ secrets.STRIPE_UNLIMITED_MONTHLY_PRICE_ID }}
+            STRIPE_UNLIMITED_ANNUAL_PRICE_ID=${{ secrets.STRIPE_UNLIMITED_ANNUAL_PRICE_ID }}
+            REDIS_HOST=${{ secrets.REDIS_HOST }}
+            REDIS_PORT=${{ secrets.REDIS_PORT }}
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            POSTGRES_URL=${{ secrets.POSTGRES_URL }}
+            SHIPBOB_API_KEY=${{ secrets.SHIPBOB_API_KEY }}
+            SHOPIFY_STORE=${{ secrets.SHOPIFY_STORE }}
+            SHOPIFY_ACCESS_TOKEN=${{ secrets.SHOPIFY_ACCESS_TOKEN }}
+            MIXPANEL_SECRET=${{ secrets.MIXPANEL_SECRET }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            POSTHOG_PERSONAL_API_KEY=${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+            POSTHOG_PROJECT_ID=${{ secrets.POSTHOG_PROJECT_ID }}
+            POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}
