@@ -60,7 +60,9 @@ See [desktop/README.md](desktop/README.md) for environment variables and credent
 cd app && bash setup.sh ios    # or: bash setup.sh android
 ```
 
-[App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) · [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios) · [Try in Browser](https://app.omi.me)
+[<img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" height="50px" width="180px">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+[<img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' height="50px" width="180px">](https://play.google.com/store/apps/details?id=com.friend.ios)
+· [Try in Browser](https://app.omi.me)
 
 ---
 
