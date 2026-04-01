@@ -1295,7 +1295,7 @@ struct NavItemView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: 14)
                     .foregroundColor(isLocked ? lockedColor : (isSelected ? NootoColors.textPrimary : NootoColors.textSecondary))
 
                 Spacer()
@@ -1424,7 +1424,7 @@ struct NavItemWithStatusView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: 14)
                     .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1772,7 +1772,7 @@ struct BottomNavItemView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: 14)
                     .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
