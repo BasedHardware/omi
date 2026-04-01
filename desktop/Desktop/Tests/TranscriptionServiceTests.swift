@@ -204,6 +204,82 @@ final class TranscriptionServiceStateTests: XCTestCase {
     }
 }
 
+// MARK: - Replay gating tests
+
+final class ReplayGatingTests: XCTestCase {
+
+    private func makeService() -> TranscriptionService? {
+        return try? TranscriptionService(apiKey: "test-key", channels: 1)
+    }
+
+    func testSendAudioBufferedDuringReplay() {
+        guard let service = makeService() else { return }
+        service.testSetState(.connected)
+        service.testSetIsReplaying(true)
+
+        // sendAudio during replay should buffer data in reconnectBuffer instead of sending
+        let chunk = Data(repeating: 0xAB, count: 100)
+        service.sendAudio(chunk)
+
+        // The chunk should have been appended to reconnectBuffer
+        let buffered = service.testDrainReconnectBuffer()
+        XCTAssertEqual(buffered.count, 1, "Chunk should be buffered during replay")
+        XCTAssertEqual(buffered[0], chunk)
+    }
+
+    func testSendAudioNotBufferedWhenNotReplaying() {
+        guard let service = makeService() else { return }
+        service.testSetState(.connected)
+        service.testSetIsReplaying(false)
+
+        // Without replay, sendAudio should NOT buffer (it tries to send directly)
+        let chunk = Data(repeating: 0xCD, count: 100)
+        service.sendAudio(chunk)
+
+        // reconnectBuffer should be empty — audio was sent (or attempted), not buffered
+        let buffered = service.testDrainReconnectBuffer()
+        XCTAssertTrue(buffered.isEmpty, "Audio should not be buffered when not replaying")
+    }
+
+    func testIsReplayingInitiallyFalse() {
+        guard let service = makeService() else { return }
+        XCTAssertFalse(service.testIsReplaying)
+    }
+
+    func testReplayFlagToggles() {
+        guard let service = makeService() else { return }
+        service.testSetIsReplaying(true)
+        XCTAssertTrue(service.testIsReplaying)
+        service.testSetIsReplaying(false)
+        XCTAssertFalse(service.testIsReplaying)
+    }
+}
+
+// MARK: - Disconnect buffer salvage tests
+
+final class DisconnectBufferSalvageTests: XCTestCase {
+
+    private func makeService() -> TranscriptionService? {
+        return try? TranscriptionService(apiKey: "test-key", channels: 1)
+    }
+
+    func testHandleDisconnectionFromConnectedPreservesReconnectBuffer() {
+        guard let service = makeService() else { return }
+        service.testSetState(.connected)
+        service.testSetShouldReconnect(false)
+
+        // Pre-populate reconnectBuffer
+        let existingChunk = Data(repeating: 0x01, count: 50)
+        service.testAppendToReconnectBuffer(existingChunk)
+
+        service.testHandleDisconnection()
+
+        // reconnectBuffer content should survive the disconnection
+        let remaining = service.testDrainReconnectBuffer()
+        XCTAssertGreaterThanOrEqual(remaining.count, 1, "Reconnect buffer should preserve data across disconnect")
+    }
+}
+
 // MARK: - Invalid URL construction tests
 
 final class URLConstructionTests: XCTestCase {
