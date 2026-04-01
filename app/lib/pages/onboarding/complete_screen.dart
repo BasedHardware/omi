@@ -126,7 +126,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Start Using Omi',
+                                'Start Using Nooto',
                                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                               ),
                               SizedBox(width: 8),
