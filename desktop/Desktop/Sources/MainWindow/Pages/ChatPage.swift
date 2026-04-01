@@ -523,6 +523,7 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             isStopping: chatProvider.isStopping,
             mode: $chatProvider.chatMode,
+            showToolbar: true,
             inputText: $chatProvider.draftText
         )
     }
