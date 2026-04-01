@@ -30,25 +30,25 @@ enum SidebarNavItem: Int, CaseIterable {
         case .settings: return "Settings"
         case .permissions: return "Permissions"
         case .device: return "Device"
-        case .help: return "Help from Founder"
+        case .help: return "Help"
         }
     }
 
     var icon: String {
         switch self {
-        case .dashboard: return "house.fill"
-        case .conversations: return "text.bubble.fill"
-        case .chat: return "bubble.left.and.bubble.right.fill"
-        case .memories: return "brain"
+        case .dashboard: return "square.grid.2x2"
+        case .conversations: return "text.bubble"
+        case .chat: return "bubble.left.and.bubble.right"
+        case .memories: return "brain.head.profile"
         case .tasks: return "checklist"
-        case .focus: return "eye.fill"
-        case .advice: return "lightbulb.fill"
+        case .focus: return "eye"
+        case .advice: return "lightbulb"
         case .rewind: return "clock.arrow.circlepath"
-        case .apps: return "puzzlepiece.fill"
-        case .settings: return "gearshape.fill"
-        case .permissions: return "exclamationmark.triangle.fill"
-        case .device: return "wave.3.right.circle.fill"
-        case .help: return "bubble.left.fill"
+        case .apps: return "square.grid.3x3"
+        case .settings: return "gearshape"
+        case .permissions: return "exclamationmark.triangle"
+        case .device: return "wave.3.right.circle"
+        case .help: return "questionmark.circle"
         }
     }
 
@@ -296,8 +296,9 @@ struct SidebarView: View {
 
                     // Divider before secondary items
                     Rectangle()
-                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
-                        .frame(height: 1)
+                        .fill(NootoColors.textTertiary.opacity(0.15))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 4)
 
                     Spacer().frame(height: 12)
 
@@ -309,8 +310,8 @@ struct SidebarView: View {
                     // Secondary navigation items
                     if currentTierLevel == 0 || currentTierLevel >= 4 {
                         BottomNavItemView(
-                            icon: "gift.fill",
-                            label: "Refer a Friend",
+                            icon: "gift",
+                            label: "Refer",
                             isCollapsed: isCollapsed,
                             iconWidth: iconWidth,
                             onTap: {
@@ -338,7 +339,7 @@ struct SidebarView: View {
 
                     // Settings at the very bottom
                     NavItemView(
-                        icon: "gearshape.fill",
+                        icon: "gearshape",
                         label: "Settings",
                         isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
                         isCollapsed: isCollapsed,
@@ -467,49 +468,45 @@ struct SidebarView: View {
 
     // MARK: - Header Section (Logo + Collapse Button on same row)
     private var headerSection: some View {
-        HStack(spacing: 12) {
-            // Omi logo icon - using the herologo from Resources
+        HStack(spacing: 10) {
+            // Logo icon
             if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
                 Image(nsImage: logoImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: iconWidth, height: iconWidth)
+                    .frame(width: 20, height: 20)
             } else {
-                // Fallback SF Symbol
                 Image(systemName: "circle.fill")
-                    .scaledFont(size: 17)
+                    .font(.system(size: 15))
                     .foregroundColor(NootoColors.brandPrimary)
-                    .frame(width: iconWidth)
+                    .frame(width: 20)
             }
 
             if !isCollapsed {
-                // Brand name
                 Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Nooto")
-                    .scaledFont(size: 22, weight: .bold)
+                    .font(.system(size: 17, weight: .bold, design: .default))
                     .foregroundColor(NootoColors.textPrimary)
-                    .tracking(-0.5)
+                    .tracking(-0.3)
 
                 Spacer()
 
-                // Collapse button
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isCollapsed.toggle()
                     }
                 }) {
                     Image(systemName: "sidebar.left")
-                        .scaledFont(size: 17)
+                        .font(.system(size: 14))
                         .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Collapse sidebar")
             } else {
-                // When collapsed, just show collapse button below logo
                 Spacer()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
     }
 
     // Collapse button for collapsed state (shown separately)
@@ -585,31 +582,28 @@ struct SidebarView: View {
                 NSWorkspace.shared.open(url)
             }
         }) {
-            HStack(spacing: 12) {
-                // Omi device image
+            HStack(spacing: 10) {
                 if let deviceImage = OmiDeviceImage.shared {
                     Image(nsImage: deviceImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 36, height: 36)
                 } else {
-                    // Fallback SF Symbol
-                    Image(systemName: "wave.3.right.circle.fill")
+                    Image(systemName: "wave.3.right.circle")
                         .scaledFont(size: 17)
                         .foregroundColor(NootoColors.brandPrimary)
-                        .frame(width: iconWidth)
+                        .frame(width: 36)
                 }
 
                 if !isCollapsed {
-                    // Text content
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text("Get Nooto Device")
                             .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(NootoColors.textPrimary)
-
                         Text("Your wearable AI companion")
                             .scaledFont(size: 11)
-                            .foregroundColor(NootoColors.textTertiary.opacity(0.8))
+                            .foregroundColor(NootoColors.textTertiary)
+                            .lineLimit(1)
                     }
 
                     Spacer()
@@ -622,7 +616,6 @@ struct SidebarView: View {
                         Image(systemName: "xmark")
                             .scaledFont(size: 10, weight: .medium)
                             .foregroundColor(NootoColors.textTertiary)
-                            .padding(6)
                     }
                     .buttonStyle(.plain)
                     .help("Dismiss")
@@ -635,7 +628,7 @@ struct SidebarView: View {
                     .fill(NootoColors.backgroundTertiary.opacity(0.6))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(NootoColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+                            .stroke(NootoColors.border.opacity(0.3), lineWidth: 1)
                     )
             )
         }
@@ -1302,23 +1295,19 @@ struct NavItemView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(isLocked ? lockedColor : (isSelected ? NootoColors.textPrimary : NootoColors.textSecondary))
 
                 Spacer()
 
                 if isLocked {
-                    // Clickable lock icon
                     lockIcon(size: 10)
                 } else {
-                    // Status indicator when expanded (for Focus)
                     if let color = statusColor {
                         Circle()
                             .fill(color)
                             .frame(width: 8, height: 8)
                     }
-
-                    // Badge count now shown on icon (see ZStack above)
                 }
             }
         }
@@ -1339,7 +1328,6 @@ struct NavItemView: View {
         .onHover { hovering in
             isHovered = isLocked ? false : hovering
         }
-        .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
     }
 
@@ -1396,16 +1384,14 @@ struct NavItemWithStatusView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Icon area - tappable to toggle
             ZStack(alignment: .topTrailing) {
-                // Show loading spinner in place of icon when loading
                 if isToggling || isPageLoading {
                     ProgressView()
                         .scaleEffect(0.5)
-                        .frame(width: iconWidth, height: 17)
+                        .frame(width: iconWidth, height: 16)
                 } else if showAudioBars && isOn {
-                    // Show audio bars when active and enabled for conversations
                     SidebarAudioLevelIcon(
                         micLevel: micLevel,
                         systemLevel: systemLevel,
@@ -1413,17 +1399,15 @@ struct NavItemWithStatusView: View {
                     )
                     .frame(width: iconWidth)
                 } else if showRewindIcon {
-                    // Show pulsing Rewind icon
                     SidebarRewindIcon(isActive: isOn)
                         .frame(width: iconWidth)
                 } else {
                     Image(systemName: icon)
-                        .scaledFont(size: 17)
+                        .font(.system(size: 15))
                         .foregroundColor(iconColor)
                         .frame(width: iconWidth)
                 }
 
-                // Status indicator when collapsed and off
                 if isCollapsed && !isOn && !isToggling && !isPageLoading {
                     Circle()
                         .fill(NootoColors.error)
@@ -1440,7 +1424,7 @@ struct NavItemWithStatusView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1448,8 +1432,7 @@ struct NavItemWithStatusView: View {
                 Spacer(minLength: 4)
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, isCollapsed ? 12 : 8)
+        .padding(.horizontal, 12)
         .padding(.vertical, 11)
         .contentShape(Rectangle())
         .background(
@@ -1465,7 +1448,6 @@ struct NavItemWithStatusView: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .padding(.bottom, 2)
         .help(isCollapsed ? "\(label) (\(isOn ? "On" : "Off")) - Click icon to toggle" : "Click icon to toggle")
     }
 }
@@ -1790,7 +1772,7 @@ struct BottomNavItemView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .scaledFont(size: 14, weight: .regular)
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(NootoColors.textSecondary)
 
                 Spacer()
@@ -1810,7 +1792,6 @@ struct BottomNavItemView: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
     }
 }
