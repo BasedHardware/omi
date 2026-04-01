@@ -536,7 +536,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
         final sheetController = await WifiConnectionSheet.show(
           context,
-          deviceName: 'Omi',
+          deviceName: 'Nooto',
           onCancel: () {
             syncProvider.cancelSync();
           },
