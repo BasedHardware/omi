@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed batch transcription failures on long speech segments (50s+)"
+  ],
   "releases": [
     {
       "version": "0.11.206",
