@@ -8,10 +8,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   static let devAPIKeyDefaultsKey = "dev_elevenlabs_api_key"
   static let devVoiceIDDefaultsKey = "dev_elevenlabs_voice_id"
 
-  nonisolated private static let defaultVoiceID = "21m00Tcm4TlvDq8ikWAM"  // Rachel
+  nonisolated private static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"  // Sloane
   nonisolated private static let defaultModelID = "eleven_multilingual_v2"
-  nonisolated private static let minimumChunkLength = 48
-  nonisolated private static let preferredChunkLength = 140
+  nonisolated private static let minimumChunkLength = 85
+  nonisolated private static let preferredChunkLength = 220
+  nonisolated private static let emergencyChunkLength = 360
 
   private var playbackTask: Task<Void, Never>?
   private var currentMode: PlaybackMode?
@@ -185,7 +186,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {
-    let preferredNames = ["Samantha", "Karen", "Moira"]
+    let preferredNames = ["Ava", "Allison", "Samantha", "Karen", "Moira"]
     for name in preferredNames {
       if let voice = AVSpeechSynthesisVoice.speechVoices().first(where: {
         $0.name.localizedCaseInsensitiveContains(name)
@@ -212,9 +213,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       modelID: defaultModelID,
       outputFormat: "mp3_44100_128",
       voiceSettings: .init(
-        stability: 0.42,
-        similarityBoost: 0.82,
-        style: 0.22,
+        stability: 0.34,
+        similarityBoost: 0.88,
+        style: 0.12,
         useSpeakerBoost: true
       )
     )
@@ -278,19 +279,35 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
     guard text.count >= minimumChunkLength else { return nil }
 
-    let searchLimit = text.index(text.startIndex, offsetBy: min(text.count, preferredChunkLength))
-    let searchSlice = text[..<searchLimit]
+    let preferredLimit = text.index(
+      text.startIndex, offsetBy: min(text.count, preferredChunkLength))
+    let preferredSlice = text[..<preferredLimit]
 
-    if let punctuationIndex = searchSlice.lastIndex(where: { ".!?\n".contains($0) }) {
+    if let punctuationIndex = preferredSlice.lastIndex(where: { ".!?\n".contains($0) }) {
       return text.index(after: punctuationIndex)
     }
 
     guard text.count >= preferredChunkLength else { return nil }
-    if let whitespaceIndex = searchSlice.lastIndex(where: \.isWhitespace) {
+
+    let emergencyLimit = text.index(
+      text.startIndex, offsetBy: min(text.count, emergencyChunkLength))
+    let emergencySlice = text[..<emergencyLimit]
+
+    if let punctuationIndex = emergencySlice.lastIndex(where: { ".!?\n".contains($0) }) {
+      return text.index(after: punctuationIndex)
+    }
+
+    guard text.count >= emergencyChunkLength else { return nil }
+
+    if let clauseIndex = emergencySlice.lastIndex(where: { ",;:\n".contains($0) }) {
+      return text.index(after: clauseIndex)
+    }
+
+    if let whitespaceIndex = emergencySlice.lastIndex(where: \.isWhitespace) {
       return whitespaceIndex
     }
 
-    return searchLimit
+    return emergencyLimit
   }
 }
 

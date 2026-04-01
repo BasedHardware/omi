@@ -349,7 +349,7 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
     }
 
-    /// When true, floating-bar replies are spoken aloud in development builds.
+    /// When true, floating-bar replies are spoken aloud.
     @Published var floatingBarVoiceAnswersEnabled: Bool {
         didSet {
             UserDefaults.standard.set(floatingBarVoiceAnswersEnabled, forKey: "shortcut_floatingBarVoiceAnswersEnabled")
