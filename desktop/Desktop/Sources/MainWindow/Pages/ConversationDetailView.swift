@@ -472,6 +472,7 @@ struct ConversationDetailView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(shareableUrl, forType: .string)
             }
+            AnalyticsManager.shared.shareAction(category: "conversation", properties: ["conversation_id": conversation.id])
         } catch {
             logError("Failed to get share link", error: error)
         }
