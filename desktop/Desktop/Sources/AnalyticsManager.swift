@@ -425,6 +425,15 @@ class AnalyticsManager {
     PostHogManager.shared.memoryShareButtonClicked(conversationId: conversationId)
   }
 
+  func shareAction(category: String, properties: [String: Any] = [:]) {
+    var props = properties
+    props["category"] = category
+    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+    MixpanelManager.shared.track("Share Action", properties: mixpanelProps)
+    PostHogManager.shared.track("Share Action", properties: props)
+    HeapManager.shared.track("Share Action", properties: ["category": category])
+  }
+
   func memoryListItemClicked(conversationId: String) {
     MixpanelManager.shared.memoryListItemClicked(conversationId: conversationId)
     PostHogManager.shared.memoryListItemClicked(conversationId: conversationId)
