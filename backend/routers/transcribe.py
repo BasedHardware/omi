@@ -30,6 +30,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 from utils.speaker_assignment import (
     process_speaker_assigned_segments,
+    resolve_conversation_for_segments,
     update_speaker_assignment_maps,
     should_update_speaker_to_person_map,
 )
@@ -2518,15 +2519,9 @@ async def _stream_handler(
                                 # Forward to pusher for speech sample extraction (non-blocking)
                                 # Only for real people (not 'user') and when private cloud sync is enabled
                                 # Only when can_assign is true (has speech_profile_processed segment)
-                                # Use segment_conversation_map to resolve the conversation the segments
-                                # actually belong to — current_conversation_id may have advanced on rollover.
-                                # Iterate all segment_ids to find a mapped conv — first ID may be unknown/stale.
-                                sample_conv_id = current_conversation_id
-                                for sid in segment_ids:
-                                    mapped = segment_conversation_map.get(sid)
-                                    if mapped:
-                                        sample_conv_id = mapped
-                                        break
+                                sample_conv_id = resolve_conversation_for_segments(
+                                    segment_ids, segment_conversation_map, current_conversation_id
+                                )
                                 if (
                                     can_assign
                                     and person_id
