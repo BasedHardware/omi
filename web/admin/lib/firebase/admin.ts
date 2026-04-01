@@ -22,6 +22,7 @@ function ensureInitialized() {
     console.log('Firebase Admin SDK initialized successfully.');
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.stack);
+    throw error;
   }
 }
 
