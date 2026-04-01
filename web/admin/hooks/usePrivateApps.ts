@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { db } from '@/lib/firebase/client'; // Import client Firestore instance
+import { getFirebaseDb } from '@/lib/firebase/client';
 import { collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
 import { OmiApp } from '@/lib/services/omi-api/types';
 
@@ -19,7 +19,7 @@ export function usePrivateApps() {
         setIsLoadingPrivate(true);
         setErrorPrivate(null);
         try {
-          const appsCollection = collection(db, 'plugins_data');
+          const appsCollection = collection(getFirebaseDb(), 'plugins_data');
           const q = query(
             appsCollection, 
             where('private', '==', true),
