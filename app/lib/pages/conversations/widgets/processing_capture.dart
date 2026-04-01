@@ -231,6 +231,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (lastEvent.status == "ready") {
           stateText = context.l10n.listening;
           statusIndicator = const RecordingStatusIndicator();
+        } else if (captureProvider.isSttDegraded) {
+          stateText = context.l10n.transcriptionDegraded;
+          statusIndicator = const DegradedStatusIndicator();
         } else {
           bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
           stateText = transcriptionDiagnosticEnabled ? (lastEvent.statusText ?? "") : "Connecting";
@@ -296,11 +299,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
     bool transcriptServiceStateOk = provider.transcriptServiceReady;
-    bool isReconnecting = !isPaused && !hasPhotos && !transcriptServiceStateOk;
+    bool isDegraded = provider.isSttDegraded && !isPaused;
+    bool isReconnecting = !isPaused && !hasPhotos && !transcriptServiceStateOk && !isDegraded;
     String statusText = isPaused
         ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
         : hasPhotos
         ? 'Capturing'
+        : isDegraded
+        ? context.l10n.transcriptionDegraded
         : (transcriptServiceStateOk ? context.l10n.listening : context.l10n.transcriptionPaused);
 
     // When recording is active, show the unified UI design
@@ -327,6 +333,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   ),
                   const SizedBox(width: 3),
                   const Icon(Icons.cloud_off, color: Color(0xFFFF9500), size: 12),
+                ] else if (isDegraded) ...[
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(color: Color(0xFFFFBF00), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 3),
+                  const Icon(Icons.sync, color: Color(0xFFFFBF00), size: 12),
                 ] else
                   Container(
                     width: 6,
@@ -585,6 +599,45 @@ class _ReconnectingStatusIndicatorState extends State<ReconnectingStatusIndicato
       child: FadeTransition(
         opacity: _opacityAnim,
         child: const Icon(Icons.cloud_off, color: Colors.orange, size: 16.0),
+      ),
+    );
+  }
+}
+
+/// Shows an amber blinking sync icon to indicate STT is in degraded mode
+/// (batch transcription active — audio is still being captured).
+class DegradedStatusIndicator extends StatefulWidget {
+  const DegradedStatusIndicator({super.key});
+
+  @override
+  State<DegradedStatusIndicator> createState() => _DegradedStatusIndicatorState();
+}
+
+class _DegradedStatusIndicatorState extends State<DegradedStatusIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this)..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.3).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 16,
+      height: 16,
+      child: FadeTransition(
+        opacity: _opacityAnim,
+        child: const Icon(Icons.sync, color: Color(0xFFFFBF00), size: 16.0),
       ),
     );
   }
