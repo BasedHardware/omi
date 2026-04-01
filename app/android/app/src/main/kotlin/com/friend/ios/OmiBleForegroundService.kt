@@ -170,13 +170,6 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
         val gatt = bleManager.connectedGatts[addr] ?: return
 
-        val hasDfuService = services.any { it.uuid.lowercase() == DFU_SERVICE_UUID }
-        if (hasDfuService) {
-            Log.i(TAG, "DFU service detected for $addr, skipping MTU request")
-            fireDeviceReady(addr, services)
-            return
-        }
-
         val originalListener = bleManager.connectionListener
         bleManager.connectionListener = object : OmiBleManager.BleConnectionListener by connectionListener {
             override fun onMtuChanged(address: String, mtu: Int, status: Int) {
