@@ -12,6 +12,7 @@ from enum import Enum
 import logging
 
 from database.redis_db import r
+from models.transcript_segment import SENTENCE_FINDALL_RE
 
 logger = logging.getLogger(__name__)
 
@@ -344,14 +345,13 @@ def split_into_sentences(text: str) -> List[str]:
     """
     if not text:
         return []
-    from models.transcript_segment import _SENTENCE_FINDALL_RE
 
     result = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
             continue
-        sentences = _SENTENCE_FINDALL_RE.findall(line)
+        sentences = SENTENCE_FINDALL_RE.findall(line)
         result.extend(s.strip() for s in sentences if s.strip())
     return result
 
