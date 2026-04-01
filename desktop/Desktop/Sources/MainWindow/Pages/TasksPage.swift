@@ -4440,6 +4440,7 @@ struct TaskRow: View {
             pasteboard.clearContents()
             pasteboard.setString(response.url, forType: .string)
             showShareCopiedFeedback()
+            AnalyticsManager.shared.shareAction(category: "task", properties: ["task_id": task.id])
             log("Copied task share link to clipboard: \(response.url)")
         } catch {
             log("Failed to get task share link: \(error)")
