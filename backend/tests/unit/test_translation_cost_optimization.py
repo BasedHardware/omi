@@ -267,6 +267,18 @@ class TestIsTextStable:
     def test_soft_boundary(self):
         assert _is_text_stable("Hello", {STABILITY_SOFT_BOUNDARY}) is True
 
+    def test_cjk_period_is_stable(self):
+        """Chinese 。 should be recognized as sentence-ending punctuation (#6189)."""
+        assert _is_text_stable("你好世界。", set()) is True
+
+    def test_hindi_danda_is_stable(self):
+        """Hindi danda (।) should trigger stability (#6189)."""
+        assert _is_text_stable("नमस्ते दुनिया।", set()) is True
+
+    def test_arabic_question_mark_is_stable(self):
+        """Arabic question mark (؟) should trigger stability (#6189)."""
+        assert _is_text_stable("كيف حالك؟", set()) is True
+
 
 # ==================== _compute_stability_signals ====================
 
@@ -294,6 +306,21 @@ class TestComputeStabilitySignals:
         now = time.monotonic()
         signals = _compute_stability_signals("hi", now, now, None, None)
         assert len(signals) == 0
+
+    def test_cjk_period_detected(self):
+        """Chinese 。 should produce STABILITY_PUNCTUATION signal (#6189)."""
+        signals = _compute_stability_signals("你好世界。", 0, 1, None, None)
+        assert STABILITY_PUNCTUATION in signals
+
+    def test_hindi_danda_detected(self):
+        """Hindi danda (।) should produce STABILITY_PUNCTUATION signal (#6189)."""
+        signals = _compute_stability_signals("नमस्ते।", 0, 1, None, None)
+        assert STABILITY_PUNCTUATION in signals
+
+    def test_arabic_question_mark_detected(self):
+        """Arabic ؟ should produce STABILITY_PUNCTUATION signal (#6189)."""
+        signals = _compute_stability_signals("كيف حالك؟", 0, 1, None, None)
+        assert STABILITY_PUNCTUATION in signals
 
 
 # ==================== Negative caching ====================
