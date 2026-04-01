@@ -462,6 +462,9 @@ class OmiBleForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Transition guard: old builds used START_STICKY, so Android may re-deliver
+        // a pending intent after process death before MainActivity initializes OmiBleManager.
+        if (!OmiBleManager.isInitialized) OmiBleManager.initialize(application)
         createNotificationChannel()
         registerReceiver(
             bluetoothReceiver,
