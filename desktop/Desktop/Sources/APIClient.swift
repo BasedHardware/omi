@@ -1769,6 +1769,15 @@ extension APIClient {
         return try await get("v1/action-items/shared/\(token)", requireAuth: false)
     }
 
+    /// Create a shareable link for a chat Q&A exchange
+    func shareChatResponse(question: String, answer: String) async throws -> ShareChatResponse {
+        struct ShareRequest: Encodable {
+            let question: String
+            let answer: String
+        }
+        return try await post("v1/chat/share", body: ShareRequest(question: question, answer: answer))
+    }
+
     /// Accepts shared tasks into the current user's task list
     func acceptSharedTasks(token: String) async throws -> AcceptTasksResponse {
         struct AcceptRequest: Encodable {
@@ -1780,6 +1789,11 @@ extension APIClient {
 
 /// Response types for task sharing
 struct ShareTasksResponse: Codable {
+    let url: String
+    let token: String
+}
+
+struct ShareChatResponse: Codable {
     let url: String
     let token: String
 }

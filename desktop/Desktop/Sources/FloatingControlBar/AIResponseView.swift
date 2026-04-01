@@ -331,6 +331,7 @@ struct AIResponseView: View {
 
     @State private var showCopiedFeedback = false
     @State private var showShareFeedback = false
+    @State private var isSharing = false
 
     private var followUpInputView: some View {
         HStack(spacing: 6) {
@@ -342,13 +343,20 @@ struct AIResponseView: View {
             .buttonStyle(.plain)
             .help("Copy response")
 
-            Button(action: { shareResponse() }) {
-                Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
-                    .scaledFont(size: 13)
-                    .foregroundColor(showShareFeedback ? .green : .secondary)
+            Button(action: { Task { await shareResponse() } }) {
+                if isSharing {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 13, height: 13)
+                } else {
+                    Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
+                        .scaledFont(size: 13)
+                        .foregroundColor(showShareFeedback ? .green : .secondary)
+                }
             }
             .buttonStyle(.plain)
             .help("Share response")
+            .disabled(isSharing)
 
             TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
@@ -375,8 +383,20 @@ struct AIResponseView: View {
         }
     }
 
+    /// Get the latest response text — from currentMessage (active) or last chatHistory exchange (restored)
+    private var latestResponseText: String {
+        if let text = currentMessage?.text, !text.isEmpty { return text }
+        return chatHistory.last?.aiMessage.text ?? ""
+    }
+
+    /// Get the latest question — from userInput (active) or last chatHistory exchange (restored)
+    private var latestQuestion: String {
+        if !userInput.isEmpty { return userInput }
+        return chatHistory.last?.question ?? ""
+    }
+
     private func copyResponse() {
-        let text = currentMessage?.text ?? ""
+        let text = latestResponseText
         guard !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -387,16 +407,24 @@ struct AIResponseView: View {
         }
     }
 
-    private func shareResponse() {
-        let answer = currentMessage?.text ?? ""
-        guard !answer.isEmpty else { return }
-        let combined = "Q: \(userInput)\n\nA: \(answer)"
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(combined, forType: .string)
-        AnalyticsManager.shared.shareAction(category: "floating_bar_share")
-        withAnimation { showShareFeedback = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showShareFeedback = false }
+    private func shareResponse() async {
+        let answer = latestResponseText
+        let question = latestQuestion
+        guard !answer.isEmpty, !isSharing else { return }
+        isSharing = true
+        defer { isSharing = false }
+
+        do {
+            let response = try await APIClient.shared.shareChatResponse(question: question, answer: answer)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(response.url, forType: .string)
+            AnalyticsManager.shared.shareAction(category: "floating_bar_share")
+            withAnimation { showShareFeedback = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showShareFeedback = false }
+            }
+        } catch {
+            log("Failed to create share link: \(error)")
         }
     }
 

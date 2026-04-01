@@ -6,6 +6,8 @@ import SceneKit
 struct MemoryGraphPage: View {
     @StateObject private var viewModel = MemoryGraphViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var showShareCopied = false
+    @State private var isSharingGraph = false
 
     var body: some View {
         ZStack {
@@ -29,6 +31,18 @@ struct MemoryGraphPage: View {
                     .buttonStyle(.plain)
 
                     Spacer()
+
+                    Button {
+                        Task { await shareGraph() }
+                    } label: {
+                        Image(systemName: showShareCopied ? "checkmark" : "arrowshape.turn.up.right")
+                            .scaledFont(size: 13)
+                            .foregroundColor(showShareCopied ? .green : .white.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Share brain map")
+                    .disabled(isSharingGraph || viewModel.isEmpty)
 
                     if viewModel.isRebuilding {
                         ProgressView()
@@ -60,7 +74,14 @@ struct MemoryGraphPage: View {
                     .tint(.white.opacity(0.4))
             }
         }
-        .task {
+        .onChange(of: showShareCopied) {
+        if showShareCopied {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showShareCopied = false }
+            }
+        }
+    }
+    .task {
             await viewModel.loadGraph()
             if viewModel.isEmpty {
                 await viewModel.rebuildGraph()
@@ -71,6 +92,20 @@ struct MemoryGraphPage: View {
                 }
             }
         }
+    }
+
+    private func shareGraph() async {
+        isSharingGraph = true
+        defer { isSharingGraph = false }
+
+        let labels = viewModel.nodeLabels
+        let summary = labels.prefix(20).joined(separator: ", ")
+        let more = labels.count > 20 ? " and \(labels.count - 20) more" : ""
+        let shareText = "My Omi Brain Map — \(labels.count) concepts: \(summary)\(more)\n\nhttps://omi.me"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(shareText, forType: .string)
+        AnalyticsManager.shared.shareAction(category: "brain_map", properties: ["node_count": labels.count])
+        withAnimation { showShareCopied = true }
     }
 }
 
@@ -133,6 +168,7 @@ class MemoryGraphViewModel: ObservableObject {
 
     let scene = SCNScene()
     let cameraNode = SCNNode()
+    private(set) var nodeLabels: [String] = []
 
     private var simulation = ForceDirectedSimulation()
     private var nodeSceneNodes: [String: SCNNode] = [:]
@@ -186,6 +222,7 @@ class MemoryGraphViewModel: ObservableObject {
 
             log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
             isEmpty = response.nodes.isEmpty
+            nodeLabels = response.nodes.map { $0.label }
 
             guard !isEmpty else { return }
 
