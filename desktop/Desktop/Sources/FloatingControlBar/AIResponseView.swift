@@ -91,6 +91,14 @@ struct AIResponseView: View {
             guard canClearVisibleConversation else { return }
             onClearVisibleConversation?()
         }
+        .onAppear {
+            if !isLoading {
+                // Restored conversation: focus follow-up field immediately
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isFollowUpFocused = true
+                }
+            }
+        }
         .onChange(of: isLoading) {
             if !isLoading {
                 // Auto-focus follow-up field when loading finishes
