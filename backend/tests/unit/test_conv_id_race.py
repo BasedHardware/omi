@@ -9,96 +9,65 @@ Bug 2: Pusher header_type 102 must not overwrite current_conversation_id
 import json
 import struct
 
+from utils.speaker_assignment import resolve_conversation_for_segments
 
-class TestSegmentConversationMap:
-    """Tests that segment_conversation_map resolves the correct conversation
-    for speaker sample requests, even after conversation rollover."""
+
+class TestResolveConversationForSegments:
+    """Tests for the production resolve_conversation_for_segments function."""
 
     def test_segment_maps_to_original_conversation(self):
         """Segments created in conv-A should map to conv-A even after rollover to conv-B."""
-        segment_conversation_map = {}
-        current_conversation_id = 'conv-A'
-
-        # Simulate segment creation in conv-A
-        segments = [{'id': 'seg-1'}, {'id': 'seg-2'}, {'id': 'seg-3'}]
-        for seg in segments:
-            segment_conversation_map[seg['id']] = current_conversation_id
-
-        # Simulate rollover
-        current_conversation_id = 'conv-B'
-
-        # speaker_assigned comes back — should resolve to conv-A, not conv-B
-        segment_ids = ['seg-1', 'seg-2']
-        sample_conv_id = segment_conversation_map.get(segment_ids[0], current_conversation_id)
-        assert sample_conv_id == 'conv-A'
+        segment_conversation_map = {'seg-1': 'conv-A', 'seg-2': 'conv-A', 'seg-3': 'conv-A'}
+        result = resolve_conversation_for_segments(['seg-1', 'seg-2'], segment_conversation_map, 'conv-B')
+        assert result == 'conv-A'
 
     def test_fallback_to_current_when_segment_unknown(self):
         """If segment not in map (edge case), fall back to current_conversation_id."""
-        segment_conversation_map = {}
-        current_conversation_id = 'conv-B'
-
-        segment_ids = ['unknown-seg']
-        sample_conv_id = segment_conversation_map.get(segment_ids[0], current_conversation_id)
-        assert sample_conv_id == 'conv-B'
+        result = resolve_conversation_for_segments(['unknown-seg'], {}, 'conv-B')
+        assert result == 'conv-B'
 
     def test_empty_segment_ids_uses_current(self):
         """Empty segment_ids should use current_conversation_id."""
-        segment_conversation_map = {'seg-1': 'conv-A'}
-        current_conversation_id = 'conv-B'
-
-        segment_ids = []
-        sample_conv_id = (
-            segment_conversation_map.get(segment_ids[0], current_conversation_id)
-            if segment_ids
-            else current_conversation_id
-        )
-        assert sample_conv_id == 'conv-B'
+        result = resolve_conversation_for_segments([], {'seg-1': 'conv-A'}, 'conv-B')
+        assert result == 'conv-B'
 
     def test_segments_across_two_conversations(self):
         """Segments from different conversations should each resolve correctly."""
-        segment_conversation_map = {}
-
-        # Conv-A segments
-        current_conversation_id = 'conv-A'
-        for sid in ['seg-1', 'seg-2']:
-            segment_conversation_map[sid] = current_conversation_id
-
-        # Rollover
-        current_conversation_id = 'conv-B'
-        for sid in ['seg-3', 'seg-4']:
-            segment_conversation_map[sid] = current_conversation_id
-
-        assert segment_conversation_map.get('seg-1', current_conversation_id) == 'conv-A'
-        assert segment_conversation_map.get('seg-3', current_conversation_id) == 'conv-B'
+        segment_conversation_map = {
+            'seg-1': 'conv-A',
+            'seg-2': 'conv-A',
+            'seg-3': 'conv-B',
+            'seg-4': 'conv-B',
+        }
+        assert resolve_conversation_for_segments(['seg-1'], segment_conversation_map, 'conv-B') == 'conv-A'
+        assert resolve_conversation_for_segments(['seg-3'], segment_conversation_map, 'conv-B') == 'conv-B'
 
     def test_mixed_segment_ids_first_unknown_resolves_from_later(self):
         """If first segment_id is unknown but later ones are in the map, resolve correctly."""
         segment_conversation_map = {'seg-2': 'conv-A', 'seg-3': 'conv-A'}
-        current_conversation_id = 'conv-B'
-
-        segment_ids = ['unknown-seg', 'seg-2', 'seg-3']
-        # Iterate all segment_ids to find a mapped conv (mirrors fix in transcribe.py)
-        sample_conv_id = current_conversation_id
-        for sid in segment_ids:
-            mapped = segment_conversation_map.get(sid)
-            if mapped:
-                sample_conv_id = mapped
-                break
-        assert sample_conv_id == 'conv-A'
+        result = resolve_conversation_for_segments(
+            ['unknown-seg', 'seg-2', 'seg-3'], segment_conversation_map, 'conv-B'
+        )
+        assert result == 'conv-A'
 
     def test_all_unknown_segments_fall_back_to_current(self):
         """If no segment_ids are in the map, fall back to current_conversation_id."""
-        segment_conversation_map = {'seg-1': 'conv-A'}
-        current_conversation_id = 'conv-B'
+        result = resolve_conversation_for_segments(['unknown-1', 'unknown-2'], {'seg-1': 'conv-A'}, 'conv-B')
+        assert result == 'conv-B'
 
-        segment_ids = ['unknown-1', 'unknown-2']
-        sample_conv_id = current_conversation_id
-        for sid in segment_ids:
-            mapped = segment_conversation_map.get(sid)
-            if mapped:
-                sample_conv_id = mapped
-                break
-        assert sample_conv_id == 'conv-B'
+    def test_none_current_conversation_id(self):
+        """When current_conversation_id is None and no match, returns None."""
+        result = resolve_conversation_for_segments(['unknown'], {}, None)
+        assert result is None
+
+    def test_none_current_but_mapped(self):
+        """When current_conversation_id is None but segment is mapped, returns mapped value."""
+        result = resolve_conversation_for_segments(['seg-1'], {'seg-1': 'conv-A'}, None)
+        assert result == 'conv-A'
+
+
+class TestSegmentConversationMapPopulation:
+    """Tests that segment_conversation_map is populated correctly at segment creation."""
 
     def test_map_populated_at_segment_creation(self):
         """Verify the map is populated when segments are first processed, not later."""
@@ -117,6 +86,22 @@ class TestSegmentConversationMap:
 
         assert segment_conversation_map == {'seg-1': 'conv-A', 'seg-2': 'conv-A'}
         assert current_session_segments == {'seg-1': True, 'seg-2': False}
+
+    def test_map_snapshots_correct_conv_across_rollover(self):
+        """Segments populated before and after rollover map to their respective conversations."""
+        segment_conversation_map = {}
+
+        current_conversation_id = 'conv-A'
+        for sid in ['seg-1', 'seg-2']:
+            segment_conversation_map[sid] = current_conversation_id
+
+        current_conversation_id = 'conv-B'
+        for sid in ['seg-3', 'seg-4']:
+            segment_conversation_map[sid] = current_conversation_id
+
+        # Now use the production function to resolve
+        assert resolve_conversation_for_segments(['seg-1'], segment_conversation_map, 'conv-B') == 'conv-A'
+        assert resolve_conversation_for_segments(['seg-3'], segment_conversation_map, 'conv-B') == 'conv-B'
 
 
 class TestPusherMemoryIdOverwrite:
