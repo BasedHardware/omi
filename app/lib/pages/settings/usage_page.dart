@@ -84,7 +84,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Prepare the watermark text
     final textPainter = TextPainter(
       text: TextSpan(
-        text: 'omi.me',
+        text: 'nooto.togodynamics.com',
         style: TextStyle(
           color: Colors.white.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
