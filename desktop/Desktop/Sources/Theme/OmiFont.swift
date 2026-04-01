@@ -9,6 +9,9 @@ import CoreText
 enum InterFont {
     static var isRegistered = false
 
+    /// The actual PostScript font family name after registration
+    private static var resolvedFamilyName: String?
+
     static func register() {
         guard !isRegistered else { return }
         isRegistered = true
@@ -16,36 +19,64 @@ enum InterFont {
         let fontNames = ["InterVariable", "InterVariable-Italic"]
         for name in fontNames {
             guard let url = Bundle.resourceBundle.url(forResource: name, withExtension: "ttf") else {
-                print("[Font] \(name).ttf not found in resource bundle")
+                NSLog("[Font] \(name).ttf not found in resource bundle")
                 continue
             }
             var error: Unmanaged<CFError>?
             if CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
-                print("[Font] Registered \(name)")
+                NSLog("[Font] Registered \(name)")
+
+                // Discover the actual family name from the font file
+                if resolvedFamilyName == nil,
+                   let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+                   let first = descriptors.first,
+                   let family = CTFontDescriptorCopyAttribute(first, kCTFontFamilyNameAttribute) as? String {
+                    resolvedFamilyName = family
+                    NSLog("[Font] Resolved family name: \(family)")
+                }
             } else {
-                print("[Font] Failed to register \(name): \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
+                // Already registered is not an error
+                NSLog("[Font] \(name) already registered or failed")
+
+                // Still try to resolve the family name
+                if resolvedFamilyName == nil,
+                   let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+                   let first = descriptors.first,
+                   let family = CTFontDescriptorCopyAttribute(first, kCTFontFamilyNameAttribute) as? String {
+                    resolvedFamilyName = family
+                    NSLog("[Font] Resolved family name: \(family)")
+                }
             }
         }
+
+        // Verify the font is actually available
+        let available = NSFontManager.shared.availableFontFamilies
+        let interFamilies = available.filter { $0.lowercased().contains("inter") }
+        NSLog("[Font] Available Inter families: \(interFamilies)")
     }
 
     /// Create an Inter font with the given size and weight.
     /// Falls back to system font if Inter is not available.
     static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let nsFont = nsFont(size: size, weight: weight)
-        return Font(nsFont)
+        if let family = resolvedFamilyName {
+            return Font.custom(family, size: size).weight(weight)
+        }
+        return Font.system(size: size, weight: weight)
     }
 
     /// NSFont variant for AppKit contexts (NootoTextEditor, etc.)
     static func nsFont(size: CGFloat, weight: Font.Weight = .regular) -> NSFont {
-        // Inter variable font uses weight axis
-        let traits: [NSFontDescriptor.TraitKey: Any] = [
-            .weight: nsFontWeight(from: weight)
-        ]
-        let descriptor = NSFontDescriptor(fontAttributes: [
-            .family: "Inter",
-            .traits: traits
-        ])
-        return NSFont(descriptor: descriptor, size: size) ?? NSFont.systemFont(ofSize: size, weight: nsFontWeight(from: weight))
+        let nsWeight = nsFontWeight(from: weight)
+        if let family = resolvedFamilyName {
+            let descriptor = NSFontDescriptor(fontAttributes: [
+                .family: family,
+                .traits: [NSFontDescriptor.TraitKey.weight: nsWeight]
+            ])
+            if let font = NSFont(descriptor: descriptor, size: size) {
+                return font
+            }
+        }
+        return NSFont.systemFont(ofSize: size, weight: nsWeight)
     }
 
     private static func nsFontWeight(from weight: Font.Weight) -> NSFont.Weight {
