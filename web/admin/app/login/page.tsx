@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAuth } from '@/components/auth-provider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ export default function LoginPage() {
   const handleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(getFirebaseAuth(), provider);
       // AuthProvider will handle redirection and admin check
     } catch (error) {
       console.error('Error signing in with Google:', error);
