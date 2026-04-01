@@ -1096,7 +1096,6 @@ async def _stream_handler(
                         stt_language,
                         sample_rate,
                         1,
-                        preseconds=0,
                         model=stt_model,
                         keywords=vocabulary[:100] if vocabulary else None,
                         vad_gate=vad_gate,
