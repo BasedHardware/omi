@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const profile = {
       email: userData?.email || '',
       name: userData?.name || '',
-      subscription_plan: userData?.subscription_plan || 'basic',
+      subscription_plan: userData?.subscription?.plan || 'basic',
     };
 
     // Serialize timestamps in state
