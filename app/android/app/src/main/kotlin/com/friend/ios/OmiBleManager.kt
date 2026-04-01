@@ -349,7 +349,11 @@ class OmiBleManager private constructor(private val application: Application) {
         enqueueCommand {
             @Suppress("deprecation")
             val success = if (Build.VERSION.SDK_INT >= 33) {
-                gatt.writeCharacteristic(characteristic, data, writeType) == BluetoothStatusCodes.SUCCESS
+                val result = gatt.writeCharacteristic(characteristic, data, writeType)
+                if (result != BluetoothStatusCodes.SUCCESS) {
+                    Log.e(TAG, "writeCharacteristic returned $result for $key")
+                }
+                result == BluetoothStatusCodes.SUCCESS
             } else {
                 characteristic.value = data
                 characteristic.writeType = writeType
@@ -468,11 +472,15 @@ class OmiBleManager private constructor(private val application: Application) {
 
     @Suppress("deprecation")
     private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
-        if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeDescriptor(descriptor, value)
+        val success = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
         } else {
             descriptor.value = value
             gatt.writeDescriptor(descriptor)
+        }
+        if (!success) {
+            Log.e(TAG, "writeDescriptor failed for ${descriptor.uuid}")
+            completeCommand()
         }
     }
 
