@@ -99,6 +99,7 @@ struct TaskChatPanel: View {
                             placeholder: "Ask about this task...",
                             mode: $taskState.chatMode,
                             pendingText: $coordinator.pendingInputText,
+                            showToolbar: false,
                             inputText: $taskState.draftText
                         )
                         .padding(12)
