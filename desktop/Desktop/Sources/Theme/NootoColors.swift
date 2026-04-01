@@ -3,14 +3,14 @@ import SwiftUI
 /// Premium color system matching Flutter's ResponsiveHelper
 /// Sophisticated dark theme with blue accent system
 enum NootoColors {
-    // MARK: - Background Colors
-    static let backgroundPrimary = Color(hex: 0x0F0F0F)    // Deep black
-    static let backgroundSecondary = Color(hex: 0x1A1A1A)  // Elevated surface
-    static let backgroundTertiary = Color(hex: 0x252525)   // Cards and components
-    static let backgroundQuaternary = Color(hex: 0x2A2A2A) // Hover states
+    // MARK: - Background Colors (macOS-native dark mode feel)
+    static let backgroundPrimary = Color(hex: 0x1C1C1E)    // macOS dark window
+    static let backgroundSecondary = Color(hex: 0x2C2C2E)  // Elevated surface
+    static let backgroundTertiary = Color(hex: 0x3A3A3C)   // Cards and components
+    static let backgroundQuaternary = Color(hex: 0x48484A) // Hover states
 
     // MARK: - Border Colors
-    static let border = Color(hex: 0x333333)               // Subtle border
+    static let border = Color(hex: 0x3A3A3C)               // Subtle border
 
     // MARK: - Blue Accent System (Nooto brand)
     static let brandPrimary = Color(hex: 0x3B82F6)    // Main blue
