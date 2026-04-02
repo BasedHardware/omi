@@ -4,12 +4,14 @@ import 'package:http/http.dart' as http;
 /// Tests that _buildRequest() refreshes X-Request-Start-Time on each call,
 /// ensuring retries and pool-queued requests don't send stale timestamps.
 ///
-/// The production code in shared.dart uses singletons that aren't injectable,
-/// so this test exercises the same request-building logic via a minimal
-/// abstraction that mirrors the production flow.
+/// _buildRequest() is private (underscore) in shared.dart and depends on
+/// non-injectable singletons (HttpPoolManager, SharedPreferencesUtil,
+/// AuthService), so this test mirrors the exact request-building logic via
+/// a minimal abstraction — the same pattern used by multipart_401_retry_test.dart.
 
-/// Mirrors _buildRequest() from shared.dart — builds an http.Request and
-/// stamps a fresh X-Request-Start-Time on the request object.
+/// Mirrors _buildRequest() from shared.dart:157 — builds an http.Request
+/// and stamps a fresh X-Request-Start-Time on the request object.
+/// IMPORTANT: keep this in sync with the production _buildRequest().
 http.Request buildRequest(String url, Map<String, String> headers, String body, String method) {
   final request = http.Request(method, Uri.parse(url));
   request.headers.addAll(headers);
