@@ -69,6 +69,8 @@ pub struct Config {
     pub deepgram_api_key: Option<String>,
     /// Anthropic API key for chat (served to desktop clients)
     pub anthropic_api_key: Option<String>,
+    /// ElevenLabs API key for floating bar voice answers (served to desktop clients)
+    pub elevenlabs_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
 }
@@ -130,6 +132,7 @@ impl Config {
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
             deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
         }
     }

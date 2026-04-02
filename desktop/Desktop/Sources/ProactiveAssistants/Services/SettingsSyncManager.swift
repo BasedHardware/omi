@@ -99,8 +99,14 @@ class SettingsSyncManager {
             if let v = floatingBar.elevenLabsApiKey {
                 UserDefaults.standard.set(v, forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey)
             }
-            if let v = floatingBar.elevenLabsVoiceID {
-                UserDefaults.standard.set(v, forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey)
+            UserDefaults.standard.removeObject(forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey)
+            if let v = floatingBar.elevenLabsVoiceID?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !v.isEmpty {
+                pushPartialUpdate(
+                    AssistantSettingsResponse(
+                        floatingBar: FloatingBarSettingsResponse(elevenLabsVoiceID: "")
+                    )
+                )
             }
         }
 
@@ -163,7 +169,7 @@ class SettingsSyncManager {
         let floatingBar = FloatingBarSettingsResponse(
             voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled,
             elevenLabsApiKey: UserDefaults.standard.string(forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey) ?? "",
-            elevenLabsVoiceID: UserDefaults.standard.string(forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey) ?? ""
+            elevenLabsVoiceID: ""
         )
 
         return AssistantSettingsResponse(
