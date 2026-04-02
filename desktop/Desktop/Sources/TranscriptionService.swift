@@ -131,11 +131,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     private let audioBufferSize = 3200  // ~100ms of 16kHz 16-bit audio (16000 * 2 * 0.1)
     private let audioBufferLock = NSLock()
 
-    // Reconnect audio ring buffer: holds audio produced while disconnected/reconnecting
-    // 30s of stereo 16kHz 16-bit = ~1.92MB; cap at 960KB (~15s) to stay conservative
-    private var reconnectBuffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
-    private var _isReplaying = false  // True while replaying buffered audio; gates live sends
-
     // MARK: - Initialization
 
     /// Whether this instance uses the backend proxy (no direct Deepgram access)
@@ -231,31 +226,12 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     }
 
     /// Send audio data to DeepGram (buffered for efficiency).
-    /// When disconnected/reconnecting, audio is queued in a ring buffer and replayed on reconnect.
+    /// When not connected, audio is silently dropped. Buffering during reconnect is a future phase.
     func sendAudio(_ data: Data) {
         guard !data.isEmpty else { return }
 
-        let shouldSendNow: Bool = withState {
-            reconnectBuffer.prune()
-            switch _connectionState {
-            case .connected:
-                if _isReplaying {
-                    reconnectBuffer.append(data)
-                    return false
-                }
-                return true
-            case .connecting, .reconnecting:
-                reconnectBuffer.append(data)
-                return false
-            case .disconnected:
-                if _shouldReconnect {
-                    reconnectBuffer.append(data)
-                }
-                return false
-            }
-        }
-
-        guard shouldSendNow else { return }
+        let isConn: Bool = withState { _connectionState == .connected }
+        guard isConn else { return }
 
         audioBufferLock.lock()
         audioBuffer.append(data)
@@ -297,61 +273,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
                 logError("TranscriptionService: Send error", error: error)
                 self?.handleDisconnection()
             }
-        }
-    }
-
-    /// Replay audio buffered during reconnection.
-    /// Sends chunks sequentially so only the first failure controls the retry path,
-    /// preventing duplicate rebuffering from concurrent failure callbacks.
-    private func replayBufferedAudio() {
-        let (task, chunks): (URLSessionWebSocketTask?, [Data]) = withState {
-            guard _connectionState == .connected else { return (nil, []) }
-            _isReplaying = true
-            return (_webSocketTask, reconnectBuffer.drain())
-        }
-        guard let task = task, !chunks.isEmpty else {
-            withState { _isReplaying = false }
-            return
-        }
-
-        log("TranscriptionService: Replaying \(chunks.count) buffered audio chunks")
-        replayChunksSequentially(task: task, chunks: chunks, index: 0)
-    }
-
-    /// Send chunks one at a time; on first failure, re-buffer the rest and reconnect.
-    private func replayChunksSequentially(task: URLSessionWebSocketTask, chunks: [Data], index: Int) {
-        guard index < chunks.count else {
-            // Drain any chunks that arrived during replay (live sendAudio appends to reconnectBuffer while _isReplaying)
-            let moreChunks: [Data] = withState {
-                let pending = reconnectBuffer.drain()
-                if pending.isEmpty {
-                    _isReplaying = false
-                }
-                return pending
-            }
-            if !moreChunks.isEmpty {
-                log("TranscriptionService: Draining \(moreChunks.count) chunks accumulated during replay")
-                replayChunksSequentially(task: task, chunks: moreChunks, index: 0)
-            }
-            return
-        }
-
-        task.send(.data(chunks[index])) { [weak self] error in
-            if let error = error {
-                logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
-                if let self = self {
-                    self.withState {
-                        self._isReplaying = false
-                        for remaining in chunks[index...] {
-                            self.reconnectBuffer.append(remaining)
-                        }
-                    }
-                    self.handleDisconnection()
-                }
-                return
-            }
-            // Success — send next chunk
-            self?.replayChunksSequentially(task: task, chunks: chunks, index: index + 1)
         }
     }
 
@@ -406,26 +327,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     /// Expose shouldReconnect setter for testing
     func testSetShouldReconnect(_ value: Bool) {
         withState { _shouldReconnect = value }
-    }
-
-    /// Current _isReplaying flag (read-only, for testing)
-    var testIsReplaying: Bool {
-        withState { _isReplaying }
-    }
-
-    /// Set _isReplaying flag for testing replay gating behavior
-    func testSetIsReplaying(_ value: Bool) {
-        withState { _isReplaying = value }
-    }
-
-    /// Append data to reconnectBuffer for testing
-    func testAppendToReconnectBuffer(_ data: Data) {
-        withState { reconnectBuffer.append(data) }
-    }
-
-    /// Drain reconnectBuffer for testing
-    func testDrainReconnectBuffer() -> [Data] {
-        withState { reconnectBuffer.drain() }
     }
 
     /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
@@ -603,7 +504,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         log("TranscriptionService: Connected (gen \(generation), protocol=\(`protocol` ?? "none"))")
         startKeepalive()
         startWatchdog()
-        replayBufferedAudio()
         onConnected?()
     }
 
@@ -728,14 +628,10 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         watchdogTask?.cancel()
         watchdogTask = nil
 
-        // Salvage any partial audio in the coalescing buffer into the reconnect buffer
+        // Discard any partial audio in the coalescing buffer (buffering during reconnect is a future phase)
         audioBufferLock.lock()
-        let partialAudio = audioBuffer
         audioBuffer = Data()
         audioBufferLock.unlock()
-        if !partialAudio.isEmpty {
-            withState { reconnectBuffer.append(partialAudio) }
-        }
 
         onDisconnected?()
 
@@ -1032,69 +928,6 @@ extension TranscriptionService {
         }
 
         return segments
-    }
-}
-
-// MARK: - Reconnect Audio Ring Buffer
-
-/// Bounded ring buffer that holds audio chunks produced while WebSocket is reconnecting.
-/// Chunks older than `ttl` or exceeding `maxBytes` are evicted automatically.
-/// Internal access level for testability via @testable import.
-struct ReconnectAudioRingBuffer {
-    struct Chunk {
-        let data: Data
-        let createdAt: Date
-    }
-
-    let ttl: TimeInterval
-    let maxBytes: Int
-    private(set) var chunks: [Chunk] = []
-    private(set) var totalBytes = 0
-
-    init(ttl: TimeInterval = 30, maxBytes: Int = 960_000) {
-        self.ttl = ttl
-        self.maxBytes = maxBytes
-    }
-
-    mutating func append(_ data: Data, now: Date = Date()) {
-        guard !data.isEmpty else { return }
-        evictExpired(now: now)
-
-        if data.count >= maxBytes {
-            let truncated = Data(data.suffix(maxBytes))
-            chunks = [Chunk(data: truncated, createdAt: now)]
-            totalBytes = truncated.count
-            return
-        }
-
-        chunks.append(Chunk(data: data, createdAt: now))
-        totalBytes += data.count
-        evictOverflow()
-    }
-
-    mutating func drain(now: Date = Date()) -> [Data] {
-        evictExpired(now: now)
-        let drained = chunks.map(\.data)
-        chunks.removeAll(keepingCapacity: true)
-        totalBytes = 0
-        return drained
-    }
-
-    mutating func prune(now: Date = Date()) {
-        evictExpired(now: now)
-    }
-
-    private mutating func evictExpired(now: Date) {
-        while let first = chunks.first, now.timeIntervalSince(first.createdAt) > ttl {
-            totalBytes -= first.data.count
-            chunks.removeFirst()
-        }
-    }
-
-    private mutating func evictOverflow() {
-        while totalBytes > maxBytes, !chunks.isEmpty {
-            totalBytes -= chunks.removeFirst().data.count
-        }
     }
 }
 
