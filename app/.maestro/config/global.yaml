@@ -1,0 +1,8 @@
+# Global Maestro configuration for Omi app functional tests
+# Docs: https://maestro.mobile.dev/
+
+appId: com.friend.ios.dev
+name: "Omi Functional Test Suite"
+
+onFlowStart:
+  - clearState  # Start each flow from a clean state when possible
