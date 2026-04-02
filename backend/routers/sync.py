@@ -42,6 +42,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    delete_all_user_cloud_audio,
 )
 
 from utils import encryption
@@ -174,20 +175,28 @@ def list_conversations_with_audio(
     List all conversations that have cloud-synced audio files.
     Returns lightweight conversation info (id, title, date, audio file count, total duration).
     """
-    conversations = conversations_db.get_conversations(uid, limit=500, include_discarded=False)
     result = []
-    for conv in conversations:
-        audio_files = conv.get('audio_files', [])
-        if not audio_files:
-            continue
-        total_duration = sum(af.get('duration', 0) for af in audio_files)
-        result.append({
-            'id': conv.get('id'),
-            'title': (conv.get('structured', {}) or {}).get('title', 'Untitled'),
-            'created_at': conv.get('created_at'),
-            'audio_file_count': len(audio_files),
-            'total_duration': total_duration,
-        })
+    offset = 0
+    batch_size = 500
+    while True:
+        conversations = conversations_db.get_conversations(uid, limit=batch_size, offset=offset, include_discarded=False)
+        if not conversations:
+            break
+        for conv in conversations:
+            audio_files = conv.get('audio_files', [])
+            if not audio_files:
+                continue
+            total_duration = sum(af.get('duration', 0) for af in audio_files)
+            result.append({
+                'id': conv.get('id'),
+                'title': (conv.get('structured', {}) or {}).get('title', 'Untitled'),
+                'created_at': conv.get('created_at'),
+                'audio_file_count': len(audio_files),
+                'total_duration': total_duration,
+            })
+        if len(conversations) < batch_size:
+            break
+        offset += batch_size
     return {'conversations': result}
 
 
@@ -200,18 +209,24 @@ def delete_all_cloud_audio(
     This removes audio chunks, merged files, and cached files from cloud storage,
     and clears the audio_files array from each conversation document.
     """
-    from utils.other.storage import delete_all_user_cloud_audio
-
     # Delete files from cloud storage
     deleted_count = delete_all_user_cloud_audio(uid)
 
-    # Clear audio_files from all conversation documents
-    conversations = conversations_db.get_conversations(uid, limit=500, include_discarded=True)
+    # Clear audio_files from all conversation documents (paginate to handle all)
     cleared_conversations = 0
-    for conv in conversations:
-        if conv.get('audio_files'):
-            conversations_db.update_conversation(uid, conv['id'], {'audio_files': []})
-            cleared_conversations += 1
+    offset = 0
+    batch_size = 500
+    while True:
+        conversations = conversations_db.get_conversations(uid, limit=batch_size, offset=offset, include_discarded=True)
+        if not conversations:
+            break
+        for conv in conversations:
+            if conv.get('audio_files'):
+                conversations_db.update_conversation(uid, conv['id'], {'audio_files': []})
+                cleared_conversations += 1
+        if len(conversations) < batch_size:
+            break
+        offset += batch_size
 
     logger.info(f"Deleted {deleted_count} cloud audio blobs and cleared {cleared_conversations} conversations for user {uid}")
     return {

@@ -8985,5 +8985,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareAudio => 'Share Audio';
- 378182dcc (feat: add audio listing, playback, sharing, and delete all to Private Cloud Sync page)
+
+  @override
+  String get preparingAudioTryAgain => 'Preparing audio… Please try again in a moment.';
+
+  @override
+  String failedToPlayAudio(String error) {
+    return 'Failed to play audio: $error';
+  }
+
+  @override
+  String failedToShareAudio(String error) {
+    return 'Failed to share audio: $error';
+  }
+
+  @override
+  String audioShareText(String title, String urls) {
+    return 'Audio from "$title"\n$urls';
+  }
 }

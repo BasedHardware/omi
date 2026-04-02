@@ -10712,3 +10712,51 @@
             }
         }
     },
+    "totalDurationMinutes": "{minutes} min",
+    "@totalDurationMinutes": {
+        "description": "Total audio duration in minutes",
+        "placeholders": {
+            "minutes": {
+                "type": "String"
+            }
+        }
+    },
+    "shareAudio": "Share Audio",
+    "@shareAudio": {
+        "description": "Button to share audio file"
+    },
+    "preparingAudioTryAgain": "Preparing audio… Please try again in a moment.",
+    "@preparingAudioTryAgain": {
+        "description": "Snackbar message when audio is being precached"
+    },
+    "failedToPlayAudio": "Failed to play audio: {error}",
+    "@failedToPlayAudio": {
+        "description": "Error message when audio playback fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "failedToShareAudio": "Failed to share audio: {error}",
+    "@failedToShareAudio": {
+        "description": "Error message when audio sharing fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "audioShareText": "Audio from \"{title}\"\n{urls}",
+    "@audioShareText": {
+        "description": "Text shared when sharing conversation audio",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            },
+            "urls": {
+                "type": "String"
+            }
+        }
+    }
+}

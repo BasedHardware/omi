@@ -36,8 +36,18 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
   @override
   void initState() {
     super.initState();
-    _playerStateSubscription = _audioPlayer.playerStateStream.listen((_) {
-      if (mounted) setState(() {});
+    _playerStateSubscription = _audioPlayer.playerStateStream.listen((state) {
+      if (mounted) {
+        // Clear playing state when playback completes
+        if (state.processingState == ProcessingState.completed) {
+          setState(() {
+            _currentPlayingConversationId = null;
+          });
+          _audioPlayer.stop();
+        } else {
+          setState(() {});
+        }
+      }
     });
     _loadCloudAudioConversations();
   }
@@ -126,8 +136,8 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         await precacheConversationAudio(conversation.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Preparing audio... Please try again in a moment.'),
+            SnackBar(
+              content: Text(context.l10n.preparingAudioTryAgain),
               backgroundColor: Colors.orange,
             ),
           );
@@ -167,7 +177,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to play audio: ${e.toString()}'),
+            content: Text(context.l10n.failedToPlayAudio(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -184,8 +194,8 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         await precacheConversationAudio(conversation.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Preparing audio... Please try again in a moment.'),
+            SnackBar(
+              content: Text(context.l10n.preparingAudioTryAgain),
               backgroundColor: Colors.orange,
             ),
           );
@@ -196,13 +206,13 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       // Share the signed URL(s) for the audio files
       final urls = cachedFiles.map((af) => af.signedUrl!).toList();
       await Share.share(
-        'Audio from "${conversation.title}"\n${urls.join('\n')}',
+        context.l10n.audioShareText(conversation.title, urls.join('\n')),
       );
     } catch (e) {
       Logger.debug('Error sharing audio: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to share audio: ${e.toString()}'), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.l10n.failedToShareAudio(e.toString())), backgroundColor: Colors.red),
         );
       }
     }
@@ -340,13 +350,13 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     return '${secs}s';
   }
 
-  String _formatDate(DateTime? date) {
+  String _formatDate(BuildContext context, DateTime? date) {
     if (date == null) return '';
     final now = DateTime.now();
     final diff = now.difference(date);
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    if (diff.inDays == 0) return context.l10n.today;
+    if (diff.inDays == 1) return context.l10n.yesterday;
+    if (diff.inDays < 7) return context.l10n.daysAgo(diff.inDays);
     return '${date.month}/${date.day}/${date.year}';
   }
 
@@ -421,7 +431,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                       Text('•', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                       const SizedBox(width: 8),
                       Text(
-                        _formatDate(conversation.createdAt),
+                        _formatDate(context, conversation.createdAt),
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                       ),
                     ],

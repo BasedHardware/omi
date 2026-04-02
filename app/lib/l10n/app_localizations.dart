@@ -14559,6 +14559,30 @@ abstract class AppLocalizations {
   /// **'Share Audio'**
   String get shareAudio;
 
+  /// Snackbar message when audio is being precached.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing audio… Please try again in a moment.'**
+  String get preparingAudioTryAgain;
+
+  /// Error message when audio playback fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to play audio: {error}'**
+  String failedToPlayAudio(String error);
+
+  /// Error message when audio sharing fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to share audio: {error}'**
+  String failedToShareAudio(String error);
+
+  /// Text shared when sharing conversation audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio from "{title}"\n{urls}'**
+  String audioShareText(String title, String urls);
+
   /// No description provided for @preparingAudio.
   ///
   /// In en, this message translates to:
