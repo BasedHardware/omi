@@ -3263,7 +3263,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get aboutYou => 'เกี่ยวกับคุณ';
 
   @override
-  String get manual => 'แมนนวล';
+  String get manual => 'ด้วยตนเอง';
 
   @override
   String get loadingYourMemories => 'กำลังโหลดความทรงจำของคุณ...';
@@ -8813,4 +8813,89 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'เราต้องการทำให้ Omi มีประโยชน์มากขึ้นสำหรับคุณ';
+
+  @override
+  String get deviceDiagnostics => 'การวินิจฉัยอุปกรณ์';
+
+  @override
+  String get signalStrength => 'ความแรงสัญญาณ';
+
+  @override
+  String get connectionUptime => 'เวลาทำงาน';
+
+  @override
+  String get reconnections => 'การเชื่อมต่อใหม่';
+
+  @override
+  String get disconnectHistory => 'ประวัติการตัดการเชื่อมต่อ';
+
+  @override
+  String get noDisconnectsRecorded => 'ไม่มีการตัดการเชื่อมต่อที่บันทึกไว้';
+
+  @override
+  String get diagnostics => 'การวินิจฉัย';
+
+  @override
+  String get waitingForData => 'กำลังรอข้อมูล...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI แบบเรียลไทม์ตามเวลา';
+
+  @override
+  String get noRssiDataYet => 'ยังไม่มีข้อมูล RSSI';
+
+  @override
+  String get collectingData => 'กำลังรวบรวมข้อมูล...';
+
+  @override
+  String get cleanDisconnect => 'ตัดการเชื่อมต่อปกติ';
+
+  @override
+  String get connectionTimeout => 'หมดเวลาการเชื่อมต่อ';
+
+  @override
+  String get remoteDeviceTerminated => 'อุปกรณ์ระยะไกลยุติการเชื่อมต่อ';
+
+  @override
+  String get pairedToAnotherPhone => 'จับคู่กับโทรศัพท์เครื่องอื่น';
+
+  @override
+  String get linkKeyMismatch => 'คีย์เชื่อมต่อไม่ตรงกัน';
+
+  @override
+  String get connectionFailed => 'การเชื่อมต่อล้มเหลว';
+
+  @override
+  String get appClosed => 'ปิดแอป';
+
+  @override
+  String get manualDisconnect => 'ตัดการเชื่อมต่อด้วยตนเอง';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count เหตุการณ์ล่าสุด';
+  }
+
+  @override
+  String get signal => 'สัญญาณ';
+
+  @override
+  String get battery => 'แบตเตอรี่';
+
+  @override
+  String get excellent => 'ยอดเยี่ยม';
+
+  @override
+  String get good => 'ดี';
+
+  @override
+  String get fair => 'พอใช้';
+
+  @override
+  String get weak => 'อ่อน';
+
+  @override
+  String gattError(String code) {
+    return 'ข้อผิดพลาด GATT ($code)';
+  }
 }

@@ -8912,4 +8912,89 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vogliamo rendere Omi più utile per te.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostica del dispositivo';
+
+  @override
+  String get signalStrength => 'Intensità del segnale';
+
+  @override
+  String get connectionUptime => 'Tempo di attività';
+
+  @override
+  String get reconnections => 'Riconnessioni';
+
+  @override
+  String get disconnectHistory => 'Cronologia disconnessioni';
+
+  @override
+  String get noDisconnectsRecorded => 'Nessuna disconnessione registrata';
+
+  @override
+  String get diagnostics => 'Diagnostica';
+
+  @override
+  String get waitingForData => 'In attesa di dati...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI in tempo reale';
+
+  @override
+  String get noRssiDataYet => 'Nessun dato RSSI ancora';
+
+  @override
+  String get collectingData => 'Raccolta dati...';
+
+  @override
+  String get cleanDisconnect => 'Disconnessione pulita';
+
+  @override
+  String get connectionTimeout => 'Timeout della connessione';
+
+  @override
+  String get remoteDeviceTerminated => 'Il dispositivo remoto ha terminato la connessione';
+
+  @override
+  String get pairedToAnotherPhone => 'Associato a un altro telefono';
+
+  @override
+  String get linkKeyMismatch => 'Chiave di collegamento non corrispondente';
+
+  @override
+  String get connectionFailed => 'Connessione fallita';
+
+  @override
+  String get appClosed => 'App chiusa';
+
+  @override
+  String get manualDisconnect => 'Disconnessione manuale';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ultimi $count eventi';
+  }
+
+  @override
+  String get signal => 'Segnale';
+
+  @override
+  String get battery => 'Batteria';
+
+  @override
+  String get excellent => 'Eccellente';
+
+  @override
+  String get good => 'Buono';
+
+  @override
+  String get fair => 'Discreto';
+
+  @override
+  String get weak => 'Debole';
+
+  @override
+  String gattError(String code) {
+    return 'Errore GATT ($code)';
+  }
 }

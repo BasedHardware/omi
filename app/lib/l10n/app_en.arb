@@ -10640,5 +10640,46 @@
     "feedbackSubtitleNotUsing": "We want to make Omi more useful for you.",
     "@feedbackSubtitleNotUsing": {
         "description": "Feedback subtitle for not using enough"
+    },
+    "deviceDiagnostics": "Device Diagnostics",
+    "signalStrength": "Signal Strength",
+    "connectionUptime": "Uptime",
+    "reconnections": "Reconnections",
+    "disconnectHistory": "Disconnect History",
+    "noDisconnectsRecorded": "No disconnects recorded",
+    "diagnostics": "Diagnostics",
+    "waitingForData": "Waiting for data...",
+    "liveRssiOverTime": "Live RSSI over time",
+    "noRssiDataYet": "No RSSI data yet",
+    "collectingData": "Collecting data...",
+    "cleanDisconnect": "Clean disconnect",
+    "connectionTimeout": "Connection timeout",
+    "remoteDeviceTerminated": "Remote device terminated",
+    "pairedToAnotherPhone": "Paired to another phone",
+    "linkKeyMismatch": "Link key mismatch",
+    "connectionFailed": "Connection failed",
+    "appClosed": "App closed",
+    "manualDisconnect": "Manual disconnect",
+    "lastNEvents": "Last {count} events",
+    "@lastNEvents": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "signal": "Signal",
+    "battery": "Battery",
+    "excellent": "Excellent",
+    "good": "Good",
+    "fair": "Fair",
+    "weak": "Weak",
+    "gattError": "GATT error ({code})",
+    "@gattError": {
+        "placeholders": {
+            "code": {
+                "type": "String"
+            }
+        }
     }
 }
