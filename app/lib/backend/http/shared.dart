@@ -157,6 +157,9 @@ Future<http.Response?> makeApiCall({
 http.Request _buildRequest(String url, Map<String, String> headers, String body, String method) {
   final request = http.Request(method, Uri.parse(url));
   request.headers.addAll(headers);
+  // Refresh timestamp on each request build so retries and pool-queued
+  // requests don't send a stale X-Request-Start-Time (#6274)
+  request.headers['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
   if (method != 'GET' && body.isNotEmpty) {
     request.headers['Content-Type'] = 'application/json';
     request.body = body;
