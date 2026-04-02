@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
@@ -21,6 +22,15 @@ class HttpPoolManager {
 
     _client = IOClient(httpClient);
     _pool = Pool(10, timeout: const Duration(seconds: 60));
+  }
+
+  /// Stamps a fresh X-Request-Start-Time on any outgoing request.
+  /// Single enforcement point: every HTTP request to the Omi backend flows
+  /// through send() or sendStreaming(), so retries, pool-queued requests,
+  /// and multipart uploads all get a current timestamp. (#6274)
+  @visibleForTesting
+  static void stampRequestTime(http.BaseRequest request) {
+    request.headers['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
   }
 
   Future<http.Response> send(
@@ -56,6 +66,7 @@ class HttpPoolManager {
     for (var i = 0; i <= retries; i++) {
       try {
         final request = requestBuilder();
+        stampRequestTime(request);
         final streamed = await _client.send(request).timeout(timeout);
         lastResponse = await http.Response.fromStream(streamed);
 
@@ -89,6 +100,7 @@ class HttpPoolManager {
     http.BaseRequest request, {
     Duration timeout = const Duration(minutes: 5),
   }) {
+    stampRequestTime(request);
     return _client.send(request).timeout(timeout);
   }
 
