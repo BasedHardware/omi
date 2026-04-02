@@ -19,6 +19,7 @@ import {
   Truck,
   Bell,
   BarChart3,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,11 @@ export function DashboardSidebar() {
       title: "Distributors",
       href: "/dashboard/distributors",
       icon: Truck,
+    },
+    {
+      title: "Fair Use",
+      href: "/dashboard/fair-use",
+      icon: ShieldAlert,
     },
   ];
 
