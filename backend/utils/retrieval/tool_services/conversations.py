@@ -67,15 +67,19 @@ def get_conversations_text(
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
     # Fetch
-    conversations_data = conversations_db.get_conversations(
-        uid,
-        limit=limit,
-        offset=offset,
-        start_date=start_dt,
-        end_date=end_dt,
-        include_discarded=include_discarded,
-        statuses=status_list,
-    )
+    try:
+        conversations_data = conversations_db.get_conversations(
+            uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_dt,
+            end_date=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list,
+        )
+    except Exception as e:
+        logger.error(f"get_conversations_text error: {e}")
+        return f"Error retrieving conversations: {e}"
 
     # Filter locked
     if conversations_data:
