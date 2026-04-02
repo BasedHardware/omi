@@ -314,7 +314,6 @@ struct SettingsContentView: View {
     @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
     @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
     @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
-    @AppStorage("dev_elevenlabs_voice_id") private var devElevenLabsVoiceID: String = ""
 
     init(
         appState: AppState,
@@ -4294,7 +4293,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
                         if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("No ElevenLabs key saved yet, so the app will use the local Samantha voice.")
+                            Text("No personal ElevenLabs key saved. The app will use Omi's default Sloane voice when available, otherwise it falls back to Samantha.")
                                 .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
@@ -4329,20 +4328,12 @@ struct SettingsContentView: View {
 
             developerKeyField(
                 title: "ElevenLabs API Key",
-                subtitle: "For experimental floating-bar voice answers",
+                subtitle: "For experimental floating-bar voice answers with the Sloane voice",
                 settingId: "advanced.devkeys.elevenlabs",
                 value: syncedElevenLabsKeyBinding
             )
 
-            developerTextField(
-                title: "ElevenLabs Voice ID",
-                subtitle: "Optional override. Leave blank to use the default Sloane voice.",
-                placeholder: "BAMYoBHLZM7lJgJAmFz0",
-                settingId: "advanced.devkeys.elevenlabsvoice",
-                value: syncedElevenLabsVoiceIDBinding
-            )
-
-            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty || !devElevenLabsVoiceID.isEmpty {
+            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
                     HStack {
                         Spacer()
@@ -4351,7 +4342,6 @@ struct SettingsContentView: View {
                             devGeminiKey = ""
                             devAnthropicKey = ""
                             devElevenLabsKey = ""
-                            devElevenLabsVoiceID = ""
                             SettingsSyncManager.shared.pushPartialUpdate(
                                 AssistantSettingsResponse(
                                     floatingBar: FloatingBarSettingsResponse(
@@ -4389,22 +4379,6 @@ struct SettingsContentView: View {
         }
     }
 
-    private func developerTextField(title: String, subtitle: String, placeholder: String, settingId: String, value: Binding<String>) -> some View {
-        settingsCard(settingId: settingId) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
-                Text(subtitle)
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
-                TextField(placeholder, text: value)
-                    .textFieldStyle(.roundedBorder)
-                    .scaledFont(size: 13)
-            }
-        }
-    }
-
     private var floatingBarVoiceAnswersBinding: Binding<Bool> {
         Binding(
             get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
@@ -4427,20 +4401,6 @@ struct SettingsContentView: View {
                 SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
                         floatingBar: FloatingBarSettingsResponse(elevenLabsApiKey: newValue)
-                    )
-                )
-            }
-        )
-    }
-
-    private var syncedElevenLabsVoiceIDBinding: Binding<String> {
-        Binding(
-            get: { devElevenLabsVoiceID },
-            set: { newValue in
-                devElevenLabsVoiceID = newValue
-                SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                        floatingBar: FloatingBarSettingsResponse(elevenLabsVoiceID: newValue)
                     )
                 )
             }

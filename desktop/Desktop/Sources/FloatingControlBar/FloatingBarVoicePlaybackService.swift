@@ -63,19 +63,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   private func resolvePlaybackMode() -> PlaybackMode {
-    let defaults = UserDefaults.standard
     guard
-      let apiKey = defaults.string(forKey: Self.devAPIKeyDefaultsKey)?.trimmingCharacters(
+      let apiKey = APIKeyService.currentElevenLabsKey?.trimmingCharacters(
         in: .whitespacesAndNewlines),
       !apiKey.isEmpty
     else {
       return .systemFallback
     }
 
-    let voiceID = defaults.string(forKey: Self.devVoiceIDDefaultsKey)?
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let resolvedVoiceID = (voiceID?.isEmpty == false) ? voiceID! : Self.defaultVoiceID
-    return .elevenLabs(apiKey: apiKey, voiceID: resolvedVoiceID)
+    return .elevenLabs(apiKey: apiKey, voiceID: Self.defaultVoiceID)
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {

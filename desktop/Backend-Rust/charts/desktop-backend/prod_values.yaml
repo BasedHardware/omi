@@ -34,6 +34,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
