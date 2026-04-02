@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
@@ -158,19 +157,12 @@ Future<http.Response?> makeApiCall({
 http.Request _buildRequest(String url, Map<String, String> headers, String body, String method) {
   final request = http.Request(method, Uri.parse(url));
   request.headers.addAll(headers);
-  // Refresh timestamp on each request build so retries and pool-queued
-  // requests don't send a stale X-Request-Start-Time (#6274)
-  request.headers['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
   if (method != 'GET' && body.isNotEmpty) {
     request.headers['Content-Type'] = 'application/json';
     request.body = body;
   }
   return request;
 }
-
-@visibleForTesting
-http.Request buildRequestForTest(String url, Map<String, String> headers, String body, String method) =>
-    _buildRequest(url, headers, body, method);
 
 Future<http.StreamedResponse> _sendMultipartWithProgress(
   http.MultipartRequest request,
