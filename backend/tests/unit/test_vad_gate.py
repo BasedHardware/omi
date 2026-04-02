@@ -2146,3 +2146,128 @@ class TestDG1011KeepaliveGap:
             )
         finally:
             safe.finish()
+
+
+# ---------------------------------------------------------------------------
+# STT audio ring buffer tests (#6190)
+# ---------------------------------------------------------------------------
+
+
+class TestSttAudioRingBuffer:
+    """Verify that GatedDeepgramSocket tracks audio sent to DG in stt_audio_ring."""
+
+    def test_no_gate_tracks_all_bytes(self):
+        """Without a gate, all sent audio ends up in stt_audio_ring."""
+        mock_conn = MagicMock()
+        sock = GatedDeepgramSocket(mock_conn, gate=None, sample_rate=8000)
+
+        chunk = _make_pcm(20, sample_rate=8000)  # 20ms @ 8kHz = 320 bytes
+        sock.send(chunk)
+
+        assert sock._stt_cursor_sec == pytest.approx(len(chunk) / (8000 * 2), abs=1e-9)
+        extracted = sock.stt_audio_ring.extract(0.0, sock._stt_cursor_sec)
+        assert extracted == chunk
+
+    def test_gated_tracks_only_speech_bytes(self):
+        """With an active gate, only speech audio goes into stt_audio_ring."""
+        gate = VADStreamingGate(sample_rate=8000, channels=1, mode='active', uid='u', session_id='s')
+        mock_conn = MagicMock()
+        sock = GatedDeepgramSocket(mock_conn, gate=gate, sample_rate=8000)
+
+        t = time.time()
+        # Silence: no audio should reach DG or ring buffer
+        _set_vad_speech(False)
+        for i in range(5):
+            sock.send(_make_pcm(30, sample_rate=8000), wall_time=t + i * 0.03)
+
+        assert sock._stt_cursor_sec == 0.0, "Silence should not advance STT cursor"
+
+        # Speech: audio should reach both DG and ring buffer
+        _set_vad_speech(True)
+        speech_chunk = _make_pcm(30, sample_rate=8000)
+        sock.send(speech_chunk, wall_time=t + 0.2)
+
+        assert sock._stt_cursor_sec > 0.0, "Speech should advance STT cursor"
+        assert sock.stt_audio_ring.total_bytes_written > 0
+
+    def test_extract_matches_sent_audio(self):
+        """Ring buffer extract for full range should return exactly what was sent."""
+        mock_conn = MagicMock()
+        sock = GatedDeepgramSocket(mock_conn, gate=None, sample_rate=8000)
+
+        chunks = []
+        for i in range(50):
+            chunk = _make_pcm(20, sample_rate=8000)
+            chunks.append(chunk)
+            sock.send(chunk)
+
+        all_audio = b''.join(chunks)
+        extracted = sock.stt_audio_ring.extract(0.0, sock._stt_cursor_sec)
+        # Allow ±4 byte tolerance for floating-point cursor accumulation
+        assert abs(len(extracted) - len(all_audio)) <= 4
+
+    def test_cursor_advances_monotonically(self):
+        """STT cursor should advance monotonically with each send."""
+        mock_conn = MagicMock()
+        sock = GatedDeepgramSocket(mock_conn, gate=None, sample_rate=16000)
+
+        prev = 0.0
+        for _ in range(10):
+            sock.send(_make_pcm(20, sample_rate=16000))
+            assert sock._stt_cursor_sec > prev
+            prev = sock._stt_cursor_sec
+
+
+class TestRemapPreservesSttTimes:
+    """Verify remap_segments preserves stt_start/stt_end (#6190)."""
+
+    def test_remap_sets_stt_fields(self):
+        """remap_segments should copy start/end to stt_start/stt_end before overwriting."""
+        gate = VADStreamingGate(sample_rate=8000, channels=1, mode='active', uid='u', session_id='s')
+        # Seed the DG→wall mapper with a checkpoint that has a wall-time offset
+        # so we can verify start/end get remapped to different values
+        gate.dg_wall_mapper.on_audio_sent(chunk_duration_sec=5.0, chunk_wall_rel_sec=100.0)
+
+        segments = [
+            {'start': 1.0, 'end': 2.0, 'text': 'hello', 'speaker': 'SPEAKER_00', 'is_user': False, 'person_id': None},
+        ]
+        gate.remap_segments(segments)
+
+        assert segments[0]['stt_start'] == 1.0, "Raw STT start should be preserved"
+        assert segments[0]['stt_end'] == 2.0, "Raw STT end should be preserved"
+        # start/end should now be wall-clock-relative (different from raw STT times)
+        assert segments[0]['start'] != 1.0, "start should have been remapped"
+
+    def test_remap_does_not_overwrite_existing_stt(self):
+        """If stt_start/stt_end are already set, remap should not overwrite them."""
+        gate = VADStreamingGate(sample_rate=8000, channels=1, mode='active', uid='u', session_id='s')
+        gate.dg_wall_mapper.on_audio_sent(chunk_duration_sec=5.0, chunk_wall_rel_sec=100.0)
+
+        segments = [
+            {
+                'start': 1.0,
+                'end': 2.0,
+                'stt_start': 0.5,
+                'stt_end': 1.5,
+                'text': 'hello',
+                'speaker': 'SPEAKER_00',
+                'is_user': False,
+                'person_id': None,
+            },
+        ]
+        gate.remap_segments(segments)
+
+        assert segments[0]['stt_start'] == 0.5, "Pre-existing stt_start should not be overwritten"
+        assert segments[0]['stt_end'] == 1.5, "Pre-existing stt_end should not be overwritten"
+
+    def test_remap_noop_when_shadow(self):
+        """In shadow mode, remap_segments should not touch any timestamps."""
+        gate = VADStreamingGate(sample_rate=8000, channels=1, mode='shadow', uid='u', session_id='s')
+        segments = [
+            {'start': 1.0, 'end': 2.0, 'text': 'hello', 'speaker': 'SPEAKER_00', 'is_user': False, 'person_id': None},
+        ]
+        gate.remap_segments(segments)
+
+        assert segments[0]['start'] == 1.0
+        assert segments[0]['end'] == 2.0
+        assert 'stt_start' not in segments[0], "Shadow mode should not add stt fields"
