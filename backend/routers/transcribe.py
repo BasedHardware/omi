@@ -101,7 +101,6 @@ from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
 from utils.aac import AACDecoder
-from utils.audio import AudioRingBuffer
 from utils.metrics import (
     BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS,
     PUSHER_CIRCUIT_BREAKER_REJECTIONS,
@@ -347,11 +346,8 @@ async def _stream_handler(
     realtime_photo_buffers: deque[ConversationPhoto] = deque(maxlen=MAX_PHOTO_BUFFER_SIZE)
 
     # === Speaker Identification State ===
-    RING_BUFFER_DURATION = 60.0  # seconds
     SPEAKER_ID_MIN_AUDIO = 2.0
     SPEAKER_ID_TARGET_AUDIO = 4.0
-
-    audio_ring_buffer: Optional[AudioRingBuffer] = None
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
@@ -690,8 +686,6 @@ async def _stream_handler(
     if not use_custom_stt and not is_multi_channel and include_speech_profile:
         has_speech_profile = get_user_has_speech_profile(uid)
     speaker_id_enabled = not use_custom_stt and (private_cloud_sync_enabled or has_speech_profile)
-    if speaker_id_enabled:
-        audio_ring_buffer = AudioRingBuffer(RING_BUFFER_DURATION, sample_rate)
 
     # Conversation timeout (to process the conversation after x seconds of silence)
     # Max: 4h, min 2m
@@ -1707,7 +1701,7 @@ async def _stream_handler(
     async def speaker_identification_task():
         """Consume segment queue, accumulate per speaker, trigger match when ready."""
         nonlocal websocket_active, speaker_to_person_map
-        nonlocal person_embeddings_cache, audio_ring_buffer
+        nonlocal person_embeddings_cache
 
         if not speaker_id_enabled:
             speaker_id_done.set()
@@ -1806,20 +1800,30 @@ async def _stream_handler(
         speaker_id_done.set()
 
     async def _match_speaker_embedding(speaker_id: int, segment: dict):
-        """Extract audio from ring buffer and match against stored embeddings."""
-        nonlocal speaker_to_person_map, segment_person_assignment_map, audio_ring_buffer, speaker_map_dirty
+        """Extract audio from STT audio ring buffer and match against stored embeddings.
+
+        Uses stt_start/stt_end (raw STT audio-time coordinates) to index into
+        deepgram_socket.stt_audio_ring, which stores exactly the bytes Deepgram
+        received. This eliminates wall-clock/STT-time drift (#6190).
+        """
+        nonlocal speaker_to_person_map, segment_person_assignment_map, speaker_map_dirty
 
         try:
-            seg_start = segment['abs_start']
-            seg_end = segment['abs_end']
+            seg_start = segment['stt_start']
+            seg_end = segment['stt_end']
             duration = segment['duration']
 
             if duration < SPEAKER_ID_MIN_AUDIO:
                 logger.info(f"Speaker ID: segment too short ({duration:.1f}s) {uid} {session_id}")
                 return
 
+            stt_ring = deepgram_socket.stt_audio_ring if deepgram_socket else None
+            if stt_ring is None:
+                logger.info(f"Speaker ID: no STT audio ring {uid} {session_id}")
+                return
+
             # Get buffer time range
-            time_range = audio_ring_buffer.get_time_range()
+            time_range = stt_ring.get_time_range()
             if time_range is None:
                 logger.info(f"Speaker ID: buffer empty {uid} {session_id}")
                 return
@@ -1856,8 +1860,8 @@ async def _stream_handler(
                 )
                 return
 
-            # Extract only the needed bytes directly from ring buffer
-            pcm_data = audio_ring_buffer.extract(extract_start, extract_end)
+            # Extract only the needed bytes directly from STT audio ring buffer
+            pcm_data = stt_ring.extract(extract_start, extract_end)
             if not pcm_data:
                 logger.error(f"Speaker ID: failed to extract audio {uid} {session_id}")
                 return
@@ -2138,26 +2142,25 @@ async def _stream_handler(
                         suggested_segments.add(segment.id)
                         continue
 
-                    # Embeding id speaker indentification
+                    # Embedding-based speaker identification (#6190: use STT audio-time)
                     if speaker_id_enabled and person_embeddings_cache:
-                        started_at_ts = conversation.started_at.timestamp()
                         if (
                             segment.speaker_id is not None
                             and not segment.person_id
                             and not segment.is_user
                             and segment.speaker_id not in speaker_to_person_map
+                            and segment.stt_start is not None
+                            and segment.stt_end is not None
                         ):
                             try:
                                 speaker_id_segment_queue.put_nowait(
                                     {
                                         'id': segment.id,
                                         'speaker_id': segment.speaker_id,
-                                        'abs_start': first_audio_byte_timestamp
-                                        + segment.start
-                                        - time_offset,  # raw start/end
-                                        'abs_end': first_audio_byte_timestamp + segment.end - time_offset,
-                                        'duration': segment.end - segment.start,
-                                        'text': segment.text,  # TODO: remove
+                                        'stt_start': segment.stt_start,
+                                        'stt_end': segment.stt_end,
+                                        'duration': segment.stt_end - segment.stt_start,
+                                        'text': segment.text,
                                     }
                                 )
                             except asyncio.QueueFull:
@@ -2302,7 +2305,7 @@ async def _stream_handler(
     async def receive_data(dg_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal audio_ring_buffer, dg_usage_ms_pending
+        nonlocal dg_usage_ms_pending
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2456,10 +2459,6 @@ async def _stream_handler(
                                     f"Sample rate: {sample_rate}Hz {uid} {session_id}"
                                 )
                                 continue
-
-                        # Feed ring buffer for speaker identification (always, with wall-clock time)
-                        if audio_ring_buffer is not None:
-                            audio_ring_buffer.write(data, last_audio_received_time)
 
                         if not use_custom_stt:
                             # VAD gating is handled inside GatedDeepgramSocket.send()
