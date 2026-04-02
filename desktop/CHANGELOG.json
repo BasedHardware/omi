@@ -1,5 +1,5 @@
 {
-  "unreleased": [],
+  "unreleased": ["Fixed speaker diarization in Take Note by migrating live transcription to production backend"],
   "releases": [
     {
       "version": "0.11.220",
