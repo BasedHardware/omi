@@ -175,6 +175,8 @@ class TranscriptSegment(BaseModel):
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        if b.stt_end is not None:
+                            a.stt_end = b.stt_end
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
                     b.text = f'{last_incomplete} {b.text}'.strip()
