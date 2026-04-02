@@ -94,6 +94,29 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         return bleManager.isPeripheralConnected(uuid)
     }
 
+    // ── Diagnostics ──
+
+    override fun startRssiStreaming(uuid: String) {
+        bleManager.isRssiStreamingEnabled = true
+    }
+
+    override fun stopRssiStreaming(uuid: String) {
+        bleManager.isRssiStreamingEnabled = false
+    }
+
+    override fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit) {
+        val service = OmiBleForegroundService.instance
+        if (service != null) {
+            callback(Result.success(service.getDeviceDiagnostics(uuid)))
+        } else {
+            callback(Result.success(BleDeviceDiagnostics(
+                disconnectHistory = emptyList(),
+                reconnectionCount = 0,
+                connectedAt = 0
+            )))
+        }
+    }
+
     // ── CompanionDeviceManager ──
 
     override fun hasCompanionDeviceAssociation(): Boolean {

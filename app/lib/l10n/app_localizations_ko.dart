@@ -8711,4 +8711,89 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omi를 더 유용하게 만들고 싶습니다.';
+
+  @override
+  String get deviceDiagnostics => '기기 진단';
+
+  @override
+  String get signalStrength => '신호 강도';
+
+  @override
+  String get connectionUptime => '가동 시간';
+
+  @override
+  String get reconnections => '재연결';
+
+  @override
+  String get disconnectHistory => '연결 해제 기록';
+
+  @override
+  String get noDisconnectsRecorded => '기록된 연결 해제 없음';
+
+  @override
+  String get diagnostics => '진단';
+
+  @override
+  String get waitingForData => '데이터 대기 중...';
+
+  @override
+  String get liveRssiOverTime => '실시간 RSSI 추이';
+
+  @override
+  String get noRssiDataYet => '아직 RSSI 데이터 없음';
+
+  @override
+  String get collectingData => '데이터 수집 중...';
+
+  @override
+  String get cleanDisconnect => '정상 연결 해제';
+
+  @override
+  String get connectionTimeout => '연결 시간 초과';
+
+  @override
+  String get remoteDeviceTerminated => '원격 기기가 연결을 종료함';
+
+  @override
+  String get pairedToAnotherPhone => '다른 휴대폰에 페어링됨';
+
+  @override
+  String get linkKeyMismatch => '링크 키 불일치';
+
+  @override
+  String get connectionFailed => '연결 실패';
+
+  @override
+  String get appClosed => '앱 종료됨';
+
+  @override
+  String get manualDisconnect => '수동 연결 해제';
+
+  @override
+  String lastNEvents(int count) {
+    return '최근 $count개 이벤트';
+  }
+
+  @override
+  String get signal => '신호';
+
+  @override
+  String get battery => '배터리';
+
+  @override
+  String get excellent => '우수';
+
+  @override
+  String get good => '양호';
+
+  @override
+  String get fair => '보통';
+
+  @override
+  String get weak => '약함';
+
+  @override
+  String gattError(String code) {
+    return 'GATT 오류 ($code)';
+  }
 }

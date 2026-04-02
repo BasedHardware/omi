@@ -8855,4 +8855,89 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+
+  @override
+  String get deviceDiagnostics => 'Device Diagnostics';
+
+  @override
+  String get signalStrength => 'Signal Strength';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Reconnections';
+
+  @override
+  String get disconnectHistory => 'Disconnect History';
+
+  @override
+  String get noDisconnectsRecorded => 'No disconnects recorded';
+
+  @override
+  String get diagnostics => 'Diagnostics';
+
+  @override
+  String get waitingForData => 'Waiting for data...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI over time';
+
+  @override
+  String get noRssiDataYet => 'No RSSI data yet';
+
+  @override
+  String get collectingData => 'Collecting data...';
+
+  @override
+  String get cleanDisconnect => 'Clean disconnect';
+
+  @override
+  String get connectionTimeout => 'Connection timeout';
+
+  @override
+  String get remoteDeviceTerminated => 'Remote device terminated';
+
+  @override
+  String get pairedToAnotherPhone => 'Paired to another phone';
+
+  @override
+  String get linkKeyMismatch => 'Link key mismatch';
+
+  @override
+  String get connectionFailed => 'Connection failed';
+
+  @override
+  String get appClosed => 'App closed';
+
+  @override
+  String get manualDisconnect => 'Manual disconnect';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Last $count events';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Battery';
+
+  @override
+  String get excellent => 'Excellent';
+
+  @override
+  String get good => 'Good';
+
+  @override
+  String get fair => 'Fair';
+
+  @override
+  String get weak => 'Weak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT error ($code)';
+  }
 }

@@ -3283,7 +3283,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get aboutYou => 'O vás';
 
   @override
-  String get manual => 'Manuálne';
+  String get manual => 'Ručné';
 
   @override
   String get loadingYourMemories => 'Načítavanie vašich spomienok...';
@@ -8846,4 +8846,89 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chceme, aby bol Omi pre vás užitočnejší.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostika zariadenia';
+
+  @override
+  String get signalStrength => 'Sila signálu';
+
+  @override
+  String get connectionUptime => 'Doba prevádzky';
+
+  @override
+  String get reconnections => 'Opätovné pripojenia';
+
+  @override
+  String get disconnectHistory => 'História odpojení';
+
+  @override
+  String get noDisconnectsRecorded => 'Žiadne odpojenia neboli zaznamenané';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Čakanie na dáta...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI v reálnom čase';
+
+  @override
+  String get noRssiDataYet => 'Zatiaľ žiadne dáta RSSI';
+
+  @override
+  String get collectingData => 'Zber dát...';
+
+  @override
+  String get cleanDisconnect => 'Čisté odpojenie';
+
+  @override
+  String get connectionTimeout => 'Vypršal časový limit pripojenia';
+
+  @override
+  String get remoteDeviceTerminated => 'Vzdialené zariadenie ukončilo spojenie';
+
+  @override
+  String get pairedToAnotherPhone => 'Spárované s iným telefónom';
+
+  @override
+  String get linkKeyMismatch => 'Nezhoda kľúča prepojenia';
+
+  @override
+  String get connectionFailed => 'Pripojenie zlyhalo';
+
+  @override
+  String get appClosed => 'Aplikácia zatvorená';
+
+  @override
+  String get manualDisconnect => 'Ručné odpojenie';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Posledných $count udalostí';
+  }
+
+  @override
+  String get signal => 'Signál';
+
+  @override
+  String get battery => 'Batéria';
+
+  @override
+  String get excellent => 'Vynikajúci';
+
+  @override
+  String get good => 'Dobrý';
+
+  @override
+  String get fair => 'Uspokojivý';
+
+  @override
+  String get weak => 'Slabý';
+
+  @override
+  String gattError(String code) {
+    return 'Chyba GATT ($code)';
+  }
 }

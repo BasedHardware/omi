@@ -8856,4 +8856,89 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
+
+  @override
+  String get deviceDiagnostics => 'Seadme diagnostika';
+
+  @override
+  String get signalStrength => 'Signaali tugevus';
+
+  @override
+  String get connectionUptime => 'Tööaeg';
+
+  @override
+  String get reconnections => 'Taasühendused';
+
+  @override
+  String get disconnectHistory => 'Katkestuste ajalugu';
+
+  @override
+  String get noDisconnectsRecorded => 'Katkestusi pole registreeritud';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Andmete ootel...';
+
+  @override
+  String get liveRssiOverTime => 'Reaalajas RSSI ajas';
+
+  @override
+  String get noRssiDataYet => 'RSSI andmeid veel pole';
+
+  @override
+  String get collectingData => 'Andmete kogumine...';
+
+  @override
+  String get cleanDisconnect => 'Puhas katkestus';
+
+  @override
+  String get connectionTimeout => 'Ühenduse ajalõpp';
+
+  @override
+  String get remoteDeviceTerminated => 'Kaugseade katkestas ühenduse';
+
+  @override
+  String get pairedToAnotherPhone => 'Seotud teise telefoniga';
+
+  @override
+  String get linkKeyMismatch => 'Lingivõtme mittevastavus';
+
+  @override
+  String get connectionFailed => 'Ühendamine ebaõnnestus';
+
+  @override
+  String get appClosed => 'Rakendus suletud';
+
+  @override
+  String get manualDisconnect => 'Käsitsi katkestus';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Viimased $count sündmust';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Aku';
+
+  @override
+  String get excellent => 'Suurepärane';
+
+  @override
+  String get good => 'Hea';
+
+  @override
+  String get fair => 'Rahuldav';
+
+  @override
+  String get weak => 'Nõrk';
+
+  @override
+  String gattError(String code) {
+    return 'GATT viga ($code)';
+  }
 }

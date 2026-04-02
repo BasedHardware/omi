@@ -8897,4 +8897,89 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
+
+  @override
+  String get deviceDiagnostics => 'Eszközdiagnosztika';
+
+  @override
+  String get signalStrength => 'Jelerősség';
+
+  @override
+  String get connectionUptime => 'Üzemidő';
+
+  @override
+  String get reconnections => 'Újracsatlakozások';
+
+  @override
+  String get disconnectHistory => 'Lecsatlakozási előzmények';
+
+  @override
+  String get noDisconnectsRecorded => 'Nincs rögzített lecsatlakozás';
+
+  @override
+  String get diagnostics => 'Diagnosztika';
+
+  @override
+  String get waitingForData => 'Adatokra várakozás...';
+
+  @override
+  String get liveRssiOverTime => 'Élő RSSI az idő függvényében';
+
+  @override
+  String get noRssiDataYet => 'Még nincs RSSI adat';
+
+  @override
+  String get collectingData => 'Adatgyűjtés...';
+
+  @override
+  String get cleanDisconnect => 'Tiszta lecsatlakozás';
+
+  @override
+  String get connectionTimeout => 'Kapcsolat időtúllépés';
+
+  @override
+  String get remoteDeviceTerminated => 'A távoli eszköz megszakította a kapcsolatot';
+
+  @override
+  String get pairedToAnotherPhone => 'Másik telefonhoz párosítva';
+
+  @override
+  String get linkKeyMismatch => 'Kapcsolati kulcs eltérés';
+
+  @override
+  String get connectionFailed => 'Sikertelen kapcsolódás';
+
+  @override
+  String get appClosed => 'Alkalmazás bezárva';
+
+  @override
+  String get manualDisconnect => 'Kézi lecsatlakozás';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Utolsó $count esemény';
+  }
+
+  @override
+  String get signal => 'Jel';
+
+  @override
+  String get battery => 'Akkumulátor';
+
+  @override
+  String get excellent => 'Kiváló';
+
+  @override
+  String get good => 'Jó';
+
+  @override
+  String get fair => 'Elfogadható';
+
+  @override
+  String get weak => 'Gyenge';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hiba ($code)';
+  }
 }

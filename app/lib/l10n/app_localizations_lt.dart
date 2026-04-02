@@ -8866,4 +8866,89 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Norime padaryti Omi naudingesnį jums.';
+
+  @override
+  String get deviceDiagnostics => 'Įrenginio diagnostika';
+
+  @override
+  String get signalStrength => 'Signalo stiprumas';
+
+  @override
+  String get connectionUptime => 'Veikimo laikas';
+
+  @override
+  String get reconnections => 'Pakartotiniai prisijungimai';
+
+  @override
+  String get disconnectHistory => 'Atjungimų istorija';
+
+  @override
+  String get noDisconnectsRecorded => 'Atjungimų neužregistruota';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Laukiama duomenų...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI realiuoju laiku';
+
+  @override
+  String get noRssiDataYet => 'Kol kas nėra RSSI duomenų';
+
+  @override
+  String get collectingData => 'Renkami duomenys...';
+
+  @override
+  String get cleanDisconnect => 'Švarus atjungimas';
+
+  @override
+  String get connectionTimeout => 'Ryšio laikas baigėsi';
+
+  @override
+  String get remoteDeviceTerminated => 'Nuotolinis įrenginys nutraukė ryšį';
+
+  @override
+  String get pairedToAnotherPhone => 'Susieta su kitu telefonu';
+
+  @override
+  String get linkKeyMismatch => 'Ryšio rakto neatitikimas';
+
+  @override
+  String get connectionFailed => 'Prisijungimas nepavyko';
+
+  @override
+  String get appClosed => 'Programėlė uždaryta';
+
+  @override
+  String get manualDisconnect => 'Rankinis atjungimas';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Paskutiniai $count įvykiai';
+  }
+
+  @override
+  String get signal => 'Signalas';
+
+  @override
+  String get battery => 'Baterija';
+
+  @override
+  String get excellent => 'Puiku';
+
+  @override
+  String get good => 'Gerai';
+
+  @override
+  String get fair => 'Patenkinamai';
+
+  @override
+  String get weak => 'Silpnas';
+
+  @override
+  String gattError(String code) {
+    return 'GATT klaida ($code)';
+  }
 }

@@ -3289,7 +3289,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutYou => 'О вас';
 
   @override
-  String get manual => 'Ручные';
+  String get manual => 'Ручное';
 
   @override
   String get loadingYourMemories => 'Загрузка ваших воспоминаний...';
@@ -8887,4 +8887,89 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Мы хотим сделать Omi более полезным для вас.';
+
+  @override
+  String get deviceDiagnostics => 'Диагностика устройства';
+
+  @override
+  String get signalStrength => 'Уровень сигнала';
+
+  @override
+  String get connectionUptime => 'Время работы';
+
+  @override
+  String get reconnections => 'Повторные подключения';
+
+  @override
+  String get disconnectHistory => 'История отключений';
+
+  @override
+  String get noDisconnectsRecorded => 'Отключения не зафиксированы';
+
+  @override
+  String get diagnostics => 'Диагностика';
+
+  @override
+  String get waitingForData => 'Ожидание данных...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI в реальном времени';
+
+  @override
+  String get noRssiDataYet => 'Данные RSSI пока отсутствуют';
+
+  @override
+  String get collectingData => 'Сбор данных...';
+
+  @override
+  String get cleanDisconnect => 'Чистое отключение';
+
+  @override
+  String get connectionTimeout => 'Тайм-аут соединения';
+
+  @override
+  String get remoteDeviceTerminated => 'Удалённое устройство разорвало соединение';
+
+  @override
+  String get pairedToAnotherPhone => 'Сопряжено с другим телефоном';
+
+  @override
+  String get linkKeyMismatch => 'Несовпадение ключа связи';
+
+  @override
+  String get connectionFailed => 'Ошибка подключения';
+
+  @override
+  String get appClosed => 'Приложение закрыто';
+
+  @override
+  String get manualDisconnect => 'Ручное отключение';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Последние $count событий';
+  }
+
+  @override
+  String get signal => 'Сигнал';
+
+  @override
+  String get battery => 'Батарея';
+
+  @override
+  String get excellent => 'Отлично';
+
+  @override
+  String get good => 'Хорошо';
+
+  @override
+  String get fair => 'Удовлетворительно';
+
+  @override
+  String get weak => 'Слабый';
+
+  @override
+  String gattError(String code) {
+    return 'Ошибка GATT ($code)';
+  }
 }
