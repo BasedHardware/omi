@@ -2217,6 +2217,25 @@ class TestSttAudioRingBuffer:
             assert sock._stt_cursor_sec > prev
             prev = sock._stt_cursor_sec
 
+    def test_gate_fallback_still_tracks_ring_buffer(self):
+        """After gate process error and fallback, audio should still go to stt_audio_ring."""
+        # Create a gate that will raise on process_audio
+        gate = VADStreamingGate(sample_rate=8000, channels=1, mode='active', uid='u', session_id='s')
+        mock_conn = MagicMock()
+        sock = GatedDeepgramSocket(mock_conn, gate=gate, sample_rate=8000)
+
+        # Make gate.process_audio raise to trigger fallback
+        gate.process_audio = MagicMock(side_effect=RuntimeError("VAD crash"))
+
+        chunk = _make_pcm(20, sample_rate=8000)
+        sock.send(chunk, wall_time=time.time())
+
+        # After fallback, gate should be disabled
+        assert sock._gate is None
+        # But audio should still be tracked in ring buffer
+        assert sock._stt_cursor_sec > 0.0, "Fallback path should still track STT audio"
+        assert sock.stt_audio_ring.total_bytes_written == len(chunk)
+
 
 class TestRemapPreservesSttTimes:
     """Verify remap_segments preserves stt_start/stt_end (#6190)."""
