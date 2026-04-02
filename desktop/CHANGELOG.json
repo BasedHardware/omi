@@ -1,6 +1,13 @@
 {
-  "unreleased": ["Fixed speaker diarization in Take Note by migrating live transcription to production backend"],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.221",
+      "date": "2026-04-02",
+      "changes": [
+        "Fixed speaker diarization in Take Note by migrating live transcription to production backend"
+      ]
+    },
     {
       "version": "0.11.220",
       "date": "2026-04-02",
