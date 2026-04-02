@@ -471,15 +471,14 @@ class TestDownloadEndpoint:
             {
                 "channel": "stable",
                 "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
+                "version_info": {"version": "1.0.0+100", "build": "100"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/Omi-stable.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/Omi-stable.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_404_no_releases(self):
@@ -494,15 +493,14 @@ class TestDownloadEndpoint:
             {
                 "channel": "beta",
                 "release": {"assets": [_dmg_asset("https://example.com/beta.dmg")]},
+                "version_info": {"version": "1.0.0+100", "build": "100"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
-        assert resp.status_code == 302
-        assert "beta.dmg" in resp.headers["location"]
+        assert resp.status_code == 200
+        assert "beta.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_beta_no_fallback(self):
@@ -510,13 +508,14 @@ class TestDownloadEndpoint:
             {
                 "channel": "stable",
                 "release": {"assets": [_dmg_asset("https://example.com/stable.dmg")]},
+                "version_info": {"version": "1.0.0+100", "build": "100"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/stable.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/stable.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_beta_uses_latest_release_even_if_marked_stable(self):
@@ -524,19 +523,19 @@ class TestDownloadEndpoint:
             {
                 "channel": "stable",
                 "release": {"assets": [_dmg_asset("https://example.com/latest.dmg")]},
+                "version_info": {"version": "2.0.0+200", "build": "200"},
             },
             {
                 "channel": "beta",
                 "release": {"assets": [_dmg_asset("https://example.com/older-beta.dmg")]},
+                "version_info": {"version": "1.0.0+100", "build": "100"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/latest.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/latest.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_404_when_no_dmg_asset(self):
