@@ -33,6 +33,12 @@ final class OmiBleManager: NSObject {
     /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
     private var rssiTimer: Timer?
 
+    /// When true, RSSI reads are forwarded to Flutter for the diagnostics graph.
+    var isRssiStreamingEnabled = false
+
+    /// Connection start time per peripheral UUID.
+    private var connectionStartTimes: [String: Int64] = [:]
+
     /// Scanning state.
     private var isScanning = false
     private var scanTimer: Timer?
@@ -121,6 +127,7 @@ final class OmiBleManager: NSObject {
 
     func disconnectPeripheral(uuid: String) {
         manuallyDisconnected.insert(uuid)
+        persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true)
         guard let peripheral = peripherals[uuid] else { return }
         centralManager.cancelPeripheralConnection(peripheral)
     }
@@ -254,6 +261,60 @@ final class OmiBleManager: NSObject {
         return uuid.uuidString.lowercased()
     }
 
+    // MARK: - Diagnostics Persistence
+
+    private static let diagnosticsKey = "ble_diagnostics_disconnect_history"
+    private static let reconnectCountKey = "ble_diagnostics_reconnect_count"
+    private static let maxDisconnectHistory = 20
+
+    private func persistDisconnectEvent(uuid: String, reason: String?, reasonCode: Int, isManual: Bool) {
+        let defaults = UserDefaults.standard
+        var history = defaults.array(forKey: OmiBleManager.diagnosticsKey) as? [[String: Any]] ?? []
+
+        let event: [String: Any] = [
+            "timestamp": Int64(Date().timeIntervalSince1970 * 1000),
+            "reason": isManual ? "manual" : (reason ?? "unknown"),
+            "reasonCode": reasonCode,
+            "isManual": isManual,
+        ]
+        history.append(event)
+
+        if history.count > OmiBleManager.maxDisconnectHistory {
+            history = Array(history.suffix(OmiBleManager.maxDisconnectHistory))
+        }
+
+        defaults.set(history, forKey: OmiBleManager.diagnosticsKey)
+    }
+
+    private func incrementReconnectionCount() {
+        let defaults = UserDefaults.standard
+        let count = defaults.integer(forKey: OmiBleManager.reconnectCountKey)
+        defaults.set(count + 1, forKey: OmiBleManager.reconnectCountKey)
+    }
+
+    func getDeviceDiagnostics(uuid: String) -> BleDeviceDiagnostics {
+        let defaults = UserDefaults.standard
+        let history = defaults.array(forKey: OmiBleManager.diagnosticsKey) as? [[String: Any]] ?? []
+        let reconnectCount = defaults.integer(forKey: OmiBleManager.reconnectCountKey)
+
+        let events = history.map { obj -> BleDisconnectEvent in
+            BleDisconnectEvent(
+                timestamp: obj["timestamp"] as? Int64 ?? 0,
+                reason: obj["reason"] as? String ?? "unknown",
+                reasonCode: Int64(obj["reasonCode"] as? Int ?? -1),
+                isManual: obj["isManual"] as? Bool ?? false
+            )
+        }
+
+        let connectedAt = connectionStartTimes[uuid] ?? 0
+
+        return BleDeviceDiagnostics(
+            disconnectHistory: events,
+            reconnectionCount: Int64(reconnectCount),
+            connectedAt: connectedAt
+        )
+    }
+
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
@@ -329,6 +390,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let uuid = peripheralUuidString(peripheral)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
+
+        // Track reconnections (not first connect)
+        if connectionStartTimes[uuid] != nil {
+            incrementReconnectionCount()
+        }
+        connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
+
         peripheral.delegate = self
         peripheral.discoverServices(nil)
     }
@@ -342,12 +410,19 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
+        let isManual = manuallyDisconnected.contains(uuid)
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
+        connectionStartTimes.removeValue(forKey: uuid)
+
+        if !isManual {
+            persistDisconnectEvent(uuid: uuid, reason: error?.localizedDescription, reasonCode: -1, isManual: false)
+        }
+
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: error?.localizedDescription) { _ in }
 
         // Auto-reconnect unless manually disconnected
-        if !manuallyDisconnected.contains(uuid) {
+        if !isManual {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
                 // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting
@@ -394,7 +469,11 @@ extension OmiBleManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-        // Pure keep-alive — value intentionally not used
+        // Pure keep-alive — only forward to Flutter when diagnostics screen is open
+        if isRssiStreamingEnabled, error == nil {
+            let uuid = peripheralUuidString(peripheral)
+            flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: Int64(RSSI.intValue)) { _ in }
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
