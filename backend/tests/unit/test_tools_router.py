@@ -126,6 +126,7 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 endpoints_mod = _stub_module("utils.other.endpoints")
 endpoints_mod.get_current_user_uid = MagicMock()
+endpoints_mod.with_rate_limit = MagicMock(return_value=MagicMock())
 
 # Stub routers package
 _stub_package("routers")
@@ -298,6 +299,20 @@ class TestSearchConversationsText:
         assert "Found" in result
         assert "1 conversations formatted" in result
 
+    def test_start_date_only_sets_ends_at(self):
+        """One-sided date: start_date only should set ends_at to avoid $lte: None."""
+        conversations_svc.search_conversations_text(uid="test-uid", query="test", start_date="2024-06-01T00:00:00Z")
+        call_kwargs = vector_db.query_vectors.call_args
+        assert call_kwargs[1]['starts_at'] is not None
+        assert call_kwargs[1]['ends_at'] is not None
+
+    def test_end_date_only_sets_starts_at(self):
+        """One-sided date: end_date only should set starts_at to 0."""
+        conversations_svc.search_conversations_text(uid="test-uid", query="test", end_date="2024-12-31T23:59:59Z")
+        call_kwargs = vector_db.query_vectors.call_args
+        assert call_kwargs[1]['starts_at'] == 0
+        assert call_kwargs[1]['ends_at'] is not None
+
 
 # ===========================================================================
 # Tests: get_memories_text
@@ -383,6 +398,16 @@ class TestGetActionItemsText:
         assert "Pending" in result
         assert "ai-1" in result
 
+    def test_filters_locked_items(self):
+        action_items_db.get_action_items.return_value = [
+            {'id': 'ai-1', 'description': 'Visible', 'completed': False, 'is_locked': False},
+            {'id': 'ai-2', 'description': 'Locked', 'completed': False, 'is_locked': True},
+        ]
+        result = action_items_svc.get_action_items_text(uid="test-uid")
+        assert "Visible" in result
+        assert "Locked" not in result
+        assert "1 total" in result
+
 
 # ===========================================================================
 # Tests: create_action_item_text
@@ -443,6 +468,11 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.return_value = None
         result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="bad-id")
         assert "not found" in result.lower()
+
+    def test_locked_item_rejected(self):
+        action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test', 'is_locked': True}
+        result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", completed=True)
+        assert "paid plan" in result.lower()
 
     def test_no_changes(self):
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test'}
