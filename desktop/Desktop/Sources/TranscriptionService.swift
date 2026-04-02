@@ -2,9 +2,17 @@ import Foundation
 
 /// Service for real-time speech-to-text transcription using DeepGram
 /// Streams audio over WebSocket and receives transcript segments
-class TranscriptionService {
+class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     // MARK: - Types
+
+    /// Connection lifecycle state (thread-safe via stateQueue)
+    enum ConnectionState {
+        case disconnected
+        case connecting
+        case connected
+        case reconnecting
+    }
 
     /// Transcript segment from DeepGram
     struct TranscriptSegment {
@@ -50,13 +58,27 @@ class TranscriptionService {
         }
     }
 
+    // MARK: - Thread-safe state
+
+    /// Serial queue protecting all mutable connection state
+    private let stateQueue = DispatchQueue(label: "com.omi.transcription.state")
+    private var _connectionState: ConnectionState = .disconnected
+    private var _webSocketTask: URLSessionWebSocketTask?
+    private var _urlSession: URLSession?
+    private var _shouldReconnect = false
+    private var _reconnectAttempts = 0
+    private var _connectionGeneration: UInt64 = 0  // Monotonic ID to discard stale delegate callbacks
+    private var _lastDataReceivedAt: Date?
+    private var _lastKeepaliveSuccessAt: Date?
+
+    /// Execute a block on the state queue and return its result
+    private func withState<T>(_ body: () -> T) -> T {
+        stateQueue.sync { body() }
+    }
+
     // MARK: - Properties
 
     private let apiKey: String
-    private var webSocketTask: URLSessionWebSocketTask?
-    private var urlSession: URLSession?
-    private var isConnected = false
-    private var shouldReconnect = false
 
     // Callbacks
     private var onTranscript: TranscriptHandler?
@@ -90,10 +112,10 @@ class TranscriptionService {
     }()
     private let channels: Int  // 2 = stereo (mic + system), 1 = mono (mic only for PTT)
 
-    // Reconnection
-    private var reconnectAttempts = 0
-    private let maxReconnectAttempts = 10
+    // Reconnection — no hard cap; backoff with jitter, retry while shouldReconnect is true
     private var reconnectTask: Task<Void, Never>?
+    private let maxBackoff: TimeInterval = 32.0
+    private let backoffJitterRange: ClosedRange<Double> = 0.8...1.0
 
     // Keepalive
     private var keepaliveTask: Task<Void, Never>?
@@ -101,12 +123,10 @@ class TranscriptionService {
 
     // Watchdog: detect stale connections where WebSocket dies silently
     private var watchdogTask: Task<Void, Never>?
-    private var lastDataReceivedAt: Date?
-    private var lastKeepaliveSuccessAt: Date?
     private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
     private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
-    // Audio buffering
+    // Audio buffering (outbound send coalescing)
     private var audioBuffer = Data()
     private let audioBufferSize = 3200  // ~100ms of 16kHz 16-bit audio (16000 * 2 * 0.1)
     private let audioBufferLock = NSLock()
@@ -136,6 +156,7 @@ class TranscriptionService {
         self.language = language
         self.vocabulary = vocabulary
         self.channels = channels
+        super.init()
         log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels), proxy=\(self.useProxy)")
     }
 
@@ -152,15 +173,17 @@ class TranscriptionService {
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
-        self.shouldReconnect = true
-        self.reconnectAttempts = 0
+        withState {
+            _shouldReconnect = true
+            _reconnectAttempts = 0
+        }
 
         connect()
     }
 
     /// Stop the transcription service
     func stop() {
-        shouldReconnect = false
+        withState { _shouldReconnect = false }
         reconnectTask?.cancel()
         reconnectTask = nil
         keepaliveTask?.cancel()
@@ -177,7 +200,7 @@ class TranscriptionService {
     /// Signal Deepgram that no more audio will be sent, but keep connection open
     /// to receive final transcription results. Call stop() later to fully disconnect.
     func finishStream() {
-        shouldReconnect = false
+        withState { _shouldReconnect = false }
         reconnectTask?.cancel()
         reconnectTask = nil
         keepaliveTask?.cancel()
@@ -187,10 +210,14 @@ class TranscriptionService {
 
         flushAudioBuffer()
 
-        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let task: URLSessionWebSocketTask? = withState {
+            guard _connectionState == .connected else { return nil }
+            return _webSocketTask
+        }
+        guard let task = task else { return }
 
         let closeMsg = "{\"type\": \"CloseStream\"}"
-        webSocketTask.send(.string(closeMsg)) { error in
+        task.send(.string(closeMsg)) { error in
             if let error = error {
                 logError("TranscriptionService: CloseStream send error", error: error)
             }
@@ -198,9 +225,13 @@ class TranscriptionService {
         log("TranscriptionService: CloseStream sent, waiting for final results")
     }
 
-    /// Send audio data to DeepGram (buffered for efficiency)
+    /// Send audio data to DeepGram (buffered for efficiency).
+    /// When not connected, audio is silently dropped. Buffering during reconnect is a future phase.
     func sendAudio(_ data: Data) {
-        guard isConnected else { return }
+        guard !data.isEmpty else { return }
+
+        let isConn: Bool = withState { _connectionState == .connected }
+        guard isConn else { return }
 
         audioBufferLock.lock()
         audioBuffer.append(data)
@@ -230,10 +261,14 @@ class TranscriptionService {
 
     /// Actually send an audio chunk to DeepGram
     private func sendAudioChunk(_ data: Data) {
-        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let task: URLSessionWebSocketTask? = withState {
+            guard _connectionState == .connected else { return nil }
+            return _webSocketTask
+        }
+        guard let task = task else { return }
 
         let message = URLSessionWebSocketTask.Message.data(data)
-        webSocketTask.send(message) { [weak self] error in
+        task.send(message) { [weak self] error in
             if let error = error {
                 logError("TranscriptionService: Send error", error: error)
                 self?.handleDisconnection()
@@ -243,9 +278,13 @@ class TranscriptionService {
 
     /// Send Deepgram Finalize message to flush pending transcripts
     func sendFinalize() {
-        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let task: URLSessionWebSocketTask? = withState {
+            guard _connectionState == .connected else { return nil }
+            return _webSocketTask
+        }
+        guard let task = task else { return }
         let msg = "{\"type\": \"Finalize\"}"
-        webSocketTask.send(.string(msg)) { error in
+        task.send(.string(msg)) { error in
             if let error = error {
                 logError("TranscriptionService: Finalize error", error: error)
             }
@@ -259,12 +298,62 @@ class TranscriptionService {
 
     /// Check if connected
     var connected: Bool {
-        return isConnected
+        return withState { _connectionState == .connected }
+    }
+
+    // MARK: - Test accessors (internal for @testable import)
+
+    /// Current connection state (read-only, for testing)
+    var testConnectionState: ConnectionState {
+        withState { _connectionState }
+    }
+
+    /// Current generation token (read-only, for testing)
+    var testConnectionGeneration: UInt64 {
+        withState { _connectionGeneration }
+    }
+
+    /// Directly set state for testing state machine behavior.
+    /// Only callable from tests via @testable import.
+    func testSetState(_ state: ConnectionState) {
+        withState { _connectionState = state }
+    }
+
+    /// Expose handleDisconnection for idempotency testing
+    func testHandleDisconnection() {
+        handleDisconnection()
+    }
+
+    /// Expose shouldReconnect setter for testing
+    func testSetShouldReconnect(_ value: Bool) {
+        withState { _shouldReconnect = value }
+    }
+
+    /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
+    /// Exposed as static for testability.
+    static func reconnectDelay(
+        attempt: Int,
+        maxBackoff: TimeInterval = 32.0,
+        jitterRange: ClosedRange<Double> = 0.8...1.0
+    ) -> TimeInterval {
+        let baseDelay = min(pow(2.0, Double(attempt)), maxBackoff)
+        let jitter = Double.random(in: jitterRange)
+        return min(baseDelay * jitter, maxBackoff)
     }
 
     // MARK: - Private Methods
 
     private func connect() {
+        let generation: UInt64 = withState {
+            guard _connectionState == .disconnected || _connectionState == .reconnecting else {
+                return 0  // 0 = signal not to proceed
+            }
+            _connectionState = .connecting
+            _connectionGeneration += 1
+            return _connectionGeneration
+        }
+        guard generation > 0 else { return }
+
         if useProxy {
             // Proxy mode: get Firebase auth token async, then connect
             Task { [weak self] in
@@ -272,19 +361,28 @@ class TranscriptionService {
                 do {
                     let authService = await MainActor.run { AuthService.shared }
                     let authHeader = try await authService.getAuthHeader()
-                    self.connectWithAuth(authHeader: authHeader)
+                    // Re-check: stop() may have been called while fetching auth token
+                    let stillValid = self.withState {
+                        self._connectionGeneration == generation && self._shouldReconnect && self._connectionState == .connecting
+                    }
+                    guard stillValid else {
+                        log("TranscriptionService: Auth fetched but connection no longer wanted (gen \(generation))")
+                        return
+                    }
+                    self.connectWithAuth(authHeader: authHeader, generation: generation)
                 } catch {
                     logError("TranscriptionService: Failed to get auth token for proxy", error: error)
                     self.onError?(TranscriptionError.connectionFailed(error))
+                    self.handleDisconnection()
                 }
             }
         } else {
             // Direct Deepgram mode (legacy/developer override)
-            connectWithAuth(authHeader: "Token \(apiKey)")
+            connectWithAuth(authHeader: "Token \(apiKey)", generation: generation)
         }
     }
 
-    private func connectWithAuth(authHeader: String) {
+    private func connectWithAuth(authHeader: String, generation: UInt64) {
         // Build WebSocket URL with parameters
         let wsBase: String
         if useProxy {
@@ -300,6 +398,7 @@ class TranscriptionService {
         guard var components = URLComponents(string: "\(wsBase)\(listenPath)") else {
             log("TranscriptionService: Invalid URL base: \(wsBase)")
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
+            handleDisconnection()
             return
         }
         var queryItems = [
@@ -328,40 +427,99 @@ class TranscriptionService {
 
         guard let url = components.url else {
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
+            handleDisconnection()
             return
         }
 
-        log("TranscriptionService: Connecting to \(url.absoluteString)")
+        // Verify this generation is still current before creating network resources
+        let stillValid = withState { _connectionGeneration == generation && _connectionState == .connecting }
+        guard stillValid else {
+            log("TranscriptionService: Connection no longer wanted (gen \(generation))")
+            return
+        }
+        log("TranscriptionService: Connecting to \(url.host ?? "?") (gen \(generation))")
 
         // Create URL request with authorization header
         var request = URLRequest(url: url)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
-        // Create URLSession and WebSocket task
+        // Create URLSession with self as delegate to receive WebSocket lifecycle callbacks
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 0  // No resource timeout for long-lived WebSocket
-        urlSession = URLSession(configuration: configuration)
-        webSocketTask = urlSession?.webSocketTask(with: request)
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        let task = session.webSocketTask(with: request)
 
-        // Start the connection
-        webSocketTask?.resume()
-
-        // Start receiving messages
-        receiveMessage()
-
-        // Mark as connected (DeepGram doesn't send a connect confirmation)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self, self.webSocketTask?.state == .running else { return }
-            self.isConnected = true
-            self.reconnectAttempts = 0
-            self.lastDataReceivedAt = Date()
-            self.lastKeepaliveSuccessAt = Date()
-            log("TranscriptionService: Connected")
-            self.startKeepalive()
-            self.startWatchdog()
-            self.onConnected?()
+        withState {
+            _urlSession = session
+            _webSocketTask = task
         }
+
+        // Start the connection — didOpenWithProtocol delegate will confirm handshake
+        task.resume()
+
+        // Start receiving messages immediately (queued until handshake completes)
+        receiveMessage(generation: generation)
+
+        // Connect timeout: if handshake hasn't completed in 10s, treat as failure
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self = self else { return }
+            let shouldTimeout: Bool = self.withState {
+                self._connectionGeneration == generation && self._connectionState == .connecting
+            }
+            if shouldTimeout {
+                log("TranscriptionService: Connect timeout (gen \(generation))")
+                self.handleDisconnection()
+            }
+        }
+    }
+
+    // MARK: - URLSessionWebSocketDelegate
+
+    /// Called when WebSocket handshake completes successfully
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        let (isValid, generation): (Bool, UInt64) = withState {
+            // Only accept if this is the current session AND we still want to be connected
+            guard _urlSession === session && _shouldReconnect && _connectionState == .connecting else {
+                return (false, _connectionGeneration)
+            }
+            _connectionState = .connected
+            _reconnectAttempts = 0
+            _lastDataReceivedAt = Date()
+            _lastKeepaliveSuccessAt = Date()
+            return (true, _connectionGeneration)
+        }
+        guard isValid else {
+            log("TranscriptionService: Ignoring stale didOpen (gen \(generation))")
+            // Clean up the unwanted session
+            session.invalidateAndCancel()
+            return
+        }
+
+        log("TranscriptionService: Connected (gen \(generation), protocol=\(`protocol` ?? "none"))")
+        startKeepalive()
+        startWatchdog()
+        onConnected?()
+    }
+
+    /// Called when WebSocket receives a close frame from server
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        let isCurrentSession: Bool = withState { _urlSession === session }
+        guard isCurrentSession else { return }
+
+        let reasonText = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
+        log("TranscriptionService: Server closed connection (code=\(closeCode.rawValue), reason=\(reasonText))")
+        handleDisconnection()
     }
 
     /// Start keepalive ping task to prevent connection timeout
@@ -370,7 +528,9 @@ class TranscriptionService {
         keepaliveTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(self?.keepaliveInterval ?? 8.0) * 1_000_000_000)
-                guard !Task.isCancelled, let self = self, self.isConnected else { break }
+                guard !Task.isCancelled, let self = self else { break }
+                let isConn = self.withState { self._connectionState == .connected }
+                guard isConn else { break }
                 self.sendKeepalive()
             }
         }
@@ -378,17 +538,20 @@ class TranscriptionService {
 
     /// Send a keepalive ping to DeepGram
     private func sendKeepalive() {
-        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let task: URLSessionWebSocketTask? = withState {
+            guard _connectionState == .connected else { return nil }
+            return _webSocketTask
+        }
+        guard let task = task else { return }
 
-        // Send a small JSON keepalive message
         let keepalive = "{\"type\": \"KeepAlive\"}"
         let message = URLSessionWebSocketTask.Message.string(keepalive)
-        webSocketTask.send(message) { [weak self] error in
+        task.send(message) { [weak self] error in
             if let error = error {
                 logError("TranscriptionService: Keepalive error", error: error)
                 self?.handleDisconnection()
             } else {
-                self?.lastKeepaliveSuccessAt = Date()
+                self?.withState { self?._lastKeepaliveSuccessAt = Date() }
             }
         }
     }
@@ -399,16 +562,19 @@ class TranscriptionService {
         watchdogTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(self?.watchdogInterval ?? 30.0) * 1_000_000_000)
-                guard !Task.isCancelled, let self = self, self.isConnected else { break }
+                guard !Task.isCancelled, let self = self else { break }
 
-                if let lastData = self.lastDataReceivedAt,
+                let (isConn, lastData, lastKeepalive) = self.withState {
+                    (self._connectionState == .connected, self._lastDataReceivedAt, self._lastKeepaliveSuccessAt)
+                }
+                guard isConn else { break }
+
+                if let lastData = lastData,
                    Date().timeIntervalSince(lastData) > self.staleThreshold {
                     // Check if keepalives are still succeeding — if so, the connection
                     // is alive and Deepgram just has nothing to return (silent room).
-                    // Only force reconnect when keepalives have also gone stale.
-                    if let lastKeepalive = self.lastKeepaliveSuccessAt,
+                    if let lastKeepalive = lastKeepalive,
                        Date().timeIntervalSince(lastKeepalive) < self.staleThreshold {
-                        // Keepalives working — connection is alive, just no speech to transcribe
                         continue
                     }
                     log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s, keepalives also failing) - forcing reconnect")
@@ -419,61 +585,89 @@ class TranscriptionService {
     }
 
     private func disconnect() {
-        isConnected = false
+        let oldSession: URLSession? = withState {
+            _connectionState = .disconnected
+            _connectionGeneration += 1  // Invalidate any in-flight receive callbacks
+            let s = _urlSession
+            _webSocketTask?.cancel(with: .normalClosure, reason: nil)
+            _webSocketTask = nil
+            _urlSession = nil
+            return s
+        }
         keepaliveTask?.cancel()
         keepaliveTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
-        webSocketTask?.cancel(with: .normalClosure, reason: nil)
-        webSocketTask = nil
-        urlSession?.invalidateAndCancel()
-        urlSession = nil
+        oldSession?.invalidateAndCancel()
         log("TranscriptionService: Disconnected")
         onDisconnected?()
     }
 
     private func handleDisconnection() {
-        guard isConnected else { return }
+        let (shouldAttemptReconnect, attempt): (Bool, Int) = withState {
+            // Idempotent: if already reconnecting or disconnected, this is a duplicate callback
+            guard _connectionState == .connected || _connectionState == .connecting else { return (false, 0) }
 
-        isConnected = false
+            _connectionGeneration += 1  // Invalidate any in-flight receive/keepalive callbacks
+            let oldSession = _urlSession
+            _connectionState = .reconnecting
+            _webSocketTask = nil
+            _urlSession = nil
+            oldSession?.invalidateAndCancel()
+
+            guard _shouldReconnect else {
+                _connectionState = .disconnected
+                return (false, 0)
+            }
+            _reconnectAttempts += 1
+            return (true, _reconnectAttempts)
+        }
+
         keepaliveTask?.cancel()
         keepaliveTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
-        webSocketTask = nil
-        urlSession?.invalidateAndCancel()
-        urlSession = nil
+
+        // Discard any partial audio in the coalescing buffer (buffering during reconnect is a future phase)
+        audioBufferLock.lock()
+        audioBuffer = Data()
+        audioBufferLock.unlock()
+
         onDisconnected?()
 
-        // Attempt reconnection if enabled
-        if shouldReconnect && reconnectAttempts < maxReconnectAttempts {
-            reconnectAttempts += 1
-            let delay = min(pow(2.0, Double(reconnectAttempts)), 32.0) // Exponential backoff, max 32s
-            log("TranscriptionService: Reconnecting in \(delay)s (attempt \(reconnectAttempts))")
+        guard shouldAttemptReconnect else { return }
 
-            reconnectTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                guard !Task.isCancelled, self.shouldReconnect else { return }
-                self.connect()
-            }
-        } else if reconnectAttempts >= maxReconnectAttempts {
-            log("TranscriptionService: Max reconnect attempts reached")
-            onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
+        // Exponential backoff with jitter, no hard cap on attempts
+        let delay = Self.reconnectDelay(attempt: attempt, maxBackoff: maxBackoff, jitterRange: backoffJitterRange)
+        log("TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt))")
+
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            guard let self = self else { return }
+            let shouldReconnect = self.withState { self._shouldReconnect }
+            guard shouldReconnect else { return }
+            self.connect()
         }
     }
 
-    private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
+    private func receiveMessage(generation: UInt64) {
+        let task: URLSessionWebSocketTask? = withState { _webSocketTask }
+        task?.receive { [weak self] result in
             guard let self = self else { return }
+
+            // Discard callbacks from stale connections
+            let currentGen = self.withState { self._connectionGeneration }
+            guard currentGen == generation else { return }
 
             switch result {
             case .success(let message):
                 self.handleMessage(message)
-                // Continue receiving
-                self.receiveMessage()
+                self.receiveMessage(generation: generation)
 
             case .failure(let error):
-                guard self.isConnected else { return }
+                let isActive = self.withState { self._connectionState == .connected || self._connectionState == .connecting }
+                guard isActive else { return }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }
@@ -482,7 +676,7 @@ class TranscriptionService {
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
         // Track that we received data (for watchdog stale detection)
-        lastDataReceivedAt = Date()
+        withState { _lastDataReceivedAt = Date() }
 
         switch message {
         case .string(let text):
