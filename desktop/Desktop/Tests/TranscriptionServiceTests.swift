@@ -2,126 +2,6 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class ReconnectAudioRingBufferTests: XCTestCase {
-
-    // MARK: - Basic append and drain
-
-    func testAppendAndDrain() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
-        let chunk1 = Data(repeating: 0x01, count: 100)
-        let chunk2 = Data(repeating: 0x02, count: 200)
-
-        buffer.append(chunk1)
-        buffer.append(chunk2)
-
-        let drained = buffer.drain()
-        XCTAssertEqual(drained.count, 2)
-        XCTAssertEqual(drained[0], chunk1)
-        XCTAssertEqual(drained[1], chunk2)
-        XCTAssertEqual(buffer.totalBytes, 0)
-    }
-
-    func testDrainClearsBuffer() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
-        buffer.append(Data(repeating: 0xAA, count: 500))
-        _ = buffer.drain()
-
-        let secondDrain = buffer.drain()
-        XCTAssertTrue(secondDrain.isEmpty)
-    }
-
-    func testEmptyDataIgnored() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
-        buffer.append(Data())
-        XCTAssertEqual(buffer.totalBytes, 0)
-        XCTAssertTrue(buffer.drain().isEmpty)
-    }
-
-    // MARK: - TTL eviction
-
-    func testTTLEviction() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 5, maxBytes: 960_000)
-        let now = Date()
-
-        // Add a chunk "5.1 seconds ago"
-        buffer.append(Data(repeating: 0x01, count: 100), now: now.addingTimeInterval(-5.1))
-        // Add a recent chunk
-        buffer.append(Data(repeating: 0x02, count: 200), now: now)
-
-        let drained = buffer.drain(now: now)
-        XCTAssertEqual(drained.count, 1, "Old chunk should be evicted by TTL")
-        XCTAssertEqual(drained[0], Data(repeating: 0x02, count: 200))
-    }
-
-    func testPruneEvictsExpired() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 2, maxBytes: 960_000)
-        let now = Date()
-
-        buffer.append(Data(repeating: 0x01, count: 100), now: now.addingTimeInterval(-3))
-        buffer.append(Data(repeating: 0x02, count: 200), now: now)
-
-        buffer.prune(now: now)
-        XCTAssertEqual(buffer.totalBytes, 200)
-    }
-
-    // MARK: - Byte cap eviction
-
-    func testByteCapEviction() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 500)
-
-        buffer.append(Data(repeating: 0x01, count: 300))
-        buffer.append(Data(repeating: 0x02, count: 300))
-
-        // Total would be 600 > 500, so oldest chunk should be evicted
-        XCTAssertEqual(buffer.totalBytes, 300)
-        let drained = buffer.drain()
-        XCTAssertEqual(drained.count, 1)
-        XCTAssertEqual(drained[0], Data(repeating: 0x02, count: 300))
-    }
-
-    func testMultipleChunksEvictedForByteCap() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 200)
-
-        buffer.append(Data(repeating: 0x01, count: 80))
-        buffer.append(Data(repeating: 0x02, count: 80))
-        buffer.append(Data(repeating: 0x03, count: 80))
-        // 240 > 200, evict oldest until <= 200
-        buffer.append(Data(repeating: 0x04, count: 80))
-        // 320 > 200, evict more
-
-        XCTAssertTrue(buffer.totalBytes <= 200)
-    }
-
-    // MARK: - Oversize chunk truncation
-
-    func testOversizeChunkTruncation() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 100)
-
-        // Append a chunk larger than maxBytes
-        let oversized = Data(repeating: 0xFF, count: 500)
-        buffer.append(oversized)
-
-        XCTAssertEqual(buffer.totalBytes, 100, "Should be truncated to maxBytes")
-        let drained = buffer.drain()
-        XCTAssertEqual(drained.count, 1)
-        XCTAssertEqual(drained[0].count, 100, "Chunk should be truncated to maxBytes")
-        // Should keep the suffix (last 100 bytes)
-        XCTAssertEqual(drained[0], Data(repeating: 0xFF, count: 100))
-    }
-
-    func testOversizeReplacesExistingChunks() {
-        var buffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 100)
-
-        buffer.append(Data(repeating: 0x01, count: 50))
-        buffer.append(Data(repeating: 0xFF, count: 200))
-
-        // Oversize replaces everything
-        XCTAssertEqual(buffer.totalBytes, 100)
-        let drained = buffer.drain()
-        XCTAssertEqual(drained.count, 1)
-    }
-}
-
 // MARK: - State machine and idempotency tests
 
 final class TranscriptionServiceStateTests: XCTestCase {
@@ -204,79 +84,41 @@ final class TranscriptionServiceStateTests: XCTestCase {
     }
 }
 
-// MARK: - Replay gating tests
+// MARK: - sendAudio drop behavior tests
 
-final class ReplayGatingTests: XCTestCase {
-
-    private func makeService() -> TranscriptionService? {
-        return try? TranscriptionService(apiKey: "test-key", channels: 1)
-    }
-
-    func testSendAudioBufferedDuringReplay() {
-        guard let service = makeService() else { return }
-        service.testSetState(.connected)
-        service.testSetIsReplaying(true)
-
-        // sendAudio during replay should buffer data in reconnectBuffer instead of sending
-        let chunk = Data(repeating: 0xAB, count: 100)
-        service.sendAudio(chunk)
-
-        // The chunk should have been appended to reconnectBuffer
-        let buffered = service.testDrainReconnectBuffer()
-        XCTAssertEqual(buffered.count, 1, "Chunk should be buffered during replay")
-        XCTAssertEqual(buffered[0], chunk)
-    }
-
-    func testSendAudioNotBufferedWhenNotReplaying() {
-        guard let service = makeService() else { return }
-        service.testSetState(.connected)
-        service.testSetIsReplaying(false)
-
-        // Without replay, sendAudio should NOT buffer (it tries to send directly)
-        let chunk = Data(repeating: 0xCD, count: 100)
-        service.sendAudio(chunk)
-
-        // reconnectBuffer should be empty — audio was sent (or attempted), not buffered
-        let buffered = service.testDrainReconnectBuffer()
-        XCTAssertTrue(buffered.isEmpty, "Audio should not be buffered when not replaying")
-    }
-
-    func testIsReplayingInitiallyFalse() {
-        guard let service = makeService() else { return }
-        XCTAssertFalse(service.testIsReplaying)
-    }
-
-    func testReplayFlagToggles() {
-        guard let service = makeService() else { return }
-        service.testSetIsReplaying(true)
-        XCTAssertTrue(service.testIsReplaying)
-        service.testSetIsReplaying(false)
-        XCTAssertFalse(service.testIsReplaying)
-    }
-}
-
-// MARK: - Disconnect buffer salvage tests
-
-final class DisconnectBufferSalvageTests: XCTestCase {
+final class SendAudioDropTests: XCTestCase {
 
     private func makeService() -> TranscriptionService? {
         return try? TranscriptionService(apiKey: "test-key", channels: 1)
     }
 
-    func testHandleDisconnectionFromConnectedPreservesReconnectBuffer() {
+    func testSendAudioDropsWhenDisconnected() {
         guard let service = makeService() else { return }
-        service.testSetState(.connected)
-        service.testSetShouldReconnect(false)
+        // State is .disconnected by default
+        let genBefore = service.testConnectionGeneration
+        service.sendAudio(Data(repeating: 0xAB, count: 100))
+        // Should not change state or generation
+        XCTAssertEqual(service.testConnectionState, .disconnected)
+        XCTAssertEqual(service.testConnectionGeneration, genBefore)
+    }
 
-        // Pre-populate reconnectBuffer
-        let existingChunk = Data(repeating: 0x01, count: 50)
-        service.testAppendToReconnectBuffer(existingChunk)
+    func testSendAudioDropsWhenReconnecting() {
+        guard let service = makeService() else { return }
+        service.testSetState(.reconnecting)
+        let genBefore = service.testConnectionGeneration
+        service.sendAudio(Data(repeating: 0xCD, count: 100))
+        // Should not change state or generation
+        XCTAssertEqual(service.testConnectionState, .reconnecting)
+        XCTAssertEqual(service.testConnectionGeneration, genBefore)
+    }
 
-        service.testHandleDisconnection()
-
-        // reconnectBuffer content should survive the disconnection
-        let remaining = service.testDrainReconnectBuffer()
-        XCTAssertGreaterThanOrEqual(remaining.count, 1, "Reconnect buffer should preserve data across disconnect")
+    func testSendAudioDropsWhenConnecting() {
+        guard let service = makeService() else { return }
+        service.testSetState(.connecting)
+        let genBefore = service.testConnectionGeneration
+        service.sendAudio(Data(repeating: 0xEF, count: 100))
+        XCTAssertEqual(service.testConnectionState, .connecting)
+        XCTAssertEqual(service.testConnectionGeneration, genBefore)
     }
 }
 
