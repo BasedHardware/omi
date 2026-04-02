@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DeviceDiagnostics extends StatefulWidget {
@@ -34,6 +35,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   @override
   void initState() {
     super.initState();
+    MixpanelManager().track('Diagnostics Opened');
     _loadDiagnostics();
     _startRssiStreaming();
   }
@@ -100,6 +102,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
     await file.writeAsString(json);
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Omi Device Diagnostics'));
+    MixpanelManager().track('Diagnostics Exported', properties: {
+      'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
+      'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
+      'rssi_samples': _rssiPoints.length,
+    });
   }
 
   void _onRssiUpdate(int rssi) {
