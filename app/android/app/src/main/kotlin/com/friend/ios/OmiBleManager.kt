@@ -97,6 +97,8 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private var rssiKeepAliveRunnable: Runnable? = null
     private val rssiKeepAliveInterval = 500L // ms
+    @Volatile
+    var isRssiStreamingEnabled = false
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -653,6 +655,13 @@ class OmiBleManager private constructor(private val application: Application) {
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.w(TAG, "RSSI read failed: status=$status for ${gatt.device.address}")
+                return
+            }
+            if (isRssiStreamingEnabled) {
+                val address = gatt.device.address.uppercase()
+                mainHandler.post {
+                    flutterApi?.onRssiUpdate(address, rssi.toLong()) {}
+                }
             }
         }
     }
