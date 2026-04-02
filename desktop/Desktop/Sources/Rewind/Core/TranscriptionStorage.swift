@@ -117,32 +117,6 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
     }
 
-    /// Mark session as completed by backend processing (WebSocket disconnect triggers processing).
-    /// Used when the app stops transcription and can't receive the memory_created event.
-    /// Only marks as completed if the session is still in pendingUpload state (not already completed by memory_created).
-    /// Does NOT set backendSynced — without a backendId we can't confirm processing succeeded.
-    /// If the backend actually failed, the retry service can still pick this up on next app launch
-    /// because backendSynced remains false.
-    func markSessionCompletedByBackend(id: Int64) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
-                throw TranscriptionStorageError.sessionNotFound
-            }
-
-            // Only mark completed if still pending — memory_created may have already handled it
-            guard record.status == .pendingUpload else { return }
-
-            record.status = .completed
-            // backendSynced intentionally left false — we don't have a backendId to confirm
-            record.updatedAt = Date()
-            try record.update(database)
-        }
-
-        log("TranscriptionStorage: Marked session \(id) as backend-processed (unverified)")
-    }
-
     /// Mark session as failed with error
     func markSessionFailed(id: Int64, error: String) async throws {
         let db = try await ensureInitialized()
