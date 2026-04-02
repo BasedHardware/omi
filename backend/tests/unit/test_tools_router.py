@@ -783,6 +783,14 @@ class TestErrorHandling:
         action_items_db.get_action_item.reset_mock()
         action_items_db.update_action_item.reset_mock()
 
+    def test_get_conversations_db_error(self):
+        """DB failure in get_conversations returns error text."""
+        conversations_db.get_conversations.side_effect = Exception("Firestore unavailable")
+        result = conversations_svc.get_conversations_text(uid="test-uid")
+        assert "Error" in result
+        assert "Firestore unavailable" in result
+        conversations_db.get_conversations.side_effect = None
+
     def test_search_conversations_vector_error(self):
         """Vector DB failure in search returns error text."""
         vector_db.query_vectors.side_effect = Exception("Pinecone timeout")
