@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
@@ -166,6 +167,10 @@ http.Request _buildRequest(String url, Map<String, String> headers, String body,
   }
   return request;
 }
+
+@visibleForTesting
+http.Request buildRequestForTest(String url, Map<String, String> headers, String body, String method) =>
+    _buildRequest(url, headers, body, method);
 
 Future<http.StreamedResponse> _sendMultipartWithProgress(
   http.MultipartRequest request,
