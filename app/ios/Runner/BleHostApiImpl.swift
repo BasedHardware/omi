@@ -75,6 +75,20 @@ final class BleHostApiImpl: BleHostApi {
         return bleManager.isPeripheralConnected(uuid: uuid)
     }
 
+    // ── Diagnostics ──
+
+    func startRssiStreaming(uuid: String) throws {
+        bleManager.isRssiStreamingEnabled = true
+    }
+
+    func stopRssiStreaming(uuid: String) throws {
+        bleManager.isRssiStreamingEnabled = false
+    }
+
+    func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void) {
+        completion(.success(bleManager.getDeviceDiagnostics(uuid: uuid)))
+    }
+
     func hasCompanionDeviceAssociation() throws -> Bool {
         return true // iOS uses state restoration
     }
