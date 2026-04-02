@@ -183,13 +183,18 @@ async def process_audio_dg(
     """
     logger.info(f'process_audio_dg {language} {sample_rate} {channels}')
 
-    # If gate provided, wrap stream_transcript to remap DG timestamps
-    if vad_gate is not None:
-        _original_stream_transcript = stream_transcript
+    # Wrap stream_transcript to:
+    # 1. Always preserve raw STT audio-time as stt_start/stt_end (#6190)
+    # 2. Remap start/end to wall-clock-relative when VAD gate is active
+    _original_stream_transcript = stream_transcript
 
-        def stream_transcript(segments):
+    def stream_transcript(segments):
+        for seg in segments:
+            seg['stt_start'] = seg['start']
+            seg['stt_end'] = seg['end']
+        if vad_gate is not None:
             vad_gate.remap_segments(segments)
-            _original_stream_transcript(segments)
+        _original_stream_transcript(segments)
 
     def on_message(self, result, **kwargs):
         sentence = result.channel.alternatives[0].transcript
@@ -255,10 +260,9 @@ async def process_audio_dg(
     dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)
     dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
-    # Wrap with VAD gate if provided
-    if vad_gate is not None:
-        return GatedDeepgramSocket(safe_conn, gate=vad_gate)
-    return safe_conn
+    # Always wrap with GatedDeepgramSocket for STT audio ring buffer (#6190)
+    # + optional VAD gating
+    return GatedDeepgramSocket(safe_conn, gate=vad_gate, sample_rate=sample_rate)
 
 
 # Calculate backoff with jitter
