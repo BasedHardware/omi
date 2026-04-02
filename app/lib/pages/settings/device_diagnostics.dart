@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -65,6 +70,38 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     BleBridge.instance.unregisterRssiCallback(widget.deviceId);
   }
 
+  Future<void> _exportDiagnostics() async {
+    final deviceProvider = context.read<DeviceProvider>();
+    final data = {
+      'device_id': widget.deviceId,
+      'exported_at': DateTime.now().toUtc().toIso8601String(),
+      'firmware': deviceProvider.connectedDevice?.firmwareRevision ?? 'unknown',
+      'battery': deviceProvider.batteryLevel,
+      'connected_at': _diagnostics?.connectedAt ?? 0,
+      'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
+      'rssi_samples': _rssiPoints
+          .map((p) => {
+                'ts': p.time.millisecondsSinceEpoch,
+                'rssi': p.rssi,
+              })
+          .toList(),
+      'disconnect_history': (_diagnostics?.disconnectHistory ?? [])
+          .map((e) => {
+                'ts': e.timestamp,
+                'reason': e.reason,
+                'code': e.reasonCode,
+                'manual': e.isManual,
+              })
+          .toList(),
+    };
+
+    final json = const JsonEncoder.withIndent('  ').convert(data);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
+    await file.writeAsString(json);
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Omi Device Diagnostics'));
+  }
+
   void _onRssiUpdate(int rssi) {
     if (!mounted) return;
     setState(() {
@@ -112,6 +149,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share, color: Colors.white, size: 22),
+            onPressed: _exportDiagnostics,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
@@ -162,26 +205,29 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _statusCard(
-                icon: FontAwesomeIcons.batteryThreeQuarters,
-                label: context.l10n.battery,
-                value: battery >= 0 ? '$battery%' : '--',
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _statusCard(
+                  icon: FontAwesomeIcons.batteryThreeQuarters,
+                  label: context.l10n.battery,
+                  value: battery >= 0 ? '$battery%' : '--',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statusCard(
-                icon: FontAwesomeIcons.signal,
-                label: context.l10n.signal,
-                value: latestRssi != null ? '$latestRssi dBm' : '--',
-                valueColor: latestRssi != null ? _rssiColor(latestRssi) : null,
-                subtitle: latestRssi != null ? _rssiQuality(latestRssi) : null,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _statusCard(
+                  icon: FontAwesomeIcons.signal,
+                  label: context.l10n.signal,
+                  value: latestRssi != null ? '$latestRssi dBm' : '--',
+                  valueColor: latestRssi != null ? _rssiColor(latestRssi) : null,
+                  subtitle: latestRssi != null ? _rssiQuality(latestRssi) : null,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -228,11 +274,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         Text(
           context.l10n.signalStrength,
           style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _rssiPoints.isEmpty ? context.l10n.waitingForData : context.l10n.liveRssiOverTime,
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
         const SizedBox(height: 16),
         Container(
