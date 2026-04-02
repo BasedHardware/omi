@@ -353,6 +353,106 @@ final class ListenProtocolTests: XCTestCase {
         XCTAssertEqual(receivedEvent?.raw["data"] as? String, "something")
     }
 
+    // MARK: - Reconnection State Machine
+
+    func testHandleDisconnectionRequiresConnected() throws {
+        let service = try TranscriptionService(language: "en")
+        // Not connected — handleDisconnection should be a no-op
+        service.isConnected = false
+        service.shouldReconnect = true
+        service.reconnectAttempts = 0
+
+        service.handleDisconnection()
+
+        // reconnectAttempts should NOT increment — guard blocked the call
+        XCTAssertEqual(service.reconnectAttempts, 0)
+    }
+
+    func testHandleDisconnectionIncrementsAttempts() throws {
+        let service = try TranscriptionService(language: "en")
+        service.isConnected = true
+        service.shouldReconnect = true
+        service.reconnectAttempts = 0
+
+        service.handleDisconnection()
+
+        XCTAssertFalse(service.isConnected)
+        XCTAssertEqual(service.reconnectAttempts, 1)
+    }
+
+    func testCleanupAndReconnectWorksWhenNotConnected() throws {
+        let service = try TranscriptionService(language: "en")
+        // Pre-connect state — isConnected is false
+        service.isConnected = false
+        service.shouldReconnect = true
+        service.reconnectAttempts = 0
+
+        service.cleanupAndReconnect()
+
+        // Should increment attempts even though not connected
+        XCTAssertEqual(service.reconnectAttempts, 1)
+    }
+
+    func testMaxReconnectAttemptsTriggersError() throws {
+        var receivedError: Error?
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { _ in },
+            onError: { receivedError = $0 },
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        // Set attempts to max
+        service.reconnectAttempts = service.maxReconnectAttempts
+        service.isConnected = true
+        service.shouldReconnect = true
+
+        service.handleDisconnection()
+
+        XCTAssertNotNil(receivedError, "should trigger error when max attempts reached")
+    }
+
+    func testCleanupAndReconnectMaxAttemptsTriggersError() throws {
+        var receivedError: Error?
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { _ in },
+            onError: { receivedError = $0 },
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        service.reconnectAttempts = service.maxReconnectAttempts
+        service.shouldReconnect = true
+
+        service.cleanupAndReconnect()
+
+        XCTAssertNotNil(receivedError, "should trigger error when max attempts reached (pre-connect)")
+    }
+
+    func testHandleDisconnectionCallsOnDisconnected() throws {
+        var disconnectedCalled = false
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { _ in },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: { disconnectedCalled = true }
+        )
+
+        service.isConnected = true
+        service.shouldReconnect = false  // Don't attempt reconnect
+
+        service.handleDisconnection()
+
+        XCTAssertTrue(disconnectedCalled)
+        XCTAssertFalse(service.isConnected)
+    }
+
     // MARK: - Multi-Segment Dispatch
 
     func testParserDispatchesMultipleSegments() throws {
