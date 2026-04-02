@@ -80,6 +80,10 @@ def get_action_items_text(
         logger.error(f"get_action_items_text error: {e}")
         return f"Error retrieving action items: {e}"
 
+    # Filter locked items (paid plan required)
+    if action_items:
+        action_items = [item for item in action_items if not item.get('is_locked', False)]
+
     if not action_items:
         date_info = ""
         if start_dt and end_dt:
@@ -203,10 +207,12 @@ def update_action_item_text(
     if not action_item_id or not action_item_id.strip():
         return "Error: action_item_id is required."
 
-    # Verify exists
+    # Verify exists and not locked
     existing = action_items_db.get_action_item(uid, action_item_id)
     if not existing:
         return f"Error: Action item '{action_item_id}' not found."
+    if existing.get('is_locked', False):
+        return "Error: A paid plan is required to modify this action item."
 
     update_data = {}
     changes = []
