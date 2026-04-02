@@ -109,7 +109,7 @@ def push_memory_to_omi(uid: str, memory_text: str) -> bool:
         return False
 
 
-def sync_user_calendar(
+async def sync_user_calendar(
     uid: str,
     get_valid_access_token_fn: Callable,
     calendar_api_request_fn: Callable,
@@ -213,7 +213,7 @@ async def _run_periodic_sync(
             log(f"Scheduler: Auto-sync disabled for {uid}, stopping")
             break
         try:
-            sync_user_calendar(
+            await sync_user_calendar(
                 uid,
                 get_valid_access_token_fn,
                 calendar_api_request_fn,
@@ -252,3 +252,34 @@ def stop_auto_sync(uid: str):
     if task and not task.done():
         task.cancel()
         log(f"Scheduler: Cancelled auto-sync for {uid}")
+
+
+async def auto_sync_loop(
+    get_valid_access_token_fn: Callable,
+    calendar_api_request_fn: Callable,
+    get_default_calendar_fn: Callable,
+    get_all_users_fn: Callable,
+):
+    """
+    Global background task that periodically syncs all users with auto_sync_enabled=True.
+    Register this in the FastAPI app lifespan.
+    """
+    log("AutoSyncLoop: Started global auto-sync background task")
+    while True:
+        await asyncio.sleep(DEFAULT_SYNC_INTERVAL_MINUTES * 60)
+        try:
+            users = get_all_users_fn()
+            for uid in users:
+                enabled = get_user_setting(uid, "auto_sync_enabled")
+                if enabled:
+                    try:
+                        await sync_user_calendar(
+                            uid,
+                            get_valid_access_token_fn,
+                            calendar_api_request_fn,
+                            get_default_calendar_fn,
+                        )
+                    except Exception as e:
+                        log(f"AutoSyncLoop: Error syncing {uid}: {e}")
+        except Exception as e:
+            log(f"AutoSyncLoop: Error during loop iteration: {e}")

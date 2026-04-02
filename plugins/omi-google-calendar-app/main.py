@@ -4,9 +4,11 @@ Google Calendar Integration App for Omi
 This app provides Google Calendar integration through OAuth2 authentication
 and chat tools for managing calendar events.
 """
+import asyncio
 import os
 import sys
 import secrets
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, List
 from urllib.parse import urlencode
@@ -16,7 +18,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-from sync import start_auto_sync, stop_auto_sync, sync_user_calendar
+from sync import start_auto_sync, stop_auto_sync, sync_user_calendar, auto_sync_loop
 
 from db import (
     store_google_tokens,
@@ -59,10 +61,50 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
+def _get_all_autosync_users():
+    """Return list of uids that have tokens stored (used by auto_sync_loop)."""
+    import os
+    from db import _ensure_data_dir
+    _ensure_data_dir()
+    data_dir = os.getenv("DATA_DIR", "./data")
+    try:
+        tokens_file = os.path.join(data_dir, "google_tokens.json")
+        if not os.path.exists(tokens_file):
+            return []
+        import json
+        with open(tokens_file) as f:
+            data = json.load(f)
+        return list(data.keys())
+    except Exception:
+        return []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan: start global auto-sync background task on startup."""
+    task = asyncio.create_task(
+        auto_sync_loop(
+            get_valid_access_token,
+            calendar_api_request,
+            get_default_calendar,
+            _get_all_autosync_users,
+        )
+    )
+    log("App: Auto-sync background loop started")
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    log("App: Auto-sync background loop stopped")
+
+
 app = FastAPI(
     title="Google Calendar Omi Integration",
     description="Google Calendar integration for Omi - Manage your calendar with chat",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -1317,12 +1359,7 @@ async def trigger_sync(request: Request):
         if not tokens:
             return JSONResponse({"error": "Google Calendar not connected"}, status_code=401)
 
-        # Run sync in thread pool to avoid blocking the event loop
-        import asyncio
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            sync_user_calendar,
+        result = await sync_user_calendar(
             uid,
             get_valid_access_token,
             calendar_api_request,
@@ -1377,12 +1414,7 @@ async def toggle_auto_sync(request: Request):
                 calendar_api_request,
                 get_default_calendar,
             )
-            # Run initial sync in thread pool
-            import asyncio
-            loop = asyncio.get_event_loop()
-            sync_result = await loop.run_in_executor(
-                None,
-                sync_user_calendar,
+            sync_result = await sync_user_calendar(
                 uid,
                 get_valid_access_token,
                 calendar_api_request,
