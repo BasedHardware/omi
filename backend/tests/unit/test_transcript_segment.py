@@ -608,6 +608,77 @@ class TestSttTimestampMerge:
         assert segments[1].stt_start == 1.5
         assert segments[1].stt_end == 3.5
 
+    def test_backward_single_sentence_merge_carries_stt_end(self):
+        """When b is fully absorbed into a (backward single-sentence), a.stt_end should extend."""
+        # a has incomplete sentence, b is a short incomplete continuation from different speaker
+        a = _segment_with_stt(
+            "Maybe it is a 20 degree field and we read faster than we can",
+            speaker="SPEAKER_00",
+            start=0.0,
+            end=2.0,
+            stt_start=0.0,
+            stt_end=1.5,
+        )
+        b = _segment_with_stt(
+            "listen.",
+            speaker="SPEAKER_01",
+            start=2.0,
+            end=2.2,
+            stt_start=1.5,
+            stt_end=1.7,
+        )
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        # b should be absorbed into a (single sentence backward merge)
+        assert len(segments) == 1
+        assert "listen" in segments[0].text
+        assert segments[0].stt_start == 0.0
+        assert segments[0].stt_end == 1.7, "stt_end should extend to cover absorbed b"
+
+    def test_forward_merge_clamps_stt_end(self):
+        """When incomplete text moves from a to b (forward merge), a.stt_end should clamp."""
+        a = _segment_with_stt(
+            "Complete sentence. and then",
+            speaker="SPEAKER_00",
+            start=0.0,
+            end=3.0,
+            stt_start=0.0,
+            stt_end=2.5,
+        )
+        b = _segment_with_stt(
+            "we keep going with a much longer sentence that makes this the dominant text.",
+            speaker="SPEAKER_01",
+            start=3.0,
+            end=6.0,
+            stt_start=2.5,
+            stt_end=5.5,
+        )
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        assert len(segments) == 2
+        # a.stt_end should be clamped to b.stt_start or below
+        assert segments[0].stt_end <= segments[1].stt_start
+
+    def test_lowercase_continuation_merge_carries_stt_end(self):
+        """Lowercase continuation merge should extend stt_end."""
+        a = _segment_with_stt(
+            "Hello there my",
+            speaker="SPEAKER_00",
+            start=0.0,
+            end=2.0,
+            stt_start=0.0,
+            stt_end=1.5,
+        )
+        b = _segment_with_stt(
+            "friend.",
+            speaker="SPEAKER_00",
+            start=2.0,
+            end=3.0,
+            stt_start=1.5,
+            stt_end=2.5,
+        )
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        assert len(segments) == 1
+        assert segments[0].stt_end == 2.5
+
     def test_merge_with_none_stt_fields(self):
         """Merging segments where stt fields are None should not crash."""
         a = _segment("Hello there", speaker="SPEAKER_00", start=0.0, end=2.0)
