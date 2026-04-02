@@ -81,8 +81,9 @@ class TranscriptionService {
     private let apiKey: String
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
-    private var isConnected = false
-    private var shouldReconnect = false
+    // Internal for @testable import access in unit tests
+    var isConnected = false
+    var shouldReconnect = false
 
     // Callbacks
     private var onBackendSegments: BackendSegmentsHandler?
@@ -123,9 +124,9 @@ class TranscriptionService {
         return ""  // Empty means use proxy
     }()
 
-    // Reconnection
-    private var reconnectAttempts = 0
-    private let maxReconnectAttempts = 10
+    // Reconnection (internal for @testable import)
+    var reconnectAttempts = 0
+    let maxReconnectAttempts = 10
     private var reconnectTask: Task<Void, Never>?
 
     // Watchdog: detect stale connections where WebSocket dies silently
@@ -420,7 +421,7 @@ class TranscriptionService {
         onDisconnected?()
     }
 
-    private func handleDisconnection() {
+    func handleDisconnection() {
         guard isConnected else { return }
 
         isConnected = false
@@ -450,7 +451,7 @@ class TranscriptionService {
 
     /// Cleanup a failed/pending connection and schedule reconnect.
     /// Unlike handleDisconnection(), this works even when isConnected is false (pre-handshake failures).
-    private func cleanupAndReconnect() {
+    func cleanupAndReconnect() {
         webSocketTask?.cancel(with: .abnormalClosure, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
