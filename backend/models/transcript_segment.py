@@ -35,6 +35,11 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    # Raw STT audio-time coordinates — position in the audio stream the STT provider received.
+    # Used for exact audio extraction (e.g., speaker embedding). Excluded from serialization
+    # so they never reach Firestore or the client. See #6190.
+    stt_start: Optional[float] = Field(default=None, exclude=True, repr=False)
+    stt_end: Optional[float] = Field(default=None, exclude=True, repr=False)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -176,17 +181,23 @@ class TranscriptSegment(BaseModel):
                     if prefix:
                         a.text = prefix
                         a.end = min(a.end, b.start)
+                        if a.stt_end is not None and b.stt_start is not None:
+                            a.stt_end = min(a.stt_end, b.stt_start)
                         return a, b
                     a.text = ""
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                if b.stt_end is not None:
+                    a.stt_end = b.stt_end
                 return a, None
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                if b.stt_end is not None:
+                    a.stt_end = b.stt_end
                 return a, None
 
             return a, b
