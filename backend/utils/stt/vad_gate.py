@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import torch
 
+from utils.audio import AudioRingBuffer
+
 logger = logging.getLogger('vad_gate')
 
 # ---------------------------------------------------------------------------
@@ -673,9 +675,18 @@ class VADStreamingGate:
         }
 
     def remap_segments(self, segments: list) -> None:
-        """Remap DG timestamps to wall-clock-relative if gate is active."""
+        """Remap DG timestamps to wall-clock-relative if gate is active.
+
+        Preserves raw STT audio-time coordinates as ``stt_start``/``stt_end``
+        before overwriting ``start``/``end`` so speaker-extraction can use them
+        to index into the STT audio ring buffer. See #6190.
+        """
         if self.mode == 'active':
             for seg in segments:
+                if 'stt_start' not in seg:
+                    seg['stt_start'] = seg['start']
+                if 'stt_end' not in seg:
+                    seg['stt_end'] = seg['end']
                 seg['start'] = self.dg_wall_mapper.dg_to_wall_rel(seg['start'])
                 seg['end'] = self.dg_wall_mapper.dg_to_wall_rel(seg['end'])
 
@@ -701,9 +712,14 @@ class GatedDeepgramSocket:
     This keeps all VAD logic out of transcribe.py.
     """
 
-    def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
+    def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None, sample_rate: int = 8000):
         self._conn = dg_connection
         self._gate = gate
+        # STT audio ring buffer — stores exactly the bytes DG receives, indexed
+        # by cumulative STT audio-time. Used for speaker-extraction (#6190).
+        self._bytes_per_sec = sample_rate * 2  # PCM16 mono
+        self._stt_cursor_sec = 0.0
+        self.stt_audio_ring = AudioRingBuffer(duration_seconds=120, sample_rate=sample_rate)
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -726,11 +742,18 @@ class GatedDeepgramSocket:
         """Why the DG connection died. Delegates to SafeDeepgramSocket."""
         return self._conn.death_reason
 
+    def _track_stt_audio(self, data: bytes) -> None:
+        """Write *data* to the STT audio ring buffer, advancing the cursor."""
+        duration = len(data) / self._bytes_per_sec
+        self._stt_cursor_sec += duration
+        self.stt_audio_ring.write(data, self._stt_cursor_sec)
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
         if self.is_connection_dead:
             return
         if self._gate is None:
+            self._track_stt_audio(data)
             return self._conn.send(data)
 
         now = wall_time or time.time()
@@ -740,12 +763,14 @@ class GatedDeepgramSocket:
             logger.exception('VAD gate process error, falling back to direct send uid=%s', self._gate.uid)
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
+            self._track_stt_audio(data)
             return self._conn.send(data)
         if self._raw_file:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
+            self._track_stt_audio(gate_out.audio_to_send)
             # SafeDeepgramSocket.send() handles dead detection internally
             self._conn.send(gate_out.audio_to_send)
         # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
