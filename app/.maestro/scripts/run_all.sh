@@ -104,7 +104,7 @@ collect_flows() {
         [[ -f "$flow_file" ]] || continue
 
         local flow_tags
-        flow_tags=$(grep -A5 "^tags:" "$flow_file" | grep "^ *- " | sed 's/^ *- //' || true)
+        flow_tags=$(awk '/^tags:/{p=1; next} p && /^ *- /{gsub(/^ *- /,""); print} p && !/^ *- /{p=0}' "$flow_file" || true)
 
         if [[ "$tag_filter" == "all" ]]; then
             flows+=("$flow_file")
@@ -161,6 +161,7 @@ for flow_file in "${FLOW_FILES[@]}"; do
     set +e
     maestro test "$flow_file" \
         $DEVICE_FLAG \
+        --config "$MAESTRO_DIR/config/global.yaml" \
         --format junit \
         --output "$flow_output/report.xml" \
         > "$flow_output/stdout.log" 2>&1
@@ -179,9 +180,11 @@ for flow_file in "${FLOW_FILES[@]}"; do
         log_err "$flow_name — FAILED (${flow_duration}s) — see $flow_output/stdout.log"
     fi
 
-    # Copy screenshots from Maestro output
+    # Copy only screenshots generated during this flow (not from earlier runs)
     if [[ -d "$HOME/.maestro/tests" ]]; then
-        cp "$HOME/.maestro/tests"/*.png "$flow_output/" 2>/dev/null || true
+        find "$HOME/.maestro/tests" -name "*.png" \
+            -newer "$flow_output/report.xml" \
+            -exec cp {} "$flow_output/" \; 2>/dev/null || true
     fi
 done
 
