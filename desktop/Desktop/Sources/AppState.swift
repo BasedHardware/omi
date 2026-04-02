@@ -1540,29 +1540,17 @@ class AppState: ObservableObject {
   /// The Python backend handles conversation lifecycle automatically — disconnecting the WebSocket
   /// triggers conversation processing on the backend side.
   func stopTranscription() {
-    // Capture session ID before clearing state — we can't receive memory_created after WebSocket closes,
-    // so we verify backend processing after a delay to prevent TranscriptionRetryService from re-uploading.
-    let capturedSessionId = currentSessionId
-
     stopAudioCapture()
     clearTranscriptionState()
 
     // Backend processes the conversation when WebSocket disconnects.
-    // After a delay, mark the local session as completed to prevent duplicate uploads via retry service.
+    // The local session stays as pendingUpload — the retry service will either:
+    // 1. Find the conversation on the backend (duplicate check) and mark it completed, or
+    // 2. Re-upload if backend processing failed (recovery path).
+    // We don't optimistically mark as completed because that orphans the session if backend fails.
     Task {
       try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s for backend to process
       await loadConversations()
-
-      if let sessionId = capturedSessionId {
-        do {
-          try await TranscriptionStorage.shared.markSessionCompletedByBackend(id: sessionId)
-          log("Transcription: Marked stopped session \(sessionId) as backend-processed")
-        } catch {
-          log(
-            "Transcription: Could not mark stopped session \(sessionId) as completed — retry service will handle: \(error)"
-          )
-        }
-      }
     }
   }
 
