@@ -21,7 +21,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from utils.other.endpoints import get_current_user_uid
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
 from utils.retrieval.tool_services.action_items import (
@@ -102,7 +102,7 @@ def get_conversations(
 @router.post("/v1/tools/conversations/search", response_model=ToolResponse)
 def search_conversations(
     body: SearchConversationsRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
     result = search_conversations_text(
         uid=uid,
@@ -139,7 +139,7 @@ def get_memories(
 @router.post("/v1/tools/memories/search", response_model=ToolResponse)
 def search_memories(
     body: SearchMemoriesRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
     result = search_memories_text(
         uid=uid,
@@ -181,7 +181,7 @@ def get_action_items(
 @router.post("/v1/tools/action-items", response_model=ToolResponse)
 def create_action_item(
     body: CreateActionItemRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
 ):
     result = create_action_item_text(
         uid=uid,
@@ -196,7 +196,7 @@ def create_action_item(
 def update_action_item(
     action_item_id: str,
     body: UpdateActionItemRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
 ):
     result = update_action_item_text(
         uid=uid,
