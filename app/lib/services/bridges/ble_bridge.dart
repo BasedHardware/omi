@@ -12,6 +12,9 @@ typedef ConnectionStateCallback = void Function(bool connected, String? error);
 /// Callback signature for device ready (connected + services + bonded + MTU done).
 typedef DeviceReadyCallback = void Function(List<BleService> services);
 
+/// Callback signature for RSSI updates (diagnostics).
+typedef RssiUpdateCallback = void Function(int rssi);
+
 /// Singleton bridge that implements BleFlutterApi (Pigeon) and dispatches
 /// native BLE events to registered listeners (NativeBleTransport instances).
 class BleBridge implements BleFlutterApi {
@@ -22,6 +25,7 @@ class BleBridge implements BleFlutterApi {
   final Map<String, CharacteristicValueCallback> _characteristicCallbacks = {};
   final Map<String, ConnectionStateCallback> _disconnectCallbacks = {};
   final Map<String, DeviceReadyCallback> _deviceReadyCallbacks = {};
+  final Map<String, RssiUpdateCallback> _rssiCallbacks = {};
 
   void Function(String state)? bluetoothStateChangedCallback;
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
@@ -37,6 +41,14 @@ class BleBridge implements BleFlutterApi {
     if (onCharacteristicValue != null) _characteristicCallbacks[key] = onCharacteristicValue;
     if (onConnectionState != null) _disconnectCallbacks[key] = onConnectionState;
     if (onDeviceReady != null) _deviceReadyCallbacks[key] = onDeviceReady;
+  }
+
+  void registerRssiCallback(String peripheralUuid, RssiUpdateCallback callback) {
+    _rssiCallbacks[peripheralUuid.toUpperCase()] = callback;
+  }
+
+  void unregisterRssiCallback(String peripheralUuid) {
+    _rssiCallbacks.remove(peripheralUuid.toUpperCase());
   }
 
   void unregisterPeripheral(String peripheralUuid) {
@@ -73,6 +85,11 @@ class BleBridge implements BleFlutterApi {
       String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value) {
     final key = peripheralUuid.toUpperCase();
     _characteristicCallbacks[key]?.call(serviceUuid, characteristicUuid, value);
+  }
+
+  @override
+  void onRssiUpdate(String peripheralUuid, int rssi) {
+    _rssiCallbacks[peripheralUuid.toUpperCase()]?.call(rssi);
   }
 
   @override
