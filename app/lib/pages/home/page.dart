@@ -352,7 +352,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           // Navigate to chat page directly since it's no longer in the tab bar
           // If there's an auto-message (e.g., from daily reflection notification), send it
           final autoMessageToSend = widget.autoMessage;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Delay ensures HomePage is fully rendered before pushing ChatPage,
+          // preventing the navigation from being dropped during widget tree construction.
+          Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) {
               Navigator.push(
                 context,
