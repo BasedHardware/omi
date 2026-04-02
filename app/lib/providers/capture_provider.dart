@@ -207,6 +207,7 @@ class CaptureProvider extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  Map<int, String> sharedSpeakerNames = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -287,6 +288,7 @@ class CaptureProvider extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    sharedSpeakerNames = {};
     _conversation = null;
     taggingSegmentIds = [];
     notifyListeners();
@@ -1265,7 +1267,10 @@ class CaptureProvider extends ChangeNotifier
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
-    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+    if (!isUser &&
+        event.personId.isNotEmpty &&
+        !event.personId.startsWith('shared:') &&
+        SharedPreferencesUtil().getPersonById(event.personId) == null) {
       SharedPreferencesUtil().addCachedPerson(
         Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
@@ -1278,6 +1283,10 @@ class CaptureProvider extends ChangeNotifier
           seg.isUser = isUser;
           seg.personId = isUser ? null : event.personId;
         }
+      }
+      // cache shared speaker names for transcript display
+      if (event.personId.startsWith('shared:')) {
+        sharedSpeakerNames[event.speakerId] = event.personName;
       }
       _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
     }
@@ -1306,9 +1315,15 @@ class CaptureProvider extends ChangeNotifier
         }
       }
 
+      // Cache shared speaker names for display
+      if (finalPersonId.startsWith('shared:')) {
+        sharedSpeakerNames[speakerId] = personName;
+      }
+
       // Add person to local cache if not exists (backward compatibility for old apps)
       if (finalPersonId.isNotEmpty &&
           finalPersonId != 'user' &&
+          !finalPersonId.startsWith('shared:') &&
           SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
         SharedPreferencesUtil().addCachedPerson(
           Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),

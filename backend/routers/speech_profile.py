@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Optional
 
@@ -7,10 +8,22 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
 from database.conversations import get_conversation
-from database.redis_db import set_speech_profile_duration
-from database.users import get_person, set_user_speaker_embedding
+from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
+from database.auth import get_user_name
+from database.users import (
+    get_person,
+    get_user_profile,
+    get_user_profiles_batch,
+    is_exists_user,
+    set_user_speaker_embedding,
+    share_speech_profile,
+    revoke_speech_profile_share,
+    remove_shared_profile_from_me,
+    get_profiles_shared_with_user,
+    get_users_shared_with,
+)
 from models.conversation import Conversation
-from models.other import UploadProfile
+from models.other import ShareSpeechProfileRequest, UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
@@ -27,7 +40,6 @@ from utils.other.storage import (
 )
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -74,16 +86,18 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
+    remove_user_soniox_speech_profile(uid)
 
-    # Extract and store speaker embedding for user identification in listen sessions
+    embedding_status = "ok"
     try:
         embedding = extract_embedding(file_path)
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
         logger.info(f"Speech profile: stored speaker embedding for {uid}")
     except Exception as e:
+        embedding_status = "failed"
         logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
 
-    return {"url": url}
+    return {"url": url, "embedding_status": embedding_status}
 
 
 # ******************************************************
@@ -113,3 +127,104 @@ def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str =
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)
+
+
+# ******************************************************
+# ************ SPEECH PROFILE SHARING ******************
+# ******************************************************
+
+
+@router.post('/v1/speech-profile/share', tags=['v1'])
+def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Share the current user's speech profile with another user"""
+    if data.target_uid == uid:
+        raise HTTPException(status_code=400, detail="Cannot share with yourself.")
+    if not is_exists_user(data.target_uid):
+        raise HTTPException(status_code=404, detail="Target user not found.")
+    existing = get_users_shared_with(uid)
+    if data.target_uid in existing:
+        raise HTTPException(status_code=400, detail="Already shared with this user.")
+    profile = get_user_profile(uid)
+    if not profile:
+        raise HTTPException(status_code=400, detail="No speech profile recorded.")
+    if not profile.get('speaker_embedding'):
+        file_path = get_profile_audio_if_exists(uid, download=True)
+        if not file_path:
+            raise HTTPException(status_code=400, detail="No speech profile recorded.")
+        try:
+            embedding = extract_embedding(file_path)
+            set_user_speaker_embedding(uid, embedding.flatten().tolist())
+        except Exception as e:
+            logger.error(f"Failed to extract speaker embedding for sharing: {e} {uid}")
+            raise HTTPException(status_code=503, detail="Embedding extraction temporarily unavailable.")
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    try:
+        share_speech_profile(uid, data.target_uid)
+    except Exception as e:
+        logger.error(f"Failed to share speech profile: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
+    return {"status": "ok"}
+
+
+@router.post('/v1/speech-profile/revoke', tags=['v1'])
+def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Revoke a previously shared speech profile"""
+    if data.target_uid == uid:
+        raise HTTPException(status_code=400, detail="Invalid target user ID.")
+    try:
+        result = revoke_speech_profile_share(uid, data.target_uid)
+    except Exception as e:
+        logger.error(f"Failed to revoke speech profile share: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+
+@router.post('/v1/speech-profile/remove-shared', tags=['v1'])
+def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Allow the current user to remove a speech profile that was shared with them"""
+    try:
+        result = remove_shared_profile_from_me(data.target_uid, uid)
+    except Exception as e:
+        logger.error(f"Failed to remove shared profile: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+
+@router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
+def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
+    """List users who have shared their speech profile with the current user"""
+    try:
+        owner_uids = get_profiles_shared_with_user(uid)
+        profiles = get_user_profiles_batch(owner_uids) if owner_uids else {}
+    except Exception as e:
+        logger.error(f"Failed to fetch shared profiles for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
+    return {
+        "shared_with_me": [
+            {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
+            for u in owner_uids
+        ]
+    }
+
+
+@router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
+def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
+    """List users with whom the current user has shared their speech profile"""
+    try:
+        target_uids = get_users_shared_with(uid)
+        profiles = get_user_profiles_batch(target_uids) if target_uids else {}
+    except Exception as e:
+        logger.error(f"Failed to fetch shared-with list for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
+    return {
+        "i_have_shared_with": [
+            {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
+            for u in target_uids
+        ]
+    }

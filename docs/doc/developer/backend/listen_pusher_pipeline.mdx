@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-03-28 (PR #6061 — remove local fallback)
+> Last updated: 2026-03-30 (speech profile sharing + PR #6061 remove local fallback)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, Deepgram, embedding API). Update when the
@@ -187,6 +187,8 @@ sequenceDiagram
 
     Client->>Backend: WS connect
     Backend->>Firestore: Load person_embeddings_cache (once at session start)
+    Backend->>Firestore: Load active shared owners for receiver
+    Backend->>Backend: Add shared embeddings as person_id = "shared:{owner_uid}"
     Backend->>GCS: Load user speech profile WAV (if exists)
     Backend->>EmbeddingAPI: Extract user embedding from profile audio
     Note over Backend: Cache user embedding as 'user' sentinel
@@ -198,9 +200,16 @@ sequenceDiagram
     alt Match is user's own voice
         Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
     else Match is known person
-        Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+        Backend-->>Client: {type: "speaker_label_suggestion", person_id, person_name, distance}
+        Note over Backend: shared:{owner_uid} assignments are not forwarded to pusher speaker-sample extraction
     end
 ```
+
+### Shared Profile Revoke Semantics
+
+- Share/revoke/remove is persisted in Firestore under `users/{owner_uid}/shared_speech_profiles/{target_uid}`.
+- `/v4/listen` loads shared embeddings once at session start.
+- Current behavior: revoke/remove does not retroactively evict already-loaded shared embeddings from an active session; effect is guaranteed on next session start.
 
 ## 5. Private Cloud Sync (Audio Upload)
 
@@ -267,4 +276,3 @@ sequenceDiagram
 | `MAX_RETRIES_PER_REQUEST` | 3 | transcribe.py | Max retries before keeping buffered |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | transcribe.py | Reconnect attempts before DEGRADED |
 | `MAX_PENDING_REQUESTS` | 100 | transcribe.py | Max buffered conversations per session |
-
