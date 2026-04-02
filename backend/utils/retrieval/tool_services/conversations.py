@@ -3,7 +3,7 @@ Shared service functions for conversation retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import database.conversations as conversations_db
@@ -156,6 +156,13 @@ def search_conversations_text(
             ends_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
+
+    # Guard one-sided date ranges: vector_db.query_vectors sets both $gte and $lte
+    # when starts_at is provided, so we need to fill in the missing bound.
+    if starts_at is not None and ends_at is None:
+        ends_at = int(datetime.now(timezone.utc).timestamp()) + 86400  # tomorrow
+    if ends_at is not None and starts_at is None:
+        starts_at = 0  # epoch
 
     try:
         conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
