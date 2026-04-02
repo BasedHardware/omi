@@ -33,15 +33,20 @@ tags:
 - tapOn:
     id: ".*send.*"
     optional: true
-- pressKey: "Enter"
-  optional: true
+- pressKey:
+    key: "Enter"
+    optional: true
 - takeScreenshot: "05_chat_sent"
 
-# Wait for AI response
+# Wait for AI response (wait for loading to disappear, then verify actual content)
+- extendedWaitUntil:
+    notVisible:
+      text: "Thinking|Loading|Typing|…"
+    timeout: 30000
 - extendedWaitUntil:
     visible:
-      text: ".*"
-    timeout: 30000
+      text: "recently|Here's|Based on|talked about|conversation"
+    timeout: 10000
 - takeScreenshot: "05_chat_response"
 
 # Verify response is visible (chat should have at least 2 messages)
