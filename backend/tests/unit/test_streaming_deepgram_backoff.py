@@ -929,6 +929,113 @@ async def test_process_audio_dg_error_handler_sets_death_reason():
 
 
 # ---------------------------------------------------------------------------
+# stream_transcript callback contract tests (#6190)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_transcript_injects_stt_start_stt_end():
+    """process_audio_dg wrapper should inject stt_start/stt_end into forwarded segments (#6190).
+
+    Captures the on_message callback from process_audio_dg, fires it with a mock
+    DG result, and verifies the original stream_transcript receives segments with
+    stt_start/stt_end set to the raw DG timestamps.
+    """
+    received = []
+    original_transcript = lambda segs: received.extend(segs)
+
+    mock_dg_conn = MagicMock()
+    captured_on_message = None
+
+    async def capture_backoff(on_message, on_error, *args, **kwargs):
+        nonlocal captured_on_message
+        captured_on_message = on_message
+        return mock_dg_conn
+
+    with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new=capture_backoff):
+        await process_audio_dg(
+            stream_transcript=original_transcript,
+            language='en',
+            sample_rate=16000,
+            channels=1,
+        )
+
+    assert captured_on_message is not None, "on_message should have been captured"
+
+    # Build a mock DG result with one word
+    mock_word = MagicMock()
+    mock_word.speaker = 0
+    mock_word.start = 1.5
+    mock_word.end = 2.3
+    mock_word.punctuated_word = "Hello"
+
+    mock_result = MagicMock()
+    mock_result.channel.alternatives = [MagicMock()]
+    mock_result.channel.alternatives[0].transcript = "Hello"
+    mock_result.channel.alternatives[0].words = [mock_word]
+
+    # Fire the callback
+    captured_on_message(None, mock_result)
+
+    assert len(received) == 1
+    seg = received[0]
+    assert seg['stt_start'] == 1.5, "stt_start should equal raw DG start"
+    assert seg['stt_end'] == 2.3, "stt_end should equal raw DG end"
+    assert seg['start'] == 1.5, "start should be unmodified (no gate)"
+    assert seg['end'] == 2.3, "end should be unmodified (no gate)"
+
+
+@pytest.mark.asyncio
+async def test_stream_transcript_stt_preserved_before_remap():
+    """With VAD gate, stt_start/stt_end should be preserved before wall-clock remapping (#6190)."""
+    from utils.stt.vad_gate import VADStreamingGate
+
+    received = []
+    original_transcript = lambda segs: received.extend(segs)
+
+    mock_dg_conn = MagicMock()
+    captured_on_message = None
+
+    async def capture_backoff(on_message, on_error, *args, **kwargs):
+        nonlocal captured_on_message
+        captured_on_message = on_message
+        return mock_dg_conn
+
+    mock_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+    # Seed mapper with offset so remap changes start/end
+    mock_gate.dg_wall_mapper.on_audio_sent(chunk_duration_sec=5.0, chunk_wall_rel_sec=100.0)
+
+    with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new=capture_backoff):
+        await process_audio_dg(
+            stream_transcript=original_transcript,
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            vad_gate=mock_gate,
+        )
+
+    mock_word = MagicMock()
+    mock_word.speaker = 0
+    mock_word.start = 1.0
+    mock_word.end = 2.0
+    mock_word.punctuated_word = "Test"
+
+    mock_result = MagicMock()
+    mock_result.channel.alternatives = [MagicMock()]
+    mock_result.channel.alternatives[0].transcript = "Test"
+    mock_result.channel.alternatives[0].words = [mock_word]
+
+    captured_on_message(None, mock_result)
+
+    assert len(received) == 1
+    seg = received[0]
+    assert seg['stt_start'] == 1.0, "stt_start should preserve raw DG time"
+    assert seg['stt_end'] == 2.0, "stt_end should preserve raw DG time"
+    # start/end should be remapped to wall-clock
+    assert seg['start'] != 1.0, "start should have been remapped by gate"
+
+
+# ---------------------------------------------------------------------------
 # GatedDeepgramSocket death_reason delegation tests
 # ---------------------------------------------------------------------------
 
