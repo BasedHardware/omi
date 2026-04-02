@@ -508,3 +508,111 @@ def test_mixed_english_cjk_sentence_splitting():
     assert len(segments) == 2
     assert segments[0].text.endswith("。")
     assert segments[1].text == "Next part."
+
+
+# --- stt_start / stt_end field tests (#6190) ---
+
+
+def _segment_with_stt(text, speaker="SPEAKER_00", is_user=False, start=0.0, end=1.0, stt_start=None, stt_end=None):
+    return TranscriptSegment(
+        text=text, speaker=speaker, is_user=is_user, start=start, end=end, stt_start=stt_start, stt_end=stt_end
+    )
+
+
+class TestSttTimestampFields:
+    """Tests for stt_start/stt_end — raw STT audio-time coordinates (#6190)."""
+
+    def test_stt_fields_survive_construction(self):
+        """stt_start/stt_end should be accessible on the object after construction."""
+        seg = _segment_with_stt("hello", stt_start=1.5, stt_end=3.0)
+        assert seg.stt_start == 1.5
+        assert seg.stt_end == 3.0
+
+    def test_stt_fields_excluded_from_dict(self):
+        """stt_start/stt_end must NOT appear in .dict() / .model_dump() output."""
+        seg = _segment_with_stt("hello", stt_start=1.5, stt_end=3.0)
+        d = seg.dict()
+        assert 'stt_start' not in d
+        assert 'stt_end' not in d
+
+    def test_stt_fields_excluded_from_model_dump(self):
+        """stt_start/stt_end must NOT appear in .model_dump() output (Pydantic v2)."""
+        seg = _segment_with_stt("hello", stt_start=1.5, stt_end=3.0)
+        d = seg.model_dump()
+        assert 'stt_start' not in d
+        assert 'stt_end' not in d
+
+    def test_stt_fields_default_none(self):
+        """stt_start/stt_end default to None when not provided."""
+        seg = _segment("hello")
+        assert seg.stt_start is None
+        assert seg.stt_end is None
+
+    def test_stt_fields_survive_model_copy(self):
+        """stt_start/stt_end should survive model_copy(deep=True)."""
+        seg = _segment_with_stt("hello", stt_start=1.5, stt_end=3.0)
+        copy = seg.model_copy(deep=True)
+        assert copy.stt_start == 1.5
+        assert copy.stt_end == 3.0
+
+    def test_stt_fields_from_dict_kwargs(self):
+        """stt_start/stt_end should work when passed via **dict (streaming.py flow)."""
+        data = {
+            'text': 'hello',
+            'speaker': 'SPEAKER_00',
+            'is_user': False,
+            'start': 0.0,
+            'end': 1.0,
+            'stt_start': 2.0,
+            'stt_end': 3.0,
+        }
+        seg = TranscriptSegment(**data, speech_profile_processed=True)
+        assert seg.stt_start == 2.0
+        assert seg.stt_end == 3.0
+
+
+class TestSttTimestampMerge:
+    """Tests that stt_end propagates correctly during segment merges (#6190)."""
+
+    def test_same_speaker_merge_carries_stt_end(self):
+        """Same-speaker merge should update stt_end to the last segment's value."""
+        a = _segment_with_stt("Hello there", speaker="SPEAKER_00", start=0.0, end=2.0, stt_start=0.0, stt_end=1.5)
+        b = _segment_with_stt("my friend.", speaker="SPEAKER_00", start=2.0, end=4.0, stt_start=1.5, stt_end=3.5)
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        assert len(segments) == 1
+        assert segments[0].stt_start == 0.0
+        assert segments[0].stt_end == 3.5
+
+    def test_different_speaker_preserves_stt(self):
+        """Different speaker segments with complete sentences keep their own stt times."""
+        a = _segment_with_stt(
+            "Hello there, how are you doing today?",
+            speaker="SPEAKER_00",
+            start=0.0,
+            end=2.0,
+            stt_start=0.0,
+            stt_end=1.5,
+        )
+        b = _segment_with_stt(
+            "I am doing great, thanks for asking.",
+            speaker="SPEAKER_01",
+            start=2.0,
+            end=4.0,
+            stt_start=1.5,
+            stt_end=3.5,
+        )
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        assert len(segments) == 2
+        assert segments[0].stt_start == 0.0
+        assert segments[0].stt_end == 1.5
+        assert segments[1].stt_start == 1.5
+        assert segments[1].stt_end == 3.5
+
+    def test_merge_with_none_stt_fields(self):
+        """Merging segments where stt fields are None should not crash."""
+        a = _segment("Hello there", speaker="SPEAKER_00", start=0.0, end=2.0)
+        b = _segment("my friend.", speaker="SPEAKER_00", start=2.0, end=4.0)
+        segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+        assert len(segments) == 1
+        assert segments[0].stt_start is None
+        assert segments[0].stt_end is None
