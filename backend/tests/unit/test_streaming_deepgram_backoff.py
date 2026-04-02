@@ -298,9 +298,10 @@ def test_deepgram_options_no_keepalive():
 
 
 @pytest.mark.asyncio
-async def test_process_audio_dg_returns_safe_socket_no_gate():
-    """process_audio_dg returns SafeDeepgramSocket when no VAD gate provided (#5870)."""
+async def test_process_audio_dg_returns_gated_socket_no_gate():
+    """process_audio_dg always returns GatedDeepgramSocket, even without VAD gate (#6190)."""
     from utils.stt.safe_socket import SafeDeepgramSocket
+    from utils.stt.vad_gate import GatedDeepgramSocket
 
     mock_dg_conn = MagicMock()
     with patch(
@@ -312,7 +313,8 @@ async def test_process_audio_dg_returns_safe_socket_no_gate():
             sample_rate=16000,
             channels=1,
         )
-    assert isinstance(result, SafeDeepgramSocket)
+    assert isinstance(result, GatedDeepgramSocket)
+    assert isinstance(result._conn, SafeDeepgramSocket)
     assert result.is_connection_dead is False
     result.finish()
 
@@ -867,7 +869,7 @@ def test_close_reason_preserved_when_keepalive_raises_after():
 @pytest.mark.asyncio
 async def test_process_audio_dg_registers_close_error_handlers():
     """process_audio_dg registers Close and Error handlers on dg_connection (#6036)."""
-    from utils.stt.safe_socket import SafeDeepgramSocket
+    from utils.stt.vad_gate import GatedDeepgramSocket
 
     mock_dg_conn = MagicMock()
     with patch(
@@ -879,7 +881,7 @@ async def test_process_audio_dg_registers_close_error_handlers():
             sample_rate=16000,
             channels=1,
         )
-    assert isinstance(result, SafeDeepgramSocket)
+    assert isinstance(result, GatedDeepgramSocket)
 
     # Verify .on() was called for Close and Error events
     on_calls = mock_dg_conn.on.call_args_list
@@ -888,7 +890,7 @@ async def test_process_audio_dg_registers_close_error_handlers():
     assert LiveTranscriptionEvents.Close in registered_events
     assert LiveTranscriptionEvents.Error in registered_events
 
-    # Invoke the close handler and verify it sets death_reason
+    # Invoke the close handler and verify it sets death_reason via delegation
     for call in on_calls:
         event, handler = call[0][0], call[0][1]
         if event == LiveTranscriptionEvents.Close:
@@ -901,7 +903,7 @@ async def test_process_audio_dg_registers_close_error_handlers():
 @pytest.mark.asyncio
 async def test_process_audio_dg_error_handler_sets_death_reason():
     """process_audio_dg Error handler feeds into set_close_reason (#6036)."""
-    from utils.stt.safe_socket import SafeDeepgramSocket
+    from utils.stt.vad_gate import GatedDeepgramSocket
 
     mock_dg_conn = MagicMock()
     with patch(
@@ -913,7 +915,7 @@ async def test_process_audio_dg_error_handler_sets_death_reason():
             sample_rate=16000,
             channels=1,
         )
-    assert isinstance(result, SafeDeepgramSocket)
+    assert isinstance(result, GatedDeepgramSocket)
 
     on_calls = mock_dg_conn.on.call_args_list
     LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
