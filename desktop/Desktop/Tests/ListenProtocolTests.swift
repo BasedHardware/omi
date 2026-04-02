@@ -248,6 +248,113 @@ final class ListenProtocolTests: XCTestCase {
         XCTAssertFalse(eventCalled, "object without type should not trigger event callback")
     }
 
+    // MARK: - Parser Boundary Tests
+
+    func testParserHandlesArrayOfInvalidSegments() throws {
+        // Valid JSON array but objects don't match BackendSegment schema
+        var segmentsCalled = false
+        var eventCalled = false
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in segmentsCalled = true },
+            onEvent: { _ in eventCalled = true },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        // Array of objects missing required fields (text, is_user, start, end)
+        service.parseBackendResponse("""
+        [{"foo":"bar","baz":123}]
+        """)
+
+        XCTAssertFalse(segmentsCalled, "array with non-decodable objects should not trigger segments")
+        XCTAssertFalse(eventCalled)
+    }
+
+    func testParserHandlesEventWithMissingNestedFields() throws {
+        // Event with type but missing expected nested fields (memory.id)
+        var receivedEvent: TranscriptionService.ListenEvent?
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { receivedEvent = $0 },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        // memory_created without memory object
+        service.parseBackendResponse("""
+        {"type":"memory_created"}
+        """)
+
+        XCTAssertEqual(receivedEvent?.type, "memory_created")
+        XCTAssertNil(receivedEvent?.raw["memory"], "missing memory field should be nil, not crash")
+    }
+
+    func testParserHandlesSegmentsDeletedWithMissingIds() throws {
+        var receivedEvent: TranscriptionService.ListenEvent?
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { receivedEvent = $0 },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        // segments_deleted without segment_ids
+        service.parseBackendResponse("""
+        {"type":"segments_deleted"}
+        """)
+
+        XCTAssertEqual(receivedEvent?.type, "segments_deleted")
+        XCTAssertNil(receivedEvent?.raw["segment_ids"])
+    }
+
+    func testParserHandlesJsonNumber() throws {
+        // Plain number is valid JSON but not array or object
+        var segmentsCalled = false
+        var eventCalled = false
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in segmentsCalled = true },
+            onEvent: { _ in eventCalled = true },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        service.parseBackendResponse("42")
+        service.parseBackendResponse("\"just a string\"")
+
+        XCTAssertFalse(segmentsCalled)
+        XCTAssertFalse(eventCalled)
+    }
+
+    func testParserHandlesUnknownEventType() throws {
+        var receivedEvent: TranscriptionService.ListenEvent?
+        let service = try TranscriptionService(language: "en")
+        service.start(
+            onSegments: { _ in },
+            onEvent: { receivedEvent = $0 },
+            onError: nil,
+            onConnected: nil,
+            onDisconnected: nil
+        )
+
+        // Unknown event type should still be dispatched
+        service.parseBackendResponse("""
+        {"type":"future_event_type","data":"something"}
+        """)
+
+        XCTAssertEqual(receivedEvent?.type, "future_event_type")
+        XCTAssertEqual(receivedEvent?.raw["data"] as? String, "something")
+    }
+
+    // MARK: - Multi-Segment Dispatch
+
     func testParserDispatchesMultipleSegments() throws {
         var receivedSegments: [TranscriptionService.BackendSegment] = []
         let service = try TranscriptionService(language: "en")
