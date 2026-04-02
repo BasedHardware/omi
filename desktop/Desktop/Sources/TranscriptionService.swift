@@ -371,7 +371,7 @@ class TranscriptionService {
             guard let self = self else { return }
             guard self.webSocketTask?.state == .running else {
                 log("TranscriptionService: WebSocket not running after handshake — triggering reconnect")
-                self.handleDisconnection()
+                self.cleanupAndReconnect()
                 return
             }
             self.isConnected = true
@@ -387,7 +387,7 @@ class TranscriptionService {
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             guard let self = self, !self.isConnected, self.shouldReconnect else { return }
             log("TranscriptionService: Connect timeout (10s) — forcing reconnect")
-            self.handleDisconnection()
+            self.cleanupAndReconnect()
         }
     }
 
@@ -445,6 +445,33 @@ class TranscriptionService {
         } else if reconnectAttempts >= maxReconnectAttempts {
             log("TranscriptionService: Max reconnect attempts reached")
             onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
+        }
+    }
+
+    /// Cleanup a failed/pending connection and schedule reconnect.
+    /// Unlike handleDisconnection(), this works even when isConnected is false (pre-handshake failures).
+    private func cleanupAndReconnect() {
+        webSocketTask?.cancel(with: .abnormalClosure, reason: nil)
+        webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
+
+        guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
+            if reconnectAttempts >= maxReconnectAttempts {
+                log("TranscriptionService: Max reconnect attempts reached (pre-connect)")
+                onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
+            }
+            return
+        }
+
+        reconnectAttempts += 1
+        let delay = min(pow(2.0, Double(reconnectAttempts)), 32.0)
+        log("TranscriptionService: Reconnecting in \(delay)s (attempt \(reconnectAttempts), pre-connect failure)")
+
+        reconnectTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, self.shouldReconnect else { return }
+            self.connect()
         }
     }
 
