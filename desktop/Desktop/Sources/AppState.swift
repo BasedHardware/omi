@@ -1596,6 +1596,11 @@ class AppState: ObservableObject {
     transcriptionService?.stop()
     transcriptionService = nil
 
+    // Clear currentSessionId BEFORE reconnecting — any segments arriving on the new WebSocket
+    // must not be persisted against the finished session. They'll be buffered in memory until
+    // the new session ID is set in the Task below.
+    currentSessionId = nil
+
     // Clear segments for the next conversation but keep recording active
     speakerSegments = []
     totalSegmentCount = 0
