@@ -365,15 +365,29 @@ class TranscriptionService {
         // Start receiving messages
         receiveMessage()
 
-        // Mark as connected after a brief delay to allow WebSocket handshake
+        // Mark as connected after a brief delay to allow WebSocket handshake.
+        // Also set a connect timeout — if the handshake hasn't completed in 10s, trigger reconnect.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self, self.webSocketTask?.state == .running else { return }
+            guard let self = self else { return }
+            guard self.webSocketTask?.state == .running else {
+                log("TranscriptionService: WebSocket not running after handshake — triggering reconnect")
+                self.handleDisconnection()
+                return
+            }
             self.isConnected = true
             self.reconnectAttempts = 0
             self.lastDataReceivedAt = Date()
             log("TranscriptionService: Connected to Python backend")
             self.startWatchdog()
             self.onConnected?()
+        }
+
+        // Connect timeout: if still not connected after 10s, force reconnect
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self = self, !self.isConnected, self.shouldReconnect else { return }
+            log("TranscriptionService: Connect timeout (10s) — forcing reconnect")
+            self.handleDisconnection()
         }
     }
 
