@@ -186,3 +186,199 @@ class TestAsyncVisionStreamPattern:
             if not chunk:
                 break
         await task
+
+
+class TestSyncCallbackErrorPaths:
+    """Test the synchronous callback error-handling patterns (end_nowait).
+
+    These mirror the try/finally and try/except patterns in:
+    - ask_stream (sync OpenAI Assistants path)
+    - process_chat_with_file_stream (_ensure_thread_and_assistant failure)
+    """
+
+    class SyncStreamingCallback:
+        """Mirrors the synchronous callback interface used by ask_stream."""
+
+        def __init__(self):
+            self.queue = asyncio.Queue()
+            self.ended = False
+
+        def put_data_nowait(self, text):
+            self.queue.put_nowait(f"data: {text}")
+
+        def end_nowait(self):
+            self.ended = True
+            self.queue.put_nowait(None)
+
+    @pytest.mark.asyncio
+    async def test_ask_stream_fill_question_failure_ends_callback(self):
+        """If _fill_question raises inside ask_stream, callback still gets end sentinel."""
+        callback = self.SyncStreamingCallback()
+
+        def _failing_ask_stream(callback):
+            """Mirrors ask_stream: _fill_question inside try/finally."""
+            output_list = []
+            try:
+                # _fill_question fails (e.g., thread deleted, network error)
+                raise ConnectionError("simulated _fill_question failure")
+            finally:
+                callback.end_nowait()
+            return ''.join(output_list)
+
+        with pytest.raises(ConnectionError, match="simulated _fill_question failure"):
+            _failing_ask_stream(callback)
+
+        assert callback.ended is True
+        chunk = callback.queue.get_nowait()
+        assert chunk is None  # End sentinel delivered
+
+    @pytest.mark.asyncio
+    async def test_ask_stream_mid_stream_failure_ends_callback(self):
+        """If streaming fails mid-way, try/finally still calls end_nowait."""
+        callback = self.SyncStreamingCallback()
+
+        def _failing_mid_stream(callback):
+            output_list = []
+            try:
+                callback.put_data_nowait("chunk1")
+                callback.put_data_nowait("chunk2")
+                raise RuntimeError("simulated stream.text_deltas error")
+            finally:
+                callback.end_nowait()
+            return ''.join(output_list)
+
+        with pytest.raises(RuntimeError, match="simulated stream.text_deltas error"):
+            _failing_mid_stream(callback)
+
+        assert callback.ended is True
+        received = []
+        while not callback.queue.empty():
+            item = callback.queue.get_nowait()
+            received.append(item)
+        assert received == ["data: chunk1", "data: chunk2", None]
+
+    @pytest.mark.asyncio
+    async def test_ensure_thread_failure_ends_callback_before_ask_stream(self):
+        """process_chat_with_file_stream: if _ensure_thread_and_assistant fails,
+        callback.end_nowait() is called before re-raise (ask_stream never runs)."""
+        callback = self.SyncStreamingCallback()
+
+        def _process_chat_pattern(callback):
+            """Mirrors process_chat_with_file_stream non-image path."""
+            try:
+                # _ensure_thread_and_assistant fails
+                raise Exception("Failed to create OpenAI thread: connection timeout")
+            except Exception:
+                callback.end_nowait()
+                raise
+
+        with pytest.raises(Exception, match="Failed to create OpenAI thread"):
+            _process_chat_pattern(callback)
+
+        assert callback.ended is True
+        chunk = callback.queue.get_nowait()
+        assert chunk is None
+
+
+class TestProducerConsumerCallbackData:
+    """Test the full producer/consumer pattern from _execute_file_chat_stream,
+    including callback_data population on success and error."""
+
+    @pytest.mark.asyncio
+    async def test_success_populates_callback_data(self):
+        """On success, callback_data gets answer, memories_found, ask_for_nps."""
+        callback = AsyncStreamingCallback()
+        callback_data = {}
+
+        async def _produce():
+            output = []
+            try:
+                for text in ["Hello", " from", " file"]:
+                    await asyncio.sleep(0.01)
+                    await callback.put_data(text)
+                    output.append(text)
+            finally:
+                await callback.end()
+            return ''.join(output)
+
+        task = asyncio.create_task(_produce())
+
+        received = []
+        while True:
+            chunk = await callback.queue.get()
+            if chunk:
+                received.append(chunk)
+            else:
+                break
+
+        answer = await task
+
+        # Mirrors graph.py callback_data population
+        callback_data['answer'] = answer
+        callback_data['memories_found'] = []
+        callback_data['ask_for_nps'] = True
+
+        assert callback_data['answer'] == "Hello from file"
+        assert callback_data['memories_found'] == []
+        assert callback_data['ask_for_nps'] is True
+        assert len(received) == 3
+
+    @pytest.mark.asyncio
+    async def test_error_populates_callback_data_error(self):
+        """On producer error, callback_data gets error string."""
+        callback = AsyncStreamingCallback()
+        callback_data = {}
+
+        async def _produce():
+            try:
+                await callback.put_data("partial")
+                raise ValueError("OpenAI API error")
+            finally:
+                await callback.end()
+
+        task = asyncio.create_task(_produce())
+
+        received = []
+        while True:
+            chunk = await asyncio.wait_for(callback.queue.get(), timeout=2.0)
+            if chunk:
+                received.append(chunk)
+            else:
+                break
+
+        # Mirrors graph.py error handling
+        try:
+            await task
+        except Exception as e:
+            callback_data['error'] = str(e)
+
+        assert callback_data['error'] == "OpenAI API error"
+        assert received == ["data: partial"]
+
+    @pytest.mark.asyncio
+    async def test_none_callback_data_no_crash(self):
+        """When callback_data is None, producer/consumer still works without error."""
+        callback = AsyncStreamingCallback()
+        callback_data = None  # Mirrors graph.py when callback_data is None
+
+        async def _produce():
+            try:
+                await callback.put_data("data")
+            finally:
+                await callback.end()
+            return "data"
+
+        task = asyncio.create_task(_produce())
+
+        while True:
+            chunk = await callback.queue.get()
+            if not chunk:
+                break
+
+        answer = await task
+
+        # Mirrors graph.py: only write to callback_data if not None
+        if callback_data is not None:
+            callback_data['answer'] = answer
+
+        assert answer == "data"
