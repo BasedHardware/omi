@@ -141,7 +141,7 @@ async def test_context_refresh_on_frame():
     # Mock analyze_frame to capture what context was passed
     captured_contexts = []
 
-    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, send_tool_request, receive_tool_result):
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
         captured_contexts.append(session_context)
         yield pb2.ServerEvent(
             analysis_outcome=pb2.AnalysisOutcome(
