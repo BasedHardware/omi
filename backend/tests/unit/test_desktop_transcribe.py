@@ -666,6 +666,22 @@ class TestVoiceMessageTranscribeEndpoint:
         finally:
             _cleanup_chat_client(saved)
 
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_runtime_error_returns_500(self, mock_transcribe):
+        """RuntimeError from transcribe_pcm_bytes should return 500."""
+        mock_transcribe.side_effect = RuntimeError('Deepgram connection failed')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 500
+            assert 'Transcription failed' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
 
 # ---------------------------------------------------------------------------
 # WebSocket endpoint tests: /v2/voice-message/transcribe-stream
