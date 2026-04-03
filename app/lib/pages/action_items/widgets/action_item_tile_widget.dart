@@ -94,10 +94,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ActionItemFormSheet(
-        actionItem: widget.actionItem,
-        onRefresh: widget.onRefresh,
-      ),
+      builder: (context) => ActionItemFormSheet(actionItem: widget.actionItem, onRefresh: widget.onRefresh),
     );
   }
 
@@ -148,30 +145,19 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: chipColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: chipColor, borderRadius: BorderRadius.circular(8)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          FaIcon(
-            FontAwesomeIcons.solidCalendar,
-            size: 11,
-            color: textColor,
-          ),
+          FaIcon(FontAwesomeIcons.solidCalendar, size: 11, color: textColor),
           const SizedBox(width: 6),
           Padding(
             padding: const EdgeInsets.only(top: 1),
             child: Text(
               dueDateText,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -185,10 +171,18 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
   String _formatDueDate(BuildContext context, DateTime date, {bool showFullDate = false}) {
     final months = [
-      context.l10n.monthJan, context.l10n.monthFeb, context.l10n.monthMar,
-      context.l10n.monthApr, context.l10n.monthMay, context.l10n.monthJun,
-      context.l10n.monthJul, context.l10n.monthAug, context.l10n.monthSep,
-      context.l10n.monthOct, context.l10n.monthNov, context.l10n.monthDec
+      context.l10n.monthJan,
+      context.l10n.monthFeb,
+      context.l10n.monthMar,
+      context.l10n.monthApr,
+      context.l10n.monthMay,
+      context.l10n.monthJun,
+      context.l10n.monthJul,
+      context.l10n.monthAug,
+      context.l10n.monthSep,
+      context.l10n.monthOct,
+      context.l10n.monthNov,
+      context.l10n.monthDec,
     ];
 
     if (showFullDate) {
@@ -225,9 +219,13 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       return context.l10n.yesterday;
     } else if (difference > 1 && difference <= 7) {
       final weekdays = [
-        context.l10n.weekdayMon, context.l10n.weekdayTue, context.l10n.weekdayWed,
-        context.l10n.weekdayThu, context.l10n.weekdayFri, context.l10n.weekdaySat,
-        context.l10n.weekdaySun
+        context.l10n.weekdayMon,
+        context.l10n.weekdayTue,
+        context.l10n.weekdayWed,
+        context.l10n.weekdayThu,
+        context.l10n.weekdayFri,
+        context.l10n.weekdaySat,
+        context.l10n.weekdaySun,
       ];
       return weekdays[date.weekday - 1];
     } else {
@@ -258,9 +256,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       child: Container(
         width: 32,
         height: 32,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
         child: Stack(
           alignment: Alignment.center,
           children: [
@@ -268,12 +264,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             displayApp.logoPath != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(6),
-                    child: Image.asset(
-                      displayApp.logoPath!,
-                      width: 24,
-                      height: 24,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.asset(displayApp.logoPath!, width: 24, height: 24, fit: BoxFit.contain),
                   )
                 : Container(
                     width: 24,
@@ -282,11 +273,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       borderRadius: BorderRadius.circular(6),
                       color: displayApp.iconColor.withOpacity(0.2),
                     ),
-                    child: Icon(
-                      displayApp.icon,
-                      color: displayApp.iconColor,
-                      size: 16,
-                    ),
+                    child: Icon(displayApp.icon, color: displayApp.iconColor, size: 16),
                   ),
             // Status indicator at bottom right
             Positioned(
@@ -298,16 +285,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                 decoration: BoxDecoration(
                   color: isExported ? Colors.green : Colors.blue,
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF1F1F25),
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: const Color(0xFF1F1F25), width: 1.5),
                 ),
-                child: Icon(
-                  isExported ? Icons.check : Icons.add,
-                  color: Colors.white,
-                  size: 8,
-                ),
+                child: Icon(isExported ? Icons.check : Icons.add, color: Colors.white, size: 8),
               ),
             ),
           ],
@@ -445,12 +425,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       // If successful, update the action item with export metadata
       if (success) {
         final exportTime = DateTime.now();
-        await updateActionItem(
-          widget.actionItem.id,
-          exported: true,
-          exportDate: exportTime,
-          exportPlatform: 'todoist',
-        );
+        await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'todoist');
 
         // Track action item export
         MixpanelManager().actionItemExported(
@@ -562,12 +537,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       // If successful, update the action item with export metadata
       if (success) {
         final exportTime = DateTime.now();
-        await updateActionItem(
-          widget.actionItem.id,
-          exported: true,
-          exportDate: exportTime,
-          exportPlatform: 'asana',
-        );
+        await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'asana');
 
         // Track action item export
         MixpanelManager().actionItemExported(
@@ -668,7 +638,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             children: [
               Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              Text(success ? context.l10n.addedToService('Google Tasks') : context.l10n.failedToAddToService('Google Tasks')),
+              Text(
+                success
+                    ? context.l10n.addedToService('Google Tasks')
+                    : context.l10n.failedToAddToService('Google Tasks'),
+              ),
             ],
           ),
           backgroundColor: success ? Colors.green : Colors.red,
@@ -776,12 +750,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       // If successful, update the action item with export metadata
       if (success) {
         final exportTime = DateTime.now();
-        await updateActionItem(
-          widget.actionItem.id,
-          exported: true,
-          exportDate: exportTime,
-          exportPlatform: 'clickup',
-        );
+        await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'clickup');
 
         // Track action item export
         MixpanelManager().actionItemExported(
@@ -892,7 +861,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             children: [
               Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              Text(success ? context.l10n.addedToService('Apple Reminders') : context.l10n.failedToAddToService('Reminders')),
+              Text(
+                success
+                    ? context.l10n.addedToService('Apple Reminders')
+                    : context.l10n.failedToAddToService('Reminders'),
+              ),
             ],
           ),
           backgroundColor: success ? Colors.green : Colors.red,
@@ -930,10 +903,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: Colors.transparent,
-          width: 0,
-        ),
+        side: BorderSide(color: Colors.transparent, width: 0),
       ),
       clipBehavior: Clip.hardEdge,
       child: InkWell(
@@ -962,13 +932,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                           ),
                           color: widget.isSelected ? Colors.deepPurpleAccent : Colors.transparent,
                         ),
-                        child: widget.isSelected
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : null,
+                        child: widget.isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
                       ),
                     )
                   // Completion checkbox when not in selection mode
@@ -993,11 +957,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                 : Colors.transparent,
                           ),
                           child: (widget.actionItem.completed || _isAnimating)
-                              ? const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 16,
-                                )
+                              ? const Icon(Icons.check, color: Colors.white, size: 16)
                               : null,
                         ),
                       ),
@@ -1033,10 +993,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                             ),
                           ],
                         ),
-                        if (widget.actionItem.dueAt != null) ...[
-                          const SizedBox(height: 6),
-                          _buildDueDateChip(),
-                        ],
+                        if (widget.actionItem.dueAt != null) ...[const SizedBox(height: 6), _buildDueDateChip()],
                       ],
                     ),
                   ),
@@ -1063,11 +1020,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                         ),
                         child: Text(
                           context.l10n.upgradeToUnlimited,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),

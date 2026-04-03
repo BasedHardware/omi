@@ -448,7 +448,7 @@
     "exportConfiguration": "Εξαγωγή διαμόρφωσης",
     "bringYourOwn": "Φέρτε το δικό σας",
     "payYourSttProvider": "Χρησιμοποιήστε ελεύθερα το omi. Πληρώνετε μόνο τον πάροχο STT σας απευθείας.",
-    "freeMinutesMonth": "4.800 δωρεάν λεπτά/μήνα συμπεριλαμβάνονται. Απεριόριστο με ",
+    "freeMinutesMonth": "1.200 δωρεάν λεπτά/μήνα συμπεριλαμβάνονται. Απεριόριστο με ",
     "omiUnlimited": "Omi Απεριόριστο",
     "hostRequired": "Απαιτείται διακομιστής",
     "validPortRequired": "Απαιτείται έγκυρη θύρα",
@@ -573,7 +573,7 @@
     "tryAgain": "Δοκιμάστε Ξανά",
     "connectOmiOmiGlass": "Σύνδεση Omi / OmiGlass",
     "continueWithoutDevice": "Συνέχεια Χωρίς Συσκευή",
-    "permissionsRequired": "Απαιτούνται Άδειες",
+    "permissionsRequired": "Απαιτούνται δικαιώματα",
     "permissionsRequiredDesc": "Αυτή η εφαρμογή χρειάζεται άδειες Bluetooth και Τοποθεσίας για να λειτουργήσει σωστά. Παρακαλώ ενεργοποιήστε τις στις ρυθμίσεις.",
     "openSettings": "Άνοιγμα Ρυθμίσεων",
     "wantDifferentName": "Θέλετε να αποκαλείστε διαφορετικά;",
@@ -993,7 +993,7 @@
     "loadingMemories": "Φόρτωση αναμνήσεων...",
     "allMemories": "Όλες οι αναμνήσεις",
     "aboutYou": "Σχετικά με εσάς",
-    "manual": "Χειροκίνητο",
+    "manual": "Χειροκίνητη",
     "loadingYourMemories": "Φόρτωση των αναμνήσεών σας...",
     "createYourFirstMemory": "Δημιουργήστε την πρώτη σας ανάμνηση για να ξεκινήσετε",
     "tryAdjustingFilter": "Δοκιμάστε να προσαρμόσετε την αναζήτηση ή το φίλτρο σας",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} και είναι {triggerDescription}.",
     "isTriggeredBy": "Είναι {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων.",
-    "basicPlanDescription": "4.800 premium λεπτά + απεριόριστα στη συσκευή",
+    "basicPlanDescription": "1.200 premium λεπτά + απεριόριστα στη συσκευή",
     "minutes": "λεπτά",
     "omiHas": "Το Omi έχει:",
     "premiumMinutesUsed": "Χρησιμοποιήθηκαν τα premium λεπτά.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Η συσκευή μπορεί να ζεσταθεί κατά την παρατεταμένη χρήση.",
     "speedAccuracyLower": "Η ταχύτητα και η ακρίβεια μπορεί να είναι χαμηλότερες από τα μοντέλα Cloud.",
     "cloudProvider": "Πάροχος Cloud",
-    "premiumMinutesMonth": "4.800 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ",
+    "premiumMinutesMonth": "1.200 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ",
     "viewUsage": "Προβολή χρήσης",
     "audioProcessedLocally": "Ο ήχος επεξεργάζεται τοπικά. Λειτουργεί εκτός σύνδεσης, πιο ιδιωτικό, αλλά καταναλώνει περισσότερη μπαταρία.",
     "languageLabel": "Γλώσσα",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Δεν Βρέθηκαν Κριτικές",
     "onDeviceIntensive": "Η μεταγραφή στη συσκευή είναι υπολογιστικά απαιτητική.",
     "onDeviceSlower": "Η μεταγραφή στη συσκευή μπορεί να είναι πιο αργή σε αυτή τη συσκευή.",
-    "premiumMinutesInfo": "4.800 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.",
+    "premiumMinutesInfo": "1.200 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.",
     "redownload": "Επαναλήψη",
     "reply": "Απάντηση",
     "replySentSuccessfully": "Η απάντηση στάλθηκε επιτυχώς",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Λήψη από τη συσκευή",
     "reconnectingToInternet": "Επανασύνδεση στο διαδίκτυο...",
     "uploadingToCloud": "Μεταφόρτωση {current} από {total}",
+    "processingOnServer": "Επεξεργασία στον διακομιστή...",
+    "processingOnServerProgress": "Επεξεργασία... {current}/{total} τμήματα",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Επεξεργασμένο",
     "corruptedStatus": "Κατεστραμμένο",
     "nPending": "{count} σε αναμονή",
@@ -2749,5 +2761,152 @@
     "notYetSynced": "Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας",
     "clearAll": "Εκκαθάριση όλων",
     "phoneKeypad": "Πληκτρολόγιο",
-    "phoneHideKeypad": "Απόκρυψη πληκτρολογίου"
+    "phoneHideKeypad": "Απόκρυψη πληκτρολογίου",
+    "transcriptionPaused": "Εγγραφή, επανασύνδεση",
+    "transcriptionPausedReconnecting": "Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή...",
+    "fairUsePolicy": "Δίκαιη χρήση",
+    "fairUseLoadError": "Δεν ήταν δυνατή η φόρτωση της κατάστασης δίκαιης χρήσης. Παρακαλώ δοκιμάστε ξανά.",
+    "fairUseStatusNormal": "Η χρήση σας είναι εντός κανονικών ορίων.",
+    "fairUseStageNormal": "Κανονική",
+    "fairUseStageWarning": "Προειδοποίηση",
+    "fairUseStageThrottle": "Περιορισμένη",
+    "fairUseStageRestrict": "Αποκλεισμένη",
+    "fairUseSpeechUsage": "Χρήση ομιλίας",
+    "fairUseToday": "Σήμερα",
+    "fairUse3Day": "3ήμερο κυλιόμενο",
+    "fairUseWeekly": "Εβδομαδιαίο κυλιόμενο",
+    "fairUseAboutTitle": "Σχετικά με τη δίκαιη χρήση",
+    "fairUseAboutBody": "Το Omi είναι σχεδιασμένο για προσωπικές συνομιλίες, συναντήσεις και ζωντανές αλληλεπιδράσεις. Η χρήση μετράται βάσει του πραγματικού χρόνου ομιλίας που ανιχνεύεται, όχι του χρόνου σύνδεσης. Εάν η χρήση υπερβαίνει σημαντικά τα κανονικά πρότυπα για μη προσωπικό περιεχόμενο, ενδέχεται να εφαρμοστούν προσαρμογές.",
+    "fairUseCaseRefCopied": "{caseRef} αντιγράφηκε",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Δίκαιη Χρήση: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Βελτίωση σύνδεσης",
+    "improveConnectionContent": "Βελτιώσαμε τον τρόπο που το Omi παραμένει συνδεδεμένο με τη συσκευή σας. Για να το ενεργοποιήσετε, μεταβείτε στη σελίδα Πληροφορίες συσκευής, πατήστε \"Αποσύνδεση συσκευής\" και συνδέστε ξανά τη συσκευή σας.",
+    "improveConnectionAction": "Κατάλαβα",
+    "clockSkewWarning": "Το ρολόι της συσκευής σας αποκλίνει κατά ~{minutes} λεπτά. Ελέγξτε τις ρυθμίσεις ημερομηνίας και ώρας.",
+    "omisStorage": "Αποθήκευση Omi",
+    "phoneStorage": "Αποθήκευση τηλεφώνου",
+    "cloudStorage": "Αποθήκευση στο cloud",
+    "howSyncingWorks": "Πώς λειτουργεί ο συγχρονισμός",
+    "noSyncedRecordings": "Δεν υπάρχουν συγχρονισμένες εγγραφές ακόμα",
+    "recordingsSyncAutomatically": "Οι εγγραφές συγχρονίζονται αυτόματα — δεν απαιτείται ενέργεια.",
+    "filesDownloadedUploadedNextTime": "Τα ήδη ληφθέντα αρχεία θα μεταφορτωθούν την επόμενη φορά.",
+    "nConversationsCreated": "{count, plural, =1{1 συνομιλία δημιουργήθηκε} other{{count} συνομιλίες δημιουργήθηκαν}}",
+    "tapToView": "Πατήστε για προβολή",
+    "syncFailed": "Ο συγχρονισμός απέτυχε",
+    "keepSyncing": "Συνέχεια συγχρονισμού",
+    "cancelSyncQuestion": "Ακύρωση συγχρονισμού;",
+    "omisStorageDesc": "Όταν το Omi σας δεν είναι συνδεδεμένο στο τηλέφωνό σας, αποθηκεύει ήχο τοπικά στην ενσωματωμένη μνήμη του. Δεν χάνετε ποτέ μια εγγραφή.",
+    "phoneStorageDesc": "Όταν το Omi επανασυνδεθεί, οι εγγραφές μεταφέρονται αυτόματα στο τηλέφωνό σας πριν τη μεταφόρτωση.",
+    "cloudStorageDesc": "Μετά τη μεταφόρτωση, οι εγγραφές σας επεξεργάζονται και μεταγράφονται. Οι συνομιλίες θα είναι διαθέσιμες σε ένα λεπτό.",
+    "storageSection": "ΑΠΟΘΗΚΕΥΣΗ",
+    "tipKeepPhoneNearby": "Κρατήστε το τηλέφωνό σας κοντά για ταχύτερο συγχρονισμό",
+    "tipStableInternet": "Σταθερό διαδίκτυο επιταχύνει τις μεταφορτώσεις στο cloud",
+    "tipAutoSync": "Οι εγγραφές συγχρονίζονται αυτόματα",
+    "permissions": "Δικαιώματα",
+    "permissionEnabled": "Ενεργοποιημένο",
+    "permissionEnable": "Ενεργοποίηση",
+    "permissionsPageDescription": "Αυτές οι άδειες είναι βασικές για τη λειτουργία του Omi. Ενεργοποιούν βασικές λειτουργίες όπως ειδοποιήσεις, εμπειρίες βάσει τοποθεσίας και καταγραφή ήχου.",
+    "permissionsRequiredDescription": "Το Omi χρειάζεται μερικά δικαιώματα για να λειτουργήσει σωστά. Παρακαλώ παραχωρήστε τα για να συνεχίσετε.",
+    "permissionsSetupTitle": "Αποκτήστε την καλύτερη εμπειρία",
+    "permissionsSetupDescription": "Ενεργοποιήστε μερικές άδειες για να μπορεί το Omi να κάνει τα μαγικά του.",
+    "permissionsChangeAnytime": "Μπορείτε να τα αλλάξετε ανά πάσα στιγμή στις Ρυθμίσεις > Άδειες",
+    "location": "Τοποθεσία",
+    "microphone": "Μικρόφωνο",
+    "cancelBillingPeriodInfo": "Το πλάνο σας θα παραμείνει ενεργό μέχρι τις {date}. Μετά, θα μεταφερθείτε στη δωρεάν έκδοση με περιορισμένες λειτουργίες.",
+    "cancelConsequenceBattery": "7x περισσότερη κατανάλωση μπαταρίας (επεξεργασία στη συσκευή)",
+    "cancelConsequenceDelay": "Καθυστέρηση επεξεργασίας 5-7 δευτερόλεπτα (μοντέλα στη συσκευή)",
+    "cancelConsequenceNoAccess": "Δεν θα έχετε πλέον απεριόριστη πρόσβαση στο τέλος της περιόδου τιμολόγησης.",
+    "cancelConsequencePhoneCalls": "Χωρίς μεταγραφή τηλεφωνικών κλήσεων σε πραγματικό χρόνο",
+    "cancelConsequenceQuality": "30% χαμηλότερη ποιότητα μεταγραφής (μοντέλα στη συσκευή)",
+    "cancelConsequenceSpeakers": "Δεν μπορεί να αναγνωρίσει ομιλητές.",
+    "cancelConsequencesSubtitle": "Συνιστούμε ανεπιφύλακτα να εξερευνήσετε τις άλλες επιλογές σας αντί να ακυρώσετε.",
+    "cancelReasonAudioQuality": "Ποιότητα ήχου/μεταγραφής",
+    "cancelReasonBatteryDrain": "Ανησυχίες για εξάντληση μπαταρίας",
+    "cancelReasonDetailHint": "Εκτιμούμε κάθε σχόλιο...",
+    "cancelReasonFoundAlternative": "Βρήκα εναλλακτική",
+    "cancelReasonMissingFeatures": "Λειτουργίες που λείπουν",
+    "cancelReasonNotUsing": "Δεν το χρησιμοποιώ αρκετά",
+    "cancelReasonOther": "Άλλο",
+    "cancelReasonSubtitle": "Μπορείτε να μας πείτε γιατί φεύγετε;",
+    "cancelReasonTooExpensive": "Πολύ ακριβό",
+    "confirmAndCancel": "Επιβεβαίωση και ακύρωση",
+    "feedbackSubtitleAudioQuality": "Θα θέλαμε να καταλάβουμε τι πήγε στραβά.",
+    "feedbackSubtitleBatteryDrain": "Αυτό βοηθά την ομάδα υλικού μας να βελτιωθεί.",
+    "feedbackSubtitleFoundAlternative": "Θα θέλαμε να μάθουμε τι τράβηξε το μάτι σας.",
+    "feedbackSubtitleMissingFeatures": "Πάντα χτίζουμε — αυτό μας βοηθά να ιεραρχήσουμε.",
+    "feedbackSubtitleNotUsing": "Θέλουμε να κάνουμε το Omi πιο χρήσιμο για εσάς.",
+    "feedbackSubtitleTooExpensive": "Τα σχόλιά σας μας βοηθούν να βρούμε τη σωστή ισορροπία.",
+    "feedbackTitleAudioQuality": "Τι προβλήματα αντιμετωπίσατε;",
+    "feedbackTitleBatteryDrain": "Πείτε μας για τα προβλήματα μπαταρίας",
+    "feedbackTitleFoundAlternative": "Σε τι αλλάζετε;",
+    "feedbackTitleMissingFeatures": "Ποιες λειτουργίες σας λείπουν;",
+    "feedbackTitleNotUsing": "Τι θα σας έκανε να χρησιμοποιείτε το Omi περισσότερο;",
+    "feedbackTitleTooExpensive": "Ποια τιμή θα σας ταίριαζε;",
+    "ifYouCancel": "Αν ακυρώσετε:",
+    "justAMoment": "Μια στιγμή, παρακαλώ",
+    "tellUsMore": "Πείτε μας περισσότερα (προαιρετικό)",
+    "whyAreYouCanceling": "Γιατί ακυρώνετε;",
+    "deviceDiagnostics": "Διαγνωστικά συσκευής",
+    "signalStrength": "Ισχύς σήματος",
+    "connectionUptime": "Χρόνος λειτουργίας",
+    "reconnections": "Επανασυνδέσεις",
+    "disconnectHistory": "Ιστορικό αποσυνδέσεων",
+    "noDisconnectsRecorded": "Δεν καταγράφηκαν αποσυνδέσεις",
+    "diagnostics": "Διαγνωστικά",
+    "waitingForData": "Αναμονή για δεδομένα...",
+    "liveRssiOverTime": "RSSI σε πραγματικό χρόνο",
+    "noRssiDataYet": "Δεν υπάρχουν δεδομένα RSSI ακόμη",
+    "collectingData": "Συλλογή δεδομένων...",
+    "cleanDisconnect": "Καθαρή αποσύνδεση",
+    "connectionTimeout": "Λήξη χρόνου σύνδεσης",
+    "remoteDeviceTerminated": "Η απομακρυσμένη συσκευή τερμάτισε",
+    "pairedToAnotherPhone": "Συζευγμένο με άλλο τηλέφωνο",
+    "linkKeyMismatch": "Αναντιστοιχία κλειδιού σύνδεσης",
+    "connectionFailed": "Αποτυχία σύνδεσης",
+    "appClosed": "Η εφαρμογή έκλεισε",
+    "manualDisconnect": "Χειροκίνητη αποσύνδεση",
+    "lastNEvents": "Τελευταία {count} συμβάντα",
+    "signal": "Σήμα",
+    "battery": "Μπαταρία",
+    "excellent": "Εξαιρετικό",
+    "good": "Καλό",
+    "fair": "Μέτριο",
+    "weak": "Αδύναμο",
+    "gattError": "Σφάλμα GATT ({code})"
 }

@@ -448,7 +448,7 @@
     "exportConfiguration": "Ekspordi konfiguratsioon",
     "bringYourOwn": "Tooge oma oma",
     "payYourSttProvider": "Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.",
-    "freeMinutesMonth": "4800 tasuta minutit kuus kaasa arvatud. Piiramatu koos ",
+    "freeMinutesMonth": "1200 tasuta minutit kuus kaasa arvatud. Piiramatu koos ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host on nõutud",
     "validPortRequired": "Kehtiv port on nõutud",
@@ -573,7 +573,7 @@
     "tryAgain": "Proovi uuesti",
     "connectOmiOmiGlass": "Ühenda Omi / OmiGlass",
     "continueWithoutDevice": "Jätka ilma seadmeta",
-    "permissionsRequired": "Load on nõutud",
+    "permissionsRequired": "Õigused nõutavad",
     "permissionsRequiredDesc": "See rakendus vajab nõuetekohaseks toimimiseks Bluetoothi ja asukoha lube. Palun lubage need seadetes.",
     "openSettings": "Ava seaded",
     "wantDifferentName": "Soovite kasutada muud nime?",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
     "isTriggeredBy": "On {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Konkreetset andmetele juurdepääsu pole seadistatud.",
-    "basicPlanDescription": "4800 premium minutit + piiramatu seadmes",
+    "basicPlanDescription": "1200 premium minutit + piiramatu seadmes",
     "minutes": "minutit",
     "omiHas": "Omil on:",
     "premiumMinutesUsed": "Premium minutid kasutatud.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Seade võib pikaajalisel kasutamisel soojeneda.",
     "speedAccuracyLower": "Kiirus ja täpsus võivad olla pilvemudeli omadest madalamad.",
     "cloudProvider": "Pilveteenuse pakkuja",
-    "premiumMinutesMonth": "4800 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ",
+    "premiumMinutesMonth": "1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ",
     "viewUsage": "Vaata kasutust",
     "audioProcessedLocally": "Heli töödeldakse kohapeal. Töötab võrguühenduseta, privaatsem, kuid kasutab rohkem akut.",
     "languageLabel": "Keel",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Arvustusi ei leitud",
     "onDeviceIntensive": "Seadmesisene transkriptsioon on arvutuslikult intensiivne.",
     "onDeviceSlower": "Seadmesisene transkriptsioon võib sellel seadmel olla aeglasem.",
-    "premiumMinutesInfo": "4800 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.",
+    "premiumMinutesInfo": "1200 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.",
     "redownload": "Laadi uuesti alla",
     "reply": "Vasta",
     "replySentSuccessfully": "Vastus saadeti edukalt",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Seadmest allalaadimine",
     "reconnectingToInternet": "Internetiga uuesti ühendamine...",
     "uploadingToCloud": "{current}/{total} üleslaadimine",
+    "processingOnServer": "Töötlemine serveris...",
+    "processingOnServerProgress": "Töötlemine... {current}/{total} segmenti",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Töödeldud",
     "corruptedStatus": "Rikutud",
     "nPending": "{count} ootel",
@@ -2749,5 +2761,152 @@
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
     "clearAll": "Tühjenda kõik",
     "phoneKeypad": "Klahvistik",
-    "phoneHideKeypad": "Peida klahvistik"
+    "phoneHideKeypad": "Peida klahvistik",
+    "transcriptionPaused": "Salvestamine, taasühendamine",
+    "transcriptionPausedReconnecting": "Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...",
+    "fairUsePolicy": "Õiglane kasutus",
+    "fairUseLoadError": "Õiglase kasutuse olekut ei õnnestunud laadida. Palun proovige uuesti.",
+    "fairUseStatusNormal": "Teie kasutus on tavapiirides.",
+    "fairUseStageNormal": "Tavaline",
+    "fairUseStageWarning": "Hoiatus",
+    "fairUseStageThrottle": "Piiratud",
+    "fairUseStageRestrict": "Keelatud",
+    "fairUseSpeechUsage": "Kõne kasutus",
+    "fairUseToday": "Täna",
+    "fairUse3Day": "3-päevane periood",
+    "fairUseWeekly": "Nädalane periood",
+    "fairUseAboutTitle": "Õiglase kasutuse kohta",
+    "fairUseAboutBody": "Omi on loodud isiklikeks vestlusteks, koosolekuteks ja reaalajas suhtluseks. Kasutust mõõdetakse tuvastatud tegeliku kõneaja, mitte ühenduse aja järgi. Kui kasutus ületab oluliselt tavapäraseid mustreid mitteisikliku sisu puhul, võidakse rakendada kohandusi.",
+    "fairUseCaseRefCopied": "{caseRef} kopeeritud",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Õiglane kasutus: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Ühenduse parandamine",
+    "improveConnectionContent": "Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.",
+    "improveConnectionAction": "Selge",
+    "clockSkewWarning": "Teie seadme kell erineb ~{minutes} min. Kontrollige kuupäeva ja kellaaja seadeid.",
+    "omisStorage": "Omi salvestusruum",
+    "phoneStorage": "Telefoni salvestusruum",
+    "cloudStorage": "Pilvsalvestus",
+    "howSyncingWorks": "Kuidas sünkroonimine töötab",
+    "noSyncedRecordings": "Sünkroonitud salvestusi veel pole",
+    "recordingsSyncAutomatically": "Salvestised sünkroonitakse automaatselt — tegevust pole vaja.",
+    "filesDownloadedUploadedNextTime": "Juba allalaaditud failid laaditakse üles järgmisel korral.",
+    "nConversationsCreated": "{count, plural, =1{1 vestlus loodud} other{{count} vestlust loodud}}",
+    "tapToView": "Puudutage vaatamiseks",
+    "syncFailed": "Sünkroonimine ebaõnnestus",
+    "keepSyncing": "Jätka sünkroonimist",
+    "cancelSyncQuestion": "Tühista sünkroonimine?",
+    "omisStorageDesc": "Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.",
+    "phoneStorageDesc": "Kui Omi uuesti ühendub, kantakse salvestised automaatselt teie telefoni enne üleslaadimist.",
+    "cloudStorageDesc": "Pärast üleslaadimist töödeldakse ja transkribeeritakse teie salvestised. Vestlused on saadaval minuti jooksul.",
+    "storageSection": "SALVESTUSRUUM",
+    "tipKeepPhoneNearby": "Hoidke telefon lähedal kiiremaks sünkroonimiseks",
+    "tipStableInternet": "Stabiilne internet kiirendab pilveüleslaadimist",
+    "tipAutoSync": "Salvestised sünkroonitakse automaatselt",
+    "permissions": "Õigused",
+    "permissionEnabled": "Lubatud",
+    "permissionEnable": "Luba",
+    "permissionsPageDescription": "Need load on Omi toimimiseks olulised. Need võimaldavad põhifunktsioone nagu teavitused, asukohapõhised kogemused ja helisalvestus.",
+    "permissionsRequiredDescription": "Omi vajab mõningaid õigusi, et korralikult töötada. Palun anna need jätkamiseks.",
+    "permissionsSetupTitle": "Saage parim kogemus",
+    "permissionsSetupDescription": "Lubage mõned õigused, et Omi saaks oma võlu avaldada.",
+    "permissionsChangeAnytime": "Saate neid igal ajal muuta jaotises Seaded > Õigused",
+    "location": "Asukoht",
+    "microphone": "Mikrofon",
+    "cancelBillingPeriodInfo": "Teie plaan jääb aktiivseks kuni {date}. Pärast seda viiakse teid üle tasuta versioonile piiratud funktsioonidega.",
+    "cancelConsequenceBattery": "7x suurem akukasutus (seadmes töötlemine)",
+    "cancelConsequenceDelay": "5-7 sekundit töötlemisviivitust (seadme mudelid)",
+    "cancelConsequenceNoAccess": "Arveldusperioodi lõpus ei ole teil enam piiramatut juurdepääsu.",
+    "cancelConsequencePhoneCalls": "Puudub reaalajas telefonikõnede transkriptsioon",
+    "cancelConsequenceQuality": "30% madalam transkriptsiooni kvaliteet (seadme mudelid)",
+    "cancelConsequenceSpeakers": "Ei suuda kõnelejaid tuvastada.",
+    "cancelConsequencesSubtitle": "Soovitame tungivalt uurida oma teisi võimalusi tühistamise asemel.",
+    "cancelReasonAudioQuality": "Heli/transkriptsiooni kvaliteet",
+    "cancelReasonBatteryDrain": "Aku tühjenemise mured",
+    "cancelReasonDetailHint": "Hindame igasugust tagasisidet...",
+    "cancelReasonFoundAlternative": "Leidsin alternatiivi",
+    "cancelReasonMissingFeatures": "Puuduvad funktsioonid",
+    "cancelReasonNotUsing": "Ei kasuta piisavalt",
+    "cancelReasonOther": "Muu",
+    "cancelReasonSubtitle": "Kas saate meile öelda, miks lahkute?",
+    "cancelReasonTooExpensive": "Liiga kallis",
+    "confirmAndCancel": "Kinnita ja tühista",
+    "feedbackSubtitleAudioQuality": "Tahaksime mõista, mis läks valesti.",
+    "feedbackSubtitleBatteryDrain": "See aitab meie riistvarameeskonnal paraneda.",
+    "feedbackSubtitleFoundAlternative": "Tahaksime teada, mis teie tähelepanu köitis.",
+    "feedbackSubtitleMissingFeatures": "Ehitame alati — see aitab meil prioriteete seada.",
+    "feedbackSubtitleNotUsing": "Tahame muuta Omi teile kasulikumaks.",
+    "feedbackSubtitleTooExpensive": "Teie tagasiside aitab meil leida õige tasakaalu.",
+    "feedbackTitleAudioQuality": "Milliseid probleeme kogesite?",
+    "feedbackTitleBatteryDrain": "Rääkige meile akuprobleemidest",
+    "feedbackTitleFoundAlternative": "Millele lähete üle?",
+    "feedbackTitleMissingFeatures": "Milliseid funktsioone teil puudu on?",
+    "feedbackTitleNotUsing": "Mis paneks teid Omi rohkem kasutama?",
+    "feedbackTitleTooExpensive": "Milline hind sobiks teile?",
+    "ifYouCancel": "Kui tühistate:",
+    "justAMoment": "Üks hetk, palun",
+    "tellUsMore": "Rääkige meile rohkem (valikuline)",
+    "whyAreYouCanceling": "Miks tühistate?",
+    "deviceDiagnostics": "Seadme diagnostika",
+    "signalStrength": "Signaali tugevus",
+    "connectionUptime": "Tööaeg",
+    "reconnections": "Taasühendused",
+    "disconnectHistory": "Katkestuste ajalugu",
+    "noDisconnectsRecorded": "Katkestusi pole registreeritud",
+    "diagnostics": "Diagnostika",
+    "waitingForData": "Andmete ootel...",
+    "liveRssiOverTime": "Reaalajas RSSI ajas",
+    "noRssiDataYet": "RSSI andmeid veel pole",
+    "collectingData": "Andmete kogumine...",
+    "cleanDisconnect": "Puhas katkestus",
+    "connectionTimeout": "Ühenduse ajalõpp",
+    "remoteDeviceTerminated": "Kaugseade katkestas ühenduse",
+    "pairedToAnotherPhone": "Seotud teise telefoniga",
+    "linkKeyMismatch": "Lingivõtme mittevastavus",
+    "connectionFailed": "Ühendamine ebaõnnestus",
+    "appClosed": "Rakendus suletud",
+    "manualDisconnect": "Käsitsi katkestus",
+    "lastNEvents": "Viimased {count} sündmust",
+    "signal": "Signaal",
+    "battery": "Aku",
+    "excellent": "Suurepärane",
+    "good": "Hea",
+    "fair": "Rahuldav",
+    "weak": "Nõrk",
+    "gattError": "GATT viga ({code})"
 }

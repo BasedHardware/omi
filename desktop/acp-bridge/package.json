@@ -6,15 +6,17 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@zed-industries/claude-agent-acp": "^0.18.0",
     "@playwright/mcp": "^0.0.68",
+    "@zed-industries/claude-agent-acp": "^0.18.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.5.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^4.1.2"
   }
 }

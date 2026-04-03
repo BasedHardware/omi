@@ -1,0 +1,148 @@
+# E2E Flow: Device Connect/Disconnect — pair Omi BLE device, verify connection, view device info, disconnect
+# Tests: Scan for Omi BLE device, tap to connect, verify listening state, view device details, disconnect, verify mic button appears
+# Core feature: pairing and managing the Omi wearable device via Bluetooth Low Energy
+# Requires: Physical Omi device powered on and in range of the test phone
+
+version: 2
+name: device-connect
+description: Device connect/disconnect flow — scan for Omi BLE device, pair, verify connected state with battery/listening, view device details page, disconnect device, verify phone mic button appears
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/device_provider.dart
+  - app/lib/providers/onboarding_provider.dart
+  - app/lib/pages/home/device.dart
+  - app/lib/pages/home/widgets/battery_info_widget.dart
+  - app/lib/pages/capture/connect.dart
+  - app/lib/pages/conversations/widgets/processing_capture.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - no_omi_device  # No Omi device currently paired. The battery indicator area should show the Omi logo without a device name.
+  - bluetooth_enabled  # Bluetooth must be on. Android: `adb shell settings put global bluetooth_on 1`. Verify: `adb shell settings get global bluetooth_on` returns 1.
+  - omi_device_powered  # Physical Omi device must be powered on, charged, and in BLE range of the phone. The device LED should be blinking blue (advertising/discoverable mode).
+
+steps:
+  - id: S1
+    name: Verify home screen — no device connected
+    do: "Verify the home screen shows no device connected. The top-left area shows the Omi logo without battery percentage. The bottom navigation bar should have the central purple mic button visible (80x80 circle, microphone icon) since no Omi device is paired. No 'Listening' or 'Connecting' status should be shown."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S1.webp
+    note: "When no device is paired (SharedPreferencesUtil().btDeviceSet is empty), the battery_info_widget shows just the Omi logo. The bottom_nav_bar shows the central mic button because isOmiDeviceConnected == false. Tapping the Omi logo area opens the ConnectDevicePage for new pairing."
+
+  - id: S2
+    name: Open device connection page
+    do: "Tap the Omi device icon area in the top-left corner of the home screen to open the Connect Device page. Alternatively, this page can be reached via Settings > 'Connect your Omi' banner. The Connect Device page starts scanning for nearby BLE devices."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "The ConnectDevicePage (app/lib/pages/capture/connect.dart) calls OnboardingProvider.scanDevices() which starts BLE scanning via DeviceService.discover(). Found devices appear in a list as they are discovered. Each discovered device shows its name, RSSI signal strength, and a tap target for pairing. Scanning runs on a 15-second periodic timer."
+
+  - id: S3
+    name: Verify Omi device discovered in scan list
+    do: "Wait for the BLE scan to discover the Omi device. The device should appear in the list with the name 'Omi' (or 'Friend' for older firmware). Verify the device entry shows the device name and is tappable."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "BLE discovery uses BluetoothDeviceDiscoverer which filters for devices advertising the Omi service UUID. Discovery may take 5-15 seconds. If the device doesn't appear, ensure it's in advertising mode (LED blinking blue). Multiple Omi devices in range will all appear in the list — select the correct one by checking the Device ID."
+
+  - id: S4
+    name: Tap Omi device to pair and connect
+    do: "Tap the discovered 'Omi' device entry to initiate BLE pairing and connection. The app calls ensureConnection(deviceId, force: true) which: establishes BLE connection, saves device to preferences, starts audio streaming, and reads battery level. A brief loading indicator may appear during connection."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Connection flow: (1) DeviceConnectionFactory.create() creates BLE connection, (2) device saved via SharedPreferencesUtil().btDeviceSet(device), (3) DeviceProvider updates connectedDevice and isConnected=true, (4) captureProvider.streamDeviceRecording(device) starts audio streaming, (5) battery level read via BLE characteristic. Android may show a Bluetooth pairing confirmation dialog — accept it."
+
+  - id: S5
+    name: Verify home screen — device connected with battery
+    do: "After successful pairing, verify the home screen now shows: (1) Device icon with green dot + battery percentage (e.g., '40%') in the top-left, (2) 'Listening' status with red recording indicator + mic icon in the status row below 'Teach Omi your voice' banner, (3) The central mic button in the bottom nav is GONE (replaced by even spacing of 4 nav tabs). The 'Listening' status means the Omi device is actively streaming audio."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Battery indicator shows color-coded icon: green (>75%), yellow (20-75%), red (<20%). Battery updates are throttled: on first reading, ≥5% change, 15-minute intervals, or crossing 20% threshold. The 'Listening' text comes from l10n key 'listening' when transcriptionServiceStatus is 'ready'. The mic icon on the right side of the status row is a mute/unmute toggle — tapping it pauses/resumes Omi device recording."
+
+  - id: S6
+    name: Test mute/unmute toggle
+    do: "Tap the mic icon on the right side of the 'Listening' status row to mute the Omi device recording. Verify the status changes to 'Muted' with a yellow/orange dot and the mic icon turns red. Tap the mic icon again to unmute — verify it returns to 'Listening' with the red recording indicator."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Mute calls provider.pauseDeviceRecording() which pauses audio streaming from the Omi device without disconnecting BLE. Unmute calls provider.resumeDeviceRecording(). The mute toggle is in processing_capture.dart. ADB coordinates for mic icon: approximately (960, 557) on 1080x2400 device."
+
+  - id: S7
+    name: Open device details page
+    do: "Tap the device icon with battery percentage in the top-left corner of the home screen. This navigates to the Device Details page showing the connected Omi device info. ADB tap at approximately (160, 190) on 1080x2400 device."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Connected", "Battery Level"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "The device details page (app/lib/pages/home/device.dart) shows: device name ('Omi'), green 'Connected' badge, device image (rendered from image_url or local asset), battery level with percentage, and action items: Product Update, SD Card Sync (if supported), Charging Issues, Disconnect Device."
+
+  - id: S8
+    name: Verify device info section
+    do: "Scroll down on the device details page to see the full device info section below the action items. Verify it shows: Product Name (Omi), Model Number (e.g., 'Omi CV 1'), Manufacturer (Based Hardware), Firmware version (e.g., '3.0.15'), Device ID (partially masked BLE address), Serial Number, and BLE streaming rates (kbps up/down)."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Product Name", "Firmware"]
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S8.webp
+    note: "All device info fields are read via BLE GATT characteristics after connection. Values are copyable via long-press. BLE streaming metrics show real-time kbps rates for audio data transfer. Firmware version is checked against latest available — if an update exists, 'Product Update' shows an 'Available' badge."
+
+  - id: S9
+    name: Tap Disconnect Device
+    do: "Scroll to find the 'Disconnect Device' button (red text with disconnect icon). Tap it to disconnect and forget the paired Omi device. The app clears the saved device from preferences and disconnects the BLE connection."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Disconnect Device calls: (1) SharedPreferencesUtil().btDeviceSet(BtDevice.empty()) to clear saved device, (2) connection.disconnect() to close BLE connection, (3) DeviceProvider.setIsConnected(false) and setConnectedDevice(null), (4) navigates back to home. After disconnect, the central mic button reappears in the bottom nav bar and the battery indicator reverts to Omi logo only."
+
+  - id: S10
+    name: Verify home screen — device disconnected, mic button visible
+    do: "Verify the home screen now shows: (1) Omi logo without battery percentage in top-left (no device connected), (2) No 'Listening' or 'Connecting' status row, (3) The central purple mic button (microphone icon) is visible again in the bottom navigation bar between the 4 tab icons. This confirms the device has been successfully disconnected."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S10.webp
+    note: "The mic button reappears because isOmiDeviceConnected is now false (isConnected=false AND connectedDevice=null). The user can now use phone mic recording by tapping the central mic button, or reconnect the Omi device by tapping the Omi logo in the top-left corner."

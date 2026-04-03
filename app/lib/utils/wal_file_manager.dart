@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -20,8 +18,7 @@ class WalFileManager {
   static File? _walBackupFile;
 
   static Future<void> init() async {
-    final directory =
-        Platform.isMacOS ? await getApplicationSupportDirectory() : await getApplicationDocumentsDirectory();
+    final directory = await getApplicationDocumentsDirectory();
     _walFile = File('${directory.path}/$_walFileName');
     _walBackupFile = File('${directory.path}/$_walBackupFileName');
   }
@@ -142,10 +139,7 @@ class WalFileManager {
       backupFileSize = await _walBackupFile!.length();
     }
 
-    return {
-      'mainFileSize': mainFileSize,
-      'backupFileSize': backupFileSize,
-    };
+    return {'mainFileSize': mainFileSize, 'backupFileSize': backupFileSize};
   }
 
   /// Migrate legacy Limitless pending files from SharedPreferences to the new WAL system.
@@ -187,10 +181,12 @@ class WalFileManager {
         final fileName = fullPath.split('/').last;
 
         // Check if this file is already tracked in existing WALs
-        final alreadyTracked = existingWals.any((wal) =>
-            wal.filePath == fullPath ||
-            wal.filePath == fileName ||
-            (wal.filePath != null && wal.filePath!.endsWith(fileName)));
+        final alreadyTracked = existingWals.any(
+          (wal) =>
+              wal.filePath == fullPath ||
+              wal.filePath == fileName ||
+              (wal.filePath != null && wal.filePath!.endsWith(fileName)),
+        );
 
         if (alreadyTracked) {
           Logger.debug('WalFileManager: File already tracked, skipping: $fileName');

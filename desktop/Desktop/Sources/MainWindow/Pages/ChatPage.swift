@@ -120,10 +120,12 @@ struct ChatPage: View {
         VStack(spacing: 0) {
             // Header with app picker
             chatHeader
-                .padding()
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 18)
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(OmiColors.border.opacity(0.4))
 
             // Messages area
             messagesView
@@ -154,7 +156,9 @@ struct ChatPage: View {
 
             // Input area
             inputArea
-                .padding()
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
         }
         .background(OmiColors.backgroundPrimary)
         .sheet(item: $citedConversation) { conversation in
@@ -340,8 +344,7 @@ struct ChatPage: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(20)
+                .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
             }
             .buttonStyle(.plain)
             .disabled(appProvider.chatApps.isEmpty)
@@ -368,8 +371,7 @@ struct ChatPage: View {
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
+                .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.9), radius: 12)
 
             // Copy conversation button
             if !chatProvider.messages.isEmpty {
@@ -460,7 +462,7 @@ struct ChatPage: View {
     }
 
     private var welcomeMessage: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 18) {
             if let app = selectedApp {
                 AsyncImage(url: URL(string: app.image)) { phase in
                     switch phase {
@@ -508,8 +510,10 @@ struct ChatPage: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .padding(.vertical, 80)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 84)
+        .frame(maxWidth: 640)
+        .omiPanel(fill: OmiColors.backgroundSecondary.opacity(0.82), radius: 28, stroke: OmiColors.border.opacity(0.18), shadowOpacity: 0.12, shadowRadius: 14, shadowY: 8)
     }
 
     // MARK: - Input Area
@@ -666,8 +670,8 @@ struct ChatBubble: View {
                                 SelectableMarkdown(text: text, sender: .ai)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
-                                    .background(OmiColors.backgroundSecondary)
-                                    .cornerRadius(18)
+                                    .background(OmiColors.backgroundTertiary.opacity(0.92))
+                                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                             }
                         case .toolCalls(_, let calls):
                             ToolCallsGroup(calls: calls)
@@ -704,8 +708,8 @@ struct ChatBubble: View {
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(OmiColors.backgroundTertiary.opacity(0.5))
-                        .cornerRadius(18)
+                        .background(OmiColors.backgroundTertiary.opacity(0.72))
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -714,8 +718,8 @@ struct ChatBubble: View {
                         SelectableMarkdown(text: displayText, sender: message.sender)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
-                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                            .cornerRadius(18)
+                            .background(message.sender == .user ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95))
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
                         // Show more / Show less toggle for long messages
                         if message.text.count > Self.truncationThreshold {
@@ -872,8 +876,8 @@ enum ContentBlockGroup: Identifiable {
         var pendingToolCalls: [ChatContentBlock] = []
 
         func flushToolCalls() {
-            guard !pendingToolCalls.isEmpty else { return }
-            let groupId = "toolgroup_\(pendingToolCalls.first!.id)"
+            guard let first = pendingToolCalls.first else { return }
+            let groupId = "toolgroup_\(first.id)"
             groups.append(.toolCalls(id: groupId, calls: pendingToolCalls))
             pendingToolCalls = []
         }
@@ -995,8 +999,7 @@ struct ToolCallsGroup: View {
                 .padding(.vertical, 6)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(8)
+        .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 16)
     }
 }
 
@@ -1106,8 +1109,7 @@ struct ToolCallCard: View {
                 .padding(.vertical, 8)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(8)
+        .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.8), radius: 16)
     }
 }
 
@@ -1161,8 +1163,7 @@ struct ThinkingBlock: View {
                     .lineLimit(30)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.3))
-        .cornerRadius(8)
+        .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.72), radius: 16)
     }
 }
 
@@ -1224,12 +1225,7 @@ struct DiscoveryCard: View {
                 .frame(maxHeight: 300)
             }
         }
-        .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
-        )
+        .omiPanel(fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18), shadowOpacity: 0.08, shadowRadius: 10, shadowY: 6)
     }
 }
 
@@ -1250,8 +1246,8 @@ struct TypingIndicator: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(18)
+        .background(OmiColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onAppear {
             animationPhase = 1
         }
@@ -1645,7 +1641,8 @@ struct HistorySessionRow: View {
 
                     if !isEditing {
                         HStack(spacing: 4) {
-                            if let preview = session.preview, !preview.isEmpty {
+                            if let preview = session.preview, !preview.isEmpty,
+                               !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted") {
                                 Text(preview)
                                     .lineLimit(1)
                             }

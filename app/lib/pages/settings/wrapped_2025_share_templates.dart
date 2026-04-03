@@ -21,12 +21,7 @@ class WrappedShareFrame extends StatelessWidget {
   final Widget child;
   final bool showBranding;
 
-  const WrappedShareFrame({
-    super.key,
-    required this.backgroundColor,
-    required this.child,
-    this.showBranding = true,
-  });
+  const WrappedShareFrame({super.key, required this.backgroundColor, required this.child, this.showBranding = true});
 
   @override
   Widget build(BuildContext context) {
@@ -74,29 +69,18 @@ class ShareBadge extends StatelessWidget {
   final Color badgeColor;
   final String? emoji;
 
-  const ShareBadge({
-    super.key,
-    required this.text,
-    required this.badgeColor,
-    this.emoji,
-  });
+  const ShareBadge({super.key, required this.text, required this.badgeColor, this.emoji});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (emoji != null) ...[
-            Text(
-              emoji!,
-              style: const TextStyle(fontSize: 28, decoration: TextDecoration.none),
-            ),
+            Text(emoji!, style: const TextStyle(fontSize: 28, decoration: TextDecoration.none)),
             const SizedBox(width: 10),
           ],
           Text(
@@ -145,10 +129,7 @@ class YearInNumbersShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedTopPercentUser(percentile.toString()),
-            badgeColor: WrappedColors.mint,
-          ),
+          ShareBadge(text: context.l10n.wrappedTopPercentUser(percentile.toString()), badgeColor: WrappedColors.mint),
           const SizedBox(height: 80),
           _buildStat(_formatNumber(totalMinutes), context.l10n.wrappedMinutes),
           const SizedBox(height: 60),
@@ -194,10 +175,7 @@ class YearInNumbersShareTemplate extends StatelessWidget {
 class TopCategoryShareTemplate extends StatelessWidget {
   final List<Map<String, dynamic>> categories; // [{name, percentage, color}]
 
-  const TopCategoryShareTemplate({
-    super.key,
-    required this.categories,
-  });
+  const TopCategoryShareTemplate({super.key, required this.categories});
 
   @override
   Widget build(BuildContext context) {
@@ -206,18 +184,13 @@ class TopCategoryShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedYouTalkedAbout,
-            badgeColor: const Color(0xFF2A9D8F),
-          ),
+          ShareBadge(text: context.l10n.wrappedYouTalkedAbout, badgeColor: const Color(0xFF2A9D8F)),
           const SizedBox(height: 60),
           // Mini pie chart representation
           SizedBox(
             width: 280,
             height: 280,
-            child: CustomPaint(
-              painter: _SimplePieChartPainter(categories: categories),
-            ),
+            child: CustomPaint(painter: _SimplePieChartPainter(categories: categories)),
           ),
           const SizedBox(height: 60),
           // Category list
@@ -230,10 +203,7 @@ class TopCategoryShareTemplate extends StatelessWidget {
                   Container(
                     width: isFirst ? 36 : 28,
                     height: isFirst ? 36 : 28,
-                    decoration: BoxDecoration(
-                      color: cat['color'] as Color,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+                    decoration: BoxDecoration(color: cat['color'] as Color, borderRadius: BorderRadius.circular(6)),
                   ),
                   const SizedBox(width: 20),
                   Expanded(
@@ -276,22 +246,12 @@ class _SimplePieChartPainter extends CustomPainter {
         ..color = cat['color'] as Color
         ..style = PaintingStyle.fill;
 
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle,
-        true,
-        paint,
-      );
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, sweepAngle, true, paint);
       startAngle += sweepAngle;
     }
 
     // Center hole
-    canvas.drawCircle(
-      center,
-      radius * 0.5,
-      Paint()..color = WrappedColors.mint,
-    );
+    canvas.drawCircle(center, radius * 0.5, Paint()..color = WrappedColors.mint);
   }
 
   @override
@@ -320,11 +280,7 @@ class ActionsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedActionItems,
-            badgeColor: WrappedColors.indigo,
-            emoji: '✓',
-          ),
+          ShareBadge(text: context.l10n.wrappedActionItems, badgeColor: WrappedColors.indigo, emoji: '✓'),
           const SizedBox(height: 80),
           Text(
             '$totalTasks',
@@ -369,10 +325,7 @@ class ActionsShareTemplate extends StatelessWidget {
           // Completion rate badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50),
-              borderRadius: BorderRadius.circular(40),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF4CAF50), borderRadius: BorderRadius.circular(40)),
             child: Text(
               context.l10n.wrappedCompletionRate(completionRate.toString()),
               style: const TextStyle(
@@ -415,10 +368,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: badgeText,
-            badgeColor: badgeColor,
-          ),
+          ShareBadge(text: badgeText, badgeColor: badgeColor),
           const SizedBox(height: 50),
           ...days.take(3).map((day) => _buildDayItem(day)),
         ],
@@ -434,10 +384,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                day['emoji'] ?? '📅',
-                style: const TextStyle(fontSize: 32, decoration: TextDecoration.none),
-              ),
+              Text(day['emoji'] ?? '📅', style: const TextStyle(fontSize: 32, decoration: TextDecoration.none)),
               const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -501,10 +448,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
 class BestMomentsShareTemplate extends StatelessWidget {
   final List<Map<String, dynamic>> moments; // [{emoji, label, title, description, dateStr}]
 
-  const BestMomentsShareTemplate({
-    super.key,
-    required this.moments,
-  });
+  const BestMomentsShareTemplate({super.key, required this.moments});
 
   @override
   Widget build(BuildContext context) {
@@ -524,10 +468,7 @@ class BestMomentsShareTemplate extends StatelessWidget {
 class MyBuddiesShareTemplate extends StatelessWidget {
   final List<Map<String, dynamic>> buddies; // [{name, relationship, context, emoji}]
 
-  const MyBuddiesShareTemplate({
-    super.key,
-    required this.buddies,
-  });
+  const MyBuddiesShareTemplate({super.key, required this.buddies});
 
   @override
   Widget build(BuildContext context) {
@@ -536,11 +477,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedMyBuddies,
-            badgeColor: const Color(0xFF6B5B95),
-            emoji: '👥',
-          ),
+          ShareBadge(text: context.l10n.wrappedMyBuddies, badgeColor: const Color(0xFF6B5B95), emoji: '👥'),
           const SizedBox(height: 50),
           ...buddies.take(5).toList().asMap().entries.map((entry) => _buildBuddyItem(entry.key, entry.value)),
         ],
@@ -557,10 +494,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
             child: Center(
               child: Text(
                 '${index + 1}',
@@ -574,10 +508,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Text(
-            buddy['emoji'] ?? '👋',
-            style: const TextStyle(fontSize: 44, decoration: TextDecoration.none),
-          ),
+          Text(buddy['emoji'] ?? '👋', style: const TextStyle(fontSize: 44, decoration: TextDecoration.none)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -646,10 +577,7 @@ class ObsessionsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedCouldntStopTalkingAbout,
-            badgeColor: WrappedColors.coral,
-          ),
+          ShareBadge(text: context.l10n.wrappedCouldntStopTalkingAbout, badgeColor: WrappedColors.coral),
           const SizedBox(height: 50),
           _buildItem('📺', context.l10n.wrappedShow, show),
           _buildItem('🎬', context.l10n.wrappedMovie, movie),
@@ -669,10 +597,7 @@ class ObsessionsShareTemplate extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                emoji,
-                style: const TextStyle(fontSize: 36, decoration: TextDecoration.none),
-              ),
+              Text(emoji, style: const TextStyle(fontSize: 36, decoration: TextDecoration.none)),
               const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -715,10 +640,7 @@ class ObsessionsShareTemplate extends StatelessWidget {
 class MovieRecsShareTemplate extends StatelessWidget {
   final List<String> movies;
 
-  const MovieRecsShareTemplate({
-    super.key,
-    required this.movies,
-  });
+  const MovieRecsShareTemplate({super.key, required this.movies});
 
   @override
   Widget build(BuildContext context) {
@@ -727,11 +649,7 @@ class MovieRecsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedMovieRecs,
-            badgeColor: const Color(0xFF1a0a2e),
-            emoji: '🎬',
-          ),
+          ShareBadge(text: context.l10n.wrappedMovieRecs, badgeColor: const Color(0xFF1a0a2e), emoji: '🎬'),
           const SizedBox(height: 50),
           ...movies.take(5).toList().asMap().entries.map((entry) => _buildMovieItem(entry.key, entry.value)),
         ],
@@ -748,10 +666,7 @@ class MovieRecsShareTemplate extends StatelessWidget {
           Container(
             width: 50,
             height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
             child: Center(
               child: Text(
                 '#${index + 1}',
@@ -788,10 +703,7 @@ class MovieRecsShareTemplate extends StatelessWidget {
 class StruggleShareTemplate extends StatelessWidget {
   final String title;
 
-  const StruggleShareTemplate({
-    super.key,
-    required this.title,
-  });
+  const StruggleShareTemplate({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -800,10 +712,7 @@ class StruggleShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '😤',
-            style: TextStyle(fontSize: 100, decoration: TextDecoration.none),
-          ),
+          const Text('😤', style: TextStyle(fontSize: 100, decoration: TextDecoration.none)),
           const SizedBox(height: 40),
           Text(
             context.l10n.wrappedBiggest,
@@ -858,10 +767,7 @@ class StruggleShareTemplate extends StatelessWidget {
 class BiggestWinShareTemplate extends StatelessWidget {
   final String title;
 
-  const BiggestWinShareTemplate({
-    super.key,
-    required this.title,
-  });
+  const BiggestWinShareTemplate({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -870,10 +776,7 @@ class BiggestWinShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '🏆',
-            style: TextStyle(fontSize: 100, decoration: TextDecoration.none),
-          ),
+          const Text('🏆', style: TextStyle(fontSize: 100, decoration: TextDecoration.none)),
           const SizedBox(height: 40),
           Text(
             context.l10n.wrappedBiggest,
@@ -928,10 +831,7 @@ class BiggestWinShareTemplate extends StatelessWidget {
 class TopPhrasesShareTemplate extends StatelessWidget {
   final List<String> phrases;
 
-  const TopPhrasesShareTemplate({
-    super.key,
-    required this.phrases,
-  });
+  const TopPhrasesShareTemplate({super.key, required this.phrases});
 
   @override
   Widget build(BuildContext context) {
@@ -940,11 +840,7 @@ class TopPhrasesShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShareBadge(
-            text: context.l10n.wrappedTopPhrases,
-            badgeColor: WrappedColors.orange,
-            emoji: '💬',
-          ),
+          ShareBadge(text: context.l10n.wrappedTopPhrases, badgeColor: WrappedColors.orange, emoji: '💬'),
           const SizedBox(height: 50),
           ...phrases.take(5).toList().asMap().entries.map((entry) => _buildPhraseItem(entry.key, entry.value)),
         ],
@@ -962,12 +858,7 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white.withOpacity(0.3),
-                  Colors.white.withOpacity(0.1),
-                ],
-              ),
+              gradient: LinearGradient(colors: [Colors.white.withOpacity(0.3), Colors.white.withOpacity(0.1)]),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -1072,11 +963,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0A1628),
-            Color(0xFF1a2744),
-            Color(0xFF0A1628),
-          ],
+          colors: [Color(0xFF0A1628), Color(0xFF1a2744), Color(0xFF0A1628)],
         ),
       ),
       child: Padding(
@@ -1088,9 +975,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
             Row(
               children: [
                 ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
-                  ).createShader(bounds),
+                  shaderCallback: (bounds) =>
+                      const LinearGradient(colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)]).createShader(bounds),
                   child: const Text(
                     '2025',
                     style: TextStyle(
@@ -1185,10 +1071,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
   Widget _buildStatsRow(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: WrappedColors.mint,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: WrappedColors.mint, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -1308,10 +1191,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 22, decoration: TextDecoration.none),
-          ),
+          Text(emoji, style: const TextStyle(fontSize: 22, decoration: TextDecoration.none)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -1333,10 +1213,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
   Widget _buildStruggleTile(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2d4a3e),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF2d4a3e), borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1375,10 +1252,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
   Widget _buildWinTile(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: WrappedColors.mint,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: WrappedColors.mint, borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -28,15 +28,8 @@ class OmiIconBadge extends AdaptiveWidget {
   Widget _base() {
     return Container(
       padding: padding,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(radius),
-      ),
-      child: Icon(
-        icon,
-        color: iconColor,
-        size: iconSize,
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(radius)),
+      child: Icon(icon, color: iconColor, size: iconSize),
     );
   }
 }

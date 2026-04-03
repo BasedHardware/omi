@@ -6,10 +6,7 @@ import 'package:photo_view/photo_view.dart';
 class FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
 
-  const FullScreenImageViewer({
-    super.key,
-    required this.imageUrl,
-  });
+  const FullScreenImageViewer({super.key, required this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -17,10 +14,7 @@ class FullScreenImageViewer extends StatelessWidget {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
       ),
       body: PhotoView(
         imageProvider: CachedNetworkImageProvider(imageUrl),

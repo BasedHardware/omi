@@ -20,7 +20,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool _appleRemindersPermissionManuallySet = false;
 
   TaskIntegrationProvider()
-      : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+    : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
@@ -38,17 +38,21 @@ class TaskIntegrationProvider extends ChangeNotifier {
         _connectionDetails = response.integrations;
 
         // Update service authentication status based on Firebase data
-        TodoistService().setAuthenticated(_connectionDetails['todoist']?['connected'] == true &&
-            _connectionDetails['todoist']?['access_token'] != null);
+        TodoistService().setAuthenticated(
+          _connectionDetails['todoist']?['connected'] == true && _connectionDetails['todoist']?['access_token'] != null,
+        );
         AsanaService().setAuthenticated(
-            _connectionDetails['asana']?['connected'] == true && _connectionDetails['asana']?['access_token'] != null,
-            userGid: _connectionDetails['asana']?['user_gid']);
-        GoogleTasksService().setAuthenticated(_connectionDetails['google_tasks']?['connected'] == true &&
-            _connectionDetails['google_tasks']?['access_token'] != null);
+          _connectionDetails['asana']?['connected'] == true && _connectionDetails['asana']?['access_token'] != null,
+          userGid: _connectionDetails['asana']?['user_gid'],
+        );
+        GoogleTasksService().setAuthenticated(
+          _connectionDetails['google_tasks']?['connected'] == true &&
+              _connectionDetails['google_tasks']?['access_token'] != null,
+        );
         ClickUpService().setAuthenticated(
-            _connectionDetails['clickup']?['connected'] == true &&
-                _connectionDetails['clickup']?['access_token'] != null,
-            userId: _connectionDetails['clickup']?['user_id']);
+          _connectionDetails['clickup']?['connected'] == true && _connectionDetails['clickup']?['access_token'] != null,
+          userId: _connectionDetails['clickup']?['user_id'],
+        );
 
         if (PlatformService.isApple && !_appleRemindersPermissionManuallySet) {
           _appleRemindersPermission = await AppleRemindersService().hasPermission();
@@ -95,10 +99,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
         _connectionDetails[appKey] = details;
 
         // Track successful integration connection
-        MixpanelManager().taskIntegrationEnabled(
-          appName: appKey,
-          success: true,
-        );
+        MixpanelManager().taskIntegrationEnabled(appName: appKey, success: true);
 
         notifyListeners();
         return true;

@@ -448,7 +448,7 @@
     "exportConfiguration": "Exportovat konfiguraci",
     "bringYourOwn": "Přineste si vlastní",
     "payYourSttProvider": "Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.",
-    "freeMinutesMonth": "4 800 bezplatných minut měsíčně. Neomezené s ",
+    "freeMinutesMonth": "1 200 bezplatných minut měsíčně. Neomezené s ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host je povinný",
     "validPortRequired": "Je vyžadován platný port",
@@ -559,7 +559,7 @@
     "allDone": "Vše hotovo!",
     "keepGoing": "Pokračujte dál, jde vám to skvěle",
     "skipThisQuestion": "Přeskočit tuto otázku",
-    "skipForNow": "Zatím přeskočit",
+    "skipForNow": "Přeskočit",
     "connectionError": "Chyba připojení",
     "connectionErrorDesc": "Nepodařilo se připojit k serveru. Zkontrolujte prosím připojení k internetu a zkuste to znovu.",
     "invalidRecordingMultipleSpeakers": "Detekována neplatná nahrávka",
@@ -1461,7 +1461,7 @@
     "accessesAndTriggeredBy": "{accessDescription} a je {triggerDescription}.",
     "isTriggeredBy": "Je {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Není nakonfigurován žádný specifický přístup k datům.",
-    "basicPlanDescription": "4 800 prémiových minut + neomezené na zařízení",
+    "basicPlanDescription": "1 200 prémiových minut + neomezené na zařízení",
     "minutes": "minut",
     "omiHas": "Omi má:",
     "premiumMinutesUsed": "Prémiové minuty vyčerpány.",
@@ -1889,7 +1889,7 @@
     "deviceMayWarmUp": "Zařízení se může při delším používání zahřát.",
     "speedAccuracyLower": "Rychlost a přesnost mohou být nižší než u cloudových modelů.",
     "cloudProvider": "Cloudový poskytovatel",
-    "premiumMinutesMonth": "4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ",
+    "premiumMinutesMonth": "1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ",
     "viewUsage": "Zobrazit využití",
     "audioProcessedLocally": "Zvuk je zpracováván lokálně. Funguje offline, je soukromější, ale spotřebovává více baterie.",
     "languageLabel": "Jazyk",
@@ -2440,7 +2440,7 @@
     "onDeviceIntensive": "Přepis na zařízení je výpočetně náročný.",
     "onDeviceSlower": "Přepis na zařízení může být na tomto zařízení pomalejší.",
     "performanceReduced": "Výkon snížen 5-10x. Použijte režim Release.",
-    "premiumMinutesInfo": "4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.",
+    "premiumMinutesInfo": "1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.",
     "redownload": "Stáhnout znovu",
     "reply": "Odpověď",
     "replySentSuccessfully": "Odpověď byla úspěšně odeslána",
@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Stahování ze zařízení",
     "reconnectingToInternet": "Opětovné připojování k internetu...",
     "uploadingToCloud": "Nahrávání {current} z {total}",
+    "processingOnServer": "Zpracování na serveru...",
+    "processingOnServerProgress": "Zpracování... {current}/{total} segmentů",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Zpracováno",
     "corruptedStatus": "Poškozeno",
     "nPending": "{count} čekajících",
@@ -2718,5 +2730,152 @@
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
     "clearAll": "Vymazat vše",
     "phoneKeypad": "Klávesnice",
-    "phoneHideKeypad": "Skrýt klávesnici"
+    "phoneHideKeypad": "Skrýt klávesnici",
+    "transcriptionPaused": "Nahrávání, připojování",
+    "transcriptionPausedReconnecting": "Stále se nahrává — připojování k přepisu...",
+    "fairUsePolicy": "Spravedlivé používání",
+    "fairUseLoadError": "Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.",
+    "fairUseStatusNormal": "Vaše používání je v normálních mezích.",
+    "fairUseStageNormal": "Normální",
+    "fairUseStageWarning": "Upozornění",
+    "fairUseStageThrottle": "Omezeno",
+    "fairUseStageRestrict": "Zakázáno",
+    "fairUseSpeechUsage": "Využití řeči",
+    "fairUseToday": "Dnes",
+    "fairUse3Day": "3denní období",
+    "fairUseWeekly": "Týdenní období",
+    "fairUseAboutTitle": "O spravedlivém používání",
+    "fairUseAboutBody": "Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.",
+    "fairUseCaseRefCopied": "{caseRef} zkopírováno",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Spravedlivé užívání: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Zlepšit připojení",
+    "improveConnectionContent": "Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.",
+    "improveConnectionAction": "Rozumím",
+    "clockSkewWarning": "Hodiny vašeho zařízení se liší o ~{minutes} min. Zkontrolujte nastavení data a času.",
+    "omisStorage": "Úložiště Omi",
+    "phoneStorage": "Úložiště telefonu",
+    "cloudStorage": "Cloudové úložiště",
+    "howSyncingWorks": "Jak synchronizace funguje",
+    "noSyncedRecordings": "Zatím žádné synchronizované nahrávky",
+    "recordingsSyncAutomatically": "Nahrávky se synchronizují automaticky — není nutná žádná akce.",
+    "filesDownloadedUploadedNextTime": "Již stažené soubory budou nahrány příště.",
+    "nConversationsCreated": "{count, plural, =1{1 konverzace vytvořena} other{{count} konverzací vytvořeno}}",
+    "tapToView": "Klepněte pro zobrazení",
+    "syncFailed": "Synchronizace selhala",
+    "keepSyncing": "Pokračovat v synchronizaci",
+    "cancelSyncQuestion": "Zrušit synchronizaci?",
+    "omisStorageDesc": "Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.",
+    "phoneStorageDesc": "Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.",
+    "cloudStorageDesc": "Po nahrání jsou vaše nahrávky zpracovány a přepsány. Konverzace budou dostupné během minuty.",
+    "storageSection": "ÚLOŽIŠTĚ",
+    "tipKeepPhoneNearby": "Mějte telefon poblíž pro rychlejší synchronizaci",
+    "tipStableInternet": "Stabilní internet urychluje nahrávání do cloudu",
+    "tipAutoSync": "Nahrávky se synchronizují automaticky",
+    "permissions": "Oprávnění",
+    "permissionEnabled": "Povoleno",
+    "permissionEnable": "Povolit",
+    "permissionsPageDescription": "Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.",
+    "permissionsRequiredDescription": "Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.",
+    "permissionsSetupTitle": "Získejte nejlepší zážitek",
+    "permissionsSetupDescription": "Povolte několik oprávnění, aby Omi mohl fungovat naplno.",
+    "permissionsChangeAnytime": "Toto můžete kdykoli změnit v Nastavení > Oprávnění",
+    "location": "Poloha",
+    "microphone": "Mikrofon",
+    "cancelBillingPeriodInfo": "Váš plán zůstane aktivní do {date}. Poté budete přesunut na bezplatnou verzi s omezenými funkcemi.",
+    "cancelConsequenceBattery": "7x větší spotřeba baterie (zpracování na zařízení)",
+    "cancelConsequenceDelay": "5-7 sekundové zpoždění zpracování (modely na zařízení)",
+    "cancelConsequenceNoAccess": "Na konci fakturačního období již nebudete mít neomezený přístup.",
+    "cancelConsequencePhoneCalls": "Žádný přepis telefonních hovorů v reálném čase",
+    "cancelConsequenceQuality": "O 30 % nižší kvalita přepisu (modely na zařízení)",
+    "cancelConsequenceSpeakers": "Nelze identifikovat mluvčí.",
+    "cancelConsequencesSubtitle": "Důrazně doporučujeme prozkoumat vaše další možnosti místo zrušení.",
+    "cancelReasonAudioQuality": "Kvalita zvuku/přepisu",
+    "cancelReasonBatteryDrain": "Obavy z vybíjení baterie",
+    "cancelReasonDetailHint": "Oceníme jakoukoli zpětnou vazbu...",
+    "cancelReasonFoundAlternative": "Našel jsem alternativu",
+    "cancelReasonMissingFeatures": "Chybějící funkce",
+    "cancelReasonNotUsing": "Nepoužívám to dostatečně",
+    "cancelReasonOther": "Jiné",
+    "cancelReasonSubtitle": "Můžete nám říct, proč odcházíte?",
+    "cancelReasonTooExpensive": "Příliš drahé",
+    "confirmAndCancel": "Potvrdit a zrušit",
+    "feedbackSubtitleAudioQuality": "Rádi bychom pochopili, co se pokazilo.",
+    "feedbackSubtitleBatteryDrain": "To pomáhá našemu hardwarovému týmu se zlepšit.",
+    "feedbackSubtitleFoundAlternative": "Rádi bychom se dozvěděli, co vás zaujalo.",
+    "feedbackSubtitleMissingFeatures": "Stále stavíme — to nám pomáhá stanovit priority.",
+    "feedbackSubtitleNotUsing": "Chceme, aby byl Omi pro vás užitečnější.",
+    "feedbackSubtitleTooExpensive": "Vaše zpětná vazba nám pomáhá najít správnou rovnováhu.",
+    "feedbackTitleAudioQuality": "Jaké problémy jste zaznamenal?",
+    "feedbackTitleBatteryDrain": "Řekněte nám o problémech s baterií",
+    "feedbackTitleFoundAlternative": "Na co přecházíte?",
+    "feedbackTitleMissingFeatures": "Jaké funkce vám chybí?",
+    "feedbackTitleNotUsing": "Co by vás přimělo používat Omi více?",
+    "feedbackTitleTooExpensive": "Jaká cena by vám vyhovovala?",
+    "ifYouCancel": "Pokud zrušíte:",
+    "justAMoment": "Moment, prosím",
+    "tellUsMore": "Řekněte nám více (volitelné)",
+    "whyAreYouCanceling": "Proč rušíte?",
+    "deviceDiagnostics": "Diagnostika zařízení",
+    "signalStrength": "Síla signálu",
+    "connectionUptime": "Doba provozu",
+    "reconnections": "Opětovná připojení",
+    "disconnectHistory": "Historie odpojení",
+    "noDisconnectsRecorded": "Žádná odpojení nebyla zaznamenána",
+    "diagnostics": "Diagnostika",
+    "waitingForData": "Čekání na data...",
+    "liveRssiOverTime": "RSSI v reálném čase",
+    "noRssiDataYet": "Zatím žádná data RSSI",
+    "collectingData": "Sbírání dat...",
+    "cleanDisconnect": "Čisté odpojení",
+    "connectionTimeout": "Vypršel časový limit připojení",
+    "remoteDeviceTerminated": "Vzdálené zařízení ukončilo spojení",
+    "pairedToAnotherPhone": "Spárováno s jiným telefonem",
+    "linkKeyMismatch": "Neshoda klíče propojení",
+    "connectionFailed": "Připojení selhalo",
+    "appClosed": "Aplikace zavřena",
+    "manualDisconnect": "Ruční odpojení",
+    "lastNEvents": "Posledních {count} událostí",
+    "signal": "Signál",
+    "battery": "Baterie",
+    "excellent": "Vynikající",
+    "good": "Dobré",
+    "fair": "Uspokojivé",
+    "weak": "Slabé",
+    "gattError": "Chyba GATT ({code})"
 }

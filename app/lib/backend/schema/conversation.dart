@@ -87,9 +87,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -102,8 +104,7 @@ enum ServerProcessingConversationStatus {
   capturing('capturing'),
   processing('processing'),
   done('done'),
-  unknown('unknown'),
-  ;
+  unknown('unknown');
 
   final String value;
 
@@ -122,8 +123,13 @@ class ConversationPhoto {
   final DateTime createdAt;
   bool discarded;
 
-  ConversationPhoto(
-      {required this.id, required this.base64, this.description, required this.createdAt, this.discarded = false});
+  ConversationPhoto({
+    required this.id,
+    required this.base64,
+    this.description,
+    required this.createdAt,
+    this.discarded = false,
+  });
 
   factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
     return ConversationPhoto(
@@ -136,12 +142,12 @@ class ConversationPhoto {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'base64': base64,
-        'description': description,
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'discarded': discarded,
-      };
+    'id': id,
+    'base64': base64,
+    'description': description,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'discarded': discarded,
+  };
 }
 
 class AudioFile {
@@ -176,14 +182,14 @@ class AudioFile {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'uid': uid,
-        'conversation_id': conversationId,
-        'chunk_timestamps': chunkTimestamps,
-        'provider': provider,
-        'started_at': startedAt?.toUtc().toIso8601String(),
-        'duration': duration,
-      };
+    'id': id,
+    'uid': uid,
+    'conversation_id': conversationId,
+    'chunk_timestamps': chunkTimestamps,
+    'provider': provider,
+    'started_at': startedAt?.toUtc().toIso8601String(),
+    'duration': duration,
+  };
 }
 
 class ServerConversation {
@@ -250,10 +256,12 @@ class ServerConversation {
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
-      appResults:
-          ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
-      suggestedSummarizationApps:
-          ((json['suggested_summarization_apps'] ?? []) as List<dynamic>).map((appId) => appId.toString()).toList(),
+      appResults: ((json['apps_results'] ?? []) as List<dynamic>)
+          .map((result) => AppResponse.fromJson(result))
+          .toList(),
+      suggestedSummarizationApps: ((json['suggested_summarization_apps'] ?? []) as List<dynamic>)
+          .map((appId) => appId.toString())
+          .toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: json['photos'] != null
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
@@ -263,8 +271,9 @@ class ServerConversation {
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      externalIntegration:
-          json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
+      externalIntegration: json['external_data'] != null
+          ? ConversationExternalData.fromJson(json['external_data'])
+          : null,
       status: json['status'] != null
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
@@ -310,8 +319,10 @@ class ServerConversation {
         .map((e) => e.speakerId)
         .toList();
     if (speakers.isEmpty) return -1;
-    var segmentsBySpeakers =
-        groupBy(speakers, (e) => e).entries.reduce((a, b) => a.value.length > b.value.length ? a : b).key;
+    var segmentsBySpeakers = groupBy(
+      speakers,
+      (e) => e,
+    ).entries.reduce((a, b) => a.value.length > b.value.length ? a : b).key;
     return segmentsBySpeakers;
   }
 
@@ -387,16 +398,96 @@ class ServerConversation {
 class SyncLocalFilesResponse {
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
+  int failedSegments;
+  int totalSegments;
+  List<String> errors;
 
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
+    this.failedSegments = 0,
+    this.totalSegments = 0,
+    this.errors = const [],
   });
+
+  bool get hasPartialFailure => failedSegments > 0;
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
     return SyncLocalFilesResponse(
       newConversationIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
       updatedConversationIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      failedSegments: json['failed_segments'] ?? 0,
+      totalSegments: json['total_segments'] ?? 0,
+      errors: ((json['errors'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+    );
+  }
+}
+
+class SyncJobStartResponse {
+  final String jobId;
+  final String status;
+  final int totalFiles;
+  final int totalSegments;
+  final int pollAfterMs;
+
+  SyncJobStartResponse({
+    required this.jobId,
+    required this.status,
+    required this.totalFiles,
+    required this.totalSegments,
+    required this.pollAfterMs,
+  });
+
+  factory SyncJobStartResponse.fromJson(Map<String, dynamic> json) {
+    return SyncJobStartResponse(
+      jobId: json['job_id'] ?? '',
+      status: json['status'] ?? 'queued',
+      totalFiles: json['total_files'] ?? 0,
+      totalSegments: json['total_segments'] ?? 0,
+      pollAfterMs: json['poll_after_ms'] ?? 3000,
+    );
+  }
+}
+
+class SyncJobStatusResponse {
+  final String jobId;
+  final String status;
+  final int totalSegments;
+  final int processedSegments;
+  final int successfulSegments;
+  final int failedSegments;
+  final SyncLocalFilesResponse? result;
+  final String? error;
+
+  SyncJobStatusResponse({
+    required this.jobId,
+    required this.status,
+    this.totalSegments = 0,
+    this.processedSegments = 0,
+    this.successfulSegments = 0,
+    this.failedSegments = 0,
+    this.result,
+    this.error,
+  });
+
+  bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
+  bool get isSuccess => status == 'completed';
+  bool get isPartialFailure => status == 'partial_failure';
+
+  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
+    SyncLocalFilesResponse? result;
+    if (json['result'] != null) {
+      result = SyncLocalFilesResponse.fromJson(json['result']);
+    }
+    return SyncJobStatusResponse(
+      jobId: json['job_id'] ?? '',
+      status: json['status'] ?? 'unknown',
+      totalSegments: json['total_segments'] ?? 0,
+      processedSegments: json['processed_segments'] ?? 0,
+      successfulSegments: json['successful_segments'] ?? 0,
+      failedSegments: json['failed_segments'] ?? 0,
+      result: result,
+      error: json['error'],
     );
   }
 }
@@ -420,8 +511,12 @@ class SyncedConversationPointer {
     );
   }
 
-  SyncedConversationPointer copyWith(
-      {SyncedConversationType? type, int? index, DateTime? key, ServerConversation? conversation}) {
+  SyncedConversationPointer copyWith({
+    SyncedConversationType? type,
+    int? index,
+    DateTime? key,
+    ServerConversation? conversation,
+  }) {
     return SyncedConversationPointer(
       type: type ?? this.type,
       index: index ?? this.index,

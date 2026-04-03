@@ -6,12 +6,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<bool> userHasSpeakerProfile() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/speech-profile',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v3/speech-profile', headers: {}, method: 'GET', body: '');
   if (response == null) return true;
   Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {
@@ -21,12 +16,7 @@ Future<bool> userHasSpeakerProfile() async {
 }
 
 Future<String?> getUserSpeechProfile() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v4/speech-profile',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v4/speech-profile', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) return jsonDecode(response.body)['url'];
@@ -72,11 +62,7 @@ Future<List<String>> getExpandedProfileSamples() async {
   return [];
 }
 
-Future<bool> deleteProfileSample(
-  String conversationId,
-  int segmentIdx, {
-  String? personId,
-}) async {
+Future<bool> deleteProfileSample(String conversationId, int segmentIdx, {String? personId}) async {
   var response = await makeApiCall(
     url:
         '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$conversationId&segment_idx=$segmentIdx&person_id=$personId',

@@ -49,10 +49,12 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DtmfDialpadSheet(onDigitPressed: (digit) {
-        MixpanelManager().phoneCallDialpadDigitPressed(digit);
-        provider.sendDtmf(digit);
-      }),
+      builder: (_) => _DtmfDialpadSheet(
+        onDigitPressed: (digit) {
+          MixpanelManager().phoneCallDialpadDigitPressed(digit);
+          provider.sendDtmf(digit);
+        },
+      ),
     );
   }
 
@@ -60,39 +62,61 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        return PopScope(
-          canPop: provider.callState == PhoneCallState.idle || provider.callState == PhoneCallState.ended,
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 32),
-                  _CallInfoHeader(
-                    contactName: provider.contactName,
-                    phoneNumber: provider.remoteNumber ?? '',
-                    duration: provider.callDuration,
-                    state: provider.callState,
+        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+            provider.callState == PhoneCallState.connecting ||
+            provider.callState == PhoneCallState.ringing;
+
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Top bar with minimize button — always visible so user can return to app
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                  child: Row(
+                    children: [
+                      if (isCallInProgress)
+                        IconButton(
+                          onPressed: () {
+                            MixpanelManager().track('Phone Call Minimized');
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                          },
+                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
+                          padding: const EdgeInsets.all(12),
+                          constraints: const BoxConstraints(),
+                        )
+                      else
+                        const SizedBox(width: 46),
+                      const Spacer(),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _LiveTranscriptView(
-                      segments: provider.transcriptSegments,
-                      getSpeakerLabel: provider.getSpeakerLabel,
-                    ),
+                ),
+                const SizedBox(height: 8),
+                _CallInfoHeader(
+                  contactName: provider.contactName,
+                  phoneNumber: provider.remoteNumber ?? '',
+                  duration: provider.callDuration,
+                  state: provider.callState,
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: _LiveTranscriptView(
+                    segments: provider.transcriptSegments,
+                    getSpeakerLabel: provider.getSpeakerLabel,
                   ),
-                  _CallControls(
-                    state: provider.callState,
-                    isMuted: provider.isMuted,
-                    isSpeakerOn: provider.isSpeakerOn,
-                    onMuteToggle: provider.toggleMute,
-                    onSpeakerToggle: provider.toggleSpeaker,
-                    onEndCall: () => provider.endCall(),
-                    onKeypad: () => _showDtmfDialpad(context, provider),
-                  ),
-                  const SizedBox(height: 32),
-                ],
-              ),
+                ),
+                _CallControls(
+                  state: provider.callState,
+                  isMuted: provider.isMuted,
+                  isSpeakerOn: provider.isSpeakerOn,
+                  onMuteToggle: provider.toggleMute,
+                  onSpeakerToggle: provider.toggleSpeaker,
+                  onEndCall: () => provider.endCall(),
+                  onKeypad: () => _showDtmfDialpad(context, provider),
+                ),
+                const SizedBox(height: 32),
+              ],
             ),
           ),
         );
@@ -159,18 +183,12 @@ class _CallInfoHeader extends StatelessWidget {
         if (contactName != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              phoneNumber,
-              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-            ),
+            child: Text(phoneNumber, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
           ),
         const SizedBox(height: 8),
         Text(
           _stateLabel(context),
-          style: TextStyle(
-            fontSize: 16,
-            color: state == PhoneCallState.failed ? Colors.red[300] : Colors.grey[400],
-          ),
+          style: TextStyle(fontSize: 16, color: state == PhoneCallState.failed ? Colors.red[300] : Colors.grey[400]),
         ),
       ],
     );
@@ -181,19 +199,13 @@ class _LiveTranscriptView extends StatelessWidget {
   final List<TranscriptSegment> segments;
   final String Function(TranscriptSegment) getSpeakerLabel;
 
-  const _LiveTranscriptView({
-    required this.segments,
-    required this.getSpeakerLabel,
-  });
+  const _LiveTranscriptView({required this.segments, required this.getSpeakerLabel});
 
   @override
   Widget build(BuildContext context) {
     if (segments.isEmpty) {
       return Center(
-        child: Text(
-          context.l10n.transcriptPlaceholder,
-          style: TextStyle(color: Colors.grey[600], fontSize: 14),
-        ),
+        child: Text(context.l10n.transcriptPlaceholder, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
       );
     }
 
@@ -244,11 +256,7 @@ class _TranscriptBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   speakerLabel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
                 ),
               ),
               Container(
@@ -265,25 +273,20 @@ class _TranscriptBubble extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      text,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: Colors.white,
-                        height: 1.4,
-                      ),
-                    ),
+                    Text(text, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4)),
                     if (translations.isNotEmpty) ...[
                       const SizedBox(height: 6),
-                      ...translations.map((t) => Text(
-                            t.text,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontStyle: FontStyle.italic,
-                              height: 1.3,
-                            ),
-                          )),
+                      ...translations.map(
+                        (t) => Text(
+                          t.text,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontStyle: FontStyle.italic,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -330,14 +333,8 @@ class _CallControls extends StatelessWidget {
             isActive: isMuted,
             onTap: isActive ? onMuteToggle : null,
           ),
-          _ControlButton(
-            icon: Icons.dialpad,
-            label: context.l10n.phoneKeypad,
-            onTap: isActive ? onKeypad : null,
-          ),
-          _EndCallButton(
-            onTap: state != PhoneCallState.ended ? onEndCall : null,
-          ),
+          _ControlButton(icon: Icons.dialpad, label: context.l10n.phoneKeypad, onTap: isActive ? onKeypad : null),
+          _EndCallButton(onTap: state != PhoneCallState.ended ? onEndCall : null),
           _ControlButton(
             icon: isSpeakerOn ? Icons.volume_up : Icons.volume_down,
             label: context.l10n.phoneSpeaker,
@@ -356,12 +353,7 @@ class _ControlButton extends StatelessWidget {
   final bool isActive;
   final VoidCallback? onTap;
 
-  const _ControlButton({
-    required this.icon,
-    required this.label,
-    this.isActive = false,
-    this.onTap,
-  });
+  const _ControlButton({required this.icon, required this.label, this.isActive = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -373,10 +365,7 @@ class _ControlButton extends StatelessWidget {
           Container(
             width: 56,
             height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isActive ? Colors.white : Colors.grey[800],
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: isActive ? Colors.white : Colors.grey[800]),
             child: Icon(
               icon,
               color: isActive ? Colors.black : (onTap != null ? Colors.white : Colors.grey[600]),
@@ -384,10 +373,7 @@ class _ControlButton extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600]),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600])),
         ],
       ),
     );
@@ -409,15 +395,8 @@ class _EndCallButton extends StatelessWidget {
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: onTap != null ? Colors.red : Colors.grey[800],
-            ),
-            child: Icon(
-              Icons.call_end,
-              color: onTap != null ? Colors.white : Colors.grey[600],
-              size: 32,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: onTap != null ? Colors.red : Colors.grey[800]),
+            child: Icon(Icons.call_end, color: onTap != null ? Colors.white : Colors.grey[600], size: 32),
           ),
           const SizedBox(height: 8),
           Text(
@@ -532,21 +511,25 @@ class _DtmfKey extends StatelessWidget {
       child: Container(
         width: 72,
         height: 72,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0xFF2A2A30),
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF2A2A30)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(digit, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white)),
+            Text(
+              digit,
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white),
+            ),
             if (subtext.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 1),
                 child: Text(
                   subtext,
-                  style:
-                      TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.grey[600], letterSpacing: 1.5),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ),
           ],

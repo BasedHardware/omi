@@ -64,7 +64,8 @@ class ProcessConversationRequest(BaseModel):
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
 def process_in_progress_conversation(
-    request: ProcessConversationRequest = None, uid: str = Depends(auth.get_current_user_uid)
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
@@ -97,7 +98,7 @@ def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -149,11 +150,13 @@ def get_conversations(
 
     for conv in conversations:
         if conv.get('is_locked', False):
-            conv['structured']['action_items'] = []
-            conv['structured']['events'] = []
+            if 'structured' in conv:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
             conv['apps_results'] = []
             conv['plugins_results'] = []
             conv['suggested_summarization_apps'] = []
+            conv['transcript_segments'] = []
     return conversations
 
 
@@ -633,13 +636,17 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     # TODO: sort in some way to have proper pagination
 
     conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
+    conversations = [c for c in conversations if not c.get('is_locked', False)]
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations
 
 
 @router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
-def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
+def search_conversations_endpoint(
+    search_request: SearchRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
+):
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
@@ -696,7 +703,11 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
-def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Depends(auth.get_current_user_uid)):
+def test_prompt(
+    conversation_id: str,
+    request: TestPromptRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "test:prompt")),
+):
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation_data)
 
@@ -720,7 +731,7 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
 async def merge_conversations(
     request: MergeConversationsRequest,
     background_tasks: BackgroundTasks,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
     """
     Merge multiple conversations into a new conversation (async).

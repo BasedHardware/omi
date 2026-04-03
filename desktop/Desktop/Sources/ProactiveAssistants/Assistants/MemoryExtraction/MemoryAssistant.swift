@@ -58,8 +58,8 @@ actor MemoryAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        // Use Gemini 3 Pro for better memory extraction quality
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
+        // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
+        self.geminiClient = try GeminiClient(apiKey: apiKey)
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         self.frameSignal = stream

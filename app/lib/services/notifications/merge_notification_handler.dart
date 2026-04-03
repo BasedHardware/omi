@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -13,10 +13,7 @@ class MergeCompletedEvent {
   final String mergedConversationId;
   final List<String> removedConversationIds;
 
-  MergeCompletedEvent({
-    required this.mergedConversationId,
-    required this.removedConversationIds,
-  });
+  MergeCompletedEvent({required this.mergedConversationId, required this.removedConversationIds});
 }
 
 /// Handler for conversation merge FCM notifications
@@ -52,13 +49,13 @@ class MergeNotificationHandler {
 
     Logger.debug('[MergeNotification] Merge completed: $mergedConversationId, removed: $removedIds');
     Logger.debug(
-        '[MergeNotification] Broadcasting event to stream (hasListener: ${_mergeCompletedController.hasListener})');
+      '[MergeNotification] Broadcasting event to stream (hasListener: ${_mergeCompletedController.hasListener})',
+    );
 
     // Broadcast the event so providers can update their state
-    _mergeCompletedController.add(MergeCompletedEvent(
-      mergedConversationId: mergedConversationId,
-      removedConversationIds: removedIds,
-    ));
+    _mergeCompletedController.add(
+      MergeCompletedEvent(mergedConversationId: mergedConversationId, removedConversationIds: removedIds),
+    );
     Logger.debug('[MergeNotification] Event broadcasted');
 
     // Show notification if app was in background
@@ -79,7 +76,7 @@ class MergeNotificationHandler {
   }) async {
     try {
       final notificationId = mergedConversationId.hashCode;
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       final totalCount = removedCount + 1;
 
       await _awesomeNotifications.createNotification(

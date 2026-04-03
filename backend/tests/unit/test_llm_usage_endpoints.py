@@ -53,7 +53,6 @@ for attr in [
     "set_user_data_protection_level",
     "get_generic_cache",
     "set_generic_cache",
-    "remove_user_soniox_speech_profile",
     "set_speech_profile_duration",
     "r",
 ]:
@@ -88,6 +87,7 @@ subscription_mod.get_plan_limits = MagicMock()
 subscription_mod.get_plan_features = MagicMock()
 subscription_mod.get_monthly_usage_for_subscription = MagicMock()
 subscription_mod.reconcile_basic_plan_with_stripe = MagicMock()
+subscription_mod.get_paid_plan_definitions = MagicMock(return_value=[])
 
 sys.modules["utils.llm.followup"].followup_question_prompt = MagicMock()
 notifications_mod = sys.modules["utils.notifications"]

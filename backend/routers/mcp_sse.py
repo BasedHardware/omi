@@ -17,6 +17,7 @@ from typing import Optional, Union, List, Any
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+from utils.other.endpoints import check_rate_limit_inline
 
 import database.memories as memories_db
 import database.conversations as conversations_db
@@ -255,12 +256,17 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         # Simplify conversation data
         simple_conversations = []
         for conv in conversations:
+            structured = conv.get("structured")
+            if conv.get("is_locked", False) and structured:
+                structured = dict(structured)
+                structured['action_items'] = []
+                structured['events'] = []
             simple_conversations.append(
                 {
                     "id": conv.get("id"),
                     "started_at": conv.get("started_at"),
                     "finished_at": conv.get("finished_at"),
-                    "structured": conv.get("structured"),
+                    "structured": structured,
                     "language": conv.get("language"),
                 }
             )
@@ -432,6 +438,9 @@ async def mcp_streamable_http(
     user_id = authenticate_api_key(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or missing API key. Provide via Authorization header.")
+
+    # Rate limit per-user
+    check_rate_limit_inline(user_id, "mcp:sse")
 
     # Parse request body
     try:

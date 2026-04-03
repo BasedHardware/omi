@@ -194,12 +194,9 @@ final class BleAudioService: ObservableObject {
         // Calculate audio level
         updateAudioLevel(from: pcmData)
 
-        // Send to transcription service (mono channel)
+        // Send to transcription service (mono — Python backend handles diarization server-side)
         if let transcription = transcriptionService {
-            // TranscriptionService expects stereo (2 channels) for multichannel transcription
-            // For BLE device audio, we duplicate to both channels (device is the "user")
-            let stereoData = convertToStereo(pcmData)
-            transcription.sendAudio(stereoData)
+            transcription.sendAudio(pcmData)
         }
 
         // Send to custom handler

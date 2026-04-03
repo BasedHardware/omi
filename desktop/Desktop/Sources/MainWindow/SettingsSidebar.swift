@@ -84,9 +84,9 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Report an Issue", subtitle: "Help us improve omi", keywords: ["bug", "feedback", "report", "issue"], section: .about, icon: "info.circle", settingId: "about.reportissue"),
 
         // Advanced subsections
+        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard for this app build only", keywords: ["reset", "onboarding", "restart", "setup"], section: .advanced, icon: "arrow.counterclockwise", settingId: "advanced.resetonboarding"),
         SettingsSearchItem(name: "AI User Profile", subtitle: "AI-generated summary of your preferences and habits", keywords: ["profile", "generate", "generate now", "regenerate"], section: .advanced, icon: "brain", settingId: "advanced.aiuserprofile"),
         SettingsSearchItem(name: "Your Stats", subtitle: "View your usage statistics and activity", keywords: ["statistics", "conversations", "usage"], section: .advanced, icon: "chart.bar", settingId: "advanced.stats"),
-        SettingsSearchItem(name: "Feature Tiers", subtitle: "Track your progress and unlock features", keywords: ["tiers", "unlock", "features", "progress"], section: .advanced, icon: "lock.shield", settingId: "advanced.featuretiers"),
         SettingsSearchItem(name: "Focus Assistant", subtitle: "Detect distractions and help you stay focused", keywords: ["distraction", "cooldown", "glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant"),
         SettingsSearchItem(name: "Visual Glow Effect", subtitle: "Show colored border when focus changes", keywords: ["glow", "visual", "border glow", "screen glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.glow"),
         SettingsSearchItem(name: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", keywords: ["cooldown", "delay", "focus timer"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.cooldown"),
@@ -113,21 +113,20 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Analysis Throttle", subtitle: "Wait before analyzing after switching apps", keywords: ["delay", "throttle", "app switch"], section: .advanced, icon: "clock.arrow.2.circlepath", settingId: "advanced.analysisthrottle"),
         SettingsSearchItem(name: "Goals", subtitle: "Track personal goals with AI-powered progress detection", keywords: ["goal", "target", "objective", "tracking"], section: .advanced, icon: "target", settingId: "advanced.goals"),
         SettingsSearchItem(name: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks", keywords: ["auto generate", "suggest goals", "daily goals"], section: .advanced, icon: "target", settingId: "advanced.goals.autogenerate"),
-        SettingsSearchItem(name: "Ask omi Floating Bar", subtitle: "Configure shortcuts and floating bar behavior", keywords: ["floating bar", "shortcuts", "push to talk"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi"),
-        SettingsSearchItem(name: "AI Model", subtitle: "Choose the AI model for Ask omi conversations", keywords: ["model", "ai", "sonnet", "opus", "claude"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.model"),
-        SettingsSearchItem(name: "Background Style", subtitle: "Toggle between solid and transparent background", keywords: ["background", "solid", "transparent", "blur"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.background"),
-        SettingsSearchItem(name: "Draggable Floating Bar", subtitle: "Allow repositioning the floating bar by dragging it", keywords: ["drag", "move", "reposition", "draggable"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.draggable"),
-        SettingsSearchItem(name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere", keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.shortcut"),
-        SettingsSearchItem(name: "Push to Talk", subtitle: "Hold a key to speak, release to send your question to AI", keywords: ["push to talk", "ptt", "hold to talk", "microphone key"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.ptt"),
-        SettingsSearchItem(name: "Transcription Mode", subtitle: "Choose how voice input is processed", keywords: ["transcription", "mode", "voice", "dictation"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.transcriptionmode"),
-        SettingsSearchItem(name: "Double-tap for Locked Mode", subtitle: "Double-tap the push-to-talk key to keep listening hands-free", keywords: ["double tap", "locked mode", "hands free", "listening"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.doubletap"),
-        SettingsSearchItem(name: "Push-to-Talk Sounds", subtitle: "Play audio feedback when starting and ending voice input", keywords: ["sounds", "audio feedback", "ptt sounds"], section: .advanced, icon: "sparkles", settingId: "advanced.askomi.pttsounds"),
+        SettingsSearchItem(name: "Ask omi Floating Bar", subtitle: "Configure the floating bar appearance and visibility", keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles", settingId: "floatingbar.show"),
+        SettingsSearchItem(name: "Background Style", subtitle: "Toggle between solid and transparent background", keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar, icon: "sparkles", settingId: "floatingbar.background"),
+        SettingsSearchItem(name: "Draggable Floating Bar", subtitle: "Allow repositioning the floating bar by dragging it", keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar, icon: "sparkles", settingId: "floatingbar.draggable"),
+        SettingsSearchItem(name: "Voice Answers", subtitle: "Speak floating-bar replies aloud", keywords: ["voice", "speech", "tts", "elevenlabs", "audio answers"], section: .advanced, icon: "key", settingId: "advanced.developerkeys.voiceanswers"),
+        SettingsSearchItem(name: "Shortcuts", subtitle: "Configure Ask omi and push-to-talk keyboard shortcuts", keywords: ["shortcuts", "keyboard", "hotkeys", "push to talk"], section: .shortcuts, icon: "keyboard", settingId: "floatingbar.shortcut"),
+        SettingsSearchItem(name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere", keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts, icon: "keyboard", settingId: "floatingbar.shortcut"),
+        SettingsSearchItem(name: "Push to Talk", subtitle: "Hold a key to speak, release to send your question to AI", keywords: ["push to talk", "ptt", "hold to talk", "microphone key"], section: .shortcuts, icon: "keyboard", settingId: "floatingbar.ptt"),
+        SettingsSearchItem(name: "Double-tap for Locked Mode", subtitle: "Double-tap the push-to-talk key to keep listening hands-free", keywords: ["double tap", "locked mode", "hands free", "listening"], section: .shortcuts, icon: "keyboard", settingId: "floatingbar.doubletap"),
+        SettingsSearchItem(name: "Push-to-Talk Sounds", subtitle: "Play audio feedback when starting and ending voice input", keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard", settingId: "floatingbar.pttsounds"),
         SettingsSearchItem(name: "Multiple Chat Sessions", subtitle: "Create separate chat threads", keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3", settingId: "advanced.preferences.multichat"),
         SettingsSearchItem(name: "Compact Conversations", subtitle: "Toggle between compact and expanded conversation list", keywords: ["conversation view", "list"], section: .advanced, icon: "slider.horizontal.3", settingId: "advanced.preferences.compact"),
         SettingsSearchItem(name: "Launch at Login", subtitle: "Start omi automatically when you log in", keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3", settingId: "advanced.preferences.launchatlogin"),
         SettingsSearchItem(name: "Report Issue", subtitle: "Send app logs and report a problem", keywords: ["bug", "feedback", "logs", "report"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
         SettingsSearchItem(name: "Rescan Files", subtitle: "Re-index your files and update your AI profile", keywords: ["index", "reindex", "rescan", "files", "scan", "file indexing", "profile"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.rescanfiles"),
-        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard and reset permissions", keywords: ["setup", "wizard", "permissions", "reset"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.resetonboarding"),
     ]
 }
 
@@ -324,6 +323,8 @@ struct SettingsSidebarItem: View {
         case .account: return "person.circle"
         case .planUsage: return "creditcard"
         case .aiChat: return "cpu"
+        case .floatingBar: return "sparkles"
+        case .shortcuts: return "keyboard"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"
         }

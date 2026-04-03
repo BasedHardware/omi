@@ -448,7 +448,7 @@
     "exportConfiguration": "Konfiguráció exportálása",
     "bringYourOwn": "Hozd a sajátod",
     "payYourSttProvider": "Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.",
-    "freeMinutesMonth": "4800 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
+    "freeMinutesMonth": "1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host szükséges",
     "validPortRequired": "Érvényes port szükséges",
@@ -559,7 +559,7 @@
     "allDone": "Kész!",
     "keepGoing": "Csak így tovább, nagyszerűen csinálod",
     "skipThisQuestion": "Kérdés kihagyása",
-    "skipForNow": "Egyelőre kihagyom",
+    "skipForNow": "Kihagyás most",
     "connectionError": "Kapcsolódási hiba",
     "connectionErrorDesc": "Nem sikerült csatlakozni a szerverhez. Kérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
     "invalidRecordingMultipleSpeakers": "Érvénytelen felvétel észlelve",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés.",
-    "basicPlanDescription": "4800 prémium perc + korlátlan eszközön",
+    "basicPlanDescription": "1200 prémium perc + korlátlan eszközön",
     "minutes": "perc",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "Prémium percek elhasználva.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Az eszköz felmelegedhet hosszabb használat során.",
     "speedAccuracyLower": "A sebesség és pontosság alacsonyabb lehet, mint a felhőmodellekkel.",
     "cloudProvider": "Felhő szolgáltató",
-    "premiumMinutesMonth": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
+    "premiumMinutesMonth": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
     "viewUsage": "Használat megtekintése",
     "audioProcessedLocally": "A hang helyileg kerül feldolgozásra. Offline működik, privátabb, de több akkumulátort használ.",
     "languageLabel": "Nyelv",
@@ -2540,7 +2540,7 @@
     "@onDeviceSlower": {
         "description": "Warning about slower transcription"
     },
-    "premiumMinutesInfo": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
+    "premiumMinutesInfo": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
     "@premiumMinutesInfo": {
         "description": "Information about premium minutes"
     },
@@ -2731,6 +2731,18 @@
     "downloadingFromDevice": "Letöltés az eszközről",
     "reconnectingToInternet": "Újracsatlakozás az internethez...",
     "uploadingToCloud": "{current}/{total} feltöltése",
+    "processingOnServer": "Feldolgozás a szerveren...",
+    "processingOnServerProgress": "Feldolgozás... {current}/{total} szegmens",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Feldolgozva",
     "corruptedStatus": "Sérült",
     "nPending": "{count} függőben",
@@ -2845,5 +2857,152 @@
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
     "clearAll": "Összes törlése",
     "phoneKeypad": "Billentyűzet",
-    "phoneHideKeypad": "Billentyűzet elrejtése"
+    "phoneHideKeypad": "Billentyűzet elrejtése",
+    "transcriptionPaused": "Felvétel, újrakapcsolódás",
+    "transcriptionPausedReconnecting": "A felvétel folytatódik — újrakapcsolódás az átíráshoz...",
+    "fairUsePolicy": "Méltányos használat",
+    "fairUseLoadError": "Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.",
+    "fairUseStatusNormal": "Használata a normális határokon belül van.",
+    "fairUseStageNormal": "Normál",
+    "fairUseStageWarning": "Figyelmeztetés",
+    "fairUseStageThrottle": "Korlátozott",
+    "fairUseStageRestrict": "Letiltva",
+    "fairUseSpeechUsage": "Beszédhasználat",
+    "fairUseToday": "Ma",
+    "fairUse3Day": "3 napos gördülő",
+    "fairUseWeekly": "Heti gördülő",
+    "fairUseAboutTitle": "A méltányos használatról",
+    "fairUseAboutBody": "Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.",
+    "fairUseCaseRefCopied": "{caseRef} másolva",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Méltányos használat: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Kapcsolat javítása",
+    "improveConnectionContent": "Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.",
+    "improveConnectionAction": "Értem",
+    "clockSkewWarning": "Az eszköz órája ~{minutes} perccel eltér. Ellenőrizze a dátum- és időbeállításokat.",
+    "omisStorage": "Omi tárhelye",
+    "phoneStorage": "Telefon tárhelye",
+    "cloudStorage": "Felhő tárhely",
+    "howSyncingWorks": "Hogyan működik a szinkronizálás",
+    "noSyncedRecordings": "Még nincsenek szinkronizált felvételek",
+    "recordingsSyncAutomatically": "A felvételek automatikusan szinkronizálódnak — nincs teendő.",
+    "filesDownloadedUploadedNextTime": "A már letöltött fájlok legközelebb feltöltődnek.",
+    "nConversationsCreated": "{count, plural, =1{1 beszélgetés létrehozva} other{{count} beszélgetés létrehozva}}",
+    "tapToView": "Koppintson a megtekintéshez",
+    "syncFailed": "Szinkronizálás sikertelen",
+    "keepSyncing": "Szinkronizálás folytatása",
+    "cancelSyncQuestion": "Szinkronizálás megszakítása?",
+    "omisStorageDesc": "Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.",
+    "phoneStorageDesc": "Amikor az Omi újra csatlakozik, a felvételek automatikusan átkerülnek a telefonjára feltöltés előtt.",
+    "cloudStorageDesc": "Feltöltés után a felvételei feldolgozásra és átírásra kerülnek. A beszélgetések egy percen belül elérhetők lesznek.",
+    "storageSection": "TÁRHELY",
+    "tipKeepPhoneNearby": "Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz",
+    "tipStableInternet": "Stabil internet gyorsítja a felhőbe feltöltést",
+    "tipAutoSync": "A felvételek automatikusan szinkronizálódnak",
+    "permissions": "Engedélyek",
+    "permissionEnabled": "Engedélyezve",
+    "permissionEnable": "Engedélyezés",
+    "permissionsPageDescription": "Ezek az engedélyek alapvetőek az Omi működéséhez. Kulcsfontosságú funkciókat tesznek lehetővé, mint az értesítések, helymeghatározáson alapuló élmények és hangfelvétel.",
+    "permissionsRequiredDescription": "Az Omi néhány engedélyre van szüksége a megfelelő működéshez. Kérjük, add meg őket a folytatáshoz.",
+    "permissionsSetupTitle": "Szerezd meg a legjobb élményt",
+    "permissionsSetupDescription": "Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.",
+    "permissionsChangeAnytime": "Ezeket bármikor módosíthatod a Beállítások > Engedélyek menüben",
+    "location": "Helyzet",
+    "microphone": "Mikrofon",
+    "cancelBillingPeriodInfo": "A csomagod aktív marad {date}-ig. Ezután az ingyenes verzióra leszel átállítva korlátozott funkciókkal.",
+    "cancelConsequenceBattery": "7x több akkuhasználat (eszközön történő feldolgozás)",
+    "cancelConsequenceDelay": "5-7 másodperces feldolgozási késleltetés (eszközön lévő modellek)",
+    "cancelConsequenceNoAccess": "A számlázási időszak végén már nem lesz korlátlan hozzáférésed.",
+    "cancelConsequencePhoneCalls": "Nincs valós idejű telefonhívás átírás",
+    "cancelConsequenceQuality": "30%-kal alacsonyabb átírási minőség (eszközön lévő modellek)",
+    "cancelConsequenceSpeakers": "Nem tudja azonosítani a beszélőket.",
+    "cancelConsequencesSubtitle": "Erősen javasoljuk, hogy a lemondás helyett fedezd fel a többi lehetőségedet.",
+    "cancelReasonAudioQuality": "Hang/átírási minőség",
+    "cancelReasonBatteryDrain": "Akkumerülési aggodalmak",
+    "cancelReasonDetailHint": "Minden visszajelzést értékelünk...",
+    "cancelReasonFoundAlternative": "Találtam alternatívát",
+    "cancelReasonMissingFeatures": "Hiányzó funkciók",
+    "cancelReasonNotUsing": "Nem használom eleget",
+    "cancelReasonOther": "Egyéb",
+    "cancelReasonSubtitle": "El tudod mondani, miért távozol?",
+    "cancelReasonTooExpensive": "Túl drága",
+    "confirmAndCancel": "Megerősítés és lemondás",
+    "feedbackSubtitleAudioQuality": "Szeretnénk megérteni, mi ment rosszul.",
+    "feedbackSubtitleBatteryDrain": "Ez segít hardvercsapatunknak fejlődni.",
+    "feedbackSubtitleFoundAlternative": "Szeretnénk tudni, mi ragadta meg a figyelmedet.",
+    "feedbackSubtitleMissingFeatures": "Mindig építünk — ez segít a prioritások meghatározásában.",
+    "feedbackSubtitleNotUsing": "Szeretnénk hasznosabbá tenni az Omit számodra.",
+    "feedbackSubtitleTooExpensive": "Visszajelzésed segít megtalálni a megfelelő egyensúlyt.",
+    "feedbackTitleAudioQuality": "Milyen problémákat tapasztaltál?",
+    "feedbackTitleBatteryDrain": "Mesélj az akkuproblémákról",
+    "feedbackTitleFoundAlternative": "Mire váltasz?",
+    "feedbackTitleMissingFeatures": "Milyen funkciók hiányoznak?",
+    "feedbackTitleNotUsing": "Mi késztetne arra, hogy többet használd az Omit?",
+    "feedbackTitleTooExpensive": "Milyen ár lenne megfelelő számodra?",
+    "ifYouCancel": "Ha lemondod:",
+    "justAMoment": "Egy pillanat, kérlek",
+    "tellUsMore": "Mondj el többet (opcionális)",
+    "whyAreYouCanceling": "Miért mondod le?",
+    "deviceDiagnostics": "Eszközdiagnosztika",
+    "signalStrength": "Jelerősség",
+    "connectionUptime": "Üzemidő",
+    "reconnections": "Újracsatlakozások",
+    "disconnectHistory": "Lecsatlakozási előzmények",
+    "noDisconnectsRecorded": "Nincs rögzített lecsatlakozás",
+    "diagnostics": "Diagnosztika",
+    "waitingForData": "Adatokra várakozás...",
+    "liveRssiOverTime": "Élő RSSI az idő függvényében",
+    "noRssiDataYet": "Még nincs RSSI adat",
+    "collectingData": "Adatgyűjtés...",
+    "cleanDisconnect": "Tiszta lecsatlakozás",
+    "connectionTimeout": "Kapcsolat időtúllépés",
+    "remoteDeviceTerminated": "A távoli eszköz megszakította a kapcsolatot",
+    "pairedToAnotherPhone": "Másik telefonhoz párosítva",
+    "linkKeyMismatch": "Kapcsolati kulcs eltérés",
+    "connectionFailed": "Sikertelen kapcsolódás",
+    "appClosed": "Alkalmazás bezárva",
+    "manualDisconnect": "Kézi lecsatlakozás",
+    "lastNEvents": "Utolsó {count} esemény",
+    "signal": "Jel",
+    "battery": "Akkumulátor",
+    "excellent": "Kiváló",
+    "good": "Jó",
+    "fair": "Elfogadható",
+    "weak": "Gyenge",
+    "gattError": "GATT hiba ({code})"
 }

@@ -158,6 +158,26 @@ class DashboardViewModel: ObservableObject {
         }
     }
 
+    func updateGoal(_ goal: Goal, title: String, currentValue: Double, targetValue: Double) async {
+        log("Goals: Updating goal '\(goal.title)' -> title='\(title)', current=\(currentValue), target=\(targetValue)")
+
+        do {
+            let updated = try await APIClient.shared.updateGoal(
+                goalId: goal.id,
+                title: title,
+                currentValue: currentValue,
+                targetValue: targetValue
+            )
+
+            _ = try? await GoalStorage.shared.syncServerGoal(updated)
+            goals = try await GoalStorage.shared.getLocalGoals()
+            log("Goals: Updated goal '\(updated.title)' confirmed by API")
+        } catch {
+            logError("Failed to update goal", error: error)
+            goals = (try? await GoalStorage.shared.getLocalGoals()) ?? goals
+        }
+    }
+
     func deleteGoal(_ goal: Goal) async {
         do {
             // Soft-delete locally first for instant UI update
@@ -178,6 +198,7 @@ struct DashboardPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedIndex: Int
     @State private var selectedConversation: ServerConversation? = nil
+    @State private var showPromptPopup = false
 
     var body: some View {
         Group {
@@ -196,14 +217,37 @@ struct DashboardPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
+        .overlay {
+            if showPromptPopup, !postOnboardingSuggestions.isEmpty {
+                TryAskingPopupView(
+                    suggestions: postOnboardingSuggestions,
+                    onAsk: handleSuggestedPrompt,
+                    onDismiss: dismissPromptPopup
+                )
+            }
+        }
+        .onAppear {
+            if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
+                showPromptPopup = true
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
         }
     }
 
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+        VStack(alignment: .leading, spacing: 28) {
+            if shouldShowSuggestionBanner {
+                PromptSuggestionBanner(
+                    suggestions: postOnboardingSuggestions,
+                    onOpen: { showPromptPopup = true },
+                    onAsk: handleSuggestedPrompt,
+                    onDismiss: dismissSuggestionBanner
+                )
+            }
+
+            Grid(horizontalSpacing: 20, verticalSpacing: 20) {
                 // Top row: Tasks + Goals
                 GridRow {
                     TasksWidget(
@@ -230,6 +274,16 @@ struct DashboardPage: View {
                                 )
                             }
                         },
+                        onUpdateGoal: { goal, title, current, target in
+                            Task {
+                                await viewModel.updateGoal(
+                                    goal,
+                                    title: title,
+                                    currentValue: current,
+                                    targetValue: target
+                                )
+                            }
+                        },
                         onUpdateProgress: { goal, value in
                             Task {
                                 await viewModel.updateGoalProgress(goal, currentValue: value)
@@ -245,9 +299,33 @@ struct DashboardPage: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 30)
+        .padding(.top, 40)
+        .padding(.bottom, 16)
+    }
+
+    private var postOnboardingSuggestions: [String] {
+        PostOnboardingPromptSuggestions.suggestions()
+    }
+
+    private var shouldShowSuggestionBanner: Bool {
+        !postOnboardingSuggestions.isEmpty && !PostOnboardingPromptSuggestions.isDismissed
+    }
+
+    private func dismissPromptPopup() {
+        showPromptPopup = false
+        PostOnboardingPromptSuggestions.shouldShowPopup = false
+    }
+
+    private func dismissSuggestionBanner() {
+        showPromptPopup = false
+        PostOnboardingPromptSuggestions.shouldShowPopup = false
+        PostOnboardingPromptSuggestions.isDismissed = true
+    }
+
+    private func handleSuggestedPrompt(_ suggestion: String) {
+        dismissPromptPopup()
+        FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
     }
 
 }

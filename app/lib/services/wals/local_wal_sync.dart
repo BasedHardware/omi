@@ -3,10 +3,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -16,7 +19,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = const [];
 
-  List<List<int>> _frames = [];
+  List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];
 
   Timer? _chunkingTimer;
@@ -37,6 +40,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
 
   LocalWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  List<WalFrame> get testFrames => _frames;
+
+  @visibleForTesting
+  List<bool> get testFrameSynced => _frameSynced;
+
+  @visibleForTesting
+  List<Wal> get testWals => _wals;
 
   @override
   void cancelSync() {
@@ -62,8 +74,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer =
-        Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
+    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+      t,
+    ) async {
       await _flush();
     });
   }
@@ -110,10 +123,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future onAudioCodecChanged(BleAudioCodec codec) async {
-    if (codec.getFramesPerSecond() == _framesPerSecond && codec == _codec) {
-      return;
-    }
-
+    // Always chunk+flush+clear to ensure clean session boundaries.
+    // This is safe when frames are empty (_chunk returns immediately).
     await _chunk();
     await _flush();
     _frames = [];
@@ -144,7 +155,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var high = pivot;
     var low = 0;
-    var chunk = _frames.sublist(low, high);
+    var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
@@ -177,8 +188,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
 
       Wal wal;
-      var walIdx =
-          _wals.indexWhere((w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec);
+      var walIdx = _wals.indexWhere(
+        (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
+      );
       if (walIdx < 0) {
         wal = Wal(
           codec: _codec,
@@ -233,11 +245,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
         List<int> data = [];
         for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i].sublist(3);
+          var frame = wal.data[i];
 
           final byteFrame = ByteData(frame.length);
-          for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i, frame[i]);
+          for (int j = 0; j < frame.length; j++) {
+            byteFrame.setUint8(j, frame[j]);
           }
           data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
           data.addAll(byteFrame.buffer.asUint8List());
@@ -323,18 +335,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onByteStream(List<int> value) async {
-    _frames.add(value);
+  void onFrameCaptured(WalFrame frame) {
+    _frames.add(frame);
     _frameSynced.add(false);
   }
 
   @override
-  void onBytesSync(List<int> value) {
+  void markFrameSynced(FrameSyncKey key) {
     for (int i = _frames.length - 1; i >= 0; i--) {
-      if (_frames[i].length >= 3 &&
-          _frames[i][0] == value[0] &&
-          _frames[i][1] == value[1] &&
-          _frames[i][2] == value[2]) {
+      if (_frames[i].syncKey == key) {
         _frameSynced[i] = true;
         break;
       }
@@ -365,6 +374,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    int filesUploaded = 0;
+    final totalFilesToUpload = wals.length;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
@@ -441,32 +452,72 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
+      // Report file-count progress
+      progress?.onWalSyncedProgress(
+        filesUploaded / totalFilesToUpload,
+        phase: SyncPhase.uploadingToCloud,
+        currentFile: filesUploaded,
+        totalFiles: totalFilesToUpload,
+      );
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
+        var partialRes = await syncLocalFilesV2(
+          files,
+          onPollProgress: (jobStatus) {
+            progress?.onWalSyncedProgress(
+              jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+              phase: SyncPhase.processingOnServer,
+              currentFile: jobStatus.processedSegments,
+              totalFiles: jobStatus.totalSegments,
+            );
+          },
+        );
 
-        resp.newConversationIds
-            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+        resp.newConversationIds.addAll(
+          partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+        );
+        resp.updatedConversationIds.addAll(
+          partialRes.updatedConversationIds.where(
+            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+          ),
+        );
+
+        if (partialRes.hasPartialFailure) {
+          Logger.debug(
+            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+          );
+          DebugLogManager.logWarning('Local upload batch partial failure', {
+            'failedSegments': partialRes.failedSegments,
+            'totalSegments': partialRes.totalSegments,
+            'errors': partialRes.errors.take(3).toList(),
+          });
+        }
 
         batchesCompleted++;
 
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            wals[j].status = WalStatus.synced;
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-
-            listener.onWalSynced(wal);
+            if (partialRes.hasPartialFailure) {
+              // Keep WALs retryable on partial failure so failed segments get
+              // another chance. Backend dedup prevents duplicate transcripts.
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+            } else {
+              wals[j].status = WalStatus.synced;
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+              listener.onWalSynced(wal);
+            }
           }
         }
+        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
+        filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
       } catch (e) {
-        Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
+        print('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
         DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': (wals.length - 1 - i) ~/ steps,
@@ -540,26 +591,58 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
-      Logger.debug(e.toString());
+      print(e.toString());
       DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
     listener.onWalUpdated();
     try {
-      var partialRes = await syncLocalFiles([walFile]);
+      var partialRes = await syncLocalFilesV2(
+        [walFile],
+        onPollProgress: (jobStatus) {
+          progress?.onWalSyncedProgress(
+            jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+            phase: SyncPhase.processingOnServer,
+            currentFile: jobStatus.processedSegments,
+            totalFiles: jobStatus.totalSegments,
+          );
+        },
+      );
 
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      resp.newConversationIds.addAll(
+        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        partialRes.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
 
-      walToSync.status = WalStatus.synced;
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
+      if (partialRes.hasPartialFailure) {
+        Logger.debug(
+          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        );
+        DebugLogManager.logWarning('Single WAL upload partial failure', {
+          'walId': wal.id,
+          'failedSegments': partialRes.failedSegments,
+          'totalSegments': partialRes.totalSegments,
+          'errors': partialRes.errors.take(3).toList(),
+        });
+      }
 
-      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-      listener.onWalSynced(wal);
+      if (partialRes.hasPartialFailure) {
+        // Keep WAL retryable so failed segments get another chance
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+      } else {
+        walToSync.status = WalStatus.synced;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        listener.onWalSynced(wal);
+      }
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});

@@ -40,26 +40,32 @@ abstract interface class ITransctiptSegmentSocketServiceListener {
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
-      {super.source, super.customSttMode, super.onboardingMode})
-      : super.create(includeSpeechProfile: false);
+  SpeechProfileTranscriptSegmentSocketService.create(
+    super.sampleRate,
+    super.codec,
+    super.language, {
+    super.source,
+    super.customSttMode,
+    super.onboardingMode,
+  }) : super.create(includeSpeechProfile: false);
 }
 
 class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
-      {super.source, super.customSttMode})
-      : super.create(includeSpeechProfile: true);
+  ConversationTranscriptSegmentSocketService.create(
+    super.sampleRate,
+    super.codec,
+    super.language, {
+    super.source,
+    super.customSttMode,
+  }) : super.create(includeSpeechProfile: true);
 }
 
 class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   CustomSttTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
-      : super.create(includeSpeechProfile: true, customSttMode: true);
+    : super.create(includeSpeechProfile: true, customSttMode: true);
 }
 
-enum SocketServiceState {
-  connected,
-  disconnected,
-}
+enum SocketServiceState { connected, disconnected }
 
 class TranscriptSegmentSocketService implements IPureSocketListener {
   late IPureSocket _socket;
@@ -91,7 +97,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.sttConfigId,
     this.onboardingMode = false,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    var params =
+        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
@@ -183,9 +190,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
     });
-    DebugLogManager.logEvent('transcription_socket_closed', {
-      'close_code': closeCode ?? -1,
-    });
+    DebugLogManager.logEvent('transcription_socket_closed', {'close_code': closeCode ?? -1});
   }
 
   @override
@@ -292,12 +297,7 @@ class TranscriptSocketServiceFactory {
     String language, {
     String? source,
   }) {
-    return SpeechProfileTranscriptSegmentSocketService.create(
-      sampleRate,
-      codec,
-      language,
-      source: source,
-    );
+    return SpeechProfileTranscriptSegmentSocketService.create(sampleRate, codec, language, source: source);
   }
 
   /// Main entry point: Create transcription service from CustomSttConfig
@@ -317,7 +317,8 @@ class TranscriptSocketServiceFactory {
     final effectiveLang = config.effectiveLanguage;
     final effectiveModel = config.effectiveModel;
     Logger.debug(
-        "[STTFactory] Creating socket: provider=${config.provider.name}, isLive=${config.isLive}, lang=$effectiveLang, model=$effectiveModel");
+      "[STTFactory] Creating socket: provider=${config.provider.name}, isLive=${config.isLive}, lang=$effectiveLang, model=$effectiveModel",
+    );
 
     // Create primary socket based on isLive/isPolling
     final primarySocket = config.isLive
@@ -337,22 +338,16 @@ class TranscriptSocketServiceFactory {
   }
 
   /// Create streaming WebSocket for live STT
-  static IPureSocket _createStreamingSocket(
-    int sampleRate,
-    BleAudioCodec codec,
-    CustomSttConfig config,
-  ) {
-    final transcoder = AudioTranscoderFactory.createToRawPcm(
-      sourceCodec: codec,
-      sampleRate: sampleRate,
-    );
+  static IPureSocket _createStreamingSocket(int sampleRate, BleAudioCodec codec, CustomSttConfig config) {
+    final transcoder = AudioTranscoderFactory.createToRawPcm(sourceCodec: codec, sampleRate: sampleRate);
 
     // Special case: Gemini Live has unique protocol (setup message, base64 audio)
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model:
-            config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: config.effectiveModel.isNotEmpty
+            ? config.effectiveModel
+            : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -362,10 +357,12 @@ class TranscriptSocketServiceFactory {
     // Deepgram Live and other streaming providers
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
 
     // Build WebSocket URL with query params
     final wsUrl = _buildUrlWithParams(url, params);
@@ -384,22 +381,17 @@ class TranscriptSocketServiceFactory {
   }
 
   /// Create polling HTTP socket for batch STT
-  static IPureSocket _createPollingSocket(
-    int sampleRate,
-    BleAudioCodec codec,
-    CustomSttConfig config,
-  ) {
-    final transcoder = AudioTranscoderFactory.createToWav(
-      sourceCodec: codec,
-      sampleRate: sampleRate,
-    );
+  static IPureSocket _createPollingSocket(int sampleRate, BleAudioCodec codec, CustomSttConfig config) {
+    final transcoder = AudioTranscoderFactory.createToWav(sourceCodec: codec, sampleRate: sampleRate);
 
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
     final audioFieldName = requestConfig['audio_field_name'] ?? config.audioFieldName ?? 'file';
     final requestType = config.effectiveRequestType;
 
@@ -417,9 +409,7 @@ class TranscriptSocketServiceFactory {
             serviceId: config.provider.name,
             transcoder: transcoder,
           ),
-          sttProvider: OnDeviceAppleProvider(
-            language: config.language ?? 'en',
-          ),
+          sttProvider: OnDeviceAppleProvider(language: config.language ?? 'en'),
         );
       }
 
@@ -433,10 +423,7 @@ class TranscriptSocketServiceFactory {
           serviceId: config.provider.name,
           transcoder: transcoder,
         ),
-        sttProvider: OnDeviceWhisperProvider(
-          modelPath: config.url ?? '',
-          language: config.language ?? 'en',
-        ),
+        sttProvider: OnDeviceWhisperProvider(modelPath: config.url ?? '', language: config.language ?? 'en'),
       );
     }
 

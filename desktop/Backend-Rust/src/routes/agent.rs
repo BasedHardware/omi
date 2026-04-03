@@ -79,13 +79,22 @@ async fn provision_agent_vm(
     // 4. Create the GCE VM asynchronously
     // We return immediately with "provisioning" status.
     // The VM creation runs in background and updates Firestore when done.
+    let gce_project = state.config.gce_project_id.clone().ok_or_else(|| {
+        tracing::error!("GCE_PROJECT_ID / FIREBASE_PROJECT_ID not set — cannot provision agent VM");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let gce_source_image = state.config.gce_source_image.clone().ok_or_else(|| {
+        tracing::error!("GCE_SOURCE_IMAGE not set and no project ID to derive it — cannot provision agent VM");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let agent_gcs_bucket = state.config.agent_gcs_bucket.clone().ok_or_else(|| {
+        tracing::error!("AGENT_GCS_BUCKET not set — cannot provision agent VM");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let firestore = state.firestore.clone();
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
-    let gce_project = state.config.gce_project_id.clone();
-    let gce_source_image = state.config.gce_source_image.clone();
-    let agent_gcs_bucket = state.config.agent_gcs_bucket.clone();
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -164,7 +173,22 @@ async fn get_agent_status(
                 || vm.status == AgentVmStatus::Error
                 || vm.status == AgentVmStatus::Stopped
             {
-                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone, &state.config.gce_project_id).await {
+                let gce_project_id = match &state.config.gce_project_id {
+                    Some(p) => p.clone(),
+                    None => {
+                        tracing::warn!("GCE_PROJECT_ID not set — returning Firestore status without GCE verification");
+                        return Ok(Json(Some(AgentStatusResponse {
+                            vm_name: vm.vm_name,
+                            zone: vm.zone,
+                            ip: vm.ip,
+                            status: vm.status,
+                            auth_token: vm.auth_token,
+                            created_at: vm.created_at,
+                            last_query_at: vm.last_query_at,
+                        })));
+                    }
+                };
+                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone, &gce_project_id).await {
                     Ok(gce_status) if gce_status == "TERMINATED" || gce_status == "STOPPED" => {
                         tracing::info!(
                             "VM {} is {} (idle auto-stop), restarting...",
@@ -192,7 +216,7 @@ async fn get_agent_status(
                         let vm_name = vm.vm_name.clone();
                         let zone = vm.zone.clone();
                         let auth_token = vm.auth_token.clone();
-                        let gce_project = state.config.gce_project_id.clone();
+                        let gce_project = gce_project_id.clone();
 
                         tokio::spawn(async move {
                             match start_stopped_vm(&firestore, &vm_name, &zone, &gce_project).await {
@@ -256,7 +280,7 @@ async fn get_agent_status(
                         let vm_name = vm.vm_name.clone();
                         let zone = vm.zone.clone();
                         let auth_token = vm.auth_token.clone();
-                        let gce_project = state.config.gce_project_id.clone();
+                        let gce_project = gce_project_id.clone();
 
                         tokio::spawn(async move {
                             let project = &gce_project;

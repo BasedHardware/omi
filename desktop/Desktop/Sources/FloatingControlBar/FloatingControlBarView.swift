@@ -10,6 +10,7 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onClearVisibleConversation: () -> Void
 
     @State private var isHovering = false
 
@@ -26,6 +27,11 @@ struct FloatingControlBarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+    }
+
+    /// Whether the bar chrome should stretch to fill the window width
+    private var barNeedsFullWidth: Bool {
+        isHovering || state.showingAIConversation || state.isVoiceListening
     }
 
     private var barChrome: some View {
@@ -50,7 +56,7 @@ struct FloatingControlBarView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -99,7 +105,7 @@ struct FloatingControlBarView: View {
         }
         .clipped()
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening || state.isShowingNotification ? 20 : 5)
+        .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
         .onHover(perform: handleBarHover)
     }
 
@@ -165,7 +171,7 @@ struct FloatingControlBarView: View {
 
     private func openFloatingBarSettings() {
         // Bring main window to front and navigate to floating bar settings
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         for window in NSApp.windows where window.title.hasPrefix("Omi") {
             window.makeKeyAndOrderFront(nil)
             break
@@ -183,12 +189,12 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
-                    compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
+                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                        compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
                 }
                 .padding(.horizontal, 6)
@@ -204,9 +210,9 @@ struct FloatingControlBarView: View {
 
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        RoundedRectangle(cornerRadius: 2)
+        RoundedRectangle(cornerRadius: 3)
             .fill(Color.white.opacity(0.5))
-            .frame(width: 28, height: 4)
+            .frame(width: 28, height: 6)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -246,7 +252,8 @@ struct FloatingControlBarView: View {
                 Text(key)
                     .scaledFont(size: 9)
                     .foregroundColor(.white)
-                    .frame(width: 15, height: 15)
+                    .padding(.horizontal, key.count > 1 ? 4 : 0)
+                    .frame(minWidth: 15, minHeight: 15)
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(3)
             }
@@ -283,7 +290,11 @@ struct FloatingControlBarView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             } else {
-                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
+                Text(
+                    state.isVoiceLocked
+                        ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
+                        : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
+                )
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -296,8 +307,10 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
+            canClearVisibleConversation: state.hasVisibleConversation,
             onSend: { message in
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
@@ -305,7 +318,7 @@ struct FloatingControlBarView: View {
                 }
                 onSendQuery(message)
             },
-            onCancel: onCloseAI,
+            onClearVisibleConversation: onClearVisibleConversation,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -336,7 +349,8 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            onClose: onCloseAI,
+            canClearVisibleConversation: state.hasVisibleConversation,
+            onClearVisibleConversation: onClearVisibleConversation,
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
@@ -345,6 +359,7 @@ struct FloatingControlBarView: View {
                 }
 
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil

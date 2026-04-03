@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:intl_phone_field/countries.dart';
+import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -93,10 +94,17 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
     var provider = context.read<PhoneCallProvider>();
 
-    if (provider.verifiedNumbers.isEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PhoneSetupIntroPage()),
+    // Block if already on a call
+    if (provider.callState != PhoneCallState.idle && provider.callState != PhoneCallState.ended) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.callAlreadyInProgress)),
       );
+      return;
+    }
+
+    if (provider.verifiedNumbers.isEmpty) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneSetupIntroPage()));
       return;
     }
 
@@ -115,13 +123,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ActiveCallPage()),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
     } else {
-      messenger.showSnackBar(
-        SnackBar(content: Text(provider.error ?? context.l10n.failedToStartCall)),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(provider.error ?? context.l10n.failedToStartCall)));
     }
   }
 
@@ -149,8 +153,10 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        title:
-            Text(context.l10n.phonePageTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.phonePageTitle,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
@@ -168,13 +174,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildContactsTab(),
-          _buildKeypadTab(),
-        ],
-      ),
+      body: TabBarView(controller: _tabController, children: [_buildContactsTab(), _buildKeypadTab()]),
     );
   }
 
@@ -206,10 +206,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.deepPurple,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
+                  decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
                   child: Text(
                     context.l10n.phoneAllow,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
@@ -240,10 +237,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
               prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
               filled: true,
               fillColor: const Color(0xFF1F1F25),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -251,8 +245,10 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         Expanded(
           child: _filteredContacts.isEmpty
               ? Center(
-                  child:
-                      Text(context.l10n.phoneNoContactsFound, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                  child: Text(
+                    context.l10n.phoneNoContactsFound,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
                 )
               : ListView.separated(
                   itemCount: _filteredContacts.length,
@@ -308,8 +304,10 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                           onTap: () {
                             HapticFeedback.lightImpact();
                             setState(() {
-                              _dialpadController.text =
-                                  _dialpadController.text.substring(0, _dialpadController.text.length - 1);
+                              _dialpadController.text = _dialpadController.text.substring(
+                                0,
+                                _dialpadController.text.length - 1,
+                              );
                             });
                           },
                           onLongPress: () {
@@ -346,11 +344,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
               shape: BoxShape.circle,
               color: hasDigits ? Colors.green : const Color(0xFF1F1F25),
             ),
-            child: Icon(
-              Icons.phone,
-              color: hasDigits ? Colors.white : Colors.grey[600],
-              size: 32,
-            ),
+            child: Icon(Icons.phone, color: hasDigits ? Colors.white : Colors.grey[600], size: 32),
           ),
         ),
         const Spacer(flex: 1),
@@ -414,11 +408,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   String? _extractCountryCode(String e164Number) {
     if (!e164Number.startsWith('+')) return null;
     var digits = e164Number.substring(1); // strip '+'
+    var allCountries = IntlCountryData.all();
     // Try longest match first (country codes are 1-3 digits)
     for (var len = 3; len >= 1; len--) {
       if (digits.length <= len) continue;
       var candidate = digits.substring(0, len);
-      if (countries.any((c) => c.fullCountryCode == candidate)) {
+      if (allCountries.any((c) => c.telephoneCode == candidate)) {
         return '+$candidate';
       }
     }
@@ -432,12 +427,7 @@ class _ContactRow extends StatelessWidget {
   final String initial;
   final VoidCallback onCall;
 
-  const _ContactRow({
-    required this.name,
-    required this.phone,
-    required this.initial,
-    required this.onCall,
-  });
+  const _ContactRow({required this.name, required this.phone, required this.initial, required this.onCall});
 
   @override
   Widget build(BuildContext context) {
@@ -480,12 +470,7 @@ class _DialpadKey extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
-  const _DialpadKey({
-    required this.digit,
-    required this.subtext,
-    required this.onTap,
-    this.onLongPress,
-  });
+  const _DialpadKey({required this.digit, required this.subtext, required this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -498,21 +483,25 @@ class _DialpadKey extends StatelessWidget {
       child: Container(
         width: 72,
         height: 72,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0xFF1F1F25),
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(digit, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white)),
+            Text(
+              digit,
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white),
+            ),
             if (subtext.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 1),
                 child: Text(
                   subtext,
-                  style:
-                      TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.grey[600], letterSpacing: 1.5),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ),
           ],

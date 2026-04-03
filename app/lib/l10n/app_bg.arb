@@ -448,7 +448,7 @@
     "exportConfiguration": "Експортирай конфигурация",
     "bringYourOwn": "Донесете свой собствен",
     "payYourSttProvider": "Използвайте omi свободно. Плащате само на вашия STT доставчик директно.",
-    "freeMinutesMonth": "4 800 безплатни минути/месец включени. Неограничено с ",
+    "freeMinutesMonth": "1 200 безплатни минути/месец включени. Неограничено с ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хостът е задължителен",
     "validPortRequired": "Валиден порт е задължителен",
@@ -573,7 +573,7 @@
     "tryAgain": "Опитай отново",
     "connectOmiOmiGlass": "Свържи Omi / OmiGlass",
     "continueWithoutDevice": "Продължи без устройство",
-    "permissionsRequired": "Изискват се разрешения",
+    "permissionsRequired": "Необходими разрешения",
     "permissionsRequiredDesc": "Това приложение се нуждае от разрешения за Bluetooth и местоположение, за да функционира правилно. Моля, активирайте ги в настройките.",
     "openSettings": "Отвори настройки",
     "wantDifferentName": "Искате ли различно име?",
@@ -1011,7 +1011,7 @@
     "loadingMemories": "Зареждане на спомени...",
     "allMemories": "Всички спомени",
     "aboutYou": "За теб",
-    "manual": "Ръчни",
+    "manual": "Ръчно",
     "loadingYourMemories": "Зареждане на вашите спомени...",
     "createYourFirstMemory": "Създайте първия си спомен, за да започнете",
     "tryAdjustingFilter": "Опитайте да промените търсенето или филтъра",
@@ -1461,7 +1461,7 @@
     "accessesAndTriggeredBy": "{accessDescription} и е {triggerDescription}.",
     "isTriggeredBy": "Е {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни.",
-    "basicPlanDescription": "4 800 премиум минути + неограничено на устройството",
+    "basicPlanDescription": "1 200 премиум минути + неограничено на устройството",
     "minutes": "минути",
     "omiHas": "Omi има:",
     "premiumMinutesUsed": "Използвани премиум минути.",
@@ -1894,7 +1894,7 @@
     "deviceMayWarmUp": "Устройството може да се нагрее при продължителна употреба.",
     "speedAccuracyLower": "Скоростта и точността може да бъдат по-ниски от облачните модели.",
     "cloudProvider": "Облачен доставчик",
-    "premiumMinutesInfo": "4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.",
+    "premiumMinutesInfo": "1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.",
     "viewUsage": "Преглед на използването",
     "localProcessingInfo": "Аудиото се обработва локално. Работи офлайн, по-поверително, но използва повече батерия.",
     "model": "Модел",
@@ -1918,7 +1918,7 @@
     "transcriptionSlowerOnDevice": "Транскрипцията на устройството може да бъде по-бавна на това устройство.",
     "computationallyIntensive": "Транскрипцията на устройството изисква интензивни изчисления.",
     "batteryDrainSignificantly": "Изтощаването на батерията ще се увеличи значително.",
-    "premiumMinutesMonth": "4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ",
+    "premiumMinutesMonth": "1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ",
     "audioProcessedLocally": "Аудиото се обработва локално. Работи офлайн, по-поверително, но консумира повече батерия.",
     "languageLabel": "Език",
     "modelLabel": "Модел",
@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Изтегляне от устройството",
     "reconnectingToInternet": "Повторно свързване с интернет...",
     "uploadingToCloud": "Качване на {current} от {total}",
+    "processingOnServer": "Обработка на сървъра...",
+    "processingOnServerProgress": "Обработка... {current}/{total} сегмента",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Обработено",
     "corruptedStatus": "Повредено",
     "nPending": "{count} в изчакване",
@@ -2718,5 +2730,152 @@
     "notYetSynced": "Все още не е синхронизирано с телефона ви",
     "clearAll": "Изчисти всичко",
     "phoneKeypad": "Клавиатура",
-    "phoneHideKeypad": "Скрий клавиатурата"
+    "phoneHideKeypad": "Скрий клавиатурата",
+    "transcriptionPaused": "Записва се, свързване отново",
+    "transcriptionPausedReconnecting": "Все още се записва — свързване с транскрипцията...",
+    "fairUsePolicy": "Честна употреба",
+    "fairUseLoadError": "Неуспешно зареждане на статуса на честна употреба. Моля, опитайте отново.",
+    "fairUseStatusNormal": "Вашата употреба е в нормалните граници.",
+    "fairUseStageNormal": "Нормална",
+    "fairUseStageWarning": "Предупреждение",
+    "fairUseStageThrottle": "Ограничена",
+    "fairUseStageRestrict": "Забранена",
+    "fairUseSpeechUsage": "Употреба на реч",
+    "fairUseToday": "Днес",
+    "fairUse3Day": "3-дневен период",
+    "fairUseWeekly": "Седмичен период",
+    "fairUseAboutTitle": "Относно честната употреба",
+    "fairUseAboutBody": "Omi е проектиран за лични разговори, срещи и взаимодействия на живо. Употребата се измерва по реалното открито време на реч, а не по времето на връзка. Ако употребата значително надвишава нормалните модели за неличностно съдържание, може да се приложат корекции.",
+    "fairUseCaseRefCopied": "{caseRef} копирано",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Добросъвестно ползване: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Подобряване на връзката",
+    "improveConnectionContent": "Подобрихме начина, по който Omi остава свързан с вашето устройство. За да активирате това, моля, отидете на страницата с информация за устройството, натиснете \"Изключване на устройството\" и сдвоете устройството си отново.",
+    "improveConnectionAction": "Разбрах",
+    "clockSkewWarning": "Часовникът на устройството ви е разместен с ~{minutes} мин. Проверете настройките за дата и час.",
+    "omisStorage": "Хранилище на Omi",
+    "phoneStorage": "Хранилище на телефона",
+    "cloudStorage": "Облачно хранилище",
+    "howSyncingWorks": "Как работи синхронизацията",
+    "noSyncedRecordings": "Все още няма синхронизирани записи",
+    "recordingsSyncAutomatically": "Записите се синхронизират автоматично — не е необходимо действие.",
+    "filesDownloadedUploadedNextTime": "Вече изтеглените файлове ще бъдат качени следващия път.",
+    "nConversationsCreated": "{count, plural, =1{1 разговор създаден} other{{count} разговора създадени}}",
+    "tapToView": "Докоснете за преглед",
+    "syncFailed": "Синхронизацията неуспешна",
+    "keepSyncing": "Продължи синхронизацията",
+    "cancelSyncQuestion": "Отмяна на синхронизацията?",
+    "omisStorageDesc": "Когато Omi не е свързан с телефона ви, той съхранява аудиото локално във вградената си памет. Никога няма да загубите запис.",
+    "phoneStorageDesc": "Когато Omi се свърже отново, записите автоматично се прехвърлят на телефона ви като временно хранилище преди качване.",
+    "cloudStorageDesc": "След качване, записите ви се обработват и транскрибират. Разговорите ще бъдат налични в рамките на минута.",
+    "storageSection": "СЪХРАНЕНИЕ",
+    "tipKeepPhoneNearby": "Дръжте телефона наблизо за по-бърза синхронизация",
+    "tipStableInternet": "Стабилен интернет ускорява качването в облака",
+    "tipAutoSync": "Записите се синхронизират автоматично",
+    "permissions": "Разрешения",
+    "permissionEnabled": "Активирано",
+    "permissionEnable": "Активиране",
+    "permissionsPageDescription": "Тези разрешения са основни за работата на Omi. Те позволяват ключови функции като известия, базирани на местоположение изживявания и аудио запис.",
+    "permissionsRequiredDescription": "Omi се нуждае от няколко разрешения, за да работи правилно. Моля, предоставете ги, за да продължите.",
+    "permissionsSetupTitle": "Получете най-доброто изживяване",
+    "permissionsSetupDescription": "Активирайте няколко разрешения, за да може Omi да работи магически.",
+    "permissionsChangeAnytime": "Можете да ги промените по всяко време в Настройки > Разрешения",
+    "location": "Местоположение",
+    "microphone": "Микрофон",
+    "cancelBillingPeriodInfo": "Планът ви ще остане активен до {date}. След това ще бъдете преместени на безплатната версия с ограничени функции.",
+    "cancelConsequenceBattery": "7 пъти повече разход на батерия (обработка на устройството)",
+    "cancelConsequenceDelay": "5-7 секунди забавяне при обработка (модели на устройството)",
+    "cancelConsequenceNoAccess": "Няма да имате неограничен достъп след края на периода на фактуриране.",
+    "cancelConsequencePhoneCalls": "Без транскрипция на телефонни разговори в реално време",
+    "cancelConsequenceQuality": "30% по-ниско качество на транскрипция (модели на устройството)",
+    "cancelConsequenceSpeakers": "Не може да идентифицира говорители.",
+    "cancelConsequencesSubtitle": "Силно препоръчваме да разгледате другите си опции вместо да отменяте.",
+    "cancelReasonAudioQuality": "Качество на аудио/транскрипция",
+    "cancelReasonBatteryDrain": "Притеснения за изтощаване на батерията",
+    "cancelReasonDetailHint": "Ценим всяка обратна връзка...",
+    "cancelReasonFoundAlternative": "Намерих алтернатива",
+    "cancelReasonMissingFeatures": "Липсващи функции",
+    "cancelReasonNotUsing": "Не го използвам достатъчно",
+    "cancelReasonOther": "Друго",
+    "cancelReasonSubtitle": "Можете ли да ни кажете защо напускате?",
+    "cancelReasonTooExpensive": "Твърде скъпо",
+    "confirmAndCancel": "Потвърди и отмени",
+    "feedbackSubtitleAudioQuality": "Бихме искали да разберем какво се е объркало.",
+    "feedbackSubtitleBatteryDrain": "Това помага на нашия хардуерен екип да се подобри.",
+    "feedbackSubtitleFoundAlternative": "Бихме искали да научим какво ви привлече.",
+    "feedbackSubtitleMissingFeatures": "Винаги изграждаме — това ни помага да приоритизираме.",
+    "feedbackSubtitleNotUsing": "Искаме да направим Omi по-полезен за вас.",
+    "feedbackSubtitleTooExpensive": "Обратната ви връзка ни помага да намерим правилния баланс.",
+    "feedbackTitleAudioQuality": "Какви проблеми срещнахте?",
+    "feedbackTitleBatteryDrain": "Разкажете ни за проблемите с батерията",
+    "feedbackTitleFoundAlternative": "Към какво преминавате?",
+    "feedbackTitleMissingFeatures": "Какви функции ви липсват?",
+    "feedbackTitleNotUsing": "Какво би ви накарало да използвате Omi повече?",
+    "feedbackTitleTooExpensive": "Каква цена би работила за вас?",
+    "ifYouCancel": "Ако отмените:",
+    "justAMoment": "Един момент, моля",
+    "tellUsMore": "Разкажете ни повече (по избор)",
+    "whyAreYouCanceling": "Защо отменяте?",
+    "deviceDiagnostics": "Диагностика на устройството",
+    "signalStrength": "Сила на сигнала",
+    "connectionUptime": "Време на работа",
+    "reconnections": "Повторни свързвания",
+    "disconnectHistory": "История на прекъсванията",
+    "noDisconnectsRecorded": "Няма записани прекъсвания",
+    "diagnostics": "Диагностика",
+    "waitingForData": "Изчакване на данни...",
+    "liveRssiOverTime": "RSSI в реално време",
+    "noRssiDataYet": "Все още няма RSSI данни",
+    "collectingData": "Събиране на данни...",
+    "cleanDisconnect": "Чисто прекъсване",
+    "connectionTimeout": "Изтекло време за свързване",
+    "remoteDeviceTerminated": "Отдалеченото устройство прекъсна",
+    "pairedToAnotherPhone": "Свързано с друг телефон",
+    "linkKeyMismatch": "Несъответствие на ключа за връзка",
+    "connectionFailed": "Неуспешно свързване",
+    "appClosed": "Приложението е затворено",
+    "manualDisconnect": "Ръчно прекъсване",
+    "lastNEvents": "Последни {count} събития",
+    "signal": "Сигнал",
+    "battery": "Батерия",
+    "excellent": "Отлично",
+    "good": "Добро",
+    "fair": "Задоволително",
+    "weak": "Слабо",
+    "gattError": "GATT грешка ({code})"
 }

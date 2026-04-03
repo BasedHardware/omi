@@ -14,6 +14,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -21,6 +23,7 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
@@ -72,13 +75,11 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -119,15 +120,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future _init() async {
   // Env
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors`
+  if (F.env == Environment.prod) {
     Env.init(ProdEnv());
   } else {
-    if (F.env == Environment.prod) {
-      Env.init(ProdEnv());
-    } else {
-      Env.init(DevEnv());
-    }
+    Env.init(DevEnv());
   }
 
   FlutterForegroundTask.initCommunicationPort();
@@ -137,7 +133,7 @@ Future _init() async {
 
   // Firebase
   if (Firebase.apps.isEmpty) {
-    final options = (PlatformService.isWindows || F.env == Environment.prod)
+    final options = F.env == Environment.prod
         ? prod.DefaultFirebaseOptions.currentPlatform
         : dev.DefaultFirebaseOptions.currentPlatform;
     await Firebase.initializeApp(options: options);
@@ -162,8 +158,13 @@ Future _init() async {
     if (isTestFlight) {
       Env.isTestFlight = true;
       if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        Env.overrideApiBaseUrl(Env.stagingApiUrl);
-        debugPrint('TestFlight detected: using staging backend (${Env.stagingApiUrl})');
+        final staging = Env.stagingApiUrl;
+        if (staging != null) {
+          Env.overrideApiBaseUrl(staging);
+          debugPrint('TestFlight detected: using staging backend ($staging)');
+        } else {
+          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
+        }
       } else {
         debugPrint('TestFlight detected: user chose production backend');
       }
@@ -184,13 +185,15 @@ Future _init() async {
       print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
     }
   }
-  if (PlatformService.isMobile) initOpus(await opus_flutter.load());
+  initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  if (!PlatformService.isWindows) {
-    ble.FlutterBluePlus.setOptions(restoreState: true);
-    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  }
+  // Register native BLE bridge
+  BleFlutterApi.setUp(BleBridge.instance);
+
+  BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+    Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+  };
 
   await CrashlyticsManager.init();
   if (isAuth) {
@@ -214,23 +217,16 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(
-    () async {
-      // Ensure
-      if (kDebugMode) {
-        MarionetteBinding.ensureInitialized();
-      } else {
-        WidgetsFlutterBinding.ensureInitialized();
-      }
-      await _init();
-      runApp(const MyApp());
-    },
-    (error, stack) => FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: true,
-    ),
-  );
+  runZonedGuarded(() async {
+    // Ensure
+    if (kDebugMode) {
+      MarionetteBinding.ensureInitialized();
+    } else {
+      WidgetsFlutterBinding.ensureInitialized();
+    }
+    await _init();
+    runApp(const MyApp());
+  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
 }
 
 class MyApp extends StatefulWidget {
@@ -242,7 +238,8 @@ class MyApp extends StatefulWidget {
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  // Delegates to the extracted globalNavigatorKey so files don't need to import main.dart
+  static GlobalKey<NavigatorState> get navigatorKey => globalNavigatorKey;
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
@@ -295,8 +292,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
@@ -432,11 +434,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
                     ),
                     Expanded(
-                      child: MediaQuery.removePadding(
-                        context: context,
-                        removeTop: true,
-                        child: child!,
-                      ),
+                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
                     ),
                   ],
                 );

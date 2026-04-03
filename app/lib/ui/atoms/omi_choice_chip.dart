@@ -29,11 +29,7 @@ class OmiChoiceChip extends AdaptiveWidget {
       mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(
-            icon,
-            size: 16,
-            color: selected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-          ),
+          Icon(icon, size: 16, color: selected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary),
           const SizedBox(width: 6),
         ],
         Flexible(

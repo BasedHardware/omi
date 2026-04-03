@@ -27,12 +27,7 @@ class TopicHighlight {
   final String summary;
   final List<String> conversationIds;
 
-  TopicHighlight({
-    required this.topic,
-    required this.emoji,
-    required this.summary,
-    this.conversationIds = const [],
-  });
+  TopicHighlight({required this.topic, required this.emoji, required this.summary, this.conversationIds = const []});
 
   factory TopicHighlight.fromJson(Map<String, dynamic> json) {
     return TopicHighlight(
@@ -48,10 +43,7 @@ class UnresolvedQuestion {
   final String question;
   final String? conversationId;
 
-  UnresolvedQuestion({
-    required this.question,
-    this.conversationId,
-  });
+  UnresolvedQuestion({required this.question, this.conversationId});
 
   factory UnresolvedQuestion.fromJson(Map<String, dynamic> json) {
     return UnresolvedQuestion(
@@ -65,10 +57,7 @@ class DecisionMade {
   final String decision;
   final String? conversationId;
 
-  DecisionMade({
-    required this.decision,
-    this.conversationId,
-  });
+  DecisionMade({required this.decision, this.conversationId});
 
   factory DecisionMade.fromJson(Map<String, dynamic> json) {
     return DecisionMade(
@@ -82,10 +71,7 @@ class KnowledgeNugget {
   final String insight;
   final String? conversationId;
 
-  KnowledgeNugget({
-    required this.insight,
-    this.conversationId,
-  });
+  KnowledgeNugget({required this.insight, this.conversationId});
 
   factory KnowledgeNugget.fromJson(Map<String, dynamic> json) {
     return KnowledgeNugget(
@@ -100,11 +86,7 @@ class DayStats {
   final int totalDurationMinutes; // Excluding discarded
   final int actionItemsCount;
 
-  DayStats({
-    this.totalConversations = 0,
-    this.totalDurationMinutes = 0,
-    this.actionItemsCount = 0,
-  });
+  DayStats({this.totalConversations = 0, this.totalDurationMinutes = 0, this.actionItemsCount = 0});
 
   factory DayStats.fromJson(Map<String, dynamic> json) {
     return DayStats(
@@ -131,13 +113,7 @@ class LocationPin {
   final String? conversationId;
   final String? time;
 
-  LocationPin({
-    required this.latitude,
-    required this.longitude,
-    this.address,
-    this.conversationId,
-    this.time,
-  });
+  LocationPin({required this.latitude, required this.longitude, this.address, this.conversationId, this.time});
 
   factory LocationPin.fromJson(Map<String, dynamic> json) {
     return LocationPin(
@@ -232,10 +208,7 @@ class DailySummary {
         json['knowledge_nuggets'],
         (e) => KnowledgeNugget.fromJson(e as Map<String, dynamic>),
       ),
-      locations: _parseList<LocationPin>(
-        json['locations'],
-        (e) => LocationPin.fromJson(e as Map<String, dynamic>),
-      ),
+      locations: _parseList<LocationPin>(json['locations'], (e) => LocationPin.fromJson(e as Map<String, dynamic>)),
     );
   }
 
@@ -257,7 +230,7 @@ class DailySummary {
         'September',
         'October',
         'November',
-        'December'
+        'December',
       ];
 
       return '${months[month - 1]} $day, ${parts[0]}';

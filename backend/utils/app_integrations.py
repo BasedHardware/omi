@@ -108,6 +108,8 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     """ON CONVERSATION CREATED"""
     if not conversation or conversation.discarded:
         return []
+    if conversation.is_locked:
+        return []
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
@@ -208,7 +210,8 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return conversations_db.get_conversations_by_id(uid, memories_id)
+    convos = conversations_db.get_conversations_by_id(uid, memories_id)
+    return [c for c in convos if not c.get('is_locked')]
 
 
 def _hit_proactive_notification_rate_limits(uid: str, app: App):
@@ -293,13 +296,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 1: Gate ─────────────────────────────────────────────────────
     try:
-        relevance = evaluate_relevance(
-            user_name=user_name,
-            user_facts=user_facts,
-            goals=goals,
-            current_messages=conversation_messages,
-            recent_notifications=recent_notifications,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            relevance = evaluate_relevance(
+                user_name=user_name,
+                user_facts=user_facts,
+                goals=goals,
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
         return None
@@ -331,14 +335,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             if memory_ids:
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
-                    all_past.extend(vector_convos)
+                    all_past.extend([c for c in vector_convos if not c.get('is_locked')])
 
         # Also fetch recent conversations by time for additional context
         recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
         if recent_convos:
             existing_ids = {c.get('id') for c in all_past}
             for rc in recent_convos:
-                if rc.get('id') not in existing_ids:
+                if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
 
         if all_past:
@@ -348,16 +352,17 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 2: Generate ─────────────────────────────────────────────────
     try:
-        draft = generate_notification(
-            user_name=user_name,
-            user_facts=user_facts,
-            goals=goals,
-            past_conversations_str=past_conversations_str,
-            current_messages=conversation_messages,
-            recent_notifications=recent_notifications,
-            frequency=frequency,
-            gate_reasoning=relevance.reasoning,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            draft = generate_notification(
+                user_name=user_name,
+                user_facts=user_facts,
+                goals=goals,
+                past_conversations_str=past_conversations_str,
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
+                frequency=frequency,
+                gate_reasoning=relevance.reasoning,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
         return None
@@ -376,13 +381,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 3: Critic ───────────────────────────────────────────────────
     try:
-        validation = validate_notification(
-            user_name=user_name,
-            notification_text=notification_text,
-            draft_reasoning=draft.reasoning,
-            current_messages=conversation_messages,
-            goals=goals,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            validation = validate_notification(
+                user_name=user_name,
+                notification_text=notification_text,
+                draft_reasoning=draft.reasoning,
+                current_messages=conversation_messages,
+                goals=goals,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
         return None

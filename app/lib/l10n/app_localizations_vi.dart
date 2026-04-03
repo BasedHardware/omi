@@ -1465,7 +1465,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get payYourSttProvider => 'Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.';
 
   @override
-  String get freeMinutesMonth => '4.800 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
+  String get freeMinutesMonth => '1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1821,7 +1821,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get skipThisQuestion => 'Bỏ qua câu hỏi này';
 
   @override
-  String get skipForNow => 'Bỏ qua';
+  String get skipForNow => 'Bỏ qua lúc này';
 
   @override
   String get connectionError => 'Lỗi Kết nối';
@@ -4771,7 +4771,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
 
   @override
-  String get basicPlanDescription => '4.800 phút cao cấp + không giới hạn trên thiết bị';
+  String get basicPlanDescription => '1.200 phút cao cấp + không giới hạn trên thiết bị';
 
   @override
   String get minutes => 'phút';
@@ -6176,7 +6176,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+      '1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8161,6 +8161,14 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Đang xử lý trên máy chủ...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Đang xử lý... $current/$total phân đoạn';
+  }
+
+  @override
   String get processedStatus => 'Đã xử lý';
 
   @override
@@ -8562,4 +8570,379 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ẩn bàn phím';
+
+  @override
+  String get fairUsePolicy => 'Sử dụng hợp lý';
+
+  @override
+  String get fairUseLoadError => 'Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.';
+
+  @override
+  String get fairUseStatusNormal => 'Mức sử dụng của bạn trong giới hạn bình thường.';
+
+  @override
+  String get fairUseStageNormal => 'Bình thường';
+
+  @override
+  String get fairUseStageWarning => 'Cảnh báo';
+
+  @override
+  String get fairUseStageThrottle => 'Bị hạn chế';
+
+  @override
+  String get fairUseStageRestrict => 'Bị chặn';
+
+  @override
+  String get fairUseSpeechUsage => 'Sử dụng giọng nói';
+
+  @override
+  String get fairUseToday => 'Hôm nay';
+
+  @override
+  String get fairUse3Day => '3 ngày liên tục';
+
+  @override
+  String get fairUseWeekly => 'Hàng tuần liên tục';
+
+  @override
+  String get fairUseAboutTitle => 'Về sử dụng hợp lý';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'Đã sao chép $caseRef';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}p / ${limit}p';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Đã đạt giới hạn chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Đặt lại $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Đang ghi, đang kết nối lại';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Vẫn đang ghi — đang kết nối lại với phiên âm...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Sử dụng hợp lý: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Cải thiện kết nối';
+
+  @override
+  String get improveConnectionContent =>
+      'Chúng tôi đã cải thiện cách Omi duy trì kết nối với thiết bị của bạn. Để kích hoạt, hãy vào trang Thông tin thiết bị, nhấn \"Ngắt kết nối thiết bị\", rồi ghép nối lại thiết bị.';
+
+  @override
+  String get improveConnectionAction => 'Đã hiểu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Đồng hồ thiết bị của bạn lệch ~$minutes phút. Kiểm tra cài đặt ngày và giờ.';
+  }
+
+  @override
+  String get omisStorage => 'Bộ nhớ Omi';
+
+  @override
+  String get phoneStorage => 'Bộ nhớ điện thoại';
+
+  @override
+  String get cloudStorage => 'Bộ nhớ đám mây';
+
+  @override
+  String get howSyncingWorks => 'Cách đồng bộ hoạt động';
+
+  @override
+  String get noSyncedRecordings => 'Chưa có bản ghi đã đồng bộ';
+
+  @override
+  String get recordingsSyncAutomatically => 'Bản ghi tự động đồng bộ — không cần thao tác.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Các tệp đã tải xuống sẽ được tải lên lần sau.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã tạo $count cuộc trò chuyện',
+      one: 'Đã tạo 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Nhấn để xem';
+
+  @override
+  String get syncFailed => 'Đồng bộ thất bại';
+
+  @override
+  String get keepSyncing => 'Tiếp tục đồng bộ';
+
+  @override
+  String get cancelSyncQuestion => 'Hủy đồng bộ?';
+
+  @override
+  String get omisStorageDesc =>
+      'Khi Omi không kết nối với điện thoại, nó lưu trữ âm thanh cục bộ trong bộ nhớ tích hợp. Bạn sẽ không bao giờ mất bản ghi.';
+
+  @override
+  String get phoneStorageDesc => 'Khi Omi kết nối lại, bản ghi tự động chuyển sang điện thoại trước khi tải lên.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Sau khi tải lên, bản ghi của bạn được xử lý và chuyển thành văn bản. Cuộc trò chuyện sẽ có trong vòng một phút.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Giữ điện thoại gần để đồng bộ nhanh hơn';
+
+  @override
+  String get tipStableInternet => 'Internet ổn định giúp tải lên đám mây nhanh hơn';
+
+  @override
+  String get tipAutoSync => 'Bản ghi tự động đồng bộ';
+
+  @override
+  String get storageSection => 'BỘ NHỚ';
+
+  @override
+  String get permissions => 'Quyền';
+
+  @override
+  String get permissionEnabled => 'Đã bật';
+
+  @override
+  String get permissionEnable => 'Bật';
+
+  @override
+  String get permissionsPageDescription =>
+      'Các quyền này rất quan trọng đối với hoạt động của Omi. Chúng kích hoạt các tính năng chính như thông báo, trải nghiệm dựa trên vị trí và ghi âm.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi cần một số quyền để hoạt động bình thường. Vui lòng cấp quyền để tiếp tục.';
+
+  @override
+  String get permissionsSetupTitle => 'Trải nghiệm tốt nhất';
+
+  @override
+  String get permissionsSetupDescription => 'Bật một vài quyền để Omi có thể phát huy hết khả năng.';
+
+  @override
+  String get permissionsChangeAnytime => 'Bạn có thể thay đổi bất cứ lúc nào trong Cài đặt > Quyền';
+
+  @override
+  String get location => 'Vị trí';
+
+  @override
+  String get microphone => 'Micrô';
+
+  @override
+  String get whyAreYouCanceling => 'Tại sao bạn hủy?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bạn có thể cho chúng tôi biết tại sao bạn rời đi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Quá đắt';
+
+  @override
+  String get cancelReasonNotUsing => 'Không sử dụng đủ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Thiếu tính năng';
+
+  @override
+  String get cancelReasonAudioQuality => 'Chất lượng âm thanh/phiên âm';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Lo ngại về tiêu hao pin';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Đã tìm thấy giải pháp thay thế';
+
+  @override
+  String get cancelReasonOther => 'Khác';
+
+  @override
+  String get tellUsMore => 'Cho chúng tôi biết thêm (tùy chọn)';
+
+  @override
+  String get cancelReasonDetailHint => 'Chúng tôi đánh giá cao mọi phản hồi...';
+
+  @override
+  String get justAMoment => 'Một chút thôi';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Chúng tôi khuyên bạn nên khám phá các lựa chọn khác thay vì hủy.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Gói của bạn sẽ vẫn hoạt động đến $date. Sau đó, bạn sẽ được chuyển sang phiên bản miễn phí với tính năng hạn chế.';
+  }
+
+  @override
+  String get ifYouCancel => 'Nếu bạn hủy:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Không còn truy cập không giới hạn khi kết thúc kỳ thanh toán.';
+
+  @override
+  String get cancelConsequenceBattery => 'Tiêu thụ pin gấp 7 lần (xử lý trên thiết bị)';
+
+  @override
+  String get cancelConsequenceQuality => 'Chất lượng phiên âm thấp hơn 30% (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceDelay => 'Độ trễ xử lý 5-7 giây (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Không thể nhận dạng người nói.';
+
+  @override
+  String get confirmAndCancel => 'Xác nhận và hủy';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Không có phiên âm cuộc gọi thời gian thực';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Mức giá nào phù hợp với bạn?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Bạn thiếu tính năng gì?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Bạn gặp vấn đề gì?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Hãy cho chúng tôi biết về vấn đề pin';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Bạn chuyển sang gì?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Điều gì sẽ khiến bạn sử dụng Omi nhiều hơn?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Phản hồi của bạn giúp chúng tôi tìm sự cân bằng.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Chúng tôi luôn xây dựng — điều này giúp ưu tiên.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chúng tôi muốn hiểu điều gì đã sai.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Điều này giúp đội ngũ phần cứng cải thiện.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chúng tôi muốn biết điều gì thu hút bạn.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
+
+  @override
+  String get deviceDiagnostics => 'Chẩn đoán thiết bị';
+
+  @override
+  String get signalStrength => 'Cường độ tín hiệu';
+
+  @override
+  String get connectionUptime => 'Thời gian hoạt động';
+
+  @override
+  String get reconnections => 'Kết nối lại';
+
+  @override
+  String get disconnectHistory => 'Lịch sử ngắt kết nối';
+
+  @override
+  String get noDisconnectsRecorded => 'Không có ngắt kết nối nào được ghi nhận';
+
+  @override
+  String get diagnostics => 'Chẩn đoán';
+
+  @override
+  String get waitingForData => 'Đang chờ dữ liệu...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI trực tiếp theo thời gian';
+
+  @override
+  String get noRssiDataYet => 'Chưa có dữ liệu RSSI';
+
+  @override
+  String get collectingData => 'Đang thu thập dữ liệu...';
+
+  @override
+  String get cleanDisconnect => 'Ngắt kết nối sạch';
+
+  @override
+  String get connectionTimeout => 'Hết thời gian kết nối';
+
+  @override
+  String get remoteDeviceTerminated => 'Thiết bị từ xa đã ngắt kết nối';
+
+  @override
+  String get pairedToAnotherPhone => 'Đã ghép nối với điện thoại khác';
+
+  @override
+  String get linkKeyMismatch => 'Khóa liên kết không khớp';
+
+  @override
+  String get connectionFailed => 'Kết nối thất bại';
+
+  @override
+  String get appClosed => 'Ứng dụng đã đóng';
+
+  @override
+  String get manualDisconnect => 'Ngắt kết nối thủ công';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count sự kiện gần nhất';
+  }
+
+  @override
+  String get signal => 'Tín hiệu';
+
+  @override
+  String get battery => 'Pin';
+
+  @override
+  String get excellent => 'Xuất sắc';
+
+  @override
+  String get good => 'Tốt';
+
+  @override
+  String get fair => 'Khá';
+
+  @override
+  String get weak => 'Yếu';
+
+  @override
+  String gattError(String code) {
+    return 'Lỗi GATT ($code)';
+  }
 }

@@ -297,6 +297,10 @@ class SharedPreferencesUtil {
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
+  bool get permissionsCompleted => getBool('permissionsCompleted');
+
+  set permissionsCompleted(bool value) => saveBool('permissionsCompleted', value);
+
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key');
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
@@ -335,6 +339,11 @@ class SharedPreferencesUtil {
   String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
 
   set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
+
+  // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)
+  bool get deviceSupportsMultiFileSync => getBool('deviceSupportsMultiFileSync');
+
+  set deviceSupportsMultiFileSync(bool value) => saveBool('deviceSupportsMultiFileSync', value);
 
   // Whether the user has been shown the Fast Transfer explanation dialog
   bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
@@ -618,6 +627,10 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
+
+  set companionAssociationPrompted(bool value) => saveBool('companionAssociationPrompted', value);
+
+  bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
 
   //------------------------ TestFlight API Environment ----------------------//
 

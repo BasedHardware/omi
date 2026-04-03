@@ -82,9 +82,7 @@ class _SearchWidgetState extends State<SearchWidget> {
         return Container(
           height: 420,
           padding: const EdgeInsets.only(top: 6.0),
-          margin: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
+          margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           color: const Color(0xFF1F1F25),
           child: SafeArea(
             top: false,
@@ -95,12 +93,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   decoration: const BoxDecoration(
                     color: Color(0xFF1F1F25),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Color(0xFF35343B),
-                        width: 0.5,
-                      ),
-                    ),
+                    border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -119,10 +112,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                         },
                         child: Text(
                           hasExistingFilter ? context.l10n.removeFilter : context.l10n.cancel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
                       const Spacer(),
@@ -136,11 +126,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                         },
                         child: Text(
                           context.l10n.done,
-                          style: const TextStyle(
-                            color: Colors.deepPurple,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -203,22 +189,10 @@ class _SearchWidgetState extends State<SearchWidget> {
                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                 filled: true,
                 fillColor: const Color(0xFF1F1F25),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: Colors.white60,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                prefixIcon: const Icon(Icons.search, color: Colors.white60),
                 suffixIcon: showClearButton
                     ? GestureDetector(
                         onTap: () async {
@@ -231,10 +205,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           homeProvider.hideConvoSearchBar();
                           MixpanelManager().searchQueryCleared();
                         },
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                        ),
+                        child: const Icon(Icons.close, color: Colors.white),
                       )
                     : null,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12),

@@ -448,7 +448,7 @@
     "exportConfiguration": "Eksportēt konfigurāciju",
     "bringYourOwn": "Atnesiet savu",
     "payYourSttProvider": "Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.",
-    "freeMinutesMonth": "4800 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ",
+    "freeMinutesMonth": "1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ",
     "omiUnlimited": "Omi Neierobežots",
     "hostRequired": "Resursdators ir nepieciešams",
     "validPortRequired": "Ir nepieciešams derīgs ports",
@@ -559,7 +559,7 @@
     "allDone": "Viss padarīts!",
     "keepGoing": "Turpiniet, jūs darāt lieliski",
     "skipThisQuestion": "Izlaist šo jautājumu",
-    "skipForNow": "Izlaist pagaidām",
+    "skipForNow": "Pagaidām izlaist",
     "connectionError": "Savienojuma kļūda",
     "connectionErrorDesc": "Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
     "invalidRecordingMultipleSpeakers": "Atklāts nederīgs ieraksts",
@@ -993,7 +993,7 @@
     "loadingMemories": "Ielādē atmiņas...",
     "allMemories": "Visas atmiņas",
     "aboutYou": "Par jums",
-    "manual": "Manuāls",
+    "manual": "Manuāli",
     "loadingYourMemories": "Ielādē jūsu atmiņas...",
     "createYourFirstMemory": "Izveidojiet savu pirmo atmiņu, lai sāktu",
     "tryAdjustingFilter": "Mēģiniet pielāgot meklēšanu vai filtru",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} un ir {triggerDescription}.",
     "isTriggeredBy": "Ir {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nav konfigurēta specifiska datu piekļuve.",
-    "basicPlanDescription": "4800 premium minūtes + neierobežots ierīcē",
+    "basicPlanDescription": "1200 premium minūtes + neierobežots ierīcē",
     "minutes": "minūtes",
     "omiHas": "Omi ir:",
     "premiumMinutesUsed": "Premium minūtes izmantotas.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Ierīce var uzkarst ilgstošas lietošanas laikā.",
     "speedAccuracyLower": "Ātrums un precizitāte var būt zemāki nekā mākoņa modeļiem.",
     "cloudProvider": "Mākoņa nodrošinātājs",
-    "premiumMinutesMonth": "4800 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ",
+    "premiumMinutesMonth": "1200 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ",
     "viewUsage": "Skatīt lietojumu",
     "audioProcessedLocally": "Audio tiek apstrādāts lokāli. Darbojas bezsaistē, privātāk, bet patērē vairāk akumulatora.",
     "languageLabel": "Valoda",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Atsauksmes nav atrastas",
     "onDeviceIntensive": "Ierīces transkripcija ir skaitļošanas resursu ietilpīga.",
     "onDeviceSlower": "Ierīces transkripcija šajā ierīcē var būt lēnāka.",
-    "premiumMinutesInfo": "4800 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.",
+    "premiumMinutesInfo": "1200 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.",
     "redownload": "Lejupielādēt atkārtoti",
     "reply": "Atbildēt",
     "replySentSuccessfully": "Atbilde veiksmīgi nosūtīta",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Lejupielāde no ierīces",
     "reconnectingToInternet": "Atkārtota savienošana ar internetu...",
     "uploadingToCloud": "Augšupielāde {current} no {total}",
+    "processingOnServer": "Apstrāde serverī...",
+    "processingOnServerProgress": "Apstrāde... {current}/{total} segmenti",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Apstrādāts",
     "corruptedStatus": "Bojāts",
     "nPending": "{count} gaida",
@@ -2749,5 +2761,152 @@
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
     "clearAll": "Notīrīt visu",
     "phoneKeypad": "Tastatūra",
-    "phoneHideKeypad": "Paslēpt tastatūru"
+    "phoneHideKeypad": "Paslēpt tastatūru",
+    "transcriptionPaused": "Ierakstīšana, atkārtota savienošana",
+    "transcriptionPausedReconnecting": "Joprojām ieraksta — atkārtoti savienojas ar transkripciju...",
+    "fairUsePolicy": "Godīga lietošana",
+    "fairUseLoadError": "Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.",
+    "fairUseStatusNormal": "Jūsu lietojums ir normas robežās.",
+    "fairUseStageNormal": "Normāls",
+    "fairUseStageWarning": "Brīdinājums",
+    "fairUseStageThrottle": "Ierobežots",
+    "fairUseStageRestrict": "Bloķēts",
+    "fairUseSpeechUsage": "Runas lietojums",
+    "fairUseToday": "Šodien",
+    "fairUse3Day": "3 dienu periods",
+    "fairUseWeekly": "Nedēļas periods",
+    "fairUseAboutTitle": "Par godīgu lietošanu",
+    "fairUseAboutBody": "Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.",
+    "fairUseCaseRefCopied": "{caseRef} nokopēts",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Godprātīga izmantošana: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Uzlabot savienojumu",
+    "improveConnectionContent": "Mēs esam uzlabojuši veidu, kā Omi paliek savienots ar jūsu ierīci. Lai to aktivizētu, dodieties uz ierīces informācijas lapu, pieskarieties \"Atvienot ierīci\" un savienojiet ierīci pārī no jauna.",
+    "improveConnectionAction": "Sapratu",
+    "clockSkewWarning": "Jūsu ierīces pulkstenis atšķiras par ~{minutes} min. Pārbaudiet datuma un laika iestatījumus.",
+    "omisStorage": "Omi krātuve",
+    "phoneStorage": "Tālruņa krātuve",
+    "cloudStorage": "Mākoņkrātuve",
+    "howSyncingWorks": "Kā darbojas sinhronizācija",
+    "noSyncedRecordings": "Vēl nav sinhronizētu ierakstu",
+    "recordingsSyncAutomatically": "Ieraksti tiek sinhronizēti automātiski — darbība nav nepieciešama.",
+    "filesDownloadedUploadedNextTime": "Jau lejupielādētie faili tiks augšupielādēti nākamreiz.",
+    "nConversationsCreated": "{count, plural, =1{1 saruna izveidota} other{{count} sarunas izveidotas}}",
+    "tapToView": "Pieskarieties, lai skatītu",
+    "syncFailed": "Sinhronizācija neizdevās",
+    "keepSyncing": "Turpināt sinhronizāciju",
+    "cancelSyncQuestion": "Atcelt sinhronizāciju?",
+    "omisStorageDesc": "Kad jūsu Omi nav savienots ar tālruni, tas saglabā audio lokāli iebūvētajā atmiņā. Jūs nekad nezaudēsiet ierakstu.",
+    "phoneStorageDesc": "Kad Omi atkārtoti pieslēdzas, ieraksti automātiski tiek pārsūtīti uz jūsu tālruni pirms augšupielādes.",
+    "cloudStorageDesc": "Pēc augšupielādes jūsu ieraksti tiek apstrādāti un transkribēti. Sarunas būs pieejamas minūtes laikā.",
+    "storageSection": "KRĀTUVE",
+    "tipKeepPhoneNearby": "Turiet tālruni tuvumā ātrākai sinhronizācijai",
+    "tipStableInternet": "Stabils internets paātrina mākoņa augšupielādi",
+    "tipAutoSync": "Ieraksti tiek sinhronizēti automātiski",
+    "permissions": "Atļaujas",
+    "permissionEnabled": "Iespējota",
+    "permissionEnable": "Iespējot",
+    "permissionsPageDescription": "Šīs atļaujas ir būtiskas Omi darbībai. Tās nodrošina galvenās funkcijas, piemēram, paziņojumus, uz atrašanās vietu balstītas pieredzes un audio ierakstīšanu.",
+    "permissionsRequiredDescription": "Omi ir nepieciešamas dažas atļaujas, lai pareizi darbotos. Lūdzu, piešķiriet tās, lai turpinātu.",
+    "permissionsSetupTitle": "Iegūstiet vislabāko pieredzi",
+    "permissionsSetupDescription": "Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.",
+    "permissionsChangeAnytime": "Jūs varat tos mainīt jebkurā laikā sadaļā Iestatījumi > Atļaujas",
+    "location": "Atrašanās vieta",
+    "microphone": "Mikrofons",
+    "cancelBillingPeriodInfo": "Jūsu plāns paliks aktīvs līdz {date}. Pēc tam jūs tiksiet pārcelts uz bezmaksas versiju ar ierobežotām funkcijām.",
+    "cancelConsequenceBattery": "7x lielāks baterijas patēriņš (apstrāde ierīcē)",
+    "cancelConsequenceDelay": "5-7 sekunžu apstrādes aizkave (modeļi ierīcē)",
+    "cancelConsequenceNoAccess": "Norēķinu perioda beigās vairs nebūs neierobežotas piekļuves.",
+    "cancelConsequencePhoneCalls": "Nav reāllaika telefona zvanu transkripcijas",
+    "cancelConsequenceQuality": "30% zemāka transkripcijas kvalitāte (modeļi ierīcē)",
+    "cancelConsequenceSpeakers": "Nevar identificēt runātājus.",
+    "cancelConsequencesSubtitle": "Mēs ļoti iesakām izpētīt citas iespējas, nevis atcelt.",
+    "cancelReasonAudioQuality": "Audio/transkripcijas kvalitāte",
+    "cancelReasonBatteryDrain": "Bažas par baterijas iztukšošanos",
+    "cancelReasonDetailHint": "Mēs novērtējam jebkādu atsauksmi...",
+    "cancelReasonFoundAlternative": "Atradu alternatīvu",
+    "cancelReasonMissingFeatures": "Trūkstošas funkcijas",
+    "cancelReasonNotUsing": "Neizmantoju pietiekami",
+    "cancelReasonOther": "Cits",
+    "cancelReasonSubtitle": "Vai varat mums pastāstīt, kāpēc aizejat?",
+    "cancelReasonTooExpensive": "Pārāk dārgs",
+    "confirmAndCancel": "Apstiprināt un atcelt",
+    "feedbackSubtitleAudioQuality": "Mēs labprāt saprastu, kas nogāja greizi.",
+    "feedbackSubtitleBatteryDrain": "Tas palīdz mūsu aparatūras komandai uzlabot.",
+    "feedbackSubtitleFoundAlternative": "Mēs labprāt uzzinātu, kas piesaistīja jūsu uzmanību.",
+    "feedbackSubtitleMissingFeatures": "Mēs vienmēr būvējam — tas palīdz mums noteikt prioritātes.",
+    "feedbackSubtitleNotUsing": "Mēs vēlamies padarīt Omi noderīgāku jums.",
+    "feedbackSubtitleTooExpensive": "Jūsu atsauksmes palīdz mums atrast pareizo līdzsvaru.",
+    "feedbackTitleAudioQuality": "Kādas problēmas jūs pieredzējāt?",
+    "feedbackTitleBatteryDrain": "Pastāstiet mums par baterijas problēmām",
+    "feedbackTitleFoundAlternative": "Uz ko jūs pāriejat?",
+    "feedbackTitleMissingFeatures": "Kādu funkciju jums pietrūkst?",
+    "feedbackTitleNotUsing": "Kas liktu jums vairāk izmantot Omi?",
+    "feedbackTitleTooExpensive": "Kāda cena jums derētu?",
+    "ifYouCancel": "Ja atcelsiet:",
+    "justAMoment": "Vienu brīdi, lūdzu",
+    "tellUsMore": "Pastāstiet mums vairāk (neobligāti)",
+    "whyAreYouCanceling": "Kāpēc jūs atceļat?",
+    "deviceDiagnostics": "Ierīces diagnostika",
+    "signalStrength": "Signāla stiprums",
+    "connectionUptime": "Darbības laiks",
+    "reconnections": "Atkārtoti savienojumi",
+    "disconnectHistory": "Atvienošanas vēsture",
+    "noDisconnectsRecorded": "Nav reģistrētu atvienošanu",
+    "diagnostics": "Diagnostika",
+    "waitingForData": "Gaida datus...",
+    "liveRssiOverTime": "Reāllaika RSSI laika gaitā",
+    "noRssiDataYet": "Vēl nav RSSI datu",
+    "collectingData": "Datu vākšana...",
+    "cleanDisconnect": "Tīra atvienošana",
+    "connectionTimeout": "Savienojuma taimauts",
+    "remoteDeviceTerminated": "Attālā ierīce pārtrauca savienojumu",
+    "pairedToAnotherPhone": "Savienots pārī ar citu tālruni",
+    "linkKeyMismatch": "Saites atslēgas neatbilstība",
+    "connectionFailed": "Savienojums neizdevās",
+    "appClosed": "Lietotne aizvērta",
+    "manualDisconnect": "Manuāla atvienošana",
+    "lastNEvents": "Pēdējie {count} notikumi",
+    "signal": "Signāls",
+    "battery": "Akumulators",
+    "excellent": "Izcili",
+    "good": "Labi",
+    "fair": "Apmierinošs",
+    "weak": "Vājš",
+    "gattError": "GATT kļūda ({code})"
 }

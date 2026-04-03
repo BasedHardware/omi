@@ -1,6 +1,7 @@
 *.env
 .env*
 !.env.template
+!.env.example
 *__pycache__/
 *venv/
 libraries/
@@ -13,6 +14,9 @@ dump/
 *.wav
 node_modules
 yarn.lock
+
+# Coordination (AI agent collab manifests)
+.coordination/
 
 # General
 .idea/

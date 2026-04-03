@@ -1,0 +1,81 @@
+# E2E Flow: Dashboard — productivity score, goals tracking, tasks overview
+# Tests: Dashboard widgets load, goals CRUD, task completion toggle, conversation list
+# Core feature: main landing page with daily productivity summary
+
+version: 2
+name: dashboard
+description: Dashboard flow — verify productivity widgets load, create/update/delete goals, toggle task completion, view embedded conversations
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/Desktop/Sources/MainWindow/Components/GoalsWidget.swift
+  - desktop/Desktop/Sources/MainWindow/Components/TasksWidget.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: S1
+    name: Verify dashboard loads with widgets
+    do: "Navigate to Dashboard via sidebar: agent-swift find key sidebar_dashboard click. Take snapshot. Verify the dashboard shows Tasks widget (overdue, today, recent sections) and Goals widget side by side in a grid layout."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Dashboard is index 0 in sidebar. DashboardPage shows Grid with TasksWidget (left) and GoalsWidget (right). Tasks sourced from shared TasksStore. Goals loaded from local SQLite first, then API sync."
+
+  - id: S2
+    name: Create a new goal
+    do: "In the Goals widget, click the '+' or 'Add Goal' button. A goal creation form appears. Fill in title 'Read 5 Books', set target to 5. Save the goal."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "GoalsWidget createGoal callback calls APIClient.shared.createGoal then syncs to local SQLite via GoalStorage.shared.syncServerGoal. Goal types: numeric, boolean. Smart emoji assigned by title keywords."
+
+  - id: S3
+    name: Update goal progress
+    do: "Find the 'Read 5 Books' goal in the Goals widget. Drag the progress slider or click to update current value to 2. Verify the progress bar updates and shows '2/5'."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "updateGoalProgress optimistically updates local SQLite, then calls APIClient. If backend auto-completes (completedAt != nil), posts .goalCompleted notification triggering celebration UI."
+
+  - id: S4
+    name: Toggle a task completion
+    do: "In the Tasks widget, find a task in the 'Today' or 'Recent' section. Click the checkbox to toggle it complete. Verify the task shows as completed (strikethrough or checkmark). The productivity score should update."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "toggleTaskCompletion delegates to TasksStore.shared.toggleTask then reloads scores via loadScores(). TasksStore handles optimistic update + API sync."
+
+  - id: S5
+    name: Scroll to embedded conversations
+    do: "Scroll down past the dashboard widgets to see the embedded ConversationsPage. Verify conversation items appear below the goals/tasks grid."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "DashboardPage embeds ConversationsPage(embedded: true) below the dashboard widgets in a single ScrollView. Conversations load from AppState."
+
+  - id: S6
+    name: Delete the goal
+    do: "Find the 'Read 5 Books' goal. Click the delete button or swipe to delete. Confirm deletion if prompted. Verify the goal is removed from the Goals widget."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "deleteGoal soft-deletes locally first via GoalStorage.shared.softDelete for instant UI update, then calls APIClient.shared.deleteGoal."

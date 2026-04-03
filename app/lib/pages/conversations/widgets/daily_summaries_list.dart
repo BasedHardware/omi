@@ -61,19 +61,12 @@ class _DailySummariesListState extends State<DailySummariesList> {
   void _openSummary(DailySummary summary) {
     // Track recap card click
     final cardIndex = _summaries.indexOf(summary);
-    MixpanelManager().recapSummaryCardClicked(
-      summaryId: summary.id,
-      date: summary.date,
-      cardIndex: cardIndex,
-    );
+    MixpanelManager().recapSummaryCardClicked(summaryId: summary.id, date: summary.date, cardIndex: cardIndex);
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DailySummaryDetailPage(
-          summaryId: summary.id,
-          summary: summary,
-        ),
+        builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
       ),
     );
   }
@@ -89,37 +82,31 @@ class _DailySummariesListState extends State<DailySummariesList> {
     }
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          // Extra tail item for spinner / bottom padding
-          if (index == _summaries.length) {
-            if (_isLoadingMore) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        // Extra tail item for spinner / bottom padding
+        if (index == _summaries.length) {
+          if (_isLoadingMore) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade400),
                 ),
-              );
-            }
-            return const SizedBox(height: 100);
+              ),
+            );
           }
+          return const SizedBox(height: 100);
+        }
 
-          // Prefetch more when approaching end
-          if (_hasMore && !_isLoadingMore && index >= _summaries.length - 3) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-          }
+        // Prefetch more when approaching end
+        if (_hasMore && !_isLoadingMore && index >= _summaries.length - 3) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+        }
 
-          return _buildSummaryCard(_summaries[index]);
-        },
-        childCount: _summaries.length + 1,
-      ),
+        return _buildSummaryCard(_summaries[index]);
+      }, childCount: _summaries.length + 1),
     );
   }
 
@@ -156,27 +143,17 @@ class _DailySummariesListState extends State<DailySummariesList> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 40),
-            const Text(
-              '📊',
-              style: TextStyle(fontSize: 64),
-            ),
+            const Text('📊', style: TextStyle(fontSize: 64)),
             const SizedBox(height: 16),
             Text(
               context.l10n.noDailyRecapsYet,
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 18, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.dailyRecapsDescription,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
           ],
         ),
@@ -222,10 +199,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24.0),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Row(
@@ -235,15 +209,9 @@ class _DailySummariesListState extends State<DailySummariesList> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF35343B),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
                   alignment: Alignment.center,
-                  child: Text(
-                    summary.dayEmoji,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
+                  child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
                 ),
                 const SizedBox(width: 12),
                 // Title and metadata
@@ -267,15 +235,8 @@ class _DailySummariesListState extends State<DailySummariesList> {
                             maxLines: 1,
                           ),
                           if (summary.stats.totalConversations > 0) ...[
-                            const Text(
-                              ' • ',
-                              style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                            ),
-                            const FaIcon(
-                              FontAwesomeIcons.solidComments,
-                              size: 10,
-                              color: Color(0xFF9A9BA1),
-                            ),
+                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                            const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
                             const SizedBox(width: 4),
                             Text(
                               '${summary.stats.totalConversations}',
@@ -284,15 +245,8 @@ class _DailySummariesListState extends State<DailySummariesList> {
                             ),
                           ],
                           if (summary.stats.actionItemsCount > 0) ...[
-                            const Text(
-                              ' • ',
-                              style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                            ),
-                            const FaIcon(
-                              FontAwesomeIcons.listCheck,
-                              size: 11,
-                              color: Color(0xFF9A9BA1),
-                            ),
+                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                            const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
                             const SizedBox(width: 4),
                             Text(
                               '${summary.stats.actionItemsCount}',

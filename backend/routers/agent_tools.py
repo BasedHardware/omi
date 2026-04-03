@@ -20,7 +20,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from database.users import get_agent_vm
-from utils.other.endpoints import get_current_user_uid
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
@@ -263,7 +263,7 @@ class ExecuteToolRequest(BaseModel):
 @router.post("/v1/agent/execute-tool")
 async def execute_tool(
     body: ExecuteToolRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
 ):
     """Execute a named tool and return its result."""
     # Set up agent_config_context so tools can resolve the UID

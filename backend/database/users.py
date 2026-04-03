@@ -52,6 +52,20 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
+def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'cancellation_feedback': {
+                'reason': reason,
+                'reason_details': reason_details or '',
+                'timestamp': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
@@ -235,6 +249,27 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         }
     )
     return True
+
+
+def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
+    """Store speaker embedding for the user's own voice on their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'speaker_embedding_updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_user_speaker_embedding(uid: str) -> Optional[list]:
+    """Get the user's own speaker embedding from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return None
+    return user_doc.to_dict().get('speaker_embedding')
 
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:

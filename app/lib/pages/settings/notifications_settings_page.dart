@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -147,9 +145,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     await showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         int tempHour = _dailySummaryHour;
         return StatefulBuilder(
@@ -164,18 +160,11 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          context.l10n.cancel,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                        ),
+                        child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400, fontSize: 16)),
                       ),
                       Text(
                         context.l10n.selectTime,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                       ),
                       TextButton(
                         onPressed: () {
@@ -192,9 +181,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   const SizedBox(height: 8),
                   Expanded(
                     child: CupertinoTheme(
-                      data: const CupertinoThemeData(
-                        brightness: Brightness.dark,
-                      ),
+                      data: const CupertinoThemeData(brightness: Brightness.dark),
                       child: CupertinoPicker(
                         scrollController: FixedExtentScrollController(initialItem: tempHour),
                         itemExtent: 44,
@@ -207,10 +194,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                           return Center(
                             child: Text(
                               '$hour12:00 $period',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 20),
                             ),
                           );
                         }),
@@ -226,72 +210,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Future<void> _showGenerateSummaryPicker() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF6366F1),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1C1C1E),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF1C1C1E),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && mounted) {
-      final dateStr =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
-      );
-
-      final summaryId = await generateDailySummary(date: dateStr);
-
-      if (!mounted) return;
-      Navigator.pop(context); // Dismiss loading
-
-      if (summaryId != null) {
-        MixpanelManager().dailySummaryTestGenerated(date: dateStr);
-
-        // Refresh the hasDailySummaries flag so the Recap tab shows
-        Provider.of<ConversationProvider>(context, listen: false).checkHasDailySummaries();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.summaryGeneratedFor('${picked.month}/${picked.day}/${picked.year}')),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
-      } else {
-        MixpanelManager().dailySummaryTestGenerationFailed(date: dateStr);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedToGenerateSummary),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -300,29 +218,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         title: Text(context.l10n.notifications),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            color: const Color(0xFF1C1C1E),
-            onSelected: (value) {
-              if (value == 'generate') {
-                _showGenerateSummaryPicker();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'generate',
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                    const SizedBox(width: 12),
-                    Text(context.l10n.generateSummary, style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
@@ -338,11 +233,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       context.l10n.notificationFrequencyDescription,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                     ),
                   ),
                   _buildFrequencyCard(),
@@ -356,11 +247,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       context.l10n.dailySummaryDescription,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                     ),
                   ),
                   _buildDailySummaryCard(),
@@ -374,11 +261,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       context.l10n.dailyReflectionDescription,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                     ),
                   ),
                   _buildDailyReflectionCard(),
@@ -391,21 +274,14 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
     );
   }
 
   Widget _buildFrequencyCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Current value display
@@ -417,19 +293,12 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                 children: [
                   Text(
                     _getFrequencyLabel(context, _notificationFrequency),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _getFrequencyDescription(context, _notificationFrequency),
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                   ),
                 ],
               ),
@@ -481,20 +350,8 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  context.l10n.sliderOff,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  context.l10n.sliderMax,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
+                Text(context.l10n.sliderOff, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                Text(context.l10n.sliderMax, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
               ],
             ),
           ),
@@ -506,10 +363,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Widget _buildDailySummaryCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Enable toggle row
@@ -543,17 +397,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   children: [
                     Text(
                       _formatHourDisplay(_dailySummaryHour),
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                     ),
                     const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right,
-                      color: Colors.grey.shade600,
-                      size: 20,
-                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                   ],
                 ),
               ),
@@ -567,10 +414,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Widget _buildDailyReflectionCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: _buildSettingRow(
         icon: FontAwesomeIcons.moon,
         title: context.l10n.enable,
@@ -583,31 +427,20 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({
-    required IconData icon,
-    required String title,
-    required Widget trailing,
-  }) {
+  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2A2E),
-            borderRadius: BorderRadius.circular(10),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
           child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
           ),
         ),
         trailing,

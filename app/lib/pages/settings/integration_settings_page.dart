@@ -43,13 +43,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            context.l10n.disconnectFromApp(widget.appName),
-            style: const TextStyle(color: Colors.white),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.disconnectFromApp(widget.appName), style: const TextStyle(color: Colors.white)),
           content: Text(
             context.l10n.disconnectFromAppDesc(widget.appName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -57,17 +52,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: const TextStyle(color: Color(0xFF8E8E93)),
-              ),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                context.l10n.disconnect,
-                style: const TextStyle(color: Colors.red),
-              ),
+              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -95,10 +84,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       }
       provider.refresh();
       scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.disconnectedFrom(widget.appName)),
-          duration: const Duration(seconds: 2),
-        ),
+        SnackBar(content: Text(context.l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
       );
       navigator.pop();
     }
@@ -117,11 +103,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         ),
         title: Text(
           context.l10n.appSettings(widget.appName),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
         actions: [
@@ -154,10 +136,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                     Expanded(
                       child: Text(
                         context.l10n.connectedToApp(widget.appName),
-                        style: const TextStyle(
-                          color: Colors.green,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: Colors.green, fontSize: 14),
                       ),
                     ),
                   ],
@@ -165,28 +144,18 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
               ),
               Text(
                 context.l10n.account,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               Text(
                 widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
-                style: const TextStyle(
-                  color: Color(0xFF8E8E93),
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
               ),
               const SizedBox(height: 32),
               // Wrap children in Expanded with SingleChildScrollView to handle overflow
               Expanded(
                 child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: widget.children,
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children),
                 ),
               ),
               const SizedBox(height: 16),
@@ -202,19 +171,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.logout,
-                        color: Colors.red,
-                        size: 20,
-                      ),
+                      const Icon(Icons.logout, color: Colors.red, size: 20),
                       const SizedBox(width: 12),
                       Text(
                         context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),

@@ -45,9 +45,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     await Future.delayed(const Duration(seconds: 1));
 
-    _rxSubscription = transport
-        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
-        .listen(_handleNotification);
+    _rxSubscription =
+        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
 
     await Future.delayed(const Duration(seconds: 1));
 

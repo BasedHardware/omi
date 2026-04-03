@@ -93,40 +93,25 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   softWrap: true,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),
               TextButton(
                 onPressed: currentSelectedLanguage == null
                     ? null
                     : () {
-                        widget.onLanguageSelected(
-                          currentSelectedLanguage,
-                          currentSelectedLanguageName,
-                        );
+                        widget.onLanguageSelected(currentSelectedLanguage, currentSelectedLanguageName);
                         Navigator.pop(context);
                       },
                 child: Text(
                   context.l10n.done,
-                  style: TextStyle(
-                    color: currentSelectedLanguage == null ? null : Colors.white,
-                  ),
+                  style: TextStyle(color: currentSelectedLanguage == null ? null : Colors.white),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            context.l10n.languageBenefits,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
-          ),
+          Text(context.l10n.languageBenefits, style: const TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 16),
           TextField(
             onChanged: filterLanguages,
@@ -157,10 +142,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
           Expanded(
             child: filteredLanguages.isEmpty
                 ? Center(
-                    child: Text(
-                      context.l10n.noLanguagesFound,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
+                    child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
                   )
                 : ListView.builder(
                     controller: widget.languageScrollController,
@@ -171,16 +153,11 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                       final isSelected = currentSelectedLanguage == language.value;
 
                       return ListTile(
-                        title: Text(
-                          language.key,
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                        title: Text(language.key, style: const TextStyle(color: Colors.white)),
                         trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                         selected: isSelected,
                         selectedTileColor: Colors.deepPurple.withOpacity(0.2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {
                             if (currentSelectedLanguage == language.value) {
@@ -220,8 +197,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           selectedLanguage = savedLanguage;
           // Find the language name for the saved language code
           try {
-            selectedLanguageName =
-                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName = homeProvider.availableLanguages.entries
+                .firstWhere((entry) => entry.value == savedLanguage)
+                .key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -265,9 +243,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
       builder: (context) {
         return LanguageSelectorWidget(
@@ -301,10 +277,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
           decoration: const BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(40),
-              topRight: Radius.circular(40),
-            ),
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
           ),
           child: SafeArea(
             top: false,
@@ -338,15 +311,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                     decoration: BoxDecoration(
                       color: Colors.grey[900],
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.grey[700]!,
-                        width: 1,
-                      ),
+                      border: Border.all(color: Colors.grey[700]!, width: 1),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 20,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -360,11 +327,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.grey[500],
-                          size: 24,
-                        ),
+                        Icon(Icons.keyboard_arrow_down, color: Colors.grey[500], size: 24),
                       ],
                     ),
                   ),
@@ -394,18 +357,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                       foregroundColor: selectedLanguage == null ? Colors.grey[600] : Colors.black,
                       disabledBackgroundColor: Colors.grey[800],
                       disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       elevation: 0,
                     ),
                     child: Text(
                       context.l10n.continueButton,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Manrope',
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                     ),
                   ),
                 ),

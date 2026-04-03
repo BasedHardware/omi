@@ -33,22 +33,14 @@ class SttSegment {
   final double end;
   final int speakerId;
 
-  SttSegment({
-    required this.text,
-    required this.start,
-    required this.end,
-    this.speakerId = 0,
-  });
+  SttSegment({required this.text, required this.start, required this.end, this.speakerId = 0});
 }
 
 class SttTranscriptionResult {
   final List<SttSegment> segments;
   final String? rawText;
 
-  SttTranscriptionResult({
-    this.segments = const [],
-    this.rawText,
-  });
+  SttTranscriptionResult({this.segments = const [], this.rawText});
 
   bool get isEmpty => segments.isEmpty && (rawText == null || rawText!.trim().isEmpty);
   bool get isNotEmpty => !isEmpty;
@@ -94,15 +86,11 @@ class SttTranscriptionResult {
           }
 
           // Extract speaker ID from speaker field
-          final speakerValue =
-              schema.segmentsSpeakerField != null ? JsonPathNavigator.getValue(seg, schema.segmentsSpeakerField) : null;
+          final speakerValue = schema.segmentsSpeakerField != null
+              ? JsonPathNavigator.getValue(seg, schema.segmentsSpeakerField)
+              : null;
 
-          segments.add(SttSegment(
-            text: text,
-            start: start,
-            end: end,
-            speakerId: _extractSpeakerId(speakerValue),
-          ));
+          segments.add(SttSegment(text: text, start: start, end: end, speakerId: _extractSpeakerId(speakerValue)));
         }
       }
     }
@@ -111,16 +99,15 @@ class SttTranscriptionResult {
 
     // Fallback: create single segment from raw text
     if (segments.isEmpty && rawText != null && rawText.trim().isNotEmpty) {
-      segments.add(SttSegment(
-        text: rawText.trim(),
-        start: audioOffsetSeconds,
-        end: audioOffsetSeconds + schema.defaultSegmentDuration,
-      ));
+      segments.add(
+        SttSegment(
+          text: rawText.trim(),
+          start: audioOffsetSeconds,
+          end: audioOffsetSeconds + schema.defaultSegmentDuration,
+        ),
+      );
     }
 
-    return SttTranscriptionResult(
-      segments: segments,
-      rawText: rawText,
-    );
+    return SttTranscriptionResult(segments: segments, rawText: rawText);
   }
 }

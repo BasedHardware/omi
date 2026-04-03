@@ -2,11 +2,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'announcement.g.dart';
 
-enum AnnouncementType {
-  changelog,
-  feature,
-  announcement,
-}
+enum AnnouncementType { changelog, feature, announcement }
 
 enum TriggerType {
   immediate,
@@ -55,13 +51,7 @@ class Display {
   @JsonKey(defaultValue: true)
   final bool showOnce;
 
-  Display({
-    this.priority = 0,
-    this.startAt,
-    this.expiresAt,
-    this.dismissible = true,
-    this.showOnce = true,
-  });
+  Display({this.priority = 0, this.startAt, this.expiresAt, this.dismissible = true, this.showOnce = true});
 
   factory Display.fromJson(Map<String, dynamic> json) => _$DisplayFromJson(json);
   Map<String, dynamic> toJson() => _$DisplayToJson(this);
@@ -74,11 +64,7 @@ class ChangelogItem {
   final String description;
   final String? icon;
 
-  ChangelogItem({
-    required this.title,
-    required this.description,
-    this.icon,
-  });
+  ChangelogItem({required this.title, required this.description, this.icon});
 
   factory ChangelogItem.fromJson(Map<String, dynamic> json) => _$ChangelogItemFromJson(json);
   Map<String, dynamic> toJson() => _$ChangelogItemToJson(this);
@@ -89,10 +75,7 @@ class ChangelogContent {
   final String title;
   final List<ChangelogItem> changes;
 
-  ChangelogContent({
-    required this.title,
-    required this.changes,
-  });
+  ChangelogContent({required this.title, required this.changes});
 
   factory ChangelogContent.fromJson(Map<String, dynamic> json) => _$ChangelogContentFromJson(json);
   Map<String, dynamic> toJson() => _$ChangelogContentToJson(this);
@@ -107,13 +90,7 @@ class FeatureStep {
   final String? videoUrl;
   final String? highlightText;
 
-  FeatureStep({
-    required this.title,
-    required this.description,
-    this.imageUrl,
-    this.videoUrl,
-    this.highlightText,
-  });
+  FeatureStep({required this.title, required this.description, this.imageUrl, this.videoUrl, this.highlightText});
 
   factory FeatureStep.fromJson(Map<String, dynamic> json) => _$FeatureStepFromJson(json);
   Map<String, dynamic> toJson() => _$FeatureStepToJson(this);
@@ -124,10 +101,7 @@ class FeatureContent {
   final String title;
   final List<FeatureStep> steps;
 
-  FeatureContent({
-    required this.title,
-    required this.steps,
-  });
+  FeatureContent({required this.title, required this.steps});
 
   factory FeatureContent.fromJson(Map<String, dynamic> json) => _$FeatureContentFromJson(json);
   Map<String, dynamic> toJson() => _$FeatureContentToJson(this);
@@ -139,10 +113,7 @@ class AnnouncementCTA {
   final String text;
   final String action;
 
-  AnnouncementCTA({
-    required this.text,
-    required this.action,
-  });
+  AnnouncementCTA({required this.text, required this.action});
 
   factory AnnouncementCTA.fromJson(Map<String, dynamic> json) => _$AnnouncementCTAFromJson(json);
   Map<String, dynamic> toJson() => _$AnnouncementCTAToJson(this);
@@ -155,12 +126,7 @@ class AnnouncementContent {
   final String? imageUrl;
   final AnnouncementCTA? cta;
 
-  AnnouncementContent({
-    required this.title,
-    required this.body,
-    this.imageUrl,
-    this.cta,
-  });
+  AnnouncementContent({required this.title, required this.body, this.imageUrl, this.cta});
 
   factory AnnouncementContent.fromJson(Map<String, dynamic> json) => _$AnnouncementContentFromJson(json);
   Map<String, dynamic> toJson() => _$AnnouncementContentToJson(this);

@@ -235,6 +235,14 @@ pub struct MemorySettingsData {
     pub excluded_apps: Option<Vec<String>>,
 }
 
+/// Floating bar chat settings
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FloatingBarSettingsData {
+    pub voice_answers_enabled: Option<bool>,
+    pub elevenlabs_api_key: Option<String>,
+    pub elevenlabs_voice_id: Option<String>,
+}
+
 /// All assistant settings (response and request — all fields optional for partial updates)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AssistantSettingsData {
@@ -243,6 +251,7 @@ pub struct AssistantSettingsData {
     pub task: Option<TaskSettingsData>,
     pub advice: Option<AdviceSettingsData>,
     pub memory: Option<MemorySettingsData>,
+    pub floating_bar: Option<FloatingBarSettingsData>,
     /// Remote override for the Sparkle update channel (top-level field on user doc, not in assistant_settings sub-map)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_channel: Option<String>,

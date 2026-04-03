@@ -448,7 +448,7 @@
     "exportConfiguration": "구성 내보내기",
     "bringYourOwn": "직접 가져오기",
     "payYourSttProvider": "Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.",
-    "freeMinutesMonth": "월 4,800분 무료 포함. ",
+    "freeMinutesMonth": "월 1,200분 무료 포함. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "호스트가 필요합니다",
     "validPortRequired": "유효한 포트가 필요합니다",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다.",
-    "basicPlanDescription": "4,800 프리미엄 분 + 무제한 온디바이스",
+    "basicPlanDescription": "1,200 프리미엄 분 + 무제한 온디바이스",
     "minutes": "분",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "프리미엄 분 사용됨.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "장시간 사용 시 기기가 뜨거워질 수 있습니다.",
     "speedAccuracyLower": "속도와 정확도가 클라우드 모델보다 낮을 수 있습니다.",
     "cloudProvider": "클라우드 제공자",
-    "premiumMinutesMonth": "월 4,800 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
+    "premiumMinutesMonth": "월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
     "viewUsage": "사용량 보기",
     "audioProcessedLocally": "오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.",
     "languageLabel": "언어",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "리뷰를 찾을 수 없습니다",
     "onDeviceIntensive": "온디바이스 음성 인식은 많은 컴퓨팅 자원을 사용합니다.",
     "onDeviceSlower": "이 기기에서는 온디바이스 음성 인식이 느릴 수 있습니다.",
-    "premiumMinutesInfo": "월 4,800분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
+    "premiumMinutesInfo": "월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
     "redownload": "다시 다운로드",
     "reply": "답글",
     "replySentSuccessfully": "답글이 성공적으로 전송되었습니다",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "기기에서 다운로드 중",
     "reconnectingToInternet": "인터넷에 다시 연결 중...",
     "uploadingToCloud": "{current}/{total} 업로드 중",
+    "processingOnServer": "서버에서 처리 중...",
+    "processingOnServerProgress": "처리 중... {current}/{total} 세그먼트",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "처리됨",
     "corruptedStatus": "손상됨",
     "nPending": "{count}개 대기 중",
@@ -2749,5 +2761,152 @@
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
     "clearAll": "모두 지우기",
     "phoneKeypad": "키패드",
-    "phoneHideKeypad": "키패드 숨기기"
+    "phoneHideKeypad": "키패드 숨기기",
+    "transcriptionPaused": "녹음 중, 재연결 중",
+    "transcriptionPausedReconnecting": "계속 녹음 중 — 음성 인식에 재연결하는 중...",
+    "fairUsePolicy": "공정 사용",
+    "fairUseLoadError": "공정 사용 상태를 불러올 수 없습니다. 다시 시도해 주세요.",
+    "fairUseStatusNormal": "사용량이 정상 범위 내에 있습니다.",
+    "fairUseStageNormal": "정상",
+    "fairUseStageWarning": "경고",
+    "fairUseStageThrottle": "제한됨",
+    "fairUseStageRestrict": "차단됨",
+    "fairUseSpeechUsage": "음성 사용량",
+    "fairUseToday": "오늘",
+    "fairUse3Day": "3일 누적",
+    "fairUseWeekly": "주간 누적",
+    "fairUseAboutTitle": "공정 사용에 대하여",
+    "fairUseAboutBody": "Omi는 개인 대화, 회의 및 실시간 상호작용을 위해 설계되었습니다. 사용량은 연결 시간이 아닌 감지된 실제 발화 시간으로 측정됩니다. 비개인적 콘텐츠에 대해 정상 패턴을 크게 초과하는 사용이 있을 경우 조정이 적용될 수 있습니다.",
+    "fairUseCaseRefCopied": "{caseRef} 복사됨",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "일일 음성 인식",
+    "fairUseBudgetExhausted": "일일 음성 인식 한도에 도달했습니다",
+    "fairUseBudgetResetsAt": "재설정 {time}",
+    "fairUseBudgetUsed": "{used}분 / {limit}분",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "공정 사용: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "연결 개선",
+    "improveConnectionContent": "Omi가 기기와 연결을 유지하는 방식을 개선했습니다. 이를 활성화하려면 기기 정보 페이지로 이동하여 \"기기 연결 해제\"를 탭한 다음 기기를 다시 페어링하세요.",
+    "improveConnectionAction": "알겠습니다",
+    "clockSkewWarning": "기기 시계가 ~{minutes}분 차이납니다. 날짜 및 시간 설정을 확인하세요.",
+    "omisStorage": "Omi 저장소",
+    "phoneStorage": "휴대폰 저장소",
+    "cloudStorage": "클라우드 저장소",
+    "howSyncingWorks": "동기화 작동 방식",
+    "noSyncedRecordings": "아직 동기화된 녹음이 없습니다",
+    "recordingsSyncAutomatically": "녹음이 자동으로 동기화됩니다 — 별도 작업이 필요 없습니다.",
+    "filesDownloadedUploadedNextTime": "이미 다운로드된 파일은 다음에 업로드됩니다.",
+    "nConversationsCreated": "{count, plural, =1{대화 1개 생성됨} other{대화 {count}개 생성됨}}",
+    "tapToView": "탭하여 보기",
+    "syncFailed": "동기화 실패",
+    "keepSyncing": "동기화 계속",
+    "cancelSyncQuestion": "동기화를 취소하시겠습니까?",
+    "omisStorageDesc": "Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.",
+    "phoneStorageDesc": "Omi가 다시 연결되면 녹음이 업로드 전에 자동으로 휴대폰으로 전송됩니다.",
+    "cloudStorageDesc": "업로드 후 녹음이 처리되고 텍스트로 변환됩니다. 대화는 1분 이내에 사용할 수 있습니다.",
+    "storageSection": "저장소",
+    "tipKeepPhoneNearby": "더 빠른 동기화를 위해 휴대폰을 가까이 두세요",
+    "tipStableInternet": "안정적인 인터넷으로 클라우드 업로드 속도 향상",
+    "tipAutoSync": "녹음이 자동으로 동기화됩니다",
+    "permissions": "권한",
+    "permissionEnabled": "활성화됨",
+    "permissionEnable": "활성화",
+    "permissionsPageDescription": "이 권한들은 Omi 작동의 핵심입니다. 알림, 위치 기반 경험, 오디오 캡처와 같은 주요 기능을 활성화합니다.",
+    "permissionsRequiredDescription": "Omi가 제대로 작동하려면 몇 가지 권한이 필요합니다. 계속하려면 권한을 허용해 주세요.",
+    "permissionsSetupTitle": "최고의 경험을 누리세요",
+    "permissionsSetupDescription": "Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.",
+    "permissionsChangeAnytime": "설정 > 권한에서 언제든지 변경할 수 있습니다",
+    "location": "위치",
+    "microphone": "마이크",
+    "cancelBillingPeriodInfo": "플랜은 {date}까지 활성 상태로 유지됩니다. 그 후 제한된 기능의 무료 버전으로 전환됩니다.",
+    "cancelConsequenceBattery": "7배 더 많은 배터리 사용량 (기기 내 처리)",
+    "cancelConsequenceDelay": "5-7초 처리 지연 (기기 내 모델)",
+    "cancelConsequenceNoAccess": "청구 기간 종료 시 무제한 액세스가 없어집니다.",
+    "cancelConsequencePhoneCalls": "실시간 전화 통화 전사 없음",
+    "cancelConsequenceQuality": "30% 낮은 전사 품질 (기기 내 모델)",
+    "cancelConsequenceSpeakers": "화자를 식별할 수 없습니다.",
+    "cancelConsequencesSubtitle": "취소 대신 다른 옵션을 살펴보시길 강력히 권장합니다.",
+    "cancelReasonAudioQuality": "오디오/전사 품질",
+    "cancelReasonBatteryDrain": "배터리 소모 우려",
+    "cancelReasonDetailHint": "모든 피드백을 감사히 여깁니다...",
+    "cancelReasonFoundAlternative": "대안을 찾았음",
+    "cancelReasonMissingFeatures": "누락된 기능",
+    "cancelReasonNotUsing": "충분히 사용하지 않음",
+    "cancelReasonOther": "기타",
+    "cancelReasonSubtitle": "떠나시는 이유를 알려주시겠어요?",
+    "cancelReasonTooExpensive": "너무 비쌈",
+    "confirmAndCancel": "확인 및 취소",
+    "feedbackSubtitleAudioQuality": "무엇이 잘못되었는지 이해하고 싶습니다.",
+    "feedbackSubtitleBatteryDrain": "하드웨어 팀의 개선에 도움이 됩니다.",
+    "feedbackSubtitleFoundAlternative": "무엇이 눈길을 끌었는지 알고 싶습니다.",
+    "feedbackSubtitleMissingFeatures": "항상 개발 중입니다 — 우선순위 결정에 도움이 됩니다.",
+    "feedbackSubtitleNotUsing": "Omi를 더 유용하게 만들고 싶습니다.",
+    "feedbackSubtitleTooExpensive": "피드백이 적절한 균형을 찾는 데 도움이 됩니다.",
+    "feedbackTitleAudioQuality": "어떤 문제를 경험하셨나요?",
+    "feedbackTitleBatteryDrain": "배터리 문제에 대해 알려주세요",
+    "feedbackTitleFoundAlternative": "무엇으로 전환하시나요?",
+    "feedbackTitleMissingFeatures": "어떤 기능이 부족한가요?",
+    "feedbackTitleNotUsing": "Omi를 더 사용하게 만들 것은 무엇인가요?",
+    "feedbackTitleTooExpensive": "어떤 가격이 적당할까요?",
+    "ifYouCancel": "취소하면:",
+    "justAMoment": "잠시만요",
+    "tellUsMore": "더 알려주세요 (선택사항)",
+    "whyAreYouCanceling": "취소하시는 이유는?",
+    "deviceDiagnostics": "기기 진단",
+    "signalStrength": "신호 강도",
+    "connectionUptime": "가동 시간",
+    "reconnections": "재연결",
+    "disconnectHistory": "연결 해제 기록",
+    "noDisconnectsRecorded": "기록된 연결 해제 없음",
+    "diagnostics": "진단",
+    "waitingForData": "데이터 대기 중...",
+    "liveRssiOverTime": "실시간 RSSI 추이",
+    "noRssiDataYet": "아직 RSSI 데이터 없음",
+    "collectingData": "데이터 수집 중...",
+    "cleanDisconnect": "정상 연결 해제",
+    "connectionTimeout": "연결 시간 초과",
+    "remoteDeviceTerminated": "원격 기기가 연결을 종료함",
+    "pairedToAnotherPhone": "다른 휴대폰에 페어링됨",
+    "linkKeyMismatch": "링크 키 불일치",
+    "connectionFailed": "연결 실패",
+    "appClosed": "앱 종료됨",
+    "manualDisconnect": "수동 연결 해제",
+    "lastNEvents": "최근 {count}개 이벤트",
+    "signal": "신호",
+    "battery": "배터리",
+    "excellent": "우수",
+    "good": "양호",
+    "fair": "보통",
+    "weak": "약함",
+    "gattError": "GATT 오류 ({code})"
 }

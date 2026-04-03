@@ -1461,7 +1461,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get payYourSttProvider => 'Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.';
 
   @override
-  String get freeMinutesMonth => '4 800 bezplatných minut měsíčně. Neomezené s ';
+  String get freeMinutesMonth => '1 200 bezplatných minut měsíčně. Neomezené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1817,7 +1817,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get skipThisQuestion => 'Přeskočit tuto otázku';
 
   @override
-  String get skipForNow => 'Zatím přeskočit';
+  String get skipForNow => 'Přeskočit';
 
   @override
   String get connectionError => 'Chyba připojení';
@@ -4757,7 +4757,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Není nakonfigurován žádný specifický přístup k datům.';
 
   @override
-  String get basicPlanDescription => '4 800 prémiových minut + neomezené na zařízení';
+  String get basicPlanDescription => '1 200 prémiových minut + neomezené na zařízení';
 
   @override
   String get minutes => 'minut';
@@ -6081,7 +6081,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
+  String get premiumMinutesInfo => '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
@@ -6162,7 +6162,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+      '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8155,6 +8155,14 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Zpracování na serveru...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Zpracování... $current/$total segmentů';
+  }
+
+  @override
   String get processedStatus => 'Zpracováno';
 
   @override
@@ -8556,4 +8564,380 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skrýt klávesnici';
+
+  @override
+  String get fairUsePolicy => 'Spravedlivé používání';
+
+  @override
+  String get fairUseLoadError => 'Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.';
+
+  @override
+  String get fairUseStatusNormal => 'Vaše používání je v normálních mezích.';
+
+  @override
+  String get fairUseStageNormal => 'Normální';
+
+  @override
+  String get fairUseStageWarning => 'Upozornění';
+
+  @override
+  String get fairUseStageThrottle => 'Omezeno';
+
+  @override
+  String get fairUseStageRestrict => 'Zakázáno';
+
+  @override
+  String get fairUseSpeechUsage => 'Využití řeči';
+
+  @override
+  String get fairUseToday => 'Dnes';
+
+  @override
+  String get fairUse3Day => '3denní období';
+
+  @override
+  String get fairUseWeekly => 'Týdenní období';
+
+  @override
+  String get fairUseAboutTitle => 'O spravedlivém používání';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef zkopírováno';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nahrávání, připojování';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Stále se nahrává — připojování k přepisu...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Spravedlivé užívání: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Zlepšit připojení';
+
+  @override
+  String get improveConnectionContent =>
+      'Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.';
+
+  @override
+  String get improveConnectionAction => 'Rozumím';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Hodiny vašeho zařízení se liší o ~$minutes min. Zkontrolujte nastavení data a času.';
+  }
+
+  @override
+  String get omisStorage => 'Úložiště Omi';
+
+  @override
+  String get phoneStorage => 'Úložiště telefonu';
+
+  @override
+  String get cloudStorage => 'Cloudové úložiště';
+
+  @override
+  String get howSyncingWorks => 'Jak synchronizace funguje';
+
+  @override
+  String get noSyncedRecordings => 'Zatím žádné synchronizované nahrávky';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nahrávky se synchronizují automaticky — není nutná žádná akce.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Již stažené soubory budou nahrány příště.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konverzací vytvořeno',
+      one: '1 konverzace vytvořena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Klepněte pro zobrazení';
+
+  @override
+  String get syncFailed => 'Synchronizace selhala';
+
+  @override
+  String get keepSyncing => 'Pokračovat v synchronizaci';
+
+  @override
+  String get cancelSyncQuestion => 'Zrušit synchronizaci?';
+
+  @override
+  String get omisStorageDesc =>
+      'Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Po nahrání jsou vaše nahrávky zpracovány a přepsány. Konverzace budou dostupné během minuty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mějte telefon poblíž pro rychlejší synchronizaci';
+
+  @override
+  String get tipStableInternet => 'Stabilní internet urychluje nahrávání do cloudu';
+
+  @override
+  String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
+
+  @override
+  String get storageSection => 'ÚLOŽIŠTĚ';
+
+  @override
+  String get permissions => 'Oprávnění';
+
+  @override
+  String get permissionEnabled => 'Povoleno';
+
+  @override
+  String get permissionEnable => 'Povolit';
+
+  @override
+  String get permissionsPageDescription =>
+      'Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.';
+
+  @override
+  String get permissionsSetupTitle => 'Získejte nejlepší zážitek';
+
+  @override
+  String get permissionsSetupDescription => 'Povolte několik oprávnění, aby Omi mohl fungovat naplno.';
+
+  @override
+  String get permissionsChangeAnytime => 'Toto můžete kdykoli změnit v Nastavení > Oprávnění';
+
+  @override
+  String get location => 'Poloha';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Proč rušíte?';
+
+  @override
+  String get cancelReasonSubtitle => 'Můžete nám říct, proč odcházíte?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Příliš drahé';
+
+  @override
+  String get cancelReasonNotUsing => 'Nepoužívám to dostatečně';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Chybějící funkce';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kvalita zvuku/přepisu';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obavy z vybíjení baterie';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Našel jsem alternativu';
+
+  @override
+  String get cancelReasonOther => 'Jiné';
+
+  @override
+  String get tellUsMore => 'Řekněte nám více (volitelné)';
+
+  @override
+  String get cancelReasonDetailHint => 'Oceníme jakoukoli zpětnou vazbu...';
+
+  @override
+  String get justAMoment => 'Moment, prosím';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Důrazně doporučujeme prozkoumat vaše další možnosti místo zrušení.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Váš plán zůstane aktivní do $date. Poté budete přesunut na bezplatnou verzi s omezenými funkcemi.';
+  }
+
+  @override
+  String get ifYouCancel => 'Pokud zrušíte:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Na konci fakturačního období již nebudete mít neomezený přístup.';
+
+  @override
+  String get cancelConsequenceBattery => '7x větší spotřeba baterie (zpracování na zařízení)';
+
+  @override
+  String get cancelConsequenceQuality => 'O 30 % nižší kvalita přepisu (modely na zařízení)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundové zpoždění zpracování (modely na zařízení)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nelze identifikovat mluvčí.';
+
+  @override
+  String get confirmAndCancel => 'Potvrdit a zrušit';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Žádný přepis telefonních hovorů v reálném čase';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Jaká cena by vám vyhovovala?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Jaké funkce vám chybí?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Jaké problémy jste zaznamenal?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Řekněte nám o problémech s baterií';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na co přecházíte?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Co by vás přimělo používat Omi více?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Vaše zpětná vazba nám pomáhá najít správnou rovnováhu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Stále stavíme — to nám pomáhá stanovit priority.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Rádi bychom pochopili, co se pokazilo.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomáhá našemu hardwarovému týmu se zlepšit.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Rádi bychom se dozvěděli, co vás zaujalo.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chceme, aby byl Omi pro vás užitečnější.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostika zařízení';
+
+  @override
+  String get signalStrength => 'Síla signálu';
+
+  @override
+  String get connectionUptime => 'Doba provozu';
+
+  @override
+  String get reconnections => 'Opětovná připojení';
+
+  @override
+  String get disconnectHistory => 'Historie odpojení';
+
+  @override
+  String get noDisconnectsRecorded => 'Žádná odpojení nebyla zaznamenána';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Čekání na data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI v reálném čase';
+
+  @override
+  String get noRssiDataYet => 'Zatím žádná data RSSI';
+
+  @override
+  String get collectingData => 'Sbírání dat...';
+
+  @override
+  String get cleanDisconnect => 'Čisté odpojení';
+
+  @override
+  String get connectionTimeout => 'Vypršel časový limit připojení';
+
+  @override
+  String get remoteDeviceTerminated => 'Vzdálené zařízení ukončilo spojení';
+
+  @override
+  String get pairedToAnotherPhone => 'Spárováno s jiným telefonem';
+
+  @override
+  String get linkKeyMismatch => 'Neshoda klíče propojení';
+
+  @override
+  String get connectionFailed => 'Připojení selhalo';
+
+  @override
+  String get appClosed => 'Aplikace zavřena';
+
+  @override
+  String get manualDisconnect => 'Ruční odpojení';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Posledních $count událostí';
+  }
+
+  @override
+  String get signal => 'Signál';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Vynikající';
+
+  @override
+  String get good => 'Dobré';
+
+  @override
+  String get fair => 'Uspokojivé';
+
+  @override
+  String get weak => 'Slabé';
+
+  @override
+  String gattError(String code) {
+    return 'Chyba GATT ($code)';
+  }
 }

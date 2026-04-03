@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} og er {triggerDescription}.",
     "isTriggeredBy": "Er {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Ingen specifik dataadgang konfigureret.",
-    "basicPlanDescription": "4.800 premium minutter + ubegrænset on-device",
+    "basicPlanDescription": "1.200 premium minutter + ubegrænset on-device",
     "minutes": "minutter",
     "omiHas": "Omi har:",
     "premiumMinutesUsed": "Premium minutter brugt.",
@@ -1887,7 +1887,7 @@
     "deviceMayWarmUp": "Enheden kan blive varm ved længere brug.",
     "speedAccuracyLower": "Hastighed og nøjagtighed kan være lavere end cloud-modeller.",
     "cloudProvider": "Cloud-udbyder",
-    "premiumMinutesMonth": "4.800 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ",
+    "premiumMinutesMonth": "1.200 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ",
     "viewUsage": "Se forbrug",
     "audioProcessedLocally": "Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.",
     "languageLabel": "Sprog",
@@ -2473,7 +2473,7 @@
     "onDeviceIntensive": "Lokal transskription er beregningskrævende.",
     "onDeviceSlower": "Lokal transskription kan være langsommere på denne enhed.",
     "performanceReduced": "Ydeevne reduceret 5-10x. Brug Release-tilstand.",
-    "premiumMinutesInfo": "4.800 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.",
+    "premiumMinutesInfo": "1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.",
     "redownload": "Download igen",
     "reply": "Svar",
     "replySentSuccessfully": "Svar sendt",
@@ -2644,6 +2644,18 @@
     "downloadingFromDevice": "Downloader fra enhed",
     "reconnectingToInternet": "Genopretter forbindelse til internet...",
     "uploadingToCloud": "Uploader {current} af {total}",
+    "processingOnServer": "Behandler på serveren...",
+    "processingOnServerProgress": "Behandler... {current}/{total} segmenter",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Behandlet",
     "corruptedStatus": "Beskadiget",
     "nPending": "{count} afventende",
@@ -2758,5 +2770,152 @@
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
     "clearAll": "Ryd alt",
     "phoneKeypad": "Tastatur",
-    "phoneHideKeypad": "Skjul tastatur"
+    "phoneHideKeypad": "Skjul tastatur",
+    "transcriptionPaused": "Optager, genopretter forbindelse",
+    "transcriptionPausedReconnecting": "Optager stadig — genopretter forbindelse til transskription...",
+    "fairUsePolicy": "Rimelig brug",
+    "fairUseLoadError": "Kunne ikke indlæse status for rimelig brug. Prøv venligst igen.",
+    "fairUseStatusNormal": "Dit forbrug er inden for normale grænser.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Advarsel",
+    "fairUseStageThrottle": "Begrænset",
+    "fairUseStageRestrict": "Spærret",
+    "fairUseSpeechUsage": "Taleforbrug",
+    "fairUseToday": "I dag",
+    "fairUse3Day": "3-dages rullende",
+    "fairUseWeekly": "Ugentlig rullende",
+    "fairUseAboutTitle": "Om rimelig brug",
+    "fairUseAboutBody": "Omi er designet til personlige samtaler, møder og live-interaktioner. Forbruget måles ved den faktiske registrerede taletid, ikke forbindelsestid. Hvis forbruget væsentligt overstiger normale mønstre for ikke-personligt indhold, kan der foretages justeringer.",
+    "fairUseCaseRefCopied": "{caseRef} kopieret",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Fair brug: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Forbedre forbindelsen",
+    "improveConnectionContent": "Vi har forbedret, hvordan Omi forbliver forbundet til din enhed. For at aktivere dette, gå til enhedsinfosiden, tryk på \"Afbryd enhed\", og tilslut din enhed igen.",
+    "improveConnectionAction": "Forstået",
+    "clockSkewWarning": "Dit enheds ur er forskudt ~{minutes} min. Tjek dine dato- og tidsindstillinger.",
+    "omisStorage": "Omis lager",
+    "phoneStorage": "Telefonlager",
+    "cloudStorage": "Skylager",
+    "howSyncingWorks": "Sådan fungerer synkronisering",
+    "noSyncedRecordings": "Ingen synkroniserede optagelser endnu",
+    "recordingsSyncAutomatically": "Optagelser synkroniseres automatisk — ingen handling nødvendig.",
+    "filesDownloadedUploadedNextTime": "Allerede downloadede filer vil blive uploadet næste gang.",
+    "nConversationsCreated": "{count, plural, =1{1 samtale oprettet} other{{count} samtaler oprettet}}",
+    "tapToView": "Tryk for at se",
+    "syncFailed": "Synkronisering mislykkedes",
+    "keepSyncing": "Fortsæt synkronisering",
+    "cancelSyncQuestion": "Annuller synkronisering?",
+    "omisStorageDesc": "Når din Omi ikke er forbundet til din telefon, gemmer den lyd lokalt i sin indbyggede hukommelse. Du mister aldrig en optagelse.",
+    "phoneStorageDesc": "Når Omi genopretter forbindelsen, overføres optagelser automatisk til din telefon som midlertidig opbevaring før upload.",
+    "cloudStorageDesc": "Når de er uploadet, behandles og transskriberes dine optagelser. Samtaler vil være tilgængelige inden for et minut.",
+    "storageSection": "LAGER",
+    "tipKeepPhoneNearby": "Hold din telefon i nærheden for hurtigere synkronisering",
+    "tipStableInternet": "Stabilt internet fremskynder cloud-uploads",
+    "tipAutoSync": "Optagelser synkroniseres automatisk",
+    "permissions": "Tilladelser",
+    "permissionEnabled": "Aktiveret",
+    "permissionEnable": "Aktivér",
+    "permissionsPageDescription": "Disse tilladelser er centrale for Omis funktion. De aktiverer nøglefunktioner som notifikationer, placeringsbaserede oplevelser og lydoptagelse.",
+    "permissionsRequiredDescription": "Omi har brug for nogle tilladelser for at fungere korrekt. Giv dem venligst for at fortsætte.",
+    "permissionsSetupTitle": "Få den bedste oplevelse",
+    "permissionsSetupDescription": "Aktivér nogle tilladelser, så Omi kan udfolde sin magi.",
+    "permissionsChangeAnytime": "Du kan ændre disse når som helst i Indstillinger > Tilladelser",
+    "location": "Placering",
+    "microphone": "Mikrofon",
+    "cancelBillingPeriodInfo": "Din plan forbliver aktiv indtil {date}. Derefter vil du blive flyttet til den gratis version med begrænsede funktioner.",
+    "cancelConsequenceBattery": "7x mere batteriforbrug (behandling på enheden)",
+    "cancelConsequenceDelay": "5-7 sekunders behandlingsforsinkelse (modeller på enheden)",
+    "cancelConsequenceNoAccess": "Du vil ikke længere have ubegrænset adgang ved slutningen af din faktureringsperiode.",
+    "cancelConsequencePhoneCalls": "Ingen realtids transskription af telefonopkald",
+    "cancelConsequenceQuality": "30% lavere transskriptionskvalitet (modeller på enheden)",
+    "cancelConsequenceSpeakers": "Kan ikke identificere talere.",
+    "cancelConsequencesSubtitle": "Vi anbefaler stærkt at udforske dine andre muligheder i stedet for at annullere.",
+    "cancelReasonAudioQuality": "Lyd-/transskriptionskvalitet",
+    "cancelReasonBatteryDrain": "Bekymringer om batteriforbrug",
+    "cancelReasonDetailHint": "Vi sætter pris på enhver feedback...",
+    "cancelReasonFoundAlternative": "Fandt et alternativ",
+    "cancelReasonMissingFeatures": "Manglende funktioner",
+    "cancelReasonNotUsing": "Bruger det ikke nok",
+    "cancelReasonOther": "Andet",
+    "cancelReasonSubtitle": "Kan du fortælle os, hvorfor du forlader?",
+    "cancelReasonTooExpensive": "For dyrt",
+    "confirmAndCancel": "Bekræft og annuller",
+    "feedbackSubtitleAudioQuality": "Vi vil gerne forstå, hvad der gik galt.",
+    "feedbackSubtitleBatteryDrain": "Dette hjælper vores hardwareteam med at forbedre sig.",
+    "feedbackSubtitleFoundAlternative": "Vi vil gerne vide, hvad der fangede dit øje.",
+    "feedbackSubtitleMissingFeatures": "Vi bygger altid — dette hjælper os med at prioritere.",
+    "feedbackSubtitleNotUsing": "Vi vil gøre Omi mere nyttig for dig.",
+    "feedbackSubtitleTooExpensive": "Din feedback hjælper os med at finde den rigtige balance.",
+    "feedbackTitleAudioQuality": "Hvilke problemer oplevede du?",
+    "feedbackTitleBatteryDrain": "Fortæl os om batteriproblemer",
+    "feedbackTitleFoundAlternative": "Hvad skifter du til?",
+    "feedbackTitleMissingFeatures": "Hvilke funktioner mangler du?",
+    "feedbackTitleNotUsing": "Hvad ville få dig til at bruge Omi mere?",
+    "feedbackTitleTooExpensive": "Hvilken pris ville passe dig?",
+    "ifYouCancel": "Hvis du annullerer:",
+    "justAMoment": "Et øjeblik, tak",
+    "tellUsMore": "Fortæl os mere (valgfrit)",
+    "whyAreYouCanceling": "Hvorfor annullerer du?",
+    "deviceDiagnostics": "Enhedsdiagnostik",
+    "signalStrength": "Signalstyrke",
+    "connectionUptime": "Oppetid",
+    "reconnections": "Genforbindelser",
+    "disconnectHistory": "Afbrydelseshistorik",
+    "noDisconnectsRecorded": "Ingen afbrydelser registreret",
+    "diagnostics": "Diagnostik",
+    "waitingForData": "Venter på data...",
+    "liveRssiOverTime": "Live RSSI over tid",
+    "noRssiDataYet": "Ingen RSSI-data endnu",
+    "collectingData": "Indsamler data...",
+    "cleanDisconnect": "Ren afbrydelse",
+    "connectionTimeout": "Forbindelsestimeout",
+    "remoteDeviceTerminated": "Fjernenheden afbrød forbindelsen",
+    "pairedToAnotherPhone": "Parret med en anden telefon",
+    "linkKeyMismatch": "Uoverensstemmelse i forbindelsesnøgle",
+    "connectionFailed": "Forbindelse mislykkedes",
+    "appClosed": "App lukket",
+    "manualDisconnect": "Manuel afbrydelse",
+    "lastNEvents": "Sidste {count} begivenheder",
+    "signal": "Signal",
+    "battery": "Batteri",
+    "excellent": "Fremragende",
+    "good": "God",
+    "fair": "Rimelig",
+    "weak": "Svag",
+    "gattError": "GATT-fejl ({code})"
 }

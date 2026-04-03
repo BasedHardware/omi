@@ -3,13 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 
-enum AudioDownloadState {
-  preparing,
-  downloading,
-  processing,
-  success,
-  error,
-}
+enum AudioDownloadState { preparing, downloading, processing, success, error }
 
 class AudioDownloadProgressSheet extends StatefulWidget {
   final AudioDownloadState state;
@@ -62,14 +56,8 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    );
+    _animationController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
+    _scaleAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic);
     _animationController.forward();
 
     HapticFeedback.lightImpact();
@@ -98,13 +86,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 30, offset: const Offset(0, 10))],
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -133,15 +115,8 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
             child: Container(
               width: 64,
               height: 64,
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check,
-                size: 36,
-                color: Colors.green,
-              ),
+              decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), shape: BoxShape.circle),
+              child: const Icon(Icons.check, size: 36, color: Colors.green),
             ),
           );
         },
@@ -152,15 +127,8 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
       return Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.15),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.error_outline,
-          size: 36,
-          color: Colors.red,
-        ),
+        decoration: BoxDecoration(color: Colors.red.withOpacity(0.15), shape: BoxShape.circle),
+        child: const Icon(Icons.error_outline, size: 36, color: Colors.red),
       );
     }
 
@@ -183,11 +151,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
           if (widget.state == AudioDownloadState.downloading && widget.progress > 0)
             Text(
               '${(widget.progress * 100).toInt()}%',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
             ),
         ],
       ),
@@ -220,12 +184,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
       child: Text(
         title,
         key: ValueKey(title),
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-          letterSpacing: 0.3,
-        ),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.3),
         textAlign: TextAlign.center,
       ),
     );
@@ -237,10 +196,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
         const SizedBox(height: 12),
         Text(
           widget.errorMessage ?? context.l10n.audioDownloadFailed,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[400],
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey[400]),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),

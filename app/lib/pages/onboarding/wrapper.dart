@@ -15,6 +15,7 @@ import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
@@ -102,7 +103,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
           if (SharedPreferencesUtil().onboardingCompleted) {
-            routeToPage(context, const HomePageWrapper(), replace: true);
+            await _routeWithPermissionsCheck(context);
           } else {
             _controller!.animateTo(kNamePage);
           }
@@ -119,6 +120,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _backgroundAnimationController.dispose();
     _speechProfileProvider?.dispose();
     super.dispose();
+  }
+
+  Future<void> _routeWithPermissionsCheck(BuildContext context) async {
+    if (!SharedPreferencesUtil().permissionsCompleted) {
+      final granted = await arePermissionsGranted();
+      if (!granted) {
+        if (context.mounted) {
+          routeToPage(context, const PermissionsInterstitialPage(), replace: true);
+        }
+        return;
+      }
+      SharedPreferencesUtil().permissionsCompleted = true;
+    }
+    if (context.mounted) {
+      routeToPage(context, const HomePageWrapper(), replace: true);
+    }
   }
 
   _goNext() {
@@ -235,14 +252,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Widget build(BuildContext context) {
     List<Widget> pages = [
       AuthComponent(
-        onSignIn: () {
+        onSignIn: () async {
           SharedPreferencesUtil().hasOmiDevice = true;
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
-            routeToPage(context, const HomePageWrapper(), replace: true);
+            await _routeWithPermissionsCheck(context);
           } else {
             _goNext(); // Go to Name page
           }
@@ -309,6 +326,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       OnboardingCompleteScreen(
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
+          SharedPreferencesUtil().permissionsCompleted = true;
           updateUserOnboardingState(completed: true);
           MixpanelManager().onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();

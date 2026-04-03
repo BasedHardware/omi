@@ -18,33 +18,17 @@ class OmiConfirmDialog {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           title,
-          style: const TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        content: Text(
-          message,
-          style: const TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-          ),
-        ),
+        content: Text(message, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              cancelLabel,
-              style: const TextStyle(color: ResponsiveHelper.textSecondary),
-            ),
+            child: Text(cancelLabel, style: const TextStyle(color: ResponsiveHelper.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              confirmLabel,
-              style: TextStyle(color: confirmColor),
-            ),
+            child: Text(confirmLabel, style: TextStyle(color: confirmColor)),
           ),
         ],
       ),
@@ -70,23 +54,13 @@ class OmiConfirmDialog {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             title,
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                message,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
+              Text(message, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14)),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -106,13 +80,7 @@ class OmiConfirmDialog {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      skipLabel,
-                      style: const TextStyle(
-                        color: ResponsiveHelper.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
+                    child: Text(skipLabel, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 12)),
                   ),
                 ],
               ),
@@ -121,27 +89,17 @@ class OmiConfirmDialog {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(
-                  ctx,
-                  ConfirmationResult(
-                    confirmed: false,
-                    skipFutureConfirmations: skipFutureConfirmations,
-                  )),
-              child: Text(
-                cancelLabel,
-                style: const TextStyle(color: ResponsiveHelper.textSecondary),
+                ctx,
+                ConfirmationResult(confirmed: false, skipFutureConfirmations: skipFutureConfirmations),
               ),
+              child: Text(cancelLabel, style: const TextStyle(color: ResponsiveHelper.textSecondary)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(
-                  ctx,
-                  ConfirmationResult(
-                    confirmed: true,
-                    skipFutureConfirmations: skipFutureConfirmations,
-                  )),
-              child: Text(
-                confirmLabel,
-                style: TextStyle(color: confirmColor),
+                ctx,
+                ConfirmationResult(confirmed: true, skipFutureConfirmations: skipFutureConfirmations),
               ),
+              child: Text(confirmLabel, style: TextStyle(color: confirmColor)),
             ),
           ],
         ),
@@ -154,8 +112,5 @@ class ConfirmationResult {
   final bool confirmed;
   final bool skipFutureConfirmations;
 
-  const ConfirmationResult({
-    required this.confirmed,
-    required this.skipFutureConfirmations,
-  });
+  const ConfirmationResult({required this.confirmed, required this.skipFutureConfirmations});
 }

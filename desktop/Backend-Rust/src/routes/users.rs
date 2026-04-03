@@ -541,6 +541,20 @@ async fn update_assistant_settings(
             }
         }
     }
+    if let Some(ref floating_bar) = request.floating_bar {
+        if let Some(ref api_key) = floating_bar.elevenlabs_api_key {
+            if api_key.len() > 512 {
+                tracing::warn!("ElevenLabs API key too long: {} chars (max 512)", api_key.len());
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+        if let Some(ref voice_id) = floating_bar.elevenlabs_voice_id {
+            if voice_id.len() > 128 {
+                tracing::warn!("ElevenLabs voice id too long: {} chars (max 128)", voice_id.len());
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    }
 
     match state
         .firestore
@@ -835,7 +849,10 @@ async fn delete_account(
         .config
         .firebase_project_id
         .clone()
-        .unwrap_or_else(|| "based-hardware".to_string());
+        .ok_or_else(|| {
+            tracing::error!("FIREBASE_PROJECT_ID not set — cannot delete Firebase Auth account");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     state
         .firestore
         .delete_firebase_auth_user(&project_id, &user.uid)

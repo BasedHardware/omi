@@ -39,23 +39,15 @@ class ConversationSyncUtils {
     SyncedConversationType type,
   ) {
     final validConversations = conversations.where((conversation) => conversation != null).toList();
-    final completedConversations =
-        validConversations.where((conversation) => conversation!.status == ConversationStatus.completed).toList();
+    final completedConversations = validConversations
+        .where((conversation) => conversation!.status == ConversationStatus.completed)
+        .toList();
     return completedConversations.map((conversation) => _createPointer(conversation!, type)).toList();
   }
 
   static SyncedConversationPointer _createPointer(ServerConversation conversation, SyncedConversationType type) {
-    final date = DateTime(
-      conversation.createdAt.year,
-      conversation.createdAt.month,
-      conversation.createdAt.day,
-    );
+    final date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
 
-    return SyncedConversationPointer(
-      type: type,
-      index: 0,
-      key: date,
-      conversation: conversation,
-    );
+    return SyncedConversationPointer(type: type, index: 0, key: date, conversation: conversation);
   }
 }

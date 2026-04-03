@@ -45,10 +45,7 @@ class _NameWidgetState extends State<NameWidget> {
           padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
           decoration: const BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(40),
-              topRight: Radius.circular(40),
-            ),
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
           ),
           child: SafeArea(
             top: false,
@@ -83,7 +80,6 @@ class _NameWidgetState extends State<NameWidget> {
                 //   ),
                 //   textAlign: TextAlign.center,
                 // ),
-
                 const SizedBox(height: 28),
 
                 // Name input field
@@ -91,10 +87,7 @@ class _NameWidgetState extends State<NameWidget> {
                   decoration: BoxDecoration(
                     color: Colors.grey[900],
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.grey[700]!,
-                      width: 1,
-                    ),
+                    border: Border.all(color: Colors.grey[700]!, width: 1),
                   ),
                   child: TextField(
                     controller: nameController,
@@ -108,16 +101,9 @@ class _NameWidgetState extends State<NameWidget> {
                     textAlign: TextAlign.center,
                     decoration: InputDecoration(
                       hintText: context.l10n.enterYourName,
-                      hintStyle: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 18,
-                        fontFamily: 'Manrope',
-                      ),
+                      hintStyle: TextStyle(color: Colors.grey[500], fontSize: 18, fontFamily: 'Manrope'),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 20,
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     ),
                     onChanged: (value) {
                       setState(() {}); // Trigger rebuild to update button state
@@ -144,18 +130,12 @@ class _NameWidgetState extends State<NameWidget> {
                       foregroundColor: nameController.text.trim().isEmpty ? Colors.grey[600] : Colors.black,
                       disabledBackgroundColor: Colors.grey[800],
                       disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       elevation: 0,
                     ),
                     child: Text(
                       context.l10n.continueButton,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Manrope',
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                     ),
                   ),
                 ),

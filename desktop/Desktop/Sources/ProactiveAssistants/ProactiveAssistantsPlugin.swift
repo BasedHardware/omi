@@ -39,6 +39,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     private(set) var isProcessingRewindFrame = false
     private(set) var droppedFrameCount = 0
 
+    /// Periodic screen recording permission recheck interval (60 seconds).
+    /// Detects permission revocation while monitoring is active (issue #5792).
+    private var lastPermissionCheckTime: Date = .distantPast
+    private let permissionCheckInterval: TimeInterval = 60
+
     // Failure tracking for screen capture recovery
     private var consecutiveFailures = 0
     private let maxConsecutiveFailures = 5
@@ -54,6 +59,16 @@ public class ProactiveAssistantsPlugin: NSObject {
     // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
     private var videoCallFrameCounter = 0
     private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
+
+    // Change-gated distribution: only distribute frames to assistants when context changes.
+    // Eliminates continuous polling when the user stays on the same app/window.
+    private var lastDistributedApp: String?
+    private var lastDistributedWindowTitle: String?
+    private var distributionDebounceTimer: Timer?
+    private var latestCapturedFrame: CapturedFrame?
+    private var lastDistributionTime: Date = .distantPast
+    /// Fallback interval: re-distribute even without context change to catch visual-only updates.
+    private let distributionFallbackInterval: TimeInterval = 60
 
     /// Apps whose primary purpose is video/audio calls.
     private static let videoCallApps: Set<String> = [
@@ -208,9 +223,9 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
-        // Request notification permission but don't block on it
-        // Screen analysis can work without notifications - users just won't get alerts
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
+        // Request notification permission in parallel — don't block monitoring on it.
+        // Screen analysis can work without notifications - users just won't get alerts.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
                 if let error = error {
                     let nsError = error as NSError
@@ -232,11 +247,11 @@ public class ProactiveAssistantsPlugin: NSObject {
                 if !granted {
                     log("Notification permission not granted - screen analysis will work but notifications will be disabled")
                 }
-
-                // Continue with monitoring regardless of notification permission
-                self?.continueStartMonitoring(completion: completion)
             }
         }
+
+        // Start monitoring immediately — don't wait for notification permission callback
+        continueStartMonitoring(completion: completion)
     }
 
     /// Repair LaunchServices registration when notification authorization fails with "not allowed".
@@ -289,7 +304,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
                 // Retry authorization after a short delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.activate()
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                         if let error = error {
                             log("Notification retry after repair failed: \(error.localizedDescription)")
@@ -392,6 +407,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
 
         isMonitoring = true
+
+        // Capture the first frame immediately so screenshots appear right away
+        // (don't wait for the first timer interval to elapse)
+        Task { @MainActor in
+            await self.captureFrame()
+        }
         isStartingMonitoring = false
 
         // Report resources after initialization
@@ -419,9 +440,15 @@ public class ProactiveAssistantsPlugin: NSObject {
         captureTimer = nil
         analysisDelayTimer?.invalidate()
         analysisDelayTimer = nil
+        distributionDebounceTimer?.invalidate()
+        distributionDebounceTimer = nil
         settingsStateTimer?.invalidate()
         settingsStateTimer = nil
         isInDelayPeriod = false
+        lastDistributedApp = nil
+        lastDistributedWindowTitle = nil
+        latestCapturedFrame = nil
+        lastDistributionTime = .distantPast
 
         windowMonitor?.stop()
         windowMonitor = nil
@@ -570,6 +597,23 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func captureFrame() async {
         guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
+        // Periodic screen recording permission recheck (issue #5792).
+        // Detects when the user revokes permission via System Settings while monitoring is active,
+        // and stops gracefully instead of silently failing on every capture.
+        let now = Date()
+        if now.timeIntervalSince(lastPermissionCheckTime) >= permissionCheckInterval {
+            lastPermissionCheckTime = now
+            let permissionGranted = ScreenCaptureService.checkPermission()
+            _hasScreenRecordingPermission = permissionGranted
+            if !permissionGranted {
+                log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
+                // Send user-visible notification about lost permission
+                sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
+                stopMonitoring()
+                return
+            }
+        }
+
         // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
         // This avoids burning through consecutive failures and generating unnecessary error events
         if isInSpecialSystemMode() {
@@ -671,7 +715,7 @@ public class ProactiveAssistantsPlugin: NSObject {
                     AssistantCoordinator.shared.trackFrame(frame)
 
                     if !isInDelayPeriod {
-                        AssistantCoordinator.shared.distributeFrame(frame)
+                        distributeFrameIfChanged(frame)
                     } else {
                         // During delay, still distribute to assistants that need it (e.g. refocus detection)
                         AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
@@ -739,7 +783,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             AssistantCoordinator.shared.trackFrame(frame)
 
             if !isInDelayPeriod {
-                AssistantCoordinator.shared.distributeFrame(frame)
+                distributeFrameIfChanged(frame)
             } else {
                 // During delay, still distribute to assistants that need it (e.g. refocus detection)
                 AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
@@ -777,6 +821,63 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
     }
 
+
+    // MARK: - Change-Gated Distribution
+
+    /// Distribute a frame to assistants only when context changed (app or window title),
+    /// with a 3-second debounce to let rapid switches settle, and a 60-second fallback
+    /// for periodic re-analysis within the same context.
+    private func distributeFrameIfChanged(_ frame: CapturedFrame) {
+        latestCapturedFrame = frame
+
+        // First frame after monitoring starts — distribute immediately, no debounce
+        if lastDistributedApp == nil {
+            flushDebouncedFrame()
+            return
+        }
+
+        let contextChanged = ContextDetection.didContextChange(
+            fromApp: lastDistributedApp,
+            fromWindowTitle: lastDistributedWindowTitle,
+            toApp: frame.appName,
+            toWindowTitle: frame.windowTitle
+        )
+
+        let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
+        let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
+
+        if contextChanged {
+            // Update tracking immediately so subsequent captures in the same new context
+            // don't keep resetting the debounce timer (fixes starvation bug).
+            lastDistributedApp = frame.appName
+            lastDistributedWindowTitle = frame.windowTitle
+
+            // Restart the 3s debounce timer — fires 3s after the last context change
+            distributionDebounceTimer?.invalidate()
+            distributionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    self?.flushDebouncedFrame()
+                }
+            }
+        } else if fallbackDue {
+            // Same context but fallback interval elapsed — distribute for periodic re-analysis
+            distributionDebounceTimer?.invalidate()
+            flushDebouncedFrame()
+        }
+        // Otherwise: same context, within fallback interval — skip distribution
+    }
+
+    /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
+    private func flushDebouncedFrame() {
+        guard let frame = latestCapturedFrame else { return }
+
+        lastDistributedApp = frame.appName
+        lastDistributedWindowTitle = frame.windowTitle
+        lastDistributionTime = Date()
+        distributionDebounceTimer = nil
+
+        AssistantCoordinator.shared.distributeFrame(frame)
+    }
 
     // MARK: - Settings State Tracking
 

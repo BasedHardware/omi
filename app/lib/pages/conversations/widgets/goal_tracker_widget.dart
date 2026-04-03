@@ -211,12 +211,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     // Navigate to chat and send the advice as a message from Omi AI
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ChatPage(
-          isPivotBottom: false,
-          autoMessage: _advice,
-        ),
-      ),
+      MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: _advice)),
     );
   }
 
@@ -359,8 +354,12 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     if (!oldGoal.id.startsWith('temp_')) {
       try {
         Logger.debug('[GOAL] Updating values for ${oldGoal.id}: current=$currentVal, target=$targetVal');
-        final updated =
-            await updateGoal(oldGoal.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+        final updated = await updateGoal(
+          oldGoal.id,
+          currentValue: currentVal,
+          targetValue: targetVal,
+          maxValue: targetVal,
+        );
         Logger.debug('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
         if (updated != null && mounted) {
           setState(() => _goal = updated);
@@ -492,8 +491,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 children: [
                   Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
                   const SizedBox(width: 8),
-                  Text(context.l10n.tapToSetAGoal,
-                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5))),
+                  Text(
+                    context.l10n.tapToSetAGoal,
+                    style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5)),
+                  ),
                 ],
               ),
             ],
@@ -687,8 +688,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
               _numField(_currentValueController, context.l10n.current.toUpperCase(), color),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('/',
-                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2))),
+                child: Text(
+                  '/',
+                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2)),
+                ),
               ),
               _numField(_targetValueController, context.l10n.target.toUpperCase(), Colors.white60),
             ],
@@ -706,8 +709,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(20)),
-                  child: Text(context.l10n.save,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: Text(
+                    context.l10n.save,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -721,11 +726,14 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                  decoration:
-                      BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                  child: Text(context.l10n.cancel,
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6))),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    context.l10n.cancel,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6)),
+                  ),
                 ),
               ),
             ],
@@ -738,9 +746,15 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
   Widget _numField(TextEditingController c, String label, Color color) {
     return Column(
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1, color: Colors.white.withOpacity(0.35))),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1,
+            color: Colors.white.withOpacity(0.35),
+          ),
+        ),
         const SizedBox(height: 6),
         SizedBox(
           width: 100,

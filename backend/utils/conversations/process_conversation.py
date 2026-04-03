@@ -476,7 +476,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
             from database.memories import set_memory_kg_extracted
 
             for memory_db_obj in parsed_memories:
-                if memory_db_obj.kg_extracted:
+                if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
                     continue
                 try:
                     result = extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)

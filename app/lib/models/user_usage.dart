@@ -48,13 +48,7 @@ class UserUsageResponse {
   final UsageStats? allTime;
   final List<UsageHistoryPoint>? history;
 
-  UserUsageResponse({
-    this.today,
-    this.monthly,
-    this.yearly,
-    this.allTime,
-    this.history,
-  });
+  UserUsageResponse({this.today, this.monthly, this.yearly, this.allTime, this.history});
 
   factory UserUsageResponse.fromJson(Map<String, dynamic> json) => _$UserUsageResponseFromJson(json);
   Map<String, dynamic> toJson() => _$UserUsageResponseToJson(this);

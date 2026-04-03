@@ -282,6 +282,8 @@ class ChatProvider: ObservableObject {
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
 If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
+If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 ================================================================================
@@ -565,6 +567,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
         guard !acpBridgeStarted else { return true }
+        // Wait for API keys before starting the bridge — the subprocess reads
+        // ANTHROPIC_API_KEY from environment on launch. Without this, Mode B
+        // (no key / OAuth) is used even when the user should be on Mode A.
+        if acpBridge.passApiKey {
+            await APIKeyService.shared.waitForKeys()
+        }
         do {
             try await acpBridge.start()
             acpBridgeStarted = true
@@ -588,15 +596,20 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
             let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
-            cachedMainSystemPrompt = mainSystemPrompt
             let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6"
+                : ShortcutSettings.shared.selectedModel
+            cachedMainSystemPrompt = mainSystemPrompt
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt),
-                .init(key: "floating", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt)
+                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
         } catch {
             logError("Failed to start ACP bridge", error: error)
+            let rawError = String(describing: error)
+            AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
@@ -753,7 +766,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         sessions = []
-        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
+        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load chats. Check your connection and try again."
     }
 
     /// Toggle the starred filter and reload sessions
@@ -1649,7 +1662,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         messages = []
-        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
+        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
 
@@ -1660,6 +1673,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private func pollForNewMessages() async {
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
+        // Skip if in auth backoff period (recent 401 errors)
+        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
         // Skip if we're actively sending. Note: isSending is released *before* the AI
         // message is saved to the backend (to unblock the next query). This means the
         // poll can run while saveMessage() is still in-flight — see the race note below.
@@ -1727,7 +1742,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messages.append(contentsOf: genuinelyNewMessages)
                 messages.sort(by: { $0.createdAt < $1.createdAt })
             }
+            AuthBackoffTracker.shared.reportSuccess()
         } catch {
+            if case APIError.unauthorized = error {
+                AuthBackoffTracker.shared.reportAuthFailure()
+            }
             // Silent failure — polling errors shouldn't disrupt the user
             logError("ChatProvider poll failed", error: error)
         }
@@ -1886,6 +1905,13 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 sender: .user
             )
             messages.append(userMessage)
+
+            // Track onboarding user messages with full content
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "user", text: trimmedText, step: "chat"
+                )
+            }
         }
 
         // Create a placeholder AI message shown immediately in the UI while
@@ -1964,7 +1990,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 if sessionKey != "floating" {
                                     // Bring the app to the foreground so the setup sheet is visible
                                     // (the failed browser attempt may have opened Chrome, stealing focus)
-                                    NSApp.activate(ignoringOtherApps: true)
+                                    NSApp.activate()
                                     for window in NSApp.windows where window.title.hasPrefix("Omi") {
                                         window.makeKeyAndOrderFront(nil)
                                     }
@@ -2093,6 +2119,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
             log("Chat response complete")
 
+            // Track onboarding AI responses with full content and tool calls
+            if isOnboarding {
+                let aiText = messages.first(where: { $0.id == aiMessageId })?.text ?? queryResult.text
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "assistant",
+                    text: aiText,
+                    step: "chat",
+                    toolCalls: toolNames.isEmpty ? nil : toolNames,
+                    model: model ?? modelOverride
+                )
+            }
+
             // Persist the ACP session ID during onboarding so we can resume after app restart
             if isOnboarding && !queryResult.sessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
@@ -2185,7 +2223,22 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
 
             logError("Failed to get AI response", error: error)
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+            // Send both user-friendly and raw error to analytics for remote debugging
+            let rawError: String
+            if let bridgeError = error as? BridgeError {
+                rawError = String(describing: bridgeError)
+            } else {
+                rawError = "\(error)"
+            }
+            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
+
+            // Track onboarding errors with full context
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "error", text: trimmedText, step: "chat",
+                    error: rawError
+                )
+            }
 
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {

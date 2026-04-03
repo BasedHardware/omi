@@ -9,7 +9,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/calendar_meeting_context.dart';
 import 'package:omi/services/calendar_service.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class CalendarProvider extends ChangeNotifier {
   final CalendarService _service = CalendarService();
@@ -60,27 +59,8 @@ class CalendarProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    // Calendar integration is only supported on macOS
-    if (!PlatformService.isMacOS) {
-      return;
-    }
-
-    await checkPermissionStatus();
-
-    // Only auto-start if user has explicitly enabled calendar integration
-    final calendarEnabled = SharedPreferencesUtil().calendarIntegrationEnabled;
-
-    if (isAuthorized && calendarEnabled) {
-      // Apply saved settings FIRST, before starting monitoring
-      await _applySavedSettings();
-
-      // Now start monitoring with correct settings applied
-      await startMonitoring();
-
-      // Fetch calendars and meetings
-      await fetchSystemCalendars();
-      await refreshMeetings();
-    }
+    // Calendar integration was only supported on macOS (now removed)
+    return;
   }
 
   Future<void> _applySavedSettings() async {
@@ -160,7 +140,7 @@ class CalendarProvider extends ChangeNotifier {
     // Preserve meetingId from previous syncs
     final meetingIdMap = {
       for (var m in _upcomingMeetings)
-        if (m.meetingId != null) m.id: m.meetingId
+        if (m.meetingId != null) m.id: m.meetingId,
     };
 
     // Update meetings list, preserving meetingIds
@@ -191,7 +171,8 @@ class CalendarProvider extends ChangeNotifier {
       final alreadySyncedIds = _upcomingMeetings.where((m) => m.meetingId != null).map((m) => m.id).toSet();
 
       Logger.debug(
-          'CalendarProvider: Syncing ${_upcomingMeetings.length} meetings (${alreadySyncedIds.length} already synced)');
+        'CalendarProvider: Syncing ${_upcomingMeetings.length} meetings (${alreadySyncedIds.length} already synced)',
+      );
 
       for (final meeting in _upcomingMeetings) {
         // Skip if we've already synced this calendar event in this session
@@ -202,10 +183,7 @@ class CalendarProvider extends ChangeNotifier {
         try {
           // Convert participants
           final participants = meeting.participants.map((p) {
-            return MeetingParticipant(
-              name: p.name,
-              email: p.email,
-            );
+            return MeetingParticipant(name: p.name, email: p.email);
           }).toList();
 
           // Store meeting in backend (backend handles create vs update based on calendar_event_id)

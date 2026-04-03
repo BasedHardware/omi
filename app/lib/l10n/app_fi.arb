@@ -448,7 +448,7 @@
     "exportConfiguration": "Vie kokoonpano",
     "bringYourOwn": "Tuo omasi",
     "payYourSttProvider": "Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.",
-    "freeMinutesMonth": "4 800 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ",
+    "freeMinutesMonth": "1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Isäntä vaaditaan",
     "validPortRequired": "Kelvollinen portti vaaditaan",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
     "isTriggeredBy": "On {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Ei määritettyä tietojen käyttöoikeutta.",
-    "basicPlanDescription": "4 800 premium-minuuttia + rajoittamaton laitteella",
+    "basicPlanDescription": "1 200 premium-minuuttia + rajoittamaton laitteella",
     "minutes": "minuuttia",
     "omiHas": "Omilla on:",
     "premiumMinutesUsed": "Premium-minuutit käytetty.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Laite voi lämmetä pitkäaikaisessa käytössä.",
     "speedAccuracyLower": "Nopeus ja tarkkuus voivat olla alhaisempia kuin pilvimalleilla.",
     "cloudProvider": "Pilvipalveluntarjoaja",
-    "premiumMinutesMonth": "4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ",
+    "premiumMinutesMonth": "1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ",
     "viewUsage": "Näytä käyttö",
     "audioProcessedLocally": "Ääni käsitellään paikallisesti. Toimii offline, yksityisempi, mutta kuluttaa enemmän akkua.",
     "languageLabel": "Kieli",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Arvosteluja ei löytynyt",
     "onDeviceIntensive": "Laitteella tapahtuva puheentunnistus on laskennallisesti vaativaa.",
     "onDeviceSlower": "Laitteella tapahtuva puheentunnistus voi olla hitaampaa tällä laitteella.",
-    "premiumMinutesInfo": "4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.",
+    "premiumMinutesInfo": "1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.",
     "redownload": "Lataa uudelleen",
     "reply": "Vastaa",
     "replySentSuccessfully": "Vastaus lähetetty onnistuneesti",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Ladataan laitteesta",
     "reconnectingToInternet": "Yhdistetään uudelleen internetiin...",
     "uploadingToCloud": "Ladataan {current}/{total}",
+    "processingOnServer": "Käsitellään palvelimella...",
+    "processingOnServerProgress": "Käsitellään... {current}/{total} segmenttiä",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Käsitelty",
     "corruptedStatus": "Vioittunut",
     "nPending": "{count} odottaa",
@@ -2749,5 +2761,152 @@
     "notYetSynced": "Ei vielä synkronoitu puhelimeesi",
     "clearAll": "Tyhjennä kaikki",
     "phoneKeypad": "Näppäimistö",
-    "phoneHideKeypad": "Piilota näppäimistö"
+    "phoneHideKeypad": "Piilota näppäimistö",
+    "transcriptionPaused": "Nauhoittaa, yhdistetään uudelleen",
+    "transcriptionPausedReconnecting": "Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...",
+    "fairUsePolicy": "Kohtuullinen käyttö",
+    "fairUseLoadError": "Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.",
+    "fairUseStatusNormal": "Käyttösi on normaalien rajojen sisällä.",
+    "fairUseStageNormal": "Normaali",
+    "fairUseStageWarning": "Varoitus",
+    "fairUseStageThrottle": "Rajoitettu",
+    "fairUseStageRestrict": "Estetty",
+    "fairUseSpeechUsage": "Puheen käyttö",
+    "fairUseToday": "Tänään",
+    "fairUse3Day": "3 päivän jakso",
+    "fairUseWeekly": "Viikkojakso",
+    "fairUseAboutTitle": "Tietoa kohtuullisesta käytöstä",
+    "fairUseAboutBody": "Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.",
+    "fairUseCaseRefCopied": "{caseRef} kopioitu",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Reilu käyttö: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Paranna yhteyttä",
+    "improveConnectionContent": "Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.",
+    "improveConnectionAction": "Selvä",
+    "clockSkewWarning": "Laitteesi kello on ~{minutes} min. väärässä. Tarkista päivämäärä- ja aika-asetukset.",
+    "omisStorage": "Omin tallennustila",
+    "phoneStorage": "Puhelimen tallennustila",
+    "cloudStorage": "Pilvitallennustila",
+    "howSyncingWorks": "Miten synkronointi toimii",
+    "noSyncedRecordings": "Ei synkronoituja nauhoituksia vielä",
+    "recordingsSyncAutomatically": "Nauhoitukset synkronoidaan automaattisesti — toimenpiteitä ei tarvita.",
+    "filesDownloadedUploadedNextTime": "Jo ladatut tiedostot ladataan palvelimelle seuraavalla kerralla.",
+    "nConversationsCreated": "{count, plural, =1{1 keskustelu luotu} other{{count} keskustelua luotu}}",
+    "tapToView": "Napauta nähdäksesi",
+    "syncFailed": "Synkronointi epäonnistui",
+    "keepSyncing": "Jatka synkronointia",
+    "cancelSyncQuestion": "Peruuta synkronointi?",
+    "omisStorageDesc": "Kun Omi ei ole yhdistetty puhelimeesi, se tallentaa äänen paikallisesti sisäiseen muistiinsa. Et koskaan menetä nauhoitusta.",
+    "phoneStorageDesc": "Kun Omi yhdistyy uudelleen, nauhoitukset siirretään automaattisesti puhelimeesi ennen palvelimelle lataamista.",
+    "cloudStorageDesc": "Lataamisen jälkeen nauhoituksesi käsitellään ja litteroidaan. Keskustelut ovat saatavilla minuutin kuluessa.",
+    "storageSection": "TALLENNUSTILA",
+    "tipKeepPhoneNearby": "Pidä puhelin lähellä nopeampaa synkronointia varten",
+    "tipStableInternet": "Vakaa internet nopeuttaa pilveen lataamista",
+    "tipAutoSync": "Nauhoitukset synkronoidaan automaattisesti",
+    "permissions": "Käyttöoikeudet",
+    "permissionEnabled": "Käytössä",
+    "permissionEnable": "Ota käyttöön",
+    "permissionsPageDescription": "Nämä käyttöoikeudet ovat keskeisiä Omin toiminnalle. Ne mahdollistavat keskeiset ominaisuudet kuten ilmoitukset, sijaintiin perustuvat kokemukset ja äänen tallennuksen.",
+    "permissionsRequiredDescription": "Omi tarvitsee muutamia käyttöoikeuksia toimiakseen oikein. Myönnä ne jatkaaksesi.",
+    "permissionsSetupTitle": "Saat parhaan kokemuksen",
+    "permissionsSetupDescription": "Ota käyttöön muutama lupa, jotta Omi voi tehdä taikojaan.",
+    "permissionsChangeAnytime": "Voit muuttaa näitä milloin tahansa kohdassa Asetukset > Käyttöoikeudet",
+    "location": "Sijainti",
+    "microphone": "Mikrofoni",
+    "cancelBillingPeriodInfo": "Tilauksesi pysyy aktiivisena {date} asti. Sen jälkeen sinut siirretään ilmaisversioon rajoitetuilla ominaisuuksilla.",
+    "cancelConsequenceBattery": "7x enemmän akunkäyttöä (laitteella käsittely)",
+    "cancelConsequenceDelay": "5-7 sekunnin käsittelyviive (laitteen mallit)",
+    "cancelConsequenceNoAccess": "Ei enää rajoittamatonta pääsyä laskutusjakson lopussa.",
+    "cancelConsequencePhoneCalls": "Ei reaaliaikaista puhelutranskripiota",
+    "cancelConsequenceQuality": "30% heikompi transkriptiolaatu (laitteen mallit)",
+    "cancelConsequenceSpeakers": "Ei voi tunnistaa puhujia.",
+    "cancelConsequencesSubtitle": "Suosittelemme vahvasti tutustumaan muihin vaihtoehtoihisi peruutuksen sijaan.",
+    "cancelReasonAudioQuality": "Äänen/transkription laatu",
+    "cancelReasonBatteryDrain": "Huoli akun kulumisesta",
+    "cancelReasonDetailHint": "Arvostamme kaikkea palautetta...",
+    "cancelReasonFoundAlternative": "Löysin vaihtoehdon",
+    "cancelReasonMissingFeatures": "Puuttuvat ominaisuudet",
+    "cancelReasonNotUsing": "En käytä tarpeeksi",
+    "cancelReasonOther": "Muu",
+    "cancelReasonSubtitle": "Voitko kertoa meille, miksi lähdet?",
+    "cancelReasonTooExpensive": "Liian kallis",
+    "confirmAndCancel": "Vahvista ja peruuta",
+    "feedbackSubtitleAudioQuality": "Haluaisimme ymmärtää, mikä meni pieleen.",
+    "feedbackSubtitleBatteryDrain": "Tämä auttaa laitteistotiimiämme parantamaan.",
+    "feedbackSubtitleFoundAlternative": "Haluaisimme tietää, mikä kiinnitti huomiosi.",
+    "feedbackSubtitleMissingFeatures": "Rakennamme aina — tämä auttaa meitä priorisoimaan.",
+    "feedbackSubtitleNotUsing": "Haluamme tehdä Omista hyödyllisemmän sinulle.",
+    "feedbackSubtitleTooExpensive": "Palautteesi auttaa meitä löytämään oikean tasapainon.",
+    "feedbackTitleAudioQuality": "Mitä ongelmia koit?",
+    "feedbackTitleBatteryDrain": "Kerro meille akkuongelmista",
+    "feedbackTitleFoundAlternative": "Mihin vaihdat?",
+    "feedbackTitleMissingFeatures": "Mitä ominaisuuksia kaipaat?",
+    "feedbackTitleNotUsing": "Mikä saisi sinut käyttämään Omia enemmän?",
+    "feedbackTitleTooExpensive": "Mikä hinta sopisi sinulle?",
+    "ifYouCancel": "Jos peruutat:",
+    "justAMoment": "Hetkinen",
+    "tellUsMore": "Kerro meille lisää (valinnainen)",
+    "whyAreYouCanceling": "Miksi peruutat?",
+    "deviceDiagnostics": "Laitediagnostiikka",
+    "signalStrength": "Signaalin voimakkuus",
+    "connectionUptime": "Käyttöaika",
+    "reconnections": "Uudelleenyhdistämiset",
+    "disconnectHistory": "Katkaisuhistoria",
+    "noDisconnectsRecorded": "Katkaisuja ei ole tallennettu",
+    "diagnostics": "Diagnostiikka",
+    "waitingForData": "Odotetaan tietoja...",
+    "liveRssiOverTime": "Reaaliaikainen RSSI ajan myötä",
+    "noRssiDataYet": "Ei vielä RSSI-tietoja",
+    "collectingData": "Kerätään tietoja...",
+    "cleanDisconnect": "Puhdas katkaisu",
+    "connectionTimeout": "Yhteyden aikakatkaisu",
+    "remoteDeviceTerminated": "Etälaite katkaisi yhteyden",
+    "pairedToAnotherPhone": "Yhdistetty toiseen puhelimeen",
+    "linkKeyMismatch": "Yhteysavaimen ristiriita",
+    "connectionFailed": "Yhteys epäonnistui",
+    "appClosed": "Sovellus suljettu",
+    "manualDisconnect": "Manuaalinen katkaisu",
+    "lastNEvents": "Viimeiset {count} tapahtumaa",
+    "signal": "Signaali",
+    "battery": "Akku",
+    "excellent": "Erinomainen",
+    "good": "Hyvä",
+    "fair": "Kohtalainen",
+    "weak": "Heikko",
+    "gattError": "GATT-virhe ({code})"
 }
