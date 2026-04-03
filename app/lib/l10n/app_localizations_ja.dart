@@ -8794,4 +8794,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String gattError(String code) {
     return 'GATTエラー ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => '安定版ファームウェアに戻す';
+
+  @override
+  String get rollbackConfirmTitle => 'ファームウェアを戻しますか？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '現在のファームウェアが最新の安定版（$version）に置き換えられます。更新後、デバイスは再起動します。';
+  }
+
+  @override
+  String get stableFirmware => '安定版ファームウェア';
+
+  @override
+  String get fetchingStableFirmware => '最新の安定版ファームウェアを取得中...';
+
+  @override
+  String get noStableFirmwareFound => 'お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。';
+
+  @override
+  String get installStableFirmware => '安定版ファームウェアをインストール';
+
+  @override
+  String get alreadyOnStableFirmware => 'すでに最新の安定版を使用しています。';
 }

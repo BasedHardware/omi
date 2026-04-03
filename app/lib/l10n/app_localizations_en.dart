@@ -8940,4 +8940,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String gattError(String code) {
     return 'GATT error ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Roll Back to Stable Firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Roll Back Firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'This will replace your current firmware with the latest stable version ($version). Your device will restart after the update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stable Firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Fetching latest stable firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Could not find a stable firmware version for your device.';
+
+  @override
+  String get installStableFirmware => 'Install Stable Firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'You are already on the latest stable version.';
 }

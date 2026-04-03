@@ -8925,4 +8925,30 @@ class AppLocalizationsHi extends AppLocalizations {
   String gattError(String code) {
     return 'GATT त्रुटि ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'स्थिर फ़र्मवेयर पर वापस जाएँ';
+
+  @override
+  String get rollbackConfirmTitle => 'फ़र्मवेयर वापस लाएँ?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'यह आपके वर्तमान फ़र्मवेयर को नवीनतम स्थिर संस्करण ($version) से बदल देगा। अपडेट के बाद आपका डिवाइस पुनः आरंभ होगा।';
+  }
+
+  @override
+  String get stableFirmware => 'स्थिर फ़र्मवेयर';
+
+  @override
+  String get fetchingStableFirmware => 'नवीनतम स्थिर फ़र्मवेयर प्राप्त किया जा रहा है...';
+
+  @override
+  String get noStableFirmwareFound => 'आपके डिवाइस के लिए स्थिर फ़र्मवेयर संस्करण नहीं मिला।';
+
+  @override
+  String get installStableFirmware => 'स्थिर फ़र्मवेयर इंस्टॉल करें';
+
+  @override
+  String get alreadyOnStableFirmware => 'आप पहले से नवीनतम स्थिर संस्करण पर हैं।';
 }

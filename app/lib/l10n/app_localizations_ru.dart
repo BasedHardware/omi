@@ -8972,4 +8972,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String gattError(String code) {
     return 'Ошибка GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Откатить до стабильной прошивки';
+
+  @override
+  String get rollbackConfirmTitle => 'Откатить прошивку?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Текущая прошивка будет заменена на последнюю стабильную версию ($version). Устройство перезагрузится после обновления.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабильная прошивка';
+
+  @override
+  String get fetchingStableFirmware => 'Получение последней стабильной прошивки...';
+
+  @override
+  String get noStableFirmwareFound => 'Не удалось найти стабильную версию прошивки для вашего устройства.';
+
+  @override
+  String get installStableFirmware => 'Установить стабильную прошивку';
+
+  @override
+  String get alreadyOnStableFirmware => 'Вы уже используете последнюю стабильную версию.';
 }

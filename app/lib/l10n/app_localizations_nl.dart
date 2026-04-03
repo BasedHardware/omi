@@ -8972,4 +8972,30 @@ class AppLocalizationsNl extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-fout ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Terugkeren naar stabiele firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware terugzetten?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dit vervangt uw huidige firmware door de laatste stabiele versie ($version). Uw apparaat wordt opnieuw opgestart na de update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiele firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Laatste stabiele firmware ophalen...';
+
+  @override
+  String get noStableFirmwareFound => 'Kan geen stabiele firmwareversie vinden voor uw apparaat.';
+
+  @override
+  String get installStableFirmware => 'Stabiele firmware installeren';
+
+  @override
+  String get alreadyOnStableFirmware => 'U gebruikt al de laatste stabiele versie.';
 }

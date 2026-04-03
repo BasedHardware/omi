@@ -8982,4 +8982,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String gattError(String code) {
     return 'GATT hiba ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Visszaállítás stabil firmware-re';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware visszaállítása?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ez lecseréli a jelenlegi firmware-t a legújabb stabil verzióra ($version). Az eszköz a frissítés után újraindul.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Legújabb stabil firmware lekérése...';
+
+  @override
+  String get noStableFirmwareFound => 'Nem található stabil firmware verzió az eszközéhez.';
+
+  @override
+  String get installStableFirmware => 'Stabil firmware telepítése';
+
+  @override
+  String get alreadyOnStableFirmware => 'Már a legújabb stabil verzión van.';
 }

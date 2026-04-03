@@ -8986,4 +8986,30 @@ class AppLocalizationsRo extends AppLocalizations {
   String gattError(String code) {
     return 'Eroare GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Revenire la firmware-ul stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Reveniți la firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ($version). Dispozitivul se va reporni după actualizare.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Se obține cel mai recent firmware stabil...';
+
+  @override
+  String get noStableFirmwareFound => 'Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.';
+
+  @override
+  String get installStableFirmware => 'Instalare firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sunteți deja pe cea mai recentă versiune stabilă.';
 }

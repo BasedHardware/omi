@@ -8954,4 +8954,30 @@ class AppLocalizationsId extends AppLocalizations {
   String gattError(String code) {
     return 'Kesalahan GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Kembali ke firmware stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Kembalikan firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ini akan mengganti firmware Anda saat ini dengan versi stabil terbaru ($version). Perangkat Anda akan dimulai ulang setelah pembaruan.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware Stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Mengambil firmware stabil terbaru...';
+
+  @override
+  String get noStableFirmwareFound => 'Tidak dapat menemukan versi firmware stabil untuk perangkat Anda.';
+
+  @override
+  String get installStableFirmware => 'Pasang firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terbaru.';
 }
