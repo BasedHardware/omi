@@ -309,6 +309,15 @@ class LocalWalSyncImpl implements LocalWalSync {
     return _wals.where((w) => w.status == WalStatus.miss).toList();
   }
 
+  /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
+  /// Used by the live capture screen to show inline audio safety indicators.
+  List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return _wals
+        .where((w) => w.status == WalStatus.miss && w.timerStart >= sessionStartSeconds && w.timerStart <= now)
+        .toList();
+  }
+
   @override
   Future<List<Wal>> getAllWals() async {
     return List.from(_wals);
