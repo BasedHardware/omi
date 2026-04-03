@@ -265,16 +265,18 @@ class FileChatTool:
 
         output_list = []
 
-        with openai.beta.threads.runs.stream(
-            thread_id=thread_id,
-            assistant_id=assistant_id,
-            event_handler=AssistantEventHandler(),
-            timeout=30.0,
-        ) as stream:
-            for text in stream.text_deltas:
-                callback.put_data_nowait(text)
-                output_list.append(text)
-            stream.until_done()
+        try:
+            with openai.beta.threads.runs.stream(
+                thread_id=thread_id,
+                assistant_id=assistant_id,
+                event_handler=AssistantEventHandler(),
+                timeout=30.0,
+            ) as stream:
+                for text in stream.text_deltas:
+                    callback.put_data_nowait(text)
+                    output_list.append(text)
+                stream.until_done()
+        finally:
             callback.end_nowait()
 
         return ''.join(output_list)
