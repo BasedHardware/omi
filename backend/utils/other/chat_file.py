@@ -133,18 +133,20 @@ class FileChatTool:
             )
 
         output_list = []
-        stream = await _async_openai.chat.completions.create(
-            model="gpt-4.1",
-            messages=[{"role": "user", "content": contents}],
-            stream=True,
-            max_tokens=2048,
-        )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if delta and delta.content:
-                await callback.put_data(delta.content)
-                output_list.append(delta.content)
-        await callback.end()
+        try:
+            stream = await _async_openai.chat.completions.create(
+                model="gpt-4.1",
+                messages=[{"role": "user", "content": contents}],
+                stream=True,
+                max_tokens=2048,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    await callback.put_data(delta.content)
+                    output_list.append(delta.content)
+        finally:
+            await callback.end()
         return ''.join(output_list)
 
     def _ensure_thread_and_assistant(self):

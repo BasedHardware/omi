@@ -103,18 +103,29 @@ class TestAsyncVisionStreamPattern:
 
     @pytest.mark.asyncio
     async def test_producer_error_terminates_queue(self):
-        """If producer raises, consumer should not hang forever."""
+        """If producer raises, queue must still receive end sentinel (None)."""
         callback = AsyncStreamingCallback()
 
         async def _failing_producer():
-            await callback.put_data("chunk1")
-            raise ValueError("simulated OpenAI error")
+            """Mirrors _ask_vision_stream with try/finally on callback.end()."""
+            try:
+                await callback.put_data("chunk1")
+                raise ValueError("simulated OpenAI error")
+            finally:
+                await callback.end()
 
         task = asyncio.create_task(_failing_producer())
 
-        # Consumer should get chunk1 then the task raises
-        chunk = await callback.queue.get()
-        assert chunk == "data: chunk1"
+        # Consumer should get chunk1 then the end sentinel
+        received = []
+        while True:
+            chunk = await asyncio.wait_for(callback.queue.get(), timeout=2.0)
+            if chunk:
+                received.append(chunk)
+            else:
+                break  # Got None sentinel — queue properly terminated
+
+        assert received == ["data: chunk1"]
 
         with pytest.raises(ValueError, match="simulated OpenAI error"):
             await task
