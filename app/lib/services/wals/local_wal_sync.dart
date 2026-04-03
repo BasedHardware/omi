@@ -318,6 +318,13 @@ class LocalWalSyncImpl implements LocalWalSync {
         .toList();
   }
 
+  /// Mark a WAL as synced and persist the change to disk.
+  Future<void> markWalSyncedAndPersist(Wal wal) async {
+    wal.status = WalStatus.synced;
+    await _saveWalsToFile();
+    listener.onWalUpdated();
+  }
+
   @override
   Future<List<Wal>> getAllWals() async {
     return List.from(_wals);
