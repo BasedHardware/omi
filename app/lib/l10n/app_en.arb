@@ -10500,6 +10500,7 @@
     "@microphone": {
         "description": "Label for microphone permission"
     },
+
     "whyAreYouCanceling": "Why are you canceling?",
     "@whyAreYouCanceling": {
         "description": "Title for cancel subscription reason page"
@@ -10661,23 +10662,99 @@
     "appClosed": "App closed",
     "manualDisconnect": "Manual disconnect",
     "lastNEvents": "Last {count} events",
-    "@lastNEvents": {
+    "@lastNEvents": {,
+"cloudAudioFiles": "Cloud Audio Files",
+    "@cloudAudioFiles": {
+        "description": "Title for cloud audio files section"
+    },
+    "noCloudAudioFiles": "No cloud audio files yet",
+    "@noCloudAudioFiles": {
+        "description": "Empty state for cloud audio files"
+    },
+    "noCloudAudioDescription": "Audio files will appear here once you record conversations with cloud sync enabled.",
+    "@noCloudAudioDescription": {
+        "description": "Description for empty cloud audio state"
+    },
+    "deleteAllAudio": "Delete All Audio",
+    "@deleteAllAudio": {
+        "description": "Button to delete all cloud audio"
+    },
+    "deleteAllAudioTitle": "Delete All Cloud Audio?",
+    "@deleteAllAudioTitle": {
+        "description": "Title for delete all audio dialog"
+    },
+    "deleteAllAudioMessage": "This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.",
+    "@deleteAllAudioMessage": {
+        "description": "Message for delete all audio dialog"
+    },
+    "deleteAll": "Delete All",
+    "@deleteAll": {
+        "description": "Button text for delete all confirmation"
+    },
+    "deletingAudio": "Deleting audio files...",
+    "@deletingAudio": {
+        "description": "Loading text while deleting audio"
+    },
+    "audioDeletedSuccessfully": "All cloud audio files deleted",
+    "@audioDeletedSuccessfully": {
+        "description": "Success message after deleting audio"
+    },
+    "failedToDeleteAudio": "Failed to delete audio files",
+    "@failedToDeleteAudio": {
+        "description": "Error message when audio deletion fails"
+    },
+    "nAudioFiles": "{count} audio {count, plural, =1{file} other{files}}",
+    "@nAudioFiles": {
+        "description": "Number of audio files", 378182dcc (feat: add audio listing, playback, sharing, and delete all to Private Cloud Sync page)
         "placeholders": {
             "count": {
                 "type": "int"
             }
         }
     },
-    "signal": "Signal",
-    "battery": "Battery",
-    "excellent": "Excellent",
-    "good": "Good",
-    "fair": "Fair",
-    "weak": "Weak",
-    "gattError": "GATT error ({code})",
-    "@gattError": {
+    "totalDurationMinutes": "{minutes} min",
+    "@totalDurationMinutes": {
+        "description": "Total audio duration in minutes",
         "placeholders": {
-            "code": {
+            "minutes": {
+                "type": "String"
+            }
+        }
+    },
+    "shareAudio": "Share Audio",
+    "@shareAudio": {
+        "description": "Button to share audio file"
+    },
+    "preparingAudioTryAgain": "Preparing audio… Please try again in a moment.",
+    "@preparingAudioTryAgain": {
+        "description": "Snackbar message when audio is being precached"
+    },
+    "failedToPlayAudio": "Failed to play audio: {error}",
+    "@failedToPlayAudio": {
+        "description": "Error message when audio playback fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "failedToShareAudio": "Failed to share audio: {error}",
+    "@failedToShareAudio": {
+        "description": "Error message when audio sharing fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "audioShareText": "Audio from \"{title}\"\n{urls}",
+    "@audioShareText": {
+        "description": "Text shared when sharing conversation audio",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            },
+            "urls": {
                 "type": "String"
             }
         }

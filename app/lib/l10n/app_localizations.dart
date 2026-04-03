@@ -14559,6 +14559,30 @@ abstract class AppLocalizations {
   /// **'Share Audio'**
   String get shareAudio;
 
+  /// Snackbar message when audio is being precached.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing audio… Please try again in a moment.'**
+  String get preparingAudioTryAgain;
+
+  /// Error message when audio playback fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to play audio: {error}'**
+  String failedToPlayAudio(String error);
+
+  /// Error message when audio sharing fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to share audio: {error}'**
+  String failedToShareAudio(String error);
+
+  /// Text shared when sharing conversation audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio from "{title}"\n{urls}'**
+  String audioShareText(String title, String urls);
+
   /// No description provided for @preparingAudio.
   ///
   /// In en, this message translates to:
@@ -16329,6 +16353,7 @@ abstract class AppLocalizations {
   /// **'Microphone'**
   String get microphone;
 
+
   /// Title for cancel subscription reason page
   ///
   /// In en, this message translates to:
@@ -16694,6 +16719,85 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GATT error ({code})'**
   String gattError(String code);
+
+  /// Title for cloud audio files section
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Audio Files'**
+  String get cloudAudioFiles;
+
+  /// Empty state for cloud audio files
+  ///
+  /// In en, this message translates to:
+  /// **'No cloud audio files yet'**
+  String get noCloudAudioFiles;
+
+  /// Description for empty cloud audio state
+  ///
+  /// In en, this message translates to:
+  /// **'Audio files will appear here once you record conversations with cloud sync enabled.'**
+  String get noCloudAudioDescription;
+
+  /// Button to delete all cloud audio
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Audio'**
+  String get deleteAllAudio;
+
+  /// Title for delete all audio dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Cloud Audio?'**
+  String get deleteAllAudioTitle;
+
+  /// Message for delete all audio dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.'**
+  String get deleteAllAudioMessage;
+
+  /// Button text for delete all confirmation
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All'**
+  String get deleteAll;
+
+  /// Loading text while deleting audio
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting audio files...'**
+  String get deletingAudio;
+
+  /// Success message after deleting audio
+  ///
+  /// In en, this message translates to:
+  /// **'All cloud audio files deleted'**
+  String get audioDeletedSuccessfully;
+
+  /// Error message when audio deletion fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete audio files'**
+  String get failedToDeleteAudio;
+
+  /// Number of audio files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} audio {count, plural, =1{file} other{files}}'**
+  String nAudioFiles(int count);
+
+  /// Total audio duration in minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String totalDurationMinutes(String minutes);
+
+  /// Button to share audio file
+  ///
+  /// In en, this message translates to:
+  /// **'Share Audio'**
+  String get shareAudio;
+ 378182dcc (feat: add audio listing, playback, sharing, and delete all to Private Cloud Sync page)
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
