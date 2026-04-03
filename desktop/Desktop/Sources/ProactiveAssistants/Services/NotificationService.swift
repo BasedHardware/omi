@@ -198,14 +198,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {
-        // Check permission before attempting delivery to avoid UNErrorDomain code 1 errors
+        FloatingControlBarManager.shared.showNotification(
+            title: title,
+            message: message,
+            assistantId: assistantId,
+            sound: sound
+        )
+
+        // Keep the floating-bar preview, but still deliver the real macOS
+        // notification when authorization is available.
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             Task { @MainActor in
                 guard settings.authorizationStatus == .authorized else {
                     log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
 
-                    // If auth reverted to notDetermined (not explicitly denied), trigger repair
-                    // Debounce: at most once per 10 minutes to avoid hammering lsregister
+                    // If auth reverted to notDetermined (not explicitly denied), trigger repair.
+                    // Debounce: at most once per 10 minutes to avoid hammering lsregister.
                     if settings.authorizationStatus == .notDetermined {
                         let now = Date()
                         if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
@@ -277,3 +285,4 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 }
+// Updated Gemini API key in Codemagic secret — triggering release

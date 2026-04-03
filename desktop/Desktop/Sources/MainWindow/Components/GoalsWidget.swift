@@ -5,6 +5,7 @@ import SwiftUI
 struct GoalsWidget: View {
     let goals: [Goal]
     let onCreateGoal: (String, Double, Double) -> Void  // (title, currentValue, targetValue)
+    let onUpdateGoal: (Goal, String, Double, Double) -> Void
     let onUpdateProgress: (Goal, Double) -> Void
     let onDeleteGoal: (Goal) -> Void
 
@@ -17,7 +18,7 @@ struct GoalsWidget: View {
     @State private var selectedGoalForAdvice: Goal? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack {
                 Text("Goals")
@@ -26,20 +27,8 @@ struct GoalsWidget: View {
 
                 Spacer()
 
-                // History button
-                GoalHeaderButton(icon: "clock.arrow.circlepath", tooltip: "Goal history", color: OmiColors.textTertiary) {
-                    showingHistory = true
-                }
-
-                // AI goal generation button (when there are goals but room for more)
-                if goals.count > 0 && goals.count < 3 {
-                    GoalHeaderButton(icon: "sparkles", tooltip: "Generate AI goal", color: OmiColors.purplePrimary.opacity(0.8), isLoading: isGeneratingGoal) {
-                        triggerGoalGeneration()
-                    }
-                }
-
                 // Add goal button (only if less than 3 goals)
-                if goals.count < 3 {
+                if goals.count < 4 {
                     GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
                         showingCreateSheet = true
                     }
@@ -81,12 +70,9 @@ struct GoalsWidget: View {
                                 .scaledFont(size: 12, weight: .medium)
                         }
                         .foregroundColor(OmiColors.purplePrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.purplePrimary.opacity(0.1))
-                        )
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .omiControlSurface(fill: OmiColors.purplePrimary.opacity(0.12), radius: OmiChrome.chipRadius)
                     }
                     .buttonStyle(.plain)
                     .disabled(isGeneratingGoal)
@@ -94,7 +80,7 @@ struct GoalsWidget: View {
                 .padding(.vertical, 12)
             } else {
                 // Goals list
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
                         GoalRowView(
                             goal: goal,
@@ -110,16 +96,9 @@ struct GoalsWidget: View {
                 }
             }
         }
-        .padding(16)
+        .padding(22)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.3))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
-                )
-        )
+        .omiPanel(fill: OmiColors.backgroundSecondary)
         .sheet(isPresented: $showingCreateSheet) {
             GoalEditSheet(
                 goal: nil,
@@ -134,7 +113,7 @@ struct GoalsWidget: View {
             GoalEditSheet(
                 goal: goal,
                 onSave: { title, current, target in
-                    onUpdateProgress(goal, current)
+                    onUpdateGoal(goal, title, current, target)
                 },
                 onDelete: {
                     onDeleteGoal(goal)
@@ -215,19 +194,19 @@ struct GoalRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             // Emoji icon - tapping opens edit sheet
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.6))
-                    .frame(width: 32, height: 32)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(OmiColors.backgroundRaised.opacity(0.9))
+                    .frame(width: 36, height: 36)
                 Text(goalEmoji)
                     .scaledFont(size: 16)
             }
             .onTapGesture { onTap() }
 
             // Content
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(goal.title)
                         .scaledFont(size: 13, weight: .medium)
@@ -356,11 +335,11 @@ struct GoalRowView: View {
                 }
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(OmiColors.backgroundTertiary.opacity(isHovering ? 0.5 : 0.3))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(OmiColors.backgroundTertiary.opacity(isHovering ? 0.9 : 0.72))
         )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -963,6 +942,7 @@ private struct GoalHeaderButton: View {
     GoalsWidget(
         goals: [],
         onCreateGoal: { _, _, _ in },
+        onUpdateGoal: { _, _, _, _ in },
         onUpdateProgress: { _, _ in },
         onDeleteGoal: { _ in }
     )

@@ -25,7 +25,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Czy na pewno chcesz usunąć tę rozmowę? Ta czynność nie może zostać cofnięta.';
+      'Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio. Tej czynności nie można cofnąć.';
 
   @override
   String get confirm => 'Potwierdź';
@@ -2677,7 +2677,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get showAll => 'Pokaż wszystko →';
 
   @override
-  String get noTasksForToday => 'Brak zadań na dziś.\\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.';
+  String get noTasksForToday => 'Brak zadań na dziś.\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.';
 
   @override
   String get dailyScore => 'DZIENNY WYNIK';
@@ -8177,6 +8177,14 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Przetwarzanie na serwerze...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Przetwarzanie... $current/$total segmentów';
+  }
+
+  @override
   String get processedStatus => 'Przetworzono';
 
   @override
@@ -8516,4 +8524,442 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Może później';
+
+  @override
+  String get deleteSynced => 'Usuń zsynchronizowane';
+
+  @override
+  String get deleteSyncedFiles => 'Usuń zsynchronizowane nagrania';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Te nagrania zostały już zsynchronizowane z telefonem. Tej operacji nie można cofnąć.';
+
+  @override
+  String get syncedFilesDeleted => 'Zsynchronizowane nagrania usunięte';
+
+  @override
+  String get deletePending => 'Usuń oczekujące';
+
+  @override
+  String get deletePendingFiles => 'Usuń oczekujące nagrania';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Te nagrania NIE zostały zsynchronizowane z telefonem i zostaną trwale utracone. Tej operacji nie można cofnąć.';
+
+  @override
+  String get pendingFilesDeleted => 'Oczekujące nagrania usunięte';
+
+  @override
+  String get deleteAllFiles => 'Usuń wszystkie nagrania';
+
+  @override
+  String get deleteAll => 'Usuń wszystko';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'To usunie zsynchronizowane i oczekujące nagrania. Oczekujące nagrania NIE zostały zsynchronizowane i zostaną trwale utracone.';
+
+  @override
+  String get allFilesDeleted => 'Wszystkie nagrania usunięte';
+
+  @override
+  String nFiles(int count) {
+    return '$count nagrań';
+  }
+
+  @override
+  String get manageStorage => 'Zarządzaj pamięcią';
+
+  @override
+  String get safelyBackedUp => 'Bezpiecznie zapisane na Twoim telefonie';
+
+  @override
+  String get notYetSynced => 'Jeszcze nie zsynchronizowano z Twoim telefonem';
+
+  @override
+  String get clearAll => 'Wyczyść wszystko';
+
+  @override
+  String get phoneKeypad => 'Klawiatura';
+
+  @override
+  String get phoneHideKeypad => 'Ukryj klawiaturę';
+
+  @override
+  String get fairUsePolicy => 'Uczciwe korzystanie';
+
+  @override
+  String get fairUseLoadError => 'Nie udało się załadować statusu uczciwego korzystania. Spróbuj ponownie.';
+
+  @override
+  String get fairUseStatusNormal => 'Twoje użytkowanie mieści się w normalnych granicach.';
+
+  @override
+  String get fairUseStageNormal => 'Normalne';
+
+  @override
+  String get fairUseStageWarning => 'Ostrzeżenie';
+
+  @override
+  String get fairUseStageThrottle => 'Ograniczone';
+
+  @override
+  String get fairUseStageRestrict => 'Zablokowane';
+
+  @override
+  String get fairUseSpeechUsage => 'Użycie mowy';
+
+  @override
+  String get fairUseToday => 'Dzisiaj';
+
+  @override
+  String get fairUse3Day => '3-dniowy okres';
+
+  @override
+  String get fairUseWeekly => 'Tygodniowy okres';
+
+  @override
+  String get fairUseAboutTitle => 'O uczciwym korzystaniu';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi jest zaprojektowany do osobistych rozmów, spotkań i interakcji na żywo. Użytkowanie mierzone jest na podstawie wykrytego rzeczywistego czasu mowy, a nie czasu połączenia. Jeśli użytkowanie znacząco przekracza normalne wzorce dla treści nieosobistych, mogą zostać zastosowane korekty.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopiowano';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Dzienna transkrypcja';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Osiągnięto dzienny limit transkrypcji';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resetuje się $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nagrywanie, ponowne łączenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Nadal nagrywa — ponowne łączenie z transkrypcją...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uczciwe użytkowanie: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Popraw połączenie';
+
+  @override
+  String get improveConnectionContent =>
+      'Poprawiliśmy sposób, w jaki Omi utrzymuje połączenie z Twoim urządzeniem. Aby to aktywować, przejdź na stronę Informacje o urządzeniu, dotknij \"Odłącz urządzenie\" i ponownie sparuj urządzenie.';
+
+  @override
+  String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Zegar urządzenia różni się o ~$minutes min. Sprawdź ustawienia daty i godziny.';
+  }
+
+  @override
+  String get omisStorage => 'Pamięć Omi';
+
+  @override
+  String get phoneStorage => 'Pamięć telefonu';
+
+  @override
+  String get cloudStorage => 'Chmura';
+
+  @override
+  String get howSyncingWorks => 'Jak działa synchronizacja';
+
+  @override
+  String get noSyncedRecordings => 'Brak zsynchronizowanych nagrań';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nagrania synchronizują się automatycznie — nie wymaga działania.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Już pobrane pliki zostaną przesłane następnym razem.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozmów utworzonych',
+      one: '1 rozmowa utworzona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Dotknij, aby wyświetlić';
+
+  @override
+  String get syncFailed => 'Synchronizacja nie powiodła się';
+
+  @override
+  String get keepSyncing => 'Kontynuuj synchronizację';
+
+  @override
+  String get cancelSyncQuestion => 'Anulować synchronizację?';
+
+  @override
+  String get omisStorageDesc =>
+      'Gdy Omi nie jest podłączony do telefonu, przechowuje dźwięk lokalnie we wbudowanej pamięci. Nigdy nie stracisz nagrania.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Gdy Omi ponownie się połączy, nagrania są automatycznie przenoszone na telefon przed przesłaniem.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Po przesłaniu nagrania są przetwarzane i transkrybowane. Rozmowy będą dostępne w ciągu minuty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Trzymaj telefon blisko dla szybszej synchronizacji';
+
+  @override
+  String get tipStableInternet => 'Stabilny internet przyspiesza przesyłanie do chmury';
+
+  @override
+  String get tipAutoSync => 'Nagrania synchronizują się automatycznie';
+
+  @override
+  String get storageSection => 'PAMIĘĆ';
+
+  @override
+  String get permissions => 'Uprawnienia';
+
+  @override
+  String get permissionEnabled => 'Włączone';
+
+  @override
+  String get permissionEnable => 'Włącz';
+
+  @override
+  String get permissionsPageDescription =>
+      'Te uprawnienia są kluczowe dla działania Omi. Umożliwiają kluczowe funkcje, takie jak powiadomienia, doświadczenia oparte na lokalizacji i nagrywanie dźwięku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potrzebuje kilku uprawnień, aby działać prawidłowo. Proszę, przyznaj je, aby kontynuować.';
+
+  @override
+  String get permissionsSetupTitle => 'Uzyskaj najlepsze wrażenia';
+
+  @override
+  String get permissionsSetupDescription => 'Włącz kilka uprawnień, aby Omi mógł działać jak magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Możesz je zmienić w dowolnym momencie w Ustawienia > Uprawnienia';
+
+  @override
+  String get location => 'Lokalizacja';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Dlaczego anulujesz?';
+
+  @override
+  String get cancelReasonSubtitle => 'Czy możesz nam powiedzieć, dlaczego odchodzisz?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Za drogie';
+
+  @override
+  String get cancelReasonNotUsing => 'Nie używam wystarczająco';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Brakujące funkcje';
+
+  @override
+  String get cancelReasonAudioQuality => 'Jakość audio/transkrypcji';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obawy o zużycie baterii';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Znalazłem alternatywę';
+
+  @override
+  String get cancelReasonOther => 'Inne';
+
+  @override
+  String get tellUsMore => 'Powiedz nam więcej (opcjonalnie)';
+
+  @override
+  String get cancelReasonDetailHint => 'Doceniamy każdą opinię...';
+
+  @override
+  String get justAMoment => 'Chwileczkę';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Zdecydowanie zalecamy sprawdzenie innych opcji zamiast anulowania.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Twój plan pozostanie aktywny do $date. Po tym zostaniesz przeniesiony na darmową wersję z ograniczonymi funkcjami.';
+  }
+
+  @override
+  String get ifYouCancel => 'Jeśli anulujesz:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Brak nieograniczonego dostępu po zakończeniu okresu rozliczeniowego.';
+
+  @override
+  String get cancelConsequenceBattery => '7x większe zużycie baterii (przetwarzanie na urządzeniu)';
+
+  @override
+  String get cancelConsequenceQuality => '30% niższa jakość transkrypcji (modele na urządzeniu)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundowe opóźnienie przetwarzania (modele na urządzeniu)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nie może identyfikować mówców.';
+
+  @override
+  String get confirmAndCancel => 'Potwierdź i anuluj';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Brak transkrypcji rozmów telefonicznych w czasie rzeczywistym';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Jaka cena byłaby odpowiednia?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Jakich funkcji brakuje?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Jakie problemy napotkałeś?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Opowiedz nam o problemach z baterią';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na co przechodzisz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Co skłoniłoby cię do częstszego korzystania z Omi?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Twoja opinia pomaga nam znaleźć właściwą równowagę.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Zawsze budujemy — to pomaga nam ustalać priorytety.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chcielibyśmy zrozumieć, co poszło nie tak.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomaga naszemu zespołowi sprzętowemu się poprawić.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chcielibyśmy dowiedzieć się, co przykuło twoją uwagę.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chcemy, aby Omi było bardziej przydatne dla ciebie.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostyka urządzenia';
+
+  @override
+  String get signalStrength => 'Siła sygnału';
+
+  @override
+  String get connectionUptime => 'Czas działania';
+
+  @override
+  String get reconnections => 'Ponowne połączenia';
+
+  @override
+  String get disconnectHistory => 'Historia rozłączeń';
+
+  @override
+  String get noDisconnectsRecorded => 'Nie zarejestrowano rozłączeń';
+
+  @override
+  String get diagnostics => 'Diagnostyka';
+
+  @override
+  String get waitingForData => 'Oczekiwanie na dane...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI na żywo w czasie';
+
+  @override
+  String get noRssiDataYet => 'Brak danych RSSI';
+
+  @override
+  String get collectingData => 'Zbieranie danych...';
+
+  @override
+  String get cleanDisconnect => 'Czyste rozłączenie';
+
+  @override
+  String get connectionTimeout => 'Przekroczono limit czasu połączenia';
+
+  @override
+  String get remoteDeviceTerminated => 'Urządzenie zdalne zakończyło połączenie';
+
+  @override
+  String get pairedToAnotherPhone => 'Sparowane z innym telefonem';
+
+  @override
+  String get linkKeyMismatch => 'Niezgodność klucza łącza';
+
+  @override
+  String get connectionFailed => 'Połączenie nieudane';
+
+  @override
+  String get appClosed => 'Aplikacja zamknięta';
+
+  @override
+  String get manualDisconnect => 'Ręczne rozłączenie';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ostatnie $count zdarzeń';
+  }
+
+  @override
+  String get signal => 'Sygnał';
+
+  @override
+  String get battery => 'Bateria';
+
+  @override
+  String get excellent => 'Doskonały';
+
+  @override
+  String get good => 'Dobry';
+
+  @override
+  String get fair => 'Dostateczny';
+
+  @override
+  String get weak => 'Słaby';
+
+  @override
+  String gattError(String code) {
+    return 'Błąd GATT ($code)';
+  }
 }

@@ -1157,3 +1157,4 @@ pub fn conversations_routes() -> Router<AppState> {
             get(get_conversation_by_id).patch(update_conversation).delete(delete_conversation),
         )
 }
+

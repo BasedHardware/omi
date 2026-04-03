@@ -144,9 +144,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       } catch (e) {
         Logger.warning('Failed to launch URL with external browser: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.couldNotOpenUrl)));
         }
         return false;
       }
@@ -189,12 +187,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AppHomeWebPage(app: app),
-              ),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
           }
         });
       }
@@ -227,38 +220,26 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
         // Track subscription cancellation
-        MixpanelManager().appDetailSubscriptionCancelled(
-          appId: widget.app.id,
-          appName: widget.app.name,
-        );
+        MixpanelManager().appDetailSubscriptionCancelled(appId: widget.app.id, appName: widget.app.name);
 
         await _loadSubscriptionData();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.subscriptionCancelledSuccessfully),
-              backgroundColor: Colors.green,
-            ),
+            SnackBar(content: Text(context.l10n.subscriptionCancelledSuccessfully), backgroundColor: Colors.green),
           );
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToCancelSubscription),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.failedToCancelSubscription), backgroundColor: Colors.red));
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.errorWithMessage(e.toString())),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(context.l10n.errorWithMessage(e.toString())), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -293,12 +274,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
       if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AppHomeWebPage(app: app),
-          ),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
       }
       // Load details
       await _refreshAppDetails();
@@ -422,51 +398,63 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     // Read permissions
     if (actions.any((a) => a.action == 'read_conversations')) {
-      permissionItems.add(_PermissionItem(
-        title: context.l10n.permissionReadConversations,
-        type: context.l10n.permissionTypeAccess,
-        description: context.l10n.permissionDescReadConversations,
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: context.l10n.permissionReadConversations,
+          type: context.l10n.permissionTypeAccess,
+          description: context.l10n.permissionDescReadConversations,
+        ),
+      );
     }
     if (actions.any((a) => a.action == 'read_memories')) {
-      permissionItems.add(_PermissionItem(
-        title: context.l10n.permissionReadMemories,
-        type: context.l10n.permissionTypeAccess,
-        description: context.l10n.permissionDescReadMemories,
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: context.l10n.permissionReadMemories,
+          type: context.l10n.permissionTypeAccess,
+          description: context.l10n.permissionDescReadMemories,
+        ),
+      );
     }
     if (actions.any((a) => a.action == 'read_tasks')) {
-      permissionItems.add(_PermissionItem(
-        title: context.l10n.permissionReadTasks,
-        type: context.l10n.permissionTypeAccess,
-        description: context.l10n.permissionDescReadTasks,
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: context.l10n.permissionReadTasks,
+          type: context.l10n.permissionTypeAccess,
+          description: context.l10n.permissionDescReadTasks,
+        ),
+      );
     }
 
     // Create permissions
     if (actions.any((a) => a.action == 'create_conversation')) {
-      permissionItems.add(_PermissionItem(
-        title: context.l10n.permissionCreateConversations,
-        type: context.l10n.permissionTypeCreate,
-        description: context.l10n.permissionDescCreateConversations,
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: context.l10n.permissionCreateConversations,
+          type: context.l10n.permissionTypeCreate,
+          description: context.l10n.permissionDescCreateConversations,
+        ),
+      );
     }
     if (actions.any((a) => a.action == 'create_facts')) {
-      permissionItems.add(_PermissionItem(
-        title: context.l10n.permissionCreateMemories,
-        type: context.l10n.permissionTypeCreate,
-        description: context.l10n.permissionDescCreateMemories,
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: context.l10n.permissionCreateMemories,
+          type: context.l10n.permissionTypeCreate,
+          description: context.l10n.permissionDescCreateMemories,
+        ),
+      );
     }
 
     // Trigger
     if (trigger != null && trigger != 'Unknown') {
       final displayTrigger = trigger == 'Transcript Segment Processed' ? context.l10n.realtimeListening : trigger;
-      permissionItems.add(_PermissionItem(
-        title: displayTrigger,
-        type: context.l10n.permissionTypeTrigger,
-        description: 'This app runs automatically when: $displayTrigger',
-      ));
+      permissionItems.add(
+        _PermissionItem(
+          title: displayTrigger,
+          type: context.l10n.permissionTypeTrigger,
+          description: 'This app runs automatically when: $displayTrigger',
+        ),
+      );
     }
 
     if (permissionItems.isEmpty) {
@@ -528,11 +516,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           Expanded(
             child: Text(
               permission.title,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -587,11 +571,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: app.chatTools!.map((tool) => _buildChatToolChip(tool)).toList(),
-          ),
+          Wrap(spacing: 12, runSpacing: 12, children: app.chatTools!.map((tool) => _buildChatToolChip(tool)).toList()),
         ],
       ),
     );
@@ -601,17 +581,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final color = Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
       child: Text(
         _formatToolName(tool.name),
-        style: TextStyle(
-          color: color,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
+        style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -619,320 +592,295 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   Widget build(BuildContext context) {
     // Watch for changes to the app in AppProvider and update local state
-    return Consumer<AppProvider>(builder: (context, appProvider, child) {
-      // Check if app has been updated in the provider
-      final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-      if (updatedApp != null) {
-        // Compare critical fields to detect if app was actually updated
-        final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-        final nameChanged = updatedApp.name != app.name;
-        final descriptionChanged = updatedApp.description != app.description;
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, child) {
+        // Check if app has been updated in the provider
+        final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
+        if (updatedApp != null) {
+          // Compare critical fields to detect if app was actually updated
+          final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
+          final nameChanged = updatedApp.name != app.name;
+          final descriptionChanged = updatedApp.description != app.description;
 
-        if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-          // Update local app state when provider's app changes
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                app = updatedApp;
-              });
-            }
-          });
+          if (appHomeUrlChanged || nameChanged || descriptionChanged) {
+            // Update local app state when provider's app changes
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  app = updatedApp;
+                });
+              }
+            });
+          }
         }
-      }
 
-      bool isIntegration = app.worksExternally();
-      bool hasSetupInstructions =
-          isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
-      bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          leading: Container(
-            width: 36,
-            height: 36,
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.3),
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                Navigator.pop(context);
-              },
-              icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-            ),
-          ),
-          actions: [
-            if (app.enabled && app.worksWithChat()) ...[
-              Container(
-                width: 36,
-                height: 36,
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: chatButtonLoading
-                      ? null
-                      : () async {
-                          HapticFeedback.mediumImpact();
-
-                          // Prevent multiple clicks
-                          if (chatButtonLoading) return;
-
-                          setState(() => chatButtonLoading = true);
-
-                          try {
-                            // Navigate directly to chat page with this app selected
-                            var appId = app.id;
-                            var appProvider = Provider.of<AppProvider>(context, listen: false);
-                            var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-
-                            // Set the selected app
-                            appProvider.setSelectedChatAppId(appId);
-
-                            // Refresh messages and get the selected app
-                            await messageProvider.refreshMessages();
-                            App? selectedApp = await appProvider.getAppFromId(appId);
-
-                            // Send initial message if chat is empty
-                            if (messageProvider.messages.isEmpty) {
-                              messageProvider.sendInitialAppMessage(selectedApp);
-                            }
-
-                            // Track chat button clicked
-                            MixpanelManager().appDetailChatClicked(
-                              appId: app.id,
-                              appName: app.name,
-                            );
-
-                            // Navigate directly to chat page
-                            if (mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const ChatPage(isPivotBottom: false),
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (mounted) {
-                              setState(() => chatButtonLoading = false);
-                            }
-                          }
-                        },
-                  icon: chatButtonLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
-                ),
+        bool isIntegration = app.worksExternally();
+        bool hasSetupInstructions =
+            isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
+        bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            elevation: 0,
+            automaticallyImplyLeading: false,
+            leading: Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.pop(context);
+                },
+                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
-            ],
-            if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
-              Container(
-                width: 36,
-                height: 36,
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AppHomeWebPage(app: app),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-            isLoading || app.private
-                ? const SizedBox.shrink()
-                : Builder(
-                    builder: (BuildContext context) {
-                      return Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
-                          onPressed: () async {
+            ),
+            actions: [
+              if (app.enabled && app.worksWithChat()) ...[
+                Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: chatButtonLoading
+                        ? null
+                        : () async {
                             HapticFeedback.mediumImpact();
-                            MixpanelManager().track('App Shared', properties: {'appId': app.id});
 
-                            // Track share button clicked
-                            MixpanelManager().appDetailShared(
-                              appId: app.id,
-                              appName: app.name,
-                            );
+                            // Prevent multiple clicks
+                            if (chatButtonLoading) return;
 
-                            // Get the position of the share button for iOS
-                            final RenderBox? box = context.findRenderObject() as RenderBox?;
-                            final Rect? sharePositionOrigin =
-                                box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+                            setState(() => chatButtonLoading = true);
 
-                            if (app.isNotPersona()) {
-                              await Share.share(
-                                'https://h.omi.me/apps/${app.id}',
-                                subject: app.name,
-                                sharePositionOrigin: sharePositionOrigin,
-                              );
-                            } else {
-                              await Share.share(
-                                'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                                subject: app.name,
-                                sharePositionOrigin: sharePositionOrigin,
-                              );
+                            try {
+                              // Navigate directly to chat page with this app selected
+                              var appId = app.id;
+                              var appProvider = Provider.of<AppProvider>(context, listen: false);
+                              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+
+                              // Set the selected app
+                              appProvider.setSelectedChatAppId(appId);
+
+                              // Refresh messages and get the selected app
+                              await messageProvider.refreshMessages();
+                              App? selectedApp = await appProvider.getAppFromId(appId);
+
+                              // Send initial message if chat is empty
+                              if (messageProvider.messages.isEmpty) {
+                                messageProvider.sendInitialAppMessage(selectedApp);
+                              }
+
+                              // Track chat button clicked
+                              MixpanelManager().appDetailChatClicked(appId: app.id, appName: app.name);
+
+                              // Navigate directly to chat page
+                              if (mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
+                                );
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => chatButtonLoading = false);
+                              }
                             }
                           },
-                        ),
-                      );
+                    icon: chatButtonLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+                  ),
+                ),
+              ],
+              if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
+                Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
                     },
                   ),
-            appProvider.isAppOwner
-                ? (isLoading
-                    ? const SizedBox.shrink()
-                    : Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                          onPressed: () async {
-                            HapticFeedback.mediumImpact();
-                            await showModalBottomSheet(
-                              context: context,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(16),
-                                  topRight: Radius.circular(16),
-                                ),
-                              ),
-                              builder: (context) {
-                                return ShowAppOptionsSheet(
-                                  app: app,
+                ),
+              ],
+              isLoading || app.private
+                  ? const SizedBox.shrink()
+                  : Builder(
+                      builder: (BuildContext context) {
+                        return Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              MixpanelManager().track('App Shared', properties: {'appId': app.id});
+
+                              // Track share button clicked
+                              MixpanelManager().appDetailShared(appId: app.id, appName: app.name);
+
+                              // Get the position of the share button for iOS
+                              final RenderBox? box = context.findRenderObject() as RenderBox?;
+                              final Rect? sharePositionOrigin = box != null
+                                  ? box.localToGlobal(Offset.zero) & box.size
+                                  : null;
+
+                              if (app.isNotPersona()) {
+                                await Share.share(
+                                  'https://h.omi.me/apps/${app.id}',
+                                  subject: app.name,
+                                  sharePositionOrigin: sharePositionOrigin,
+                                );
+                              } else {
+                                await Share.share(
+                                  'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                                  subject: app.name,
+                                  sharePositionOrigin: sharePositionOrigin,
+                                );
+                              }
+                            },
+                          ),
+                        );
+                      },
+                    ),
+              appProvider.isAppOwner
+                  ? (isLoading
+                        ? const SizedBox.shrink()
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                              onPressed: () async {
+                                HapticFeedback.mediumImpact();
+                                await showModalBottomSheet(
+                                  context: context,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(16),
+                                      topRight: Radius.circular(16),
+                                    ),
+                                  ),
+                                  builder: (context) {
+                                    return ShowAppOptionsSheet(app: app);
+                                  },
                                 );
                               },
-                            );
-                          },
-                        ),
-                      ))
-                : const SizedBox(width: 8),
-          ],
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: SingleChildScrollView(
-          controller: _scrollController,
-          child: Skeletonizer(
-            enabled: isLoading,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(width: 20),
-                    CachedNetworkImage(
-                      imageUrl: app.getImageUrl(),
-                      imageBuilder: (context, imageProvider) => Container(
-                        width: 108,
-                        height: 108,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.rectangle,
-                          borderRadius: BorderRadius.circular(24),
-                          image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                        ),
-                      ),
-                      placeholder: (context, url) => const CircularProgressIndicator(),
-                      errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: SizedBox(
-                        height: 108,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  app.name.decodeString,
-                                  style:
-                                      const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        app.author.decodeString,
-                                        style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (app.official) ...[
-                                      const SizedBox(width: 4),
-                                      const FaIcon(
-                                        FontAwesomeIcons.solidCircleCheck,
-                                        size: 14,
-                                        color: Colors.deepPurpleAccent,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
                             ),
-                            isLoading
-                                ? AnimatedLoadingButton(
-                                    text: '',
-                                    width: 32,
-                                    height: 32,
-                                    onPressed: () async {},
-                                    color: const Color(0xFF35343B),
-                                  )
-                                : app.enabled
-                                    ? AnimatedLoadingButton(
-                                        text: context.l10n.uninstall,
-                                        width: 90,
-                                        height: 32,
-                                        onPressed: () => _toggleApp(app.id, false),
-                                        color: Colors.red,
-                                      )
-                                    : (app.isPaid && !app.isUserPaid
+                          ))
+                  : const SizedBox(width: 8),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          body: SingleChildScrollView(
+            controller: _scrollController,
+            child: Skeletonizer(
+              enabled: isLoading,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(width: 20),
+                      CachedNetworkImage(
+                        imageUrl: app.getImageUrl(),
+                        imageBuilder: (context, imageProvider) => Container(
+                          width: 108,
+                          height: 108,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.rectangle,
+                            borderRadius: BorderRadius.circular(24),
+                            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                          ),
+                        ),
+                        placeholder: (context, url) => const CircularProgressIndicator(),
+                        errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: SizedBox(
+                          height: 108,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    app.name.decodeString,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          app.author.decodeString,
+                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (app.official) ...[
+                                        const SizedBox(width: 4),
+                                        const FaIcon(
+                                          FontAwesomeIcons.solidCircleCheck,
+                                          size: 14,
+                                          color: Colors.deepPurpleAccent,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              isLoading
+                                  ? AnimatedLoadingButton(
+                                      text: '',
+                                      width: 32,
+                                      height: 32,
+                                      onPressed: () async {},
+                                      color: const Color(0xFF35343B),
+                                    )
+                                  : app.enabled
+                                  ? AnimatedLoadingButton(
+                                      text: context.l10n.uninstall,
+                                      width: 90,
+                                      height: 32,
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.red,
+                                    )
+                                  : (app.isPaid && !app.isUserPaid
                                         ? AnimatedLoadingButton(
                                             width: 100,
                                             height: 32,
@@ -969,19 +917,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 showDialog(
                                                   context: context,
                                                   builder: (ctx) {
-                                                    return StatefulBuilder(builder: (ctx, setState) {
-                                                      return ConfirmationDialog(
-                                                        title: context.l10n.dataAccessNotice,
-                                                        description: context.l10n.dataAccessNoticeDescription,
-                                                        onConfirm: () {
-                                                          _toggleApp(app.id, true);
-                                                          Navigator.pop(context);
-                                                        },
-                                                        onCancel: () {
-                                                          Navigator.pop(context);
-                                                        },
-                                                      );
-                                                    });
+                                                    return StatefulBuilder(
+                                                      builder: (ctx, setState) {
+                                                        return ConfirmationDialog(
+                                                          title: context.l10n.dataAccessNotice,
+                                                          description: context.l10n.dataAccessNoticeDescription,
+                                                          onConfirm: () {
+                                                            _toggleApp(app.id, true);
+                                                            Navigator.pop(context);
+                                                          },
+                                                          onCancel: () {
+                                                            Navigator.pop(context);
+                                                          },
+                                                        );
+                                                      },
+                                                    );
                                                   },
                                                 );
                                               } else {
@@ -990,176 +940,82 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                             },
                                             color: Colors.green,
                                           )),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 20),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Ratings section - App Store style
-                          GestureDetector(
-                            onTap: () {
-                              if ((app.ratingCount > 0 || app.reviews.isNotEmpty) &&
-                                  _reviewsSectionKey.currentContext != null) {
-                                Scrollable.ensureVisible(
-                                  _reviewsSectionKey.currentContext!,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              }
-                            },
-                            child: Column(
-                              children: [
-                                Text(
-                                  app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
+                      const SizedBox(width: 20),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Ratings section - App Store style
+                            GestureDetector(
+                              onTap: () {
+                                if ((app.ratingCount > 0 || app.reviews.isNotEmpty) &&
+                                    _reviewsSectionKey.currentContext != null) {
+                                  Scrollable.ensureVisible(
+                                    _reviewsSectionKey.currentContext!,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                              child: Column(
+                                children: [
+                                  Text(
+                                    app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  app.getRatingAvg() ?? '0.0',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade400,
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    app.getRatingAvg() ?? '0.0',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade400,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                RatingBar.builder(
-                                  initialRating: app.ratingAvg ?? 0,
-                                  minRating: 1,
-                                  ignoreGestures: true,
-                                  direction: Axis.horizontal,
-                                  allowHalfRating: true,
-                                  itemCount: 5,
-                                  itemSize: 12,
-                                  tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                  itemBuilder: (context, _) => Icon(
-                                    FontAwesomeIcons.solidStar,
-                                    color: Colors.grey.shade500,
+                                  const SizedBox(height: 6),
+                                  RatingBar.builder(
+                                    initialRating: app.ratingAvg ?? 0,
+                                    minRating: 1,
+                                    ignoreGestures: true,
+                                    direction: Axis.horizontal,
+                                    allowHalfRating: true,
+                                    itemCount: 5,
+                                    itemSize: 12,
+                                    tapOnlyMode: false,
+                                    itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                    itemBuilder: (context, _) =>
+                                        Icon(FontAwesomeIcons.solidStar, color: Colors.grey.shade500),
+                                    maxRating: 5.0,
+                                    onRatingUpdate: (rating) {},
                                   ),
-                                  maxRating: 5.0,
-                                  onRatingUpdate: (rating) {},
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          VerticalDivider(
-                            color: Colors.grey.shade800,
-                            width: 4,
-                          ),
-                          const SizedBox(width: 20),
-                          // Installs
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${(app.installs / 10).round() * 10}+',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade400,
-                                ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'INSTALLS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 20),
-                          VerticalDivider(
-                            color: Colors.grey.shade800,
-                            width: 4,
-                          ),
-                          const SizedBox(width: 20),
-                          // Pricing
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                _getPricingText(app),
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade400,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'PRICE',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 20),
-                          VerticalDivider(
-                            color: Colors.grey.shade800,
-                            width: 4,
-                          ),
-                          const SizedBox(width: 20),
-                          // Category
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              FaIcon(
-                                _getCategoryIcon(app.category),
-                                size: 20,
-                                color: Colors.grey.shade400,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                app.getCategoryName().split(' ').first.toUpperCase(),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (app.getLastUpdatedDate() != null) ...[
-                            const SizedBox(width: 20),
-                            VerticalDivider(
-                              color: Colors.grey.shade800,
-                              width: 4,
                             ),
                             const SizedBox(width: 20),
-                            // Updated/Created
+                            VerticalDivider(color: Colors.grey.shade800, width: 4),
+                            const SizedBox(width: 20),
+                            // Installs
                             Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  _formatDate(app.getLastUpdatedDate()!),
+                                  '${(app.installs / 10).round() * 10}+',
                                   style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
@@ -1168,7 +1024,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  app.updatedAt != null ? 'UPDATED' : 'CREATED',
+                                  'INSTALLS',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey.shade500,
@@ -1178,26 +1034,24 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 ),
                               ],
                             ),
-                          ],
-                          if (app.isPopular == true) ...[
                             const SizedBox(width: 20),
-                            VerticalDivider(
-                              color: Colors.grey.shade800,
-                              width: 4,
-                            ),
+                            VerticalDivider(color: Colors.grey.shade800, width: 4),
                             const SizedBox(width: 20),
-                            // Featured
+                            // Pricing
                             Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                FaIcon(
-                                  FontAwesomeIcons.trophy,
-                                  size: 20,
-                                  color: Colors.grey.shade400,
-                                ),
-                                const SizedBox(height: 12),
                                 Text(
-                                  'FEATURED',
+                                  _getPricingText(app),
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'PRICE',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey.shade500,
@@ -1207,542 +1061,595 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(width: 20),
+                            VerticalDivider(color: Colors.grey.shade800, width: 4),
+                            const SizedBox(width: 20),
+                            // Category
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FaIcon(_getCategoryIcon(app.category), size: 20, color: Colors.grey.shade400),
+                                const SizedBox(height: 12),
+                                Text(
+                                  app.getCategoryName().split(' ').first.toUpperCase(),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (app.getLastUpdatedDate() != null) ...[
+                              const SizedBox(width: 20),
+                              VerticalDivider(color: Colors.grey.shade800, width: 4),
+                              const SizedBox(width: 20),
+                              // Updated/Created
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _formatDate(app.getLastUpdatedDate()!),
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    app.updatedAt != null ? 'UPDATED' : 'CREATED',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (app.isPopular == true) ...[
+                              const SizedBox(width: 20),
+                              VerticalDivider(color: Colors.grey.shade800, width: 4),
+                              const SizedBox(width: 20),
+                              // Featured
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  FaIcon(FontAwesomeIcons.trophy, size: 20, color: Colors.grey.shade400),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'FEATURED',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                // Cancel Subscription
-                !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: InkWell(
-                          onTap: _isCancelingSubscription
-                              ? null
-                              : () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (c) => getDialog(
-                                      context,
-                                      () => Navigator.pop(context),
-                                      () async {
-                                        Navigator.pop(context);
-                                        await _cancelSubscription();
-                                      },
-                                      'Cancel Subscription?',
-                                      'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
-                                      okButtonText: 'Cancel Subscription',
-                                    ),
-                                  );
-                                },
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.only(top: 12),
-                            child: _isCancelingSubscription
-                                ? const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                                        ),
+                  // Cancel Subscription
+                  !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: InkWell(
+                            onTap: _isCancelingSubscription
+                                ? null
+                                : () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (c) => getDialog(
+                                        context,
+                                        () => Navigator.pop(context),
+                                        () async {
+                                          Navigator.pop(context);
+                                          await _cancelSubscription();
+                                        },
+                                        'Cancel Subscription?',
+                                        'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
+                                        okButtonText: 'Cancel Subscription',
                                       ),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Cancelling...',
-                                        style: TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
+                                    );
+                                  },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.only(top: 12),
+                              child: _isCancelingSubscription
+                                  ? const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  )
-                                : const Text(
-                                    'Cancel Subscription',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Cancelling...',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : const Text(
+                                      'Cancel Subscription',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
                                     ),
-                                  ),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-
-                (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
-                    ? Column(
-                        children: [
-                          const SizedBox(
-                            height: 10,
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                FontAwesomeIcons.circleInfo,
-                                color: Colors.grey,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.78,
-                                child: const Text(
-                                    'You are a beta tester for this app. It is not public yet. It will be public once approved.',
-                                    style: TextStyle(color: Colors.grey)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-                app.isUnderReview() && !app.private && app.isOwner(SharedPreferencesUtil().uid)
-                    ? Column(
-                        children: [
-                          const SizedBox(
-                            height: 10,
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                FontAwesomeIcons.circleInfo,
-                                color: Colors.grey,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.78,
-                                child: const Text(
-                                    'Your app is under review and visible only to you. It will be public once approved.',
-                                    style: TextStyle(color: Colors.grey)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-                app.isRejected()
-                    ? Column(
-                        children: [
-                          const SizedBox(
-                            height: 10,
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                FontAwesomeIcons.circleExclamation,
-                                color: Colors.grey,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.78,
-                                child: const Text(
-                                  'Your app has been rejected. Please update the app details and resubmit for review.',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-                const SizedBox(height: 24),
-                ...(hasAuthSteps
-                    ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                        return Container(
-                          margin: EdgeInsets.only(
-                            left: MediaQuery.of(context).size.width * 0.05,
-                            right: MediaQuery.of(context).size.width * 0.05,
-                            bottom: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25).withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(16.0),
-                            border: Border.all(
-                              color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
-                              width: 1,
                             ),
                           ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
+                        )
+                      : const SizedBox.shrink(),
+
+                  (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: MediaQuery.of(context).size.width * 0.78,
+                                  child: const Text(
+                                    'You are a beta tester for this app. It is not public yet. It will be public once approved.',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                  app.isUnderReview() && !app.private && app.isOwner(SharedPreferencesUtil().uid)
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: MediaQuery.of(context).size.width * 0.78,
+                                  child: const Text(
+                                    'Your app is under review and visible only to you. It will be public once approved.',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                  app.isRejected()
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: MediaQuery.of(context).size.width * 0.78,
+                                  child: const Text(
+                                    'Your app has been rejected. Please update the app details and resubmit for review.',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                  const SizedBox(height: 24),
+                  ...(hasAuthSteps
+                      ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
+                          return Container(
+                            margin: EdgeInsets.only(
+                              left: MediaQuery.of(context).size.width * 0.05,
+                              right: MediaQuery.of(context).size.width * 0.05,
+                              bottom: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1F1F25).withOpacity(0.8),
                               borderRadius: BorderRadius.circular(16.0),
-                              onTap: () async {
-                                final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
-                                final uri = Uri.tryParse(rawUrl);
-                                if (uri == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(context.l10n.invalidIntegrationUrl)),
-                                  );
-                                  return;
-                                }
-                                await _launchUrlSafely(uri);
-                                checkSetupCompleted(autoInstallIfCompleted: true);
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: setupCompleted
-                                            ? Colors.green.withOpacity(0.2)
-                                            : Colors.grey.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Center(
-                                        child: setupCompleted
-                                            ? const FaIcon(
-                                                FontAwesomeIcons.check,
-                                                size: 14,
-                                                color: Colors.green,
-                                              )
-                                            : Text(
-                                                '${i + 1}',
-                                                style: TextStyle(
-                                                  color: Colors.grey.shade400,
-                                                  fontWeight: FontWeight.bold,
+                              border: Border.all(
+                                color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(16.0),
+                                onTap: () async {
+                                  final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
+                                  final uri = Uri.tryParse(rawUrl);
+                                  if (uri == null) {
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).showSnackBar(SnackBar(content: Text(context.l10n.invalidIntegrationUrl)));
+                                    return;
+                                  }
+                                  await _launchUrlSafely(uri);
+                                  checkSetupCompleted(autoInstallIfCompleted: true);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          color: setupCompleted
+                                              ? Colors.green.withOpacity(0.2)
+                                              : Colors.grey.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Center(
+                                          child: setupCompleted
+                                              ? const FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.green)
+                                              : Text(
+                                                  '${i + 1}',
+                                                  style: TextStyle(
+                                                    color: Colors.grey.shade400,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              step.name,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
                                               ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              setupCompleted ? context.l10n.setupCompleted : context.l10n.tapToComplete,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: setupCompleted ? Colors.green : Colors.grey.shade500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            step.name,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.white,
+                                      FaIcon(
+                                        FontAwesomeIcons.arrowUpRightFromSquare,
+                                        size: 16,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList()
+                      : <Widget>[const SizedBox.shrink()]),
+                  !hasAuthSteps && hasSetupInstructions
+                      ? ListTile(
+                          onTap: () async {
+                            if (app.externalIntegration != null) {
+                              if (app.externalIntegration!.setupInstructionsFilePath?.contains(
+                                    'raw.githubusercontent.com',
+                                  ) ==
+                                  true) {
+                                await routeToPage(
+                                  context,
+                                  MarkdownViewer(
+                                    title: context.l10n.setupInstructions,
+                                    markdown: instructionsMarkdown ?? '',
+                                  ),
+                                );
+                              } else {
+                                if (app.externalIntegration!.isInstructionsUrl == true) {
+                                  final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
+                                  if (uri == null) {
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).showSnackBar(SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)));
+                                    return;
+                                  }
+                                  await _launchUrlSafely(uri);
+                                } else {
+                                  var m = app.externalIntegration!.setupInstructionsFilePath;
+                                  routeToPage(
+                                    context,
+                                    MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''),
+                                  );
+                                }
+                              }
+                            }
+                            checkSetupCompleted();
+                          },
+                          trailing: const Padding(
+                            padding: EdgeInsets.only(right: 12.0),
+                            child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
+                          ),
+                          title: const Text(
+                            'Integration Instructions',
+                            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                  if (app.thumbnailUrls.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                      child: Text('Preview', style: TextStyle(color: Colors.white, fontSize: 18)),
+                    ),
+                    SizedBox(
+                      height: 250,
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        scrollDirection: Axis.horizontal,
+                        itemCount: app.thumbnailUrls.length,
+                        itemBuilder: (context, index) {
+                          return GestureDetector(
+                            onTap: () {
+                              // Track preview image viewed
+                              MixpanelManager().appDetailPreviewImageViewed(appId: app.id, imageIndex: index);
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullScreenImageViewer(imageUrl: app.thumbnailUrls[index]),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: EdgeInsets.only(
+                                left: index == 0 ? 16 : 8,
+                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: const Color(0xFF424242), width: 1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(11),
+                                    child: CachedNetworkImage(
+                                      imageUrl: app.thumbnailUrls[index],
+                                      fit: BoxFit.contain,
+                                      placeholder: (context, url) => SizedBox(
+                                        width: 150,
+                                        child: ShimmerWithTimeout(
+                                          baseColor: Colors.grey[900]!,
+                                          highlightColor: Colors.grey[800]!,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            setupCompleted ? context.l10n.setupCompleted : context.l10n.tapToComplete,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: setupCompleted ? Colors.green : Colors.grey.shade500,
-                                            ),
-                                          ),
-                                        ],
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
+                                        width: 150,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[900],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(FontAwesomeIcons.circleExclamation),
                                       ),
                                     ),
-                                    FaIcon(
-                                      FontAwesomeIcons.arrowUpRightFromSquare,
-                                      size: 16,
-                                      color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  InfoCardWidget(
+                    onTap: () {
+                      if (app.description.decodeString.characters.length > 200) {
+                        routeToPage(
+                          context,
+                          MarkdownViewer(
+                            title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
+                            markdown: app.description.decodeString,
+                          ),
+                        );
+                      }
+                    },
+                    title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
+                    description: app.description,
+                    showChips: false,
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final allCapabilities = context.read<AddAppProvider>().capabilities;
+                      var capabilitiesList = app.getCapabilitiesFromIds(allCapabilities);
+
+                      // If app has chat tools, add chat capability if not already present
+                      if (app.chatTools != null && app.chatTools!.isNotEmpty) {
+                        final hasChatCapability = capabilitiesList.any((cap) => cap.id == 'chat');
+                        if (!hasChatCapability) {
+                          final chatCapability = allCapabilities.firstWhereOrNull((cap) => cap.id == 'chat');
+                          if (chatCapability != null) {
+                            capabilitiesList = [...capabilitiesList, chatCapability];
+                          }
+                        }
+
+                        // Add "Push to Talk" capability
+                        final hasPushToTalkCapability = capabilitiesList.any((cap) => cap.id == 'push_to_talk');
+                        if (!hasPushToTalkCapability) {
+                          capabilitiesList = [
+                            ...capabilitiesList,
+                            AppCapability(title: context.l10n.pushToTalk, id: 'push_to_talk'),
+                          ];
+                        }
+                      }
+
+                      // Filter out external_integration capability
+                      capabilitiesList = capabilitiesList.where((cap) => cap.id != 'external_integration').toList();
+
+                      return CapabilitiesCard(capabilities: capabilitiesList);
+                    },
+                  ),
+                  app.chatTools != null && app.chatTools!.isNotEmpty
+                      ? _buildChatToolsCard(app)
+                      : const SizedBox.shrink(),
+                  app.conversationPrompt != null
+                      ? InfoCardWidget(
+                          onTap: () {
+                            routeToPage(
+                              context,
+                              MarkdownViewer(
+                                title: context.l10n.summaryPrompt,
+                                markdown: app.conversationPrompt!.decodeString,
+                              ),
+                            );
+                          },
+                          title: context.l10n.summaryPrompt,
+                          description: app.conversationPrompt!,
+                          showChips: false,
+                          maxLines: 3,
+                        )
+                      : const SizedBox.shrink(),
+
+                  app.chatPrompt != null
+                      ? InfoCardWidget(
+                          onTap: () {
+                            routeToPage(
+                              context,
+                              MarkdownViewer(
+                                title: context.l10n.chatPersonality,
+                                markdown: app.chatPrompt!.decodeString,
+                              ),
+                            );
+                          },
+                          title: context.l10n.chatPersonality,
+                          description: app.chatPrompt!,
+                          showChips: false,
+                          maxLines: 3,
+                        )
+                      : const SizedBox.shrink(),
+                  _buildPermissionsCard(app),
+                  Builder(
+                    builder: (context) {
+                      final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
+                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                          ? GestureDetector(
+                              onTap: () {
+                                if (app.reviews.isNotEmpty) {
+                                  // Track reviews page opened
+                                  MixpanelManager().appDetailReviewsOpened(
+                                    appId: app.id,
+                                    reviewCount: app.reviews.length,
+                                  );
+
+                                  routeToPage(context, ReviewsListPage(app: app));
+                                }
+                              },
+                              child: Container(
+                                key: _reviewsSectionKey,
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16.0),
+                                margin: EdgeInsets.only(
+                                  left: MediaQuery.of(context).size.width * 0.05,
+                                  right: MediaQuery.of(context).size.width * 0.05,
+                                  top: 12,
+                                  bottom: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1F1F25).withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(16.0),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          context.l10n.ratingsAndReviews,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        app.reviews.isNotEmpty
+                                            ? const Icon(Icons.arrow_forward, size: 20)
+                                            : const SizedBox.shrink(),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    RatingDistributionWidget(
+                                      ratingAvg: app.ratingAvg ?? 0,
+                                      ratingCount: app.ratingCount,
+                                      reviews: app.reviews,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    RecentReviewsSection(
+                                      reviews: app.reviews
+                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
+                                          .take(3)
+                                          .toList(),
+                                      userReview: app.userReview,
+                                      app: app,
+                                      onReviewUpdated: () {
+                                        setState(() {});
+                                      },
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      }).toList()
-                    : <Widget>[const SizedBox.shrink()]),
-                !hasAuthSteps && hasSetupInstructions
-                    ? ListTile(
-                        onTap: () async {
-                          if (app.externalIntegration != null) {
-                            if (app.externalIntegration!.setupInstructionsFilePath
-                                    ?.contains('raw.githubusercontent.com') ==
-                                true) {
-                              await routeToPage(
-                                context,
-                                MarkdownViewer(
-                                    title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
-                              );
-                            } else {
-                              if (app.externalIntegration!.isInstructionsUrl == true) {
-                                final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
-                                if (uri == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)),
-                                  );
-                                  return;
-                                }
-                                await _launchUrlSafely(uri);
-                              } else {
-                                var m = app.externalIntegration!.setupInstructionsFilePath;
-                                routeToPage(
-                                    context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
-                              }
-                            }
-                          }
-                          checkSetupCompleted();
-                        },
-                        trailing: const Padding(
-                          padding: EdgeInsets.only(right: 12.0),
-                          child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
-                        ),
-                        title: const Text(
-                          'Integration Instructions',
-                          style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-                if (app.thumbnailUrls.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                    child: Text(
-                      'Preview',
-                      style: TextStyle(color: Colors.white, fontSize: 18),
-                    ),
+                            )
+                          : const SizedBox.shrink();
+                    },
                   ),
-                  SizedBox(
-                    height: 250,
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      scrollDirection: Axis.horizontal,
-                      itemCount: app.thumbnailUrls.length,
-                      itemBuilder: (context, index) {
-                        return GestureDetector(
-                          onTap: () {
-                            // Track preview image viewed
-                            MixpanelManager().appDetailPreviewImageViewed(
-                              appId: app.id,
-                              imageIndex: index,
-                            );
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FullScreenImageViewer(
-                                  imageUrl: app.thumbnailUrls[index],
-                                ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            margin: EdgeInsets.only(
-                              left: index == 0 ? 16 : 8,
-                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: const Color(0xFF424242),
-                                    width: 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(11),
-                                  child: CachedNetworkImage(
-                                    imageUrl: app.thumbnailUrls[index],
-                                    fit: BoxFit.contain,
-                                    placeholder: (context, url) => SizedBox(
-                                      width: 150,
-                                      child: ShimmerWithTimeout(
-                                        baseColor: Colors.grey[900]!,
-                                        highlightColor: Colors.grey[800]!,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.black,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
-                                      width: 150,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[900],
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: const Icon(FontAwesomeIcons.circleExclamation),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
+                  // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+                  // app.private
+                  //     ? const SizedBox.shrink()
+                  //     : AppAnalyticsWidget(
+                  //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
+                  const SizedBox(height: 60),
                 ],
-                InfoCardWidget(
-                  onTap: () {
-                    if (app.description.decodeString.characters.length > 200) {
-                      routeToPage(
-                          context,
-                          MarkdownViewer(
-                              title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
-                              markdown: app.description.decodeString));
-                    }
-                  },
-                  title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
-                  description: app.description,
-                  showChips: false,
-                ),
-                Builder(
-                  builder: (context) {
-                    final allCapabilities = context.read<AddAppProvider>().capabilities;
-                    var capabilitiesList = app.getCapabilitiesFromIds(allCapabilities);
-
-                    // If app has chat tools, add chat capability if not already present
-                    if (app.chatTools != null && app.chatTools!.isNotEmpty) {
-                      final hasChatCapability = capabilitiesList.any((cap) => cap.id == 'chat');
-                      if (!hasChatCapability) {
-                        final chatCapability = allCapabilities.firstWhereOrNull((cap) => cap.id == 'chat');
-                        if (chatCapability != null) {
-                          capabilitiesList = [...capabilitiesList, chatCapability];
-                        }
-                      }
-
-                      // Add "Push to Talk" capability
-                      final hasPushToTalkCapability = capabilitiesList.any((cap) => cap.id == 'push_to_talk');
-                      if (!hasPushToTalkCapability) {
-                        capabilitiesList = [
-                          ...capabilitiesList,
-                          AppCapability(
-                            title: context.l10n.pushToTalk,
-                            id: 'push_to_talk',
-                          ),
-                        ];
-                      }
-                    }
-
-                    // Filter out external_integration capability
-                    capabilitiesList = capabilitiesList.where((cap) => cap.id != 'external_integration').toList();
-
-                    return CapabilitiesCard(capabilities: capabilitiesList);
-                  },
-                ),
-                app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
-                app.conversationPrompt != null
-                    ? InfoCardWidget(
-                        onTap: () {
-                          routeToPage(
-                              context,
-                              MarkdownViewer(
-                                  title: context.l10n.summaryPrompt, markdown: app.conversationPrompt!.decodeString));
-                        },
-                        title: context.l10n.summaryPrompt,
-                        description: app.conversationPrompt!,
-                        showChips: false,
-                        maxLines: 3,
-                      )
-                    : const SizedBox.shrink(),
-
-                app.chatPrompt != null
-                    ? InfoCardWidget(
-                        onTap: () {
-                          routeToPage(
-                              context,
-                              MarkdownViewer(
-                                  title: context.l10n.chatPersonality, markdown: app.chatPrompt!.decodeString));
-                        },
-                        title: context.l10n.chatPersonality,
-                        description: app.chatPrompt!,
-                        showChips: false,
-                        maxLines: 3,
-                      )
-                    : const SizedBox.shrink(),
-                _buildPermissionsCard(app),
-                Builder(
-                  builder: (context) {
-                    final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                    return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
-                        ? GestureDetector(
-                            onTap: () {
-                              if (app.reviews.isNotEmpty) {
-                                // Track reviews page opened
-                                MixpanelManager().appDetailReviewsOpened(
-                                  appId: app.id,
-                                  reviewCount: app.reviews.length,
-                                );
-
-                                routeToPage(context, ReviewsListPage(app: app));
-                              }
-                            },
-                            child: Container(
-                              key: _reviewsSectionKey,
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16.0),
-                              margin: EdgeInsets.only(
-                                left: MediaQuery.of(context).size.width * 0.05,
-                                right: MediaQuery.of(context).size.width * 0.05,
-                                top: 12,
-                                bottom: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25).withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(16.0),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(context.l10n.ratingsAndReviews,
-                                          style: TextStyle(
-                                              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                                      const Spacer(),
-                                      app.reviews.isNotEmpty
-                                          ? const Icon(
-                                              Icons.arrow_forward,
-                                              size: 20,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 20),
-                                  RatingDistributionWidget(
-                                    ratingAvg: app.ratingAvg ?? 0,
-                                    ratingCount: app.ratingCount,
-                                    reviews: app.reviews,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  RecentReviewsSection(
-                                    reviews:
-                                        app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
-                                    userReview: app.userReview,
-                                    app: app,
-                                    onReviewUpdated: () {
-                                      setState(() {});
-                                    },
-                                  )
-                                ],
-                              ),
-                            ),
-                          )
-                        : const SizedBox.shrink();
-                  },
-                ),
-                // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-                // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-                // app.private
-                //     ? const SizedBox.shrink()
-                //     : AppAnalyticsWidget(
-                //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
-                const SizedBox(height: 60),
-              ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   Future<void> _navigateToSetup() async {
@@ -1756,9 +1663,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final uri = Uri.tryParse(rawUrl);
       if (uri == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.invalidIntegrationUrl)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.invalidIntegrationUrl)));
         }
         return;
       }
@@ -1774,9 +1679,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
           final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
           if (uri == null) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)));
             }
             return;
           }
@@ -1861,12 +1766,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AppHomeWebPage(app: app),
-              ),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
           }
         });
       }
@@ -1892,11 +1792,7 @@ class _PermissionItem {
   final String type;
   final String description;
 
-  _PermissionItem({
-    required this.title,
-    required this.type,
-    required this.description,
-  });
+  _PermissionItem({required this.title, required this.type, required this.description});
 }
 
 class RatingDistributionWidget extends StatelessWidget {
@@ -1933,12 +1829,7 @@ class RatingDistributionWidget extends StatelessWidget {
           children: [
             Text(
               ratingAvg.toStringAsFixed(1),
-              style: TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade400,
-                height: 1,
-              ),
+              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
             ),
             const SizedBox(height: 8),
             Row(
@@ -1956,10 +1847,7 @@ class RatingDistributionWidget extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade500,
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
         ),
@@ -1977,34 +1865,20 @@ class RatingDistributionWidget extends StatelessWidget {
                   children: [
                     Text(
                       '$star',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade400,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
-                      FontAwesomeIcons.solidStar,
-                      size: 10,
-                      color: Colors.deepPurple,
-                    ),
+                    const Icon(FontAwesomeIcons.solidStar, size: 10, color: Colors.deepPurple),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
                         height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade800,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(4)),
                         child: FractionallySizedBox(
                           alignment: Alignment.centerLeft,
                           widthFactor: percentage,
                           child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.deepPurple,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                            decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(4)),
                           ),
                         ),
                       ),
@@ -2014,10 +1888,7 @@ class RatingDistributionWidget extends StatelessWidget {
                       width: 20,
                       child: Text(
                         '$count',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                        ),
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
                         textAlign: TextAlign.right,
                       ),
                     ),
@@ -2081,9 +1952,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Future<void> _submitReview() async {
     if (editRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.pleaseSelectRating)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
       return;
     }
 
@@ -2094,8 +1963,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
+          ? prefs.fullName
+          : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -2138,18 +2007,19 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(widget.userReview == null
+              content: Text(
+                widget.userReview == null
                     ? context.l10n.reviewAddedSuccessfully
-                    : context.l10n.reviewUpdatedSuccessfully)),
+                    : context.l10n.reviewUpdatedSuccessfully,
+              ),
+            ),
           );
           setState(() => isEditing = false);
           widget.onReviewUpdated?.call();
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.failedToSubmitReview)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
         }
       }
     } finally {
@@ -2224,11 +2094,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             children: [
               Text(
                 widget.userReview == null ? 'Add Your Review' : 'Edit Your Review',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
               ),
               const Spacer(),
               if (widget.userReview != null)
@@ -2240,13 +2106,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       editRating = widget.userReview?.score ?? 0;
                     });
                   },
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                    ),
-                  ),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
                 ),
             ],
           ),
@@ -2281,10 +2141,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.black.withOpacity(0.3),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
               contentPadding: const EdgeInsets.all(12),
               counterStyle: TextStyle(color: Colors.grey.shade500),
             ),
@@ -2299,9 +2156,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 backgroundColor: Colors.deepPurple,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: isSubmitting
                   ? const SizedBox(
@@ -2312,9 +2167,11 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : Text(widget.userReview == null
-                      ? AppLocalizations.of(context)!.submitReview
-                      : AppLocalizations.of(context)!.updateReview),
+                  : Text(
+                      widget.userReview == null
+                          ? AppLocalizations.of(context)!.submitReview
+                          : AppLocalizations.of(context)!.updateReview,
+                    ),
             ),
           ),
         ],
@@ -2324,8 +2181,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context)!;
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName = isUserReview
+        ? l10n.yourReview
+        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(
@@ -2390,19 +2248,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         const SizedBox(width: 8),
                         Text(
                           timeago.format(review.ratedAt),
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
                         ),
-                        if (isUserReview) ...[
-                          const Spacer(),
-                          Icon(
-                            Icons.edit,
-                            size: 14,
-                            color: Colors.grey.shade500,
-                          ),
-                        ],
+                        if (isUserReview) ...[const Spacer(), Icon(Icons.edit, size: 14, color: Colors.grey.shade500)],
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -2431,11 +2279,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               padding: const EdgeInsets.only(left: 48),
               child: Text(
                 review.review.decodeString,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),

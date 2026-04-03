@@ -40,12 +40,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   LimitlessDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
-
-    await Future.delayed(const Duration(seconds: 1));
 
     _rxSubscription =
         transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
@@ -102,7 +98,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (packet == null) {
       if (_isBatchMode) {
         Logger.debug(
-            'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}');
+          'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}',
+        );
       }
       _rawDataBuffer.addAll(data);
       return;
@@ -670,12 +667,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       if (index != null && numFrags != null && payload != null) {
-        return {
-          'index': index,
-          'seq': seq,
-          'num_frags': numFrags,
-          'payload': payload,
-        };
+        return {'index': index, 'seq': seq, 'num_frags': numFrags, 'payload': payload};
       }
     } catch (e) {
       Logger.debug('Limitless: Error parsing BLE wrapper: $e');
@@ -1405,8 +1397,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
                   result['flash_page_data'] = data.sublist(storagePos, storagePos + flashPageLength);
 
-                  final sessionInfo =
-                      _parseFlashPageSessionMarkers(data.sublist(storagePos, storagePos + flashPageLength));
+                  final sessionInfo = _parseFlashPageSessionMarkers(
+                    data.sublist(storagePos, storagePos + flashPageLength),
+                  );
                   result.addAll(sessionInfo);
 
                   return result;
@@ -1423,10 +1416,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
     } catch (e) {
       Logger.debug('Limitless: Error parsing StorageBufferMsg: $e');
-      DebugLogManager.logWarning('Limitless StorageBufferMsg parse error', {
-        'dataLength': data.length,
-        'error': '$e',
-      });
+      DebugLogManager.logWarning('Limitless StorageBufferMsg parse error', {'dataLength': data.length, 'error': '$e'});
     }
     return null;
   }
@@ -1533,10 +1523,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
-      final batteryData = await transport.readCharacteristic(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final batteryData = await transport.readCharacteristic(batteryServiceUuid, batteryLevelCharacteristicUuid);
       if (batteryData.isNotEmpty) {
         return batteryData[0];
       }
@@ -1555,10 +1542,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     try {
-      final stream = transport.getCharacteristicStream(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
 
       return stream.listen((value) {
         if (value.isNotEmpty) {
@@ -1603,9 +1587,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetButtonState() async => [];
 
   @override
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     return _buttonController.stream.listen((value) {
       if (value.isNotEmpty) {
         onButtonReceived(value);
@@ -1635,10 +1617,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       null;
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async =>
-      null;
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
 
   @override
   Future<int> performGetFeatures() async => OmiFeatures.ledDimming;

@@ -18,8 +18,8 @@ struct OnboardingLoadingAnimation: View {
                 let pulseScale = 0.15 + 0.08 * sin(time * 1.8)
                 let pulseRadius = radius * pulseScale
                 let pulseGradient = Gradient(colors: [
-                    OmiColors.purplePrimary.opacity(0.4),
-                    OmiColors.purplePrimary.opacity(0.0),
+                    Color.white.opacity(0.4),
+                    Color.white.opacity(0.0),
                 ])
                 let pulseShading = GraphicsContext.Shading.radialGradient(
                     pulseGradient,
@@ -39,7 +39,7 @@ struct OnboardingLoadingAnimation: View {
                 trackPath.addArc(center: center, radius: radius,
                                  startAngle: .degrees(0), endAngle: .degrees(360),
                                  clockwise: false)
-                context.stroke(trackPath, with: .color(OmiColors.purplePrimary.opacity(0.12)),
+                context.stroke(trackPath, with: .color(Color.white.opacity(0.12)),
                                lineWidth: 3)
 
                 // --- Orbital ring (filled arc) ---
@@ -51,8 +51,8 @@ struct OnboardingLoadingAnimation: View {
                                    endAngle: .degrees(-90 + arcEnd),
                                    clockwise: false)
                     let arcGradient = Gradient(colors: [
-                        OmiColors.purplePrimary,
-                        OmiColors.purpleSecondary,
+                        Color.white,
+                        Color.gray,
                     ])
                     context.stroke(arcPath,
                                    with: .linearGradient(arcGradient,
@@ -77,8 +77,8 @@ struct OnboardingLoadingAnimation: View {
                     let glowSize = pSize * 3
                     let glowRect = CGRect(x: px - glowSize, y: py - glowSize, width: glowSize * 2, height: glowSize * 2)
                     let glowGradient = Gradient(colors: [
-                        OmiColors.purpleSecondary.opacity(particleOpacities[i] * 0.5),
-                        OmiColors.purpleSecondary.opacity(0),
+                        Color.gray.opacity(particleOpacities[i] * 0.5),
+                        Color.gray.opacity(0),
                     ])
                     context.fill(Circle().path(in: glowRect),
                                  with: .radialGradient(glowGradient, center: CGPoint(x: px, y: py),

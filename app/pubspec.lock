@@ -1285,14 +1285,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.20.2"
-  intl_phone_field:
+  intl_country_data:
     dependency: "direct main"
     description:
-      name: intl_phone_field
-      sha256: "73819d3dfcb68d2c85663606f6842597c3ddf6688ac777f051b17814fe767bbf"
+      name: intl_country_data
+      sha256: "6f67014fab815ecdd312113d68f90998d8e91f861bc6282f0e540cf1229248a3"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.0"
+    version: "1.2.9"
   io:
     dependency: transitive
     description:

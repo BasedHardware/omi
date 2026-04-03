@@ -32,62 +32,64 @@ class SpeechProfileCardWidget extends StatelessWidget {
         if (provider.isLoading) return const SizedBox();
         return provider.hasSpeakerProfile
             ? const SizedBox()
-            : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.pairedDevice == null ||
-                    !device.isConnected ||
-                    device.pairedDevice?.firmwareRevision == '1.0.2') {
-                  return const SizedBox();
-                }
-                return Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () async {
-                        MixpanelManager().pageOpened('Speech Profile Memories');
-                        bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                        await routeToPage(context, const SpeechProfilePage());
-                        final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                        if (hasSpeakerProfile != newHasSpeakerProfile) {
-                          if (!context.mounted) return;
-                          await context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          if (!context.mounted) return;
-                          context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
-                        }
-                      },
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.all(Radius.circular(24)),
-                        ),
-                        margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.multitrack_audio),
-                                  const SizedBox(width: 16),
-                                  Text(
-                                    context.l10n.teachOmiYourVoice,
-                                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                                  ),
-                                ],
+            : Consumer<DeviceProvider>(
+                builder: (context, device, child) {
+                  if (device.pairedDevice == null ||
+                      !device.isConnected ||
+                      device.pairedDevice?.firmwareRevision == '1.0.2') {
+                    return const SizedBox();
+                  }
+                  return Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          MixpanelManager().pageOpened('Speech Profile Memories');
+                          bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                          await routeToPage(context, const SpeechProfilePage());
+                          final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                          if (hasSpeakerProfile != newHasSpeakerProfile) {
+                            if (!context.mounted) return;
+                            await context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                            if (!context.mounted) return;
+                            context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
+                          }
+                        },
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.all(Radius.circular(24)),
+                          ),
+                          margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.multitrack_audio),
+                                    const SizedBox(width: 16),
+                                    Text(
+                                      context.l10n.teachOmiYourVoice,
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                          ],
+                              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const Positioned(
-                      top: 6,
-                      right: 24,
-                      child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
-                    ),
-                  ],
-                );
-              });
+                      const Positioned(
+                        top: 6,
+                        right: 24,
+                        child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
+                      ),
+                    ],
+                  );
+                },
+              );
       },
     );
   }
@@ -102,7 +104,8 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
       builder: (context, provider, child) {
         if (!provider.havingNewFirmware) return const SizedBox();
 
-        final isOmiGlass = provider.pairedDevice?.type == DeviceType.openglass ||
+        final isOmiGlass =
+            provider.pairedDevice?.type == DeviceType.openglass ||
             (provider.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
 
         return Stack(
@@ -222,9 +225,7 @@ getTranscriptWidget(
   final bool showTranscript = segments.isNotEmpty;
 
   Widget buildPhotos() {
-    return PhotosGridComponent(
-      photos: photos,
-    );
+    return PhotosGridComponent(photos: photos);
   }
 
   Widget buildTranscriptSegments() {
@@ -251,13 +252,8 @@ getTranscriptWidget(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 250,
-          child: buildPhotos(),
-        ),
-        Expanded(
-          child: buildTranscriptSegments(),
-        ),
+        SizedBox(height: 250, child: buildPhotos()),
+        Expanded(child: buildTranscriptSegments()),
       ],
     );
   }
@@ -272,19 +268,12 @@ getTranscriptWidget(
   return const SizedBox.shrink();
 }
 
-getLiteTranscriptWidget(
-  List<TranscriptSegment> segments,
-  List<ConversationPhoto> photos,
-  BtDevice? btDevice,
-) {
+getLiteTranscriptWidget(List<TranscriptSegment> segments, List<ConversationPhoto> photos, BtDevice? btDevice) {
   return Column(
     children: [
       if (photos.isNotEmpty) PhotosPreviewWidget(photos: photos),
       if (photos.isNotEmpty && segments.isNotEmpty) const SizedBox(height: 8),
-      if (segments.isNotEmpty)
-        LiteTranscriptWidget(
-          segments: segments,
-        ),
+      if (segments.isNotEmpty) LiteTranscriptWidget(segments: segments),
     ],
   );
 }

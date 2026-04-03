@@ -8,12 +8,7 @@ class McpApi {
   static final String _baseUrl = '${Env.apiBaseUrl}v1/mcp';
 
   static Future<List<McpApiKey>> getMcpApiKeys() async {
-    final response = await makeApiCall(
-      url: '$_baseUrl/keys',
-      headers: {},
-      body: '{}',
-      method: 'GET',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: '{}', method: 'GET');
 
     if (response != null && response.statusCode == 200) {
       final List<dynamic> body = jsonDecode(response.body);
@@ -39,12 +34,7 @@ class McpApi {
   }
 
   static Future<void> deleteMcpApiKey(String keyId) async {
-    final response = await makeApiCall(
-      url: '$_baseUrl/keys/$keyId',
-      headers: {},
-      body: '{}',
-      method: 'DELETE',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/keys/$keyId', headers: {}, body: '{}', method: 'DELETE');
 
     if (response == null || response.statusCode != 204) {
       throw Exception('Failed to delete API key: ${response?.body}');

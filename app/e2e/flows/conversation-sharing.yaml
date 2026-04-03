@@ -1,0 +1,108 @@
+# E2E Flow: Conversation Sharing — share conversation link, copy transcript, manage visibility
+# Tests: Share button, copy transcript/summary, visibility toggle (private/shared), three-dot menu
+# Core feature: sharing conversations with others via link or clipboard
+
+version: 2
+name: conversation-sharing
+description: Conversation sharing flow — open conversation detail, share via link (sets visibility to shared), copy transcript to clipboard, copy summary, change visibility between private and shared
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversation_detail/page.dart
+  - app/lib/pages/conversation_detail/share.dart
+  - app/lib/pages/conversation_detail/widgets.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - has_conversations  # At least 1 conversation with transcript and summary exists.
+
+steps:
+  - id: S1
+    name: Open conversation detail
+    do: "On the home screen, tap the first conversation in the Conversations list. The conversation detail page opens showing: back arrow, conversation title, info chips row (date, time, duration, folder, visibility), and tab bar (Overview, Transcript, Moments)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Conversation detail page in page.dart. AppBar has 4 action buttons: star (favorite), share (arrowUpFromBracket), search, three-dots menu. Info chips row shows: date, time, duration (if transcript), folder chip, visibility chip."
+
+  - id: S2
+    name: Verify AppBar action buttons
+    do: "Verify the conversation detail AppBar shows 4 action buttons (left to right): star icon (favorite toggle), share icon (arrow-up-from-bracket), search icon, and three-dots menu icon. All buttons are 36x36 grey circles."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Star button toggles conversation starred status. Share button triggers shareConversationLink(). Search opens in-page transcript search. Three-dots opens PullDownMenu with Copy Transcript, Copy Summary, Share Audio, Test Prompt, Reprocess, Delete."
+
+  - id: S3
+    name: Tap three-dots menu — copy transcript
+    do: "Tap the three-dots menu icon (rightmost button). A pull-down menu appears with options: Copy Transcript, Copy Summary, Share Audio (if audio exists), Test Prompt, Reprocess Conversation, Delete Conversation. Tap 'Copy Transcript'. A toast/snackbar confirms the transcript was copied to clipboard."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Three-dots menu uses PullDownMenu widget. Copy Transcript copies full transcript text to system clipboard via Clipboard.setData(). Copy Summary copies the AI-generated summary. Share Audio downloads the merged audio file (if available) and opens native share sheet."
+
+  - id: S4
+    name: Check visibility chip — private by default
+    do: "Look at the info chips row below the conversation title. Find the visibility chip (lock icon with 'Private' text or public icon with 'Shared' text). By default, conversations are 'Private' (lock icon). This chip is tappable."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Visibility chip in widgets.dart (lines 247-379). Shows lock icon for private, public icon for shared. Chip has dropdown indicator (chevron). Default: private ('Only you can see conversation')."
+
+  - id: S5
+    name: Tap visibility chip to open visibility sheet
+    do: "Tap the visibility chip to open the 'Visibility' bottom sheet. The sheet shows two options: 'Private' (lock icon, 'Only you can see conversation') and 'Shared' (public icon, 'Anyone with link can view'). The current setting has a checkmark."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Visibility sheet in widgets.dart. Two ListTile options. Selecting 'Shared' calls setConversationVisibility() to make URL public, then automatically triggers shareConversationLink() to open native share sheet."
+
+  - id: S6
+    name: Set visibility to Shared
+    do: "Tap 'Shared' option. The visibility updates and the native share sheet opens with the conversation link (https://h.omi.me/conversations/{id}). Dismiss the share sheet (tap outside or cancel). Verify the visibility chip now shows the public icon indicating 'Shared' status."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Selecting Shared: (1) setConversationVisibility(id) makes URL public on backend, (2) updates UI locally, (3) shareConversationLink() opens Share.share() with URL. Share sheet is native system UI — cannot be fully automated. URL format: https://h.omi.me/conversations/{conversation_id}."
+
+  - id: S7
+    name: Tap share button directly
+    do: "Tap the share button (arrow-up-from-bracket icon, second button in AppBar). This directly sets visibility to 'shared' (if not already) and opens the native share sheet with the conversation link. Dismiss the share sheet."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Share button calls setConversationVisibility() then shareConversationLink(). Uses _shareButtonKey to position the share sheet near the button (Rect.fromLTWH). Analytics: conversationShared event."
+
+  - id: S8
+    name: Return to home
+    do: "Press back to return to the home screen. Verify the conversations list is visible."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S8.webp
+    note: "Back from conversation detail returns to home. The conversation's shared visibility persists — the link remains accessible to anyone until the user changes it back to private."

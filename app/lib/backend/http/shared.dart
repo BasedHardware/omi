@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -30,7 +31,11 @@ Future<String> getAuthHeader() async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+    final refreshedToken = await AuthService.instance.getIdToken();
+    if (refreshedToken != null) {
+      SharedPreferencesUtil().authToken = refreshedToken;
+    }
+    hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
 
   if (!hasAuthToken) {
@@ -79,13 +84,14 @@ Future<http.StreamedResponse> makeRawApiCall({
   required String method,
   Map<String, String> headers = const {},
 }) async {
-  final builtHeaders = await buildHeaders(
-    requireAuthCheck: _isRequiredAuthCheck(url),
-    fromHeaders: headers,
-  );
+  final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
   var request = http.Request(method, Uri.parse(url));
   request.headers.addAll(builtHeaders);
   return HttpPoolManager.instance.sendStreaming(request);
+}
+
+void _checkClockSkewResponse(http.Response response) {
+  ClockSkewDetector.instance.checkResponse(response);
 }
 
 Future<http.Response?> makeApiCall({
@@ -98,10 +104,7 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-    );
+    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
     final effectiveTimeout =
         timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
@@ -117,10 +120,7 @@ Future<http.Response?> makeApiCall({
       Logger.log('Token expired on 1st attempt');
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(
-          requireAuthCheck: requireAuthCheck,
-          fromHeaders: headers,
-        );
+        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
         response = await HttpPoolManager.instance.send(
           () => _buildRequest(url, builtHeaders, body, method),
           timeout: effectiveTimeout,
@@ -129,16 +129,23 @@ Future<http.Response?> makeApiCall({
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
           await AuthService.instance.signOut();
-          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-              message: 'Authentication failed. Please sign in again.');
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
         }
       } else {
         await AuthService.instance.signOut();
-        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-            message: 'Authentication failed. Please sign in again.');
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
@@ -147,12 +154,7 @@ Future<http.Response?> makeApiCall({
   }
 }
 
-http.Request _buildRequest(
-  String url,
-  Map<String, String> headers,
-  String body,
-  String method,
-) {
+http.Request _buildRequest(String url, Map<String, String> headers, String body, String method) {
   final request = http.Request(method, Uri.parse(url));
   request.headers.addAll(headers);
   if (method != 'GET' && body.isNotEmpty) {
@@ -160,6 +162,44 @@ http.Request _buildRequest(
     request.body = body;
   }
   return request;
+}
+
+Future<http.StreamedResponse> _sendMultipartWithProgress(
+  http.MultipartRequest request,
+  UploadProgressCallback? onProgress,
+) async {
+  if (onProgress == null) {
+    return HttpPoolManager.instance.sendStreaming(request);
+  }
+
+  final totalBytes = request.contentLength;
+  int bytesSent = 0;
+  final startTime = DateTime.now();
+
+  final originalStream = request.finalize();
+  final progressStream = originalStream.transform(
+    StreamTransformer<List<int>, List<int>>.fromHandlers(
+      handleData: (data, sink) {
+        sink.add(data);
+        bytesSent += data.length;
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
+        final speed = elapsed > 0.3 ? (bytesSent / 1024.0) / elapsed : 0.0;
+        onProgress(bytesSent, totalBytes, speed);
+      },
+    ),
+  );
+
+  final streamedRequest = http.StreamedRequest(request.method, request.url);
+  streamedRequest.headers.addAll(request.headers);
+  streamedRequest.contentLength = totalBytes;
+
+  progressStream.listen(
+    streamedRequest.sink.add,
+    onError: streamedRequest.sink.addError,
+    onDone: streamedRequest.sink.close,
+  );
+
+  return HttpPoolManager.instance.sendStreaming(streamedRequest);
 }
 
 Future<http.MultipartRequest> _buildMultipartRequest({
@@ -177,17 +217,14 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   for (var file in files) {
     var stream = http.ByteStream(file.openRead());
     var length = await file.length();
-    var multipartFile = http.MultipartFile(
-      fileFieldName,
-      stream,
-      length,
-      filename: basename(file.path),
-    );
+    var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
 
   return request;
 }
+
+typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
 
 Future<http.Response> makeMultipartApiCall({
   required String url,
@@ -196,13 +233,11 @@ Future<http.Response> makeMultipartApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   String method = 'POST',
+  UploadProgressCallback? onUploadProgress,
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-    );
+    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -213,17 +248,14 @@ Future<http.Response> makeMultipartApiCall({
       method: method,
     );
 
-    var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
+    var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st multipart attempt');
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(
-          requireAuthCheck: requireAuthCheck,
-          fromHeaders: headers,
-        );
+        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
         request = await _buildMultipartRequest(
           url: url,
           files: files,
@@ -232,21 +264,28 @@ Future<http.Response> makeMultipartApiCall({
           fileFieldName: fileFieldName,
           method: method,
         );
-        streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
+        streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
         response = await http.Response.fromStream(streamedResponse);
         Logger.log('Token refreshed and multipart request retried');
         if (response.statusCode == 401) {
           await AuthService.instance.signOut();
-          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-              message: 'Authentication failed. Please sign in again.');
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
         }
       } else {
         await AuthService.instance.signOut();
-        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-            message: 'Authentication failed. Please sign in again.');
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
@@ -262,10 +301,7 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
 }) async* {
   try {
-    final builtHeaders = await buildHeaders(
-      requireAuthCheck: _isRequiredAuthCheck(url),
-      fromHeaders: headers,
-    );
+    final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
 
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
@@ -282,30 +318,27 @@ Stream<String> makeStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: buffer partial data across TCP reads and only
+    // emit complete events delimited by \n\n.  The previous 1024-byte
+    // heuristic failed when TCP segments split an SSE line at arbitrary
+    // byte boundaries (see issue #6284).
+    var remainder = '';
     await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      // Last element is either empty (if data ended with \n\n) or
+      // an incomplete fragment — keep it in the remainder.
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    // Flush any trailing data that wasn't terminated by \n\n
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
@@ -322,10 +355,7 @@ Stream<String> makeMultipartStreamingApiCall({
 }) async* {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-    );
+    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -342,10 +372,7 @@ Stream<String> makeMultipartStreamingApiCall({
       Logger.log('Token expired on 1st multipart streaming attempt');
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(
-          requireAuthCheck: requireAuthCheck,
-          fromHeaders: headers,
-        );
+        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
         request = await _buildMultipartRequest(
           url: url,
           files: files,
@@ -358,14 +385,20 @@ Stream<String> makeMultipartStreamingApiCall({
         Logger.log('Token refreshed and multipart streaming request retried');
         if (response.statusCode == 401) {
           await AuthService.instance.signOut();
-          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-              message: 'Authentication failed. Please sign in again.');
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
           return;
         }
       } else {
         await AuthService.instance.signOut();
-        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-            message: 'Authentication failed. Please sign in again.');
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
         return;
       }
     }
@@ -375,30 +408,21 @@ Stream<String> makeMultipartStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
+    var remainder = '';
     await for (var data in response.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
@@ -428,13 +452,16 @@ dynamic extractContentFromResponse(
   } else {
     Logger.debug('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    PlatformManager.instance.crashReporter
-        .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
-      'response_null': (response == null).toString(),
-      'response_status_code': response?.statusCode.toString() ?? '',
-      'is_embedding': isEmbedding.toString(),
-      'is_function_calling': isFunctionCalling.toString(),
-    });
+    PlatformManager.instance.crashReporter.reportCrash(
+      Exception('Error fetching data: ${response?.statusCode}'),
+      StackTrace.current,
+      userAttributes: {
+        'response_null': (response == null).toString(),
+        'response_status_code': response?.statusCode.toString() ?? '',
+        'is_embedding': isEmbedding.toString(),
+        'is_function_calling': isFunctionCalling.toString(),
+      },
+    );
     return null;
   }
 }

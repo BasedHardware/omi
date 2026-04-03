@@ -23,9 +23,7 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   FriendPendantDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 1));
 
@@ -33,18 +31,18 @@ class FriendPendantDeviceConnection extends DeviceConnection {
     _audioSub = transport
         .getCharacteristicStream(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid)
         .listen((data) {
-      final payload = _processAudioPacket(data);
-      if (payload != null && payload.isNotEmpty) {
-        // Split 90-byte payload into 30-byte LC3 frames and add each separately
-        for (int i = 0; i < payload.length; i += lc3FrameSize) {
-          final end = (i + lc3FrameSize <= payload.length) ? i + lc3FrameSize : payload.length;
-          final chunk = payload.sublist(i, end);
-          if (chunk.length == lc3FrameSize) {
-            _audioController.add(chunk);
+          final payload = _processAudioPacket(data);
+          if (payload != null && payload.isNotEmpty) {
+            // Split 90-byte payload into 30-byte LC3 frames and add each separately
+            for (int i = 0; i < payload.length; i += lc3FrameSize) {
+              final end = (i + lc3FrameSize <= payload.length) ? i + lc3FrameSize : payload.length;
+              final chunk = payload.sublist(i, end);
+              if (chunk.length == lc3FrameSize) {
+                _audioController.add(chunk);
+              }
+            }
           }
-        }
-      }
-    });
+        });
   }
 
   @override
@@ -109,8 +107,7 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -124,14 +121,10 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async =>
-      null;
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
 
   @override
   Future<int> performGetFeatures() async => 0;

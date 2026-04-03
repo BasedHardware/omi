@@ -101,8 +101,9 @@ class FrameTransport extends DeviceTransport {
   Future<void> _loadFrameLibrary() async {
     bool isLoaded = false;
     bool isRunning = false;
-    final String mainLuaContent =
-        (await rootBundle.loadString(Assets.deviceAssets.frameLib)).replaceAll("\t", "").replaceAll("\n\n", "\n");
+    final String mainLuaContent = (await rootBundle.loadString(
+      Assets.deviceAssets.frameLib,
+    )).replaceAll("\t", "").replaceAll("\n\n", "\n");
     final int frameLibHash = mainLuaContent.hashCode;
 
     if (_isLooping == false) {
@@ -142,8 +143,11 @@ class FrameTransport extends DeviceTransport {
       await _frame!.bluetooth.sendBreakSignal();
       Logger.debug("About to send main.lua to frame, length = ${mainLuaContent.length}");
       try {
-        await _frame!.files.writeFile("main.lua", utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
-            checked: true);
+        await _frame!.files.writeFile(
+          "main.lua",
+          utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
+          checked: true,
+        );
         Logger.debug("Sent main.lua to frame");
         await _frame!.bluetooth.sendResetSignal();
       } catch (e) {
@@ -388,8 +392,11 @@ class FrameTransport extends DeviceTransport {
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
 
-  Future<bool> _sendUntilEchoed(String data,
-      {int maxAttempts = 3, Duration timeout = const Duration(seconds: 10)}) async {
+  Future<bool> _sendUntilEchoed(
+    String data, {
+    int maxAttempts = 3,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
     if (_frame == null || !_frame!.isConnected) {
       return false;
     }

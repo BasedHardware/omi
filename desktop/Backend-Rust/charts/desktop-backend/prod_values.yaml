@@ -1,0 +1,111 @@
+# Production environment values for desktop-backend
+
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware/desktop-backend
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  port: 8080
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: FIREBASE_PROJECT_ID
+    value: "based-hardware"
+  - name: RUST_LOG
+    value: "info"
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/app/google-credentials.json"
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OPENAI_API_KEY
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
+  - name: ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ENCRYPTION_SECRET
+  - name: REDIS_DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PINECONE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: PINECONE_API_KEY
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - backend-listen
+            - key: env
+              operator: In
+              values:
+                - prod

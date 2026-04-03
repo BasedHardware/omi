@@ -21,7 +21,7 @@ async fn get_memories(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetMemoriesQuery>,
-) -> Json<Vec<MemoryDB>> {
+) -> Result<Json<Vec<MemoryDB>>, (StatusCode, String)> {
     // Parse tags from comma-separated string
     let tags: Option<Vec<String>> = query.tags.as_ref().map(|t| {
         t.split(',')
@@ -52,10 +52,10 @@ async fn get_memories(
         )
         .await
     {
-        Ok(memories) => Json(memories),
+        Ok(memories) => Ok(Json(memories)),
         Err(e) => {
             tracing::error!("Failed to get memories: {}", e);
-            Json(vec![])
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get memories: {}", e)))
         }
     }
 }

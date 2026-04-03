@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "flow": "logout",
+  "flowHash": "5f2e2e1ccf1445cd",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-16T06:41:08.332Z",
+  "runId": "RInLwL0",
+  "totalDurationMs": 503395,
+  "verifySteps": [
+    "S1",
+    "S3",
+    "S5"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 11803,
+      "durationMs": 12108,
+      "ref": "screen",
+      "text": "Home screen",
+      "type": "Screen"
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 30524,
+      "ref": "e27",
+      "text": "Settings gear",
+      "type": "IconButton",
+      "bounds": {
+        "x": 350,
+        "y": 72,
+        "width": 36,
+        "height": 36
+      },
+      "center": {
+        "x": 368,
+        "y": 90
+      }
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 364111,
+      "ref": "vm_service",
+      "text": "Scrolled settings via VM Service",
+      "type": "Scrollable"
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 39770,
+      "ref": "e10",
+      "text": "Sign Out",
+      "type": "GestureDetector",
+      "bounds": {
+        "x": 20,
+        "y": 741,
+        "width": 362,
+        "height": 61
+      },
+      "center": {
+        "x": 201,
+        "y": 772
+      }
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 45073,
+      "ref": "e2",
+      "text": "Ok",
+      "type": "TextButton",
+      "bounds": {
+        "x": 201,
+        "y": 468,
+        "width": 135,
+        "height": 48
+      },
+      "center": {
+        "x": 269,
+        "y": 492
+      }
+    }
+  }
+}

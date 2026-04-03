@@ -204,6 +204,118 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
       required: ["task_id"],
     },
   },
+  // --- Backend RAG tools (call Python backend /v1/tools/* via Swift) ---
+  {
+    name: "get_conversations",
+    description: `Retrieve user conversations from the Omi backend with transcripts, summaries, and metadata.
+Use when user asks about recent conversations, what they discussed, or needs conversation details.
+For weekly/monthly summaries: set limit=5000, include_transcript=false.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string" as const, description: "ISO date with timezone (e.g. 2024-01-19T15:00:00-08:00)" },
+        end_date: { type: "string" as const, description: "ISO date with timezone" },
+        limit: { type: "number" as const, description: "Number of conversations (default: 20, max: 5000)" },
+        offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
+        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "search_conversations",
+    description: `Semantic search across user conversations. Uses AI embeddings to find conversations matching a concept.
+Use for: "when did X happen?", "what did I say about Y?", finding specific events or topics.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string" as const, description: "Natural language search query" },
+        start_date: { type: "string" as const, description: "ISO date with timezone" },
+        end_date: { type: "string" as const, description: "ISO date with timezone" },
+        limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
+        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_memories",
+    description: `Retrieve user memories (facts, preferences, habits) from the Omi backend.
+Use for: "what do you know about me?", "what are my preferences?", personal facts.
+NOT for events — use search_conversations for "when did X happen?".`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number" as const, description: "Number of memories (default: 50, max: 5000)" },
+        offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
+        start_date: { type: "string" as const, description: "ISO date with timezone" },
+        end_date: { type: "string" as const, description: "ISO date with timezone" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "search_memories",
+    description: `Semantic search across user memories/facts. Finds memories matching a concept.
+Use for: "what do I know about cooking?", "my work goals", topic-specific facts.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string" as const, description: "Natural language search query" },
+        limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_action_items",
+    description: `Retrieve user action items (tasks/to-dos) from the Omi backend.
+Use for: "what are my tasks?", "show my to-dos", "what's due today?".
+Use due_start_date/due_end_date for time queries (not start_date/end_date which filter by creation date).`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number" as const, description: "Number of items (default: 50, max: 500)" },
+        offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
+        completed: { type: "boolean" as const, description: "Filter: true=completed, false=pending, omit=all" },
+        start_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone)" },
+        end_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone)" },
+        due_start_date: { type: "string" as const, description: "Filter by due date (ISO with timezone)" },
+        due_end_date: { type: "string" as const, description: "Filter by due date (ISO with timezone)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "create_action_item",
+    description: `Create a new action item (task) for the user.
+ONLY use when user explicitly asks: "add task...", "remind me to...", "create a to-do...".
+Keep descriptions short (5-10 words).`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        description: { type: "string" as const, description: "Short task description (5-10 words)" },
+        due_at: { type: "string" as const, description: "Due date (ISO with timezone, defaults to 24h from now)" },
+        conversation_id: { type: "string" as const, description: "Source conversation ID (optional)" },
+      },
+      required: ["description"],
+    },
+  },
+  {
+    name: "update_action_item",
+    description: `Update an action item's status, description, or due date.
+Use get_action_items first to find the action_item_id.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action_item_id: { type: "string" as const, description: "ID from get_action_items" },
+        completed: { type: "boolean" as const, description: "Mark complete (true) or pending (false)" },
+        description: { type: "string" as const, description: "New description" },
+        due_at: { type: "string" as const, description: "New due date (ISO with timezone)" },
+      },
+      required: ["action_item_id"],
+    },
+  },
   {
     name: "load_skill",
     description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
@@ -523,6 +635,24 @@ async function handleJsonRpc(
         toolName === "save_knowledge_graph"
       ) {
         // Onboarding tools — forward directly to Swift
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (
+        toolName === "get_conversations" ||
+        toolName === "search_conversations" ||
+        toolName === "get_memories" ||
+        toolName === "search_memories" ||
+        toolName === "get_action_items" ||
+        toolName === "create_action_item" ||
+        toolName === "update_action_item"
+      ) {
+        // Backend RAG tools — forward to Swift which calls Python backend
         const result = await requestSwiftTool(toolName, args);
         if (!isNotification) {
           send({

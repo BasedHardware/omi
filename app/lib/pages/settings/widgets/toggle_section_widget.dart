@@ -7,13 +7,14 @@ class ToggleSectionWidget extends StatefulWidget {
   final List<Widget> options;
   final Function(bool) onSectionEnabledChanged;
 
-  const ToggleSectionWidget(
-      {super.key,
-      required this.isSectionEnabled,
-      required this.sectionTitle,
-      required this.sectionDescription,
-      required this.options,
-      required this.onSectionEnabledChanged});
+  const ToggleSectionWidget({
+    super.key,
+    required this.isSectionEnabled,
+    required this.sectionTitle,
+    required this.sectionDescription,
+    required this.options,
+    required this.onSectionEnabledChanged,
+  });
   @override
   State<ToggleSectionWidget> createState() => _ToggleSectionWidgetState();
 }
@@ -41,20 +42,10 @@ class _ToggleSectionWidgetState extends State<ToggleSectionWidget> {
                   children: [
                     Text(
                       widget.sectionTitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      widget.sectionDescription,
-                      style: const TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 13,
-                      ),
-                    ),
+                    Text(widget.sectionDescription, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13)),
                   ],
                 ),
               ),

@@ -35,11 +35,11 @@ from utils.chat import (
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
+from database.redis_db import try_acquire_goal_extraction_lock
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
-from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
 ):
     compat_app_id = app_id or plugin_id
     logger.info(f'send_message {data.text} {compat_app_id} {uid}')
@@ -113,8 +113,9 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
-    # Check for goal progress (background)
-    threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
+    # Check for goal progress (background) — rate-limited to one call per user per 5 min
+    if try_acquire_goal_extraction_lock(uid):
+        threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -177,8 +178,7 @@ def send_message(
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
-            # Using the new agentic system via graph routing
-            async for chunk in execute_graph_chat_stream(
+            async for chunk in execute_chat_stream(
                 uid,
                 messages,
                 app,
@@ -294,7 +294,9 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
@@ -332,7 +334,7 @@ def get_messages(
 async def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -357,7 +359,7 @@ async def create_voice_message_stream(
 async def transcribe_voice_message(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
 ):
     # Check if files are empty
     if not files or len(files) == 0:
@@ -449,7 +451,10 @@ async def transcribe_voice_message(
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
+):
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -502,7 +507,10 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
+):
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -597,7 +605,9 @@ def clear_chat_messages(
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)

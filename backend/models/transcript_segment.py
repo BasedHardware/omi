@@ -6,6 +6,17 @@ from pydantic import BaseModel, Field
 
 from models.other import Person
 
+# Unicode sentence-ending punctuation used across supported locales.
+# Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
+SENTENCE_ENDERS = frozenset('.?!。！？؟۔।॥')
+
+# Pre-compiled regex character class built from SENTENCE_ENDERS for use in re.split/re.findall.
+SENTENCE_ENDERS_CLASS = '[' + re.escape(''.join(SENTENCE_ENDERS)) + ']'
+SENTENCE_SPLIT_RE = re.compile(r'(?<=' + SENTENCE_ENDERS_CLASS + r')\s*')
+SENTENCE_FINDALL_RE = re.compile(
+    r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
+)
+
 
 class Translation(BaseModel):
     lang: str
@@ -80,13 +91,11 @@ class TranscriptSegment(BaseModel):
             text = text.strip()
             if not text:
                 return None, ""
-            # Use lookbehind to split after sentence-ending punctuation
-            parts = [p for p in re.split(r'(?<=[.?!])\s*', text) if p]
+            parts = [p for p in SENTENCE_SPLIT_RE.split(text) if p]
             if not parts:
                 return None, text
             last = parts[-1]
-            # Check if the last part is incomplete (doesn't end with punctuation)
-            if last[-1] not in ".?!":
+            if last[-1] not in SENTENCE_ENDERS:
                 prefix = " ".join(parts[:-1]).strip() if len(parts) > 1 else ""
                 return last, prefix
             return None, text
@@ -95,16 +104,22 @@ class TranscriptSegment(BaseModel):
             text = text.strip()
             if not text:
                 return "", ""
-            parts = [p for p in re.split(r'(?<=[.?!])\s*', text) if p]
+            parts = [p for p in SENTENCE_SPLIT_RE.split(text) if p]
             if not parts:
                 return "", ""
             first = parts[0]
             rest = " ".join(parts[1:]).strip()
             return first, rest
 
+        def _starts_with_lowercase_cased(text: str) -> bool:
+            for ch in text.strip():
+                if ch.isalpha():
+                    return ch.islower()
+            return False
+
         def _is_sentence_complete(text: str) -> bool:
             text = text.strip()
-            return bool(text) and text[-1] in ".?!" and text[0].isupper()
+            return bool(text) and text[-1] in SENTENCE_ENDERS and not _starts_with_lowercase_cased(text)
 
         def _can_backward_merge_first_sentence(first_sentence: str, rest: str, last_incomplete: str) -> bool:
             if not rest:
@@ -125,7 +140,7 @@ class TranscriptSegment(BaseModel):
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.speech_profile_processed == b.speech_profile_processed
                 and (b.start - a.end < 3)
-                and (len(a.text) < 125 or a.text[-1] not in [".", "?", "!"])
+                and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
             )
 
         def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
@@ -133,8 +148,8 @@ class TranscriptSegment(BaseModel):
                 a.text
                 and b.text
                 and (a.speaker == b.speaker or (a.is_user and b.is_user))
-                and not a.text[-1] in [".", "?", "!"]
-                and b.text[0].islower()
+                and a.text[-1] not in SENTENCE_ENDERS
+                and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
             )
 
@@ -204,7 +219,7 @@ class TranscriptSegment(BaseModel):
 
         segments.extend(joined_similar_segments)
 
-        # Speechmatics specific issue with punctuation
+        # Normalize punctuation spacing
         for i, segment in enumerate(segments):
             segments[i].text = (
                 segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')

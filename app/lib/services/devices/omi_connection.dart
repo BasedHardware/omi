@@ -95,9 +95,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     try {
       final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
 
@@ -174,8 +172,10 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     Logger.debug('perform storage list called');
     try {
-      final storageValue =
-          await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
+      final storageValue = await transport.readCharacteristic(
+        storageDataStreamServiceUuid,
+        storageReadControlCharacteristicUuid,
+      );
 
       List<int> storageLengths = [];
       if (storageValue.isNotEmpty) {
@@ -201,13 +201,177 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  // --- New multi-file storage protocol (CMD_LIST_FILES 0x10, CMD_READ_FILE 0x11, CMD_DELETE_FILE 0x12) ---
+
+  @override
+  Future<StorageStatus?> performGetStorageFileStats() async {
+    try {
+      // Reuse existing performGetStorageList() which reads storageReadControlCharacteristicUuid
+      // and parses as array of LE uint32s.
+      // New firmware format: [0]=totalBytes, [1]=fileCount (was offset in old firmware)
+      final storageFiles = await performGetStorageList();
+      if (storageFiles.isEmpty) return null;
+
+      final totalBytes = storageFiles[0];
+      final fileCount = storageFiles.length >= 2 ? storageFiles[1] : 0;
+
+      // Distinguish new firmware from old: old firmware returns [totalBytes, offset]
+      // where offset is a byte position (large number). New firmware returns
+      // [totalBytes, fileCount] where fileCount is small (typically 0-100).
+      // A value > 1000 in field[1] is almost certainly an old-firmware byte offset.
+      if (fileCount > 1000) {
+        Logger.debug('OmiDeviceConnection: Looks like old firmware (field[1]=$fileCount too large for file count)');
+        return null;
+      }
+
+      final status = StorageStatus(
+        totalUsedBytes: totalBytes,
+        fileCount: fileCount,
+        freeBytes: 0,
+        statusFlags: 0,
+      );
+      Logger.debug('OmiDeviceConnection: $status');
+      return status;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading storage status: $e');
+      return null;
+    }
+  }
+
+  /// Send CMD_LIST_FILES (0x10) and wait for the file list notification response.
+  /// Response format: [count:1][ts1:4 BE][sz1:4 BE][ts2:4 BE][sz2:4 BE]...
+  /// Caller is responsible for sending STOP command beforehand and retries.
+  @override
+  Future<List<StorageFileInfo>> performListStorageFiles() async {
+    try {
+      final completer = Completer<List<StorageFileInfo>>();
+      StreamSubscription? sub;
+
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.isEmpty) return;
+
+        int count = value[0];
+        int expectedLen = 1 + count * 8;
+
+        // Empty file list
+        if (count == 0 && value.length == 1) {
+          completer.complete([]);
+          return;
+        }
+
+        // Validate this looks like a file list response (not a data packet or status byte)
+        if (value.length >= expectedLen && count > 0 && count <= 128) {
+          List<StorageFileInfo> files = [];
+          for (int i = 0; i < count; i++) {
+            int base = 1 + i * 8;
+            if (base + 8 > value.length) break;
+            int timestamp = (value[base] << 24) | (value[base + 1] << 16) | (value[base + 2] << 8) | value[base + 3];
+            int size = (value[base + 4] << 24) | (value[base + 5] << 16) | (value[base + 6] << 8) | value[base + 7];
+            files.add(StorageFileInfo(index: i, timestamp: timestamp, sizeBytes: size));
+          }
+          Logger.debug('OmiDeviceConnection: Listed ${files.length} storage files');
+          completer.complete(files);
+        }
+      });
+
+      // Send CMD_LIST_FILES
+      try {
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x10]);
+
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: listFiles timeout');
+            return <StorageFileInfo>[];
+          },
+        );
+        return result;
+      } finally {
+        await sub?.cancel();
+      }
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error listing storage files: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<bool> performDeleteStorageFile(int fileIndex) async {
+    try {
+      final completer = Completer<bool>();
+
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      StreamSubscription? subscription;
+      Timer? timeout;
+
+      subscription = stream.listen((value) {
+        if (completer.isCompleted) return;
+        timeout?.cancel();
+        // Single-byte result: 0 = success
+        final result = value.isNotEmpty ? value[0] : 0xFF;
+        Logger.debug('OmiDeviceConnection: deleteStorageFile result=$result');
+        completer.complete(result == 0);
+      });
+
+      timeout = Timer(const Duration(seconds: 5), () {
+        if (!completer.isCompleted) {
+          Logger.debug('OmiDeviceConnection: deleteStorageFile timeout');
+          completer.complete(false);
+        }
+      });
+
+      // Send CMD_DELETE_FILE command
+      try {
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+          0x12,
+          fileIndex & 0xFF,
+        ]);
+
+        final result = await completer.future;
+        return result;
+      } finally {
+        await subscription?.cancel();
+        timeout?.cancel();
+      }
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error deleting storage file: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performStopStorageSync() async {
+    try {
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x03]);
+      Logger.debug('OmiDeviceConnection: Sent STOP_SYNC command');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending stop command: $e');
+      return false;
+    }
+  }
+
+  // --- Legacy storage protocol ---
+
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
     try {
-      final stream =
-          transport.getCharacteristicStream(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid);
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
 
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onStorageBytesReceived(value);
@@ -228,8 +392,9 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<bool> performPlayToSpeakerHaptic(int level) async {
     try {
       Logger.debug('About to play to speaker haptic');
-      await transport
-          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [level & 0xFF]);
+      await transport.writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [
+        level & 0xFF,
+      ]);
       return true;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error playing haptic: $e');
@@ -245,15 +410,16 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('about to send $command');
       Logger.debug('about to send offset$offset');
 
-      var offsetBytes = [
-        (offset >> 24) & 0xFF,
-        (offset >> 16) & 0xFF,
-        (offset >> 8) & 0xFF,
-        offset & 0xFF,
-      ];
+      var offsetBytes = [(offset >> 24) & 0xFF, (offset >> 16) & 0xFF, (offset >> 8) & 0xFF, offset & 0xFF];
 
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
-          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        command & 0xFF,
+        numFile & 0xFF,
+        offsetBytes[0],
+        offsetBytes[1],
+        offsetBytes[2],
+        offsetBytes[3],
+      ]);
       return true;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error writing to storage: $e');
@@ -358,10 +524,12 @@ class OmiDeviceConnection extends DeviceConnection {
             if (imageBytes.isNotEmpty) {
               Logger.debug('Completed image bytes length: ${imageBytes.length}');
               try {
-                onImageReceived(OrientedImage(
-                  imageBytes: imageBytes,
-                  orientation: currentOrientation ?? ImageOrientation.orientation0,
-                ));
+                onImageReceived(
+                  OrientedImage(
+                    imageBytes: imageBytes,
+                    orientation: currentOrientation ?? ImageOrientation.orientation0,
+                  ),
+                );
               } catch (e) {
                 Logger.debug('Error processing image: $e');
               }
@@ -444,9 +612,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async {
     try {
       final stream = transport.getCharacteristicStream(accelDataStreamServiceUuid, accelDataStreamCharacteristicUuid);
 
@@ -484,8 +650,9 @@ class OmiDeviceConnection extends DeviceConnection {
             Logger.debug('Accelerometer z direction: ${accelerometerData[2]}');
             Logger.debug('Gyroscope z direction: ${accelerometerData[5]}\n');
             //simple threshold fall calcaultor
-            var fall_number =
-                sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
+            var fall_number = sqrt(
+              pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2),
+            );
             if (fall_number > 30.0) {
               await NotificationUtil.triggerFallNotification();
             }
@@ -503,8 +670,9 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<void> performSetLedDimRatio(int ratio) async {
     try {
-      await transport
-          .writeCharacteristic(settingsServiceUuid, settingsDimRatioCharacteristicUuid, [ratio.clamp(0, 100)]);
+      await transport.writeCharacteristic(settingsServiceUuid, settingsDimRatioCharacteristicUuid, [
+        ratio.clamp(0, 100),
+      ]);
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error setting LED dim ratio: $e');
     }
@@ -568,8 +736,10 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       // Read model number
       try {
-        final modelValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, modelNumberCharacteristicUuid);
+        final modelValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          modelNumberCharacteristicUuid,
+        );
         if (modelValue.isNotEmpty) {
           deviceInfo['modelNumber'] = String.fromCharCodes(modelValue);
         }
@@ -579,8 +749,10 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read firmware revision
       try {
-        final firmwareValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+        final firmwareValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          firmwareRevisionCharacteristicUuid,
+        );
         if (firmwareValue.isNotEmpty) {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
@@ -590,8 +762,10 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read hardware revision
       try {
-        final hardwareValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, hardwareRevisionCharacteristicUuid);
+        final hardwareValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          hardwareRevisionCharacteristicUuid,
+        );
         if (hardwareValue.isNotEmpty) {
           deviceInfo['hardwareRevision'] = String.fromCharCodes(hardwareValue);
         }
@@ -601,8 +775,10 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read manufacturer name
       try {
-        final manufacturerValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, manufacturerNameCharacteristicUuid);
+        final manufacturerValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          manufacturerNameCharacteristicUuid,
+        );
         if (manufacturerValue.isNotEmpty) {
           deviceInfo['manufacturerName'] = String.fromCharCodes(manufacturerValue);
         }

@@ -39,9 +39,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ActionItemFormSheet(
-        defaultDueDate: defaultDueDate,
-      ),
+      builder: (context) => ActionItemFormSheet(defaultDueDate: defaultDueDate),
     );
   }
 
@@ -84,10 +82,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
           child: Stack(
             children: [
               Row(
@@ -110,11 +105,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                         const SizedBox(height: 6),
                         Text(
                           context.l10n.dailyScoreDescription,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.5),
-                            height: 1.4,
-                          ),
+                          style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5), height: 1.4),
                         ),
                         const SizedBox(height: 14),
                         // "Add Goals" or "New Task" button
@@ -171,10 +162,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                           top: 0,
                           child: CustomPaint(
                             size: const Size(130, 75),
-                            painter: _SemicircleGaugePainter(
-                              score: score,
-                              color: statusColor,
-                            ),
+                            painter: _SemicircleGaugePainter(score: score, color: statusColor),
                           ),
                         ),
                         // Score text positioned inside the arc - aligned with arch start
@@ -182,12 +170,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                           top: 38,
                           child: Text(
                             _formatScore(score),
-                            style: TextStyle(
-                              fontSize: 44,
-                              fontWeight: FontWeight.w500,
-                              color: statusColor,
-                              height: 1,
-                            ),
+                            style: TextStyle(fontSize: 44, fontWeight: FontWeight.w500, color: statusColor, height: 1),
                           ),
                         ),
                       ],
@@ -208,11 +191,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                     },
                     child: Container(
                       padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.help_outline,
-                        size: 16,
-                        color: Colors.white.withOpacity(0.3),
-                      ),
+                      child: Icon(Icons.help_outline, size: 16, color: Colors.white.withOpacity(0.3)),
                     ),
                   ),
                 ),
@@ -260,18 +239,11 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
               ),
               Text(
                 context.l10n.dailyScoreBreakdown,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
               _buildDetailRow(context.l10n.todaysScore, _formatScore(score), _getStatusColor(score)),
@@ -295,20 +267,12 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                   children: [
                     Text(
                       context.l10n.howItWorks,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.8)),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       context.l10n.dailyScoreExplanation,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.5),
-                        height: 1.4,
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5), height: 1.4),
                     ),
                   ],
                 ),
@@ -318,13 +282,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    context.l10n.gotIt,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 15,
-                    ),
-                  ),
+                  child: Text(context.l10n.gotIt, style: const TextStyle(color: Colors.white70, fontSize: 15)),
                 ),
               ),
             ],
@@ -338,20 +296,10 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.white.withOpacity(0.5),
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5))),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-          ),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: valueColor),
         ),
       ],
     );

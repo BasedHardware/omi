@@ -84,21 +84,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-              ),
-            ),
+            Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
           ],
         ],
       ),
@@ -128,11 +118,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w400,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
             ),
           ),
           Container(
@@ -143,11 +129,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             ),
             child: Text(
               version,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -164,10 +146,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       children: [
         Container(
           width: double.infinity,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -191,11 +170,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       Center(
                         child: Text(
                           '$progress%',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
                     ],
@@ -204,11 +179,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 const SizedBox(height: 24),
                 Text(
                   statusText,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
               ],
             ),
@@ -226,20 +197,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const FaIcon(
-                  FontAwesomeIcons.triangleExclamation,
-                  color: Color(0xFFFFB800),
-                  size: 18,
-                ),
+                const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     context.l10n.firmwareUpdateWarning,
-                    style: TextStyle(
-                      color: Colors.orange.shade200,
-                      fontSize: 14,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: Colors.orange.shade200, fontSize: 14, height: 1.4),
                   ),
                 ),
               ],
@@ -255,10 +218,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -266,36 +226,19 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 Container(
                   width: 80,
                   height: 80,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A3D2E),
-                    borderRadius: BorderRadius.circular(40),
-                  ),
-                  child: const Center(
-                    child: FaIcon(
-                      FontAwesomeIcons.check,
-                      color: Color(0xFF4ADE80),
-                      size: 32,
-                    ),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1A3D2E), borderRadius: BorderRadius.circular(40)),
+                  child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Color(0xFF4ADE80), size: 32)),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   context.l10n.firmwareUpdated,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   context.l10n.restartDeviceToComplete(widget.device?.name ?? "Omi device"),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade400,
-                    height: 1.4,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade400, height: 1.4),
                 ),
               ],
             ),
@@ -312,18 +255,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-            ),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
             child: Center(
               child: Text(
                 context.l10n.done,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -345,29 +281,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Row(
               children: [
-                Text(
-                  context.l10n.yourDeviceIsUpToDate,
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                  ),
-                ),
+                Text(context.l10n.yourDeviceIsUpToDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                 const SizedBox(width: 8),
-                const FaIcon(
-                  FontAwesomeIcons.circleCheck,
-                  color: Color(0xFF4ADE80),
-                  size: 14,
-                ),
+                const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
               ],
             ),
           ),
         ],
         // Version cards
         Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Column(
             children: [
               _buildVersionItem(
@@ -394,43 +317,38 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           const SizedBox(height: 24),
           _buildSectionHeader(context.l10n.whatsNew),
           Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(20),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ...(List<String>.from(changelogData)).map((change) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              margin: const EdgeInsets.only(top: 6),
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade500,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
+                  ...(List<String>.from(changelogData)).map(
+                    (change) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade500,
+                              borderRadius: BorderRadius.circular(3),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                change,
-                                style: TextStyle(
-                                  color: Colors.grey.shade300,
-                                  fontSize: 15,
-                                  height: 1.4,
-                                ),
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              change,
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.4),
                             ),
-                          ],
-                        ),
-                      )),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -464,26 +382,15 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.download,
-                    color: Colors.black,
-                    size: 16,
-                  ),
+                  const FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
                   const SizedBox(width: 10),
                   Text(
                     otaUpdateSteps.isEmpty ? context.l10n.installUpdate : context.l10n.updateNow,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -501,26 +408,15 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(14),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FaIcon(
-                    FontAwesomeIcons.circleQuestion,
-                    color: Colors.grey.shade400,
-                    size: 16,
-                  ),
+                  FaIcon(FontAwesomeIcons.circleQuestion, color: Colors.grey.shade400, size: 16),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.updateGuide,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 15, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -537,10 +433,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       children: [
         _buildSectionHeader(context.l10n.checkingForUpdates, subtitle: context.l10n.pleaseWait),
         Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(48),
             child: Center(
@@ -555,13 +448,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(
-                    context.l10n.checkingFirmwareVersion,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                    ),
-                  ),
+                  Text(context.l10n.checkingFirmwareVersion, style: const TextStyle(color: Colors.white, fontSize: 15)),
                 ],
               ),
             ),
@@ -588,11 +475,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 ),
           title: Text(
             context.l10n.firmwareUpdate,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           centerTitle: true,
         ),
@@ -602,10 +485,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: isLoading
                 ? _buildLoadingSection()
                 : isDownloading || isInstalling
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : _buildUpdateSection(),
+                ? _buildProgressSection()
+                : isInstalled
+                ? _buildSuccessSection()
+                : _buildUpdateSection(),
           ),
         ),
       ),

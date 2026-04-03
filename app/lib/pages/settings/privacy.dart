@@ -11,10 +11,7 @@ class PrivacyInfoPage extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.l10n.privacyInformation),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -22,47 +19,42 @@ class PrivacyInfoPage extends StatelessWidget {
           children: [
             Text(
               context.l10n.yourPrivacyMattersToUs,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            Text(
-              context.l10n.privacyIntroText,
-              style: const TextStyle(fontSize: 16),
-            ),
+            Text(context.l10n.privacyIntroText, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 16),
-            Text(
-              context.l10n.whatWeTrack,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(context.l10n.whatWeTrack, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _buildBulletPoint(
-                'Onboarding Events: We track when you connect your device and complete the onboarding process.'),
+              'Onboarding Events: We track when you connect your device and complete the onboarding process.',
+            ),
             _buildBulletPoint(
-                'Settings Interactions: We track when you open and save settings, and when you enable or disable developer mode.'),
+              'Settings Interactions: We track when you open and save settings, and when you enable or disable developer mode.',
+            ),
             _buildBulletPoint('Apps Interactions: We track when you open apps, and when you enable or disable them.'),
             _buildBulletPoint('Device Status: We track when your device connects or disconnects.'),
             _buildBulletPoint('Language Changes: We track changes to your recording language.'),
             _buildBulletPoint('Navigation: We track clicks on different tabs in the bottom navigation.'),
             _buildBulletPoint(
-                'Transcript and Conversation Data: We track the length, word count, and number of speakers in your transcripts. For memories, we track their creation, editing, sharing, and deletion.'),
+              'Transcript and Conversation Data: We track the length, word count, and number of speakers in your transcripts. For memories, we track their creation, editing, sharing, and deletion.',
+            ),
             _buildBulletPoint('Feedback: We track feedback given to the Coach Advisor.'),
             _buildBulletPoint('Chat Interactions: We track messages sent and interactions with memories through chat.'),
             _buildBulletPoint(
-                'Speech Profile: We track the capture, start, onboarding, and completion of your speech profile.'),
+              'Speech Profile: We track the capture, start, onboarding, and completion of your speech profile.',
+            ),
             _buildBulletPoint(
-                'Show Discarded Conversations: We track when you toggle the option to show discarded conversations.'),
+              'Show Discarded Conversations: We track when you toggle the option to show discarded conversations.',
+            ),
             _buildBulletPoint('Manual Memories: We track when you add or create manual memories.'),
             _buildBulletPoint(
-                'User Properties: We track user properties such as occupation, usage location, and age range.'),
+              'User Properties: We track user properties such as occupation, usage location, and age range.',
+            ),
             _buildBulletPoint('Conversation Re-processing: We track when you re-process a conversation.'),
             _buildBulletPoint(
-                'Backups: We track when backups are enabled or disabled, and when a backups password is set.'),
+              'Backups: We track when backups are enabled or disabled, and when a backups password is set.',
+            ),
             _buildBulletPoint('Support: We track when you contact support.'),
             _buildBulletPoint('Privacy Page: We track when you open the privacy details page.'),
             _buildBulletPoint('Join Discord: We track when you click to join our Discord.'),
@@ -74,49 +66,28 @@ class PrivacyInfoPage extends StatelessWidget {
             _buildBulletPoint('Advanced Mode: We track interactions with the advanced mode documentation.'),
             _buildBulletPoint('Use Without Device: We track interactions with the use without device onboarding.'),
             const SizedBox(height: 16),
-            Text(
-              context.l10n.anonymityAndPrivacy,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(context.l10n.anonymityAndPrivacy, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _buildBulletPoint(
-                'Anonymous Tracking: All tracking is 100% anonymous. We do not collect or store any personal information like your email address.'),
-            _buildBulletPoint(
-                'Randomly Generated IDs: Each user is assigned a randomly generated ID, ensuring that nothing can be personally associated with you.'),
-            _buildBulletPoint(
-                'No Selling of Data: We do not sell or share your data with any third parties. The data we collect is solely used to understand how you use the app and to make improvements.'),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.optInAndOptOutOptions,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              'Anonymous Tracking: All tracking is 100% anonymous. We do not collect or store any personal information like your email address.',
             ),
+            _buildBulletPoint(
+              'Randomly Generated IDs: Each user is assigned a randomly generated ID, ensuring that nothing can be personally associated with you.',
+            ),
+            _buildBulletPoint(
+              'No Selling of Data: We do not sell or share your data with any third parties. The data we collect is solely used to understand how you use the app and to make improvements.',
+            ),
+            const SizedBox(height: 16),
+            Text(context.l10n.optInAndOptOutOptions, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _buildBulletPoint('Opt-In: You can choose to opt in to tracking to help us enhance your experience.'),
             _buildBulletPoint('Opt-Out: You can opt out of tracking at any time, and we will reset all your data.'),
             const SizedBox(height: 16),
-            Text(
-              context.l10n.ourCommitment,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(context.l10n.ourCommitment, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(
-              context.l10n.commitmentText,
-              style: const TextStyle(fontSize: 16),
-            ),
+            Text(context.l10n.commitmentText, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 16),
-            Text(
-              context.l10n.thankYouText,
-              style: const TextStyle(fontSize: 16),
-            ),
+            Text(context.l10n.thankYouText, style: const TextStyle(fontSize: 16)),
           ],
         ),
       ),
@@ -130,12 +101,7 @@ class PrivacyInfoPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('• ', style: TextStyle(fontSize: 16)),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 16))),
         ],
       ),
     );

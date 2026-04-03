@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, HTMLResponse
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
@@ -186,6 +186,84 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     return desktop_releases
 
 
+def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "") -> str:
+    """Generate an HTML landing page that auto-triggers DMG download."""
+    channel_label = "Beta " if channel == "beta" else ""
+    version_display = f"v{version}" if version else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Download Omi {channel_label}for macOS</title>
+    <meta http-equiv="refresh" content="2;url={dmg_url}">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #0a0a0a; color: #fff; display: flex; align-items: center;
+               justify-content: center; min-height: 100vh; text-align: center; }}
+        .container {{ max-width: 960px; padding: 40px 24px; }}
+        h1 {{ font-size: 28px; font-weight: 600; margin-bottom: 12px; }}
+        .version {{ color: #555; font-size: 14px; margin-bottom: 24px; }}
+        .subtitle {{ color: #888; font-size: 16px; margin-bottom: 32px; }}
+        .status {{ width: 40px; height: 40px; margin: 0 auto 24px; position: relative; }}
+        .spinner {{ width: 40px; height: 40px; border: 3px solid #333; border-top-color: #fff;
+                    border-radius: 50%; animation: spin 0.8s linear infinite; }}
+        .checkmark {{ display: none; font-size: 36px; color: #4ade80; }}
+        .done .spinner {{ display: none; }}
+        .done .checkmark {{ display: block; }}
+        .done .subtitle {{ color: #4ade80; }}
+        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+        .download-link {{ color: #6C8FFF; text-decoration: none; font-size: 15px; }}
+        .download-link:hover {{ text-decoration: underline; }}
+        .video-container {{ margin-top: 32px; border-radius: 12px; overflow: hidden;
+                            background: #151515; display: none; }}
+        .video-container video {{ width: 100%; display: block; }}
+        .video-label {{ color: #888; font-size: 13px; padding: 12px 16px; text-align: center; }}
+        .steps {{ color: #888; font-size: 13px; margin-top: 20px; line-height: 1.8; text-align: left;
+                  background: #151515; border-radius: 12px; padding: 20px 24px; }}
+        .steps b {{ color: #ccc; }}
+        .discord {{ margin-top: 24px; font-size: 14px; color: #888; }}
+        .discord a {{ color: #5865F2; text-decoration: none; }}
+        .discord a:hover {{ text-decoration: underline; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Downloading Omi {channel_label}for macOS</h1>
+        <p class="version">{version_display}</p>
+        <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
+        <div class="status" id="status-icon">
+            <div class="spinner"></div>
+            <div class="checkmark">&#10003;</div>
+        </div>
+        <p><a class="download-link" href="{dmg_url}">Click here if the download doesn&rsquo;t start</a></p>
+        <div class="video-container" id="demo-video">
+            <video autoplay muted loop playsinline>
+                <source src="https://storage.googleapis.com/omi_macos_updates/omi-demo.mp4" type="video/mp4">
+            </video>
+            <p class="video-label">See how Omi works</p>
+        </div>
+        <div class="steps">
+            <b>Installation steps:</b><br>
+            1. Open the downloaded .dmg file<br>
+            2. Drag Omi to your Applications folder<br>
+            3. Launch Omi from Applications
+        </div>
+        <p class="discord">Need help? Join our <a href="https://discord.com/invite/8MP3b9ymvx">Discord community</a></p>
+    </div>
+    <script>
+        setTimeout(function() {{
+            window.location.href = "{dmg_url}";
+            document.getElementById("status-icon").classList.add("done");
+            document.getElementById("status-text").textContent = "Download started!";
+            document.getElementById("demo-video").style.display = "block";
+        }}, 2000);
+    </script>
+</body>
+</html>"""
+
+
 def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
     """Format changelog as HTML for Sparkle appcast"""
     if not changes:
@@ -333,12 +411,23 @@ async def download_latest_desktop_release(
 ):
     """
     Redirect to the latest desktop release DMG installer.
-    Resolves from GitHub release assets filtered by channel.
+    Stable resolves from the latest stable-tagged release.
+    Beta always resolves from the newest desktop GitHub release, regardless of channel metadata.
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
+
+    if channel == "beta":
+        # Beta downloads should always expose the newest GitHub desktop build,
+        # even if the release-channel promotion metadata is stale.
+        for entry in desktop_releases:
+            dmg_url = _get_dmg_download_url(entry["release"])
+            if dmg_url:
+                version = entry["version_info"]["version"]
+                return HTMLResponse(content=_download_landing_html(dmg_url, channel="beta", version=version))
+        raise HTTPException(status_code=404, detail="No DMG installer found for latest beta release")
 
     # Find latest release matching the requested channel
     for entry in desktop_releases:
@@ -346,14 +435,16 @@ async def download_latest_desktop_release(
             continue
         dmg_url = _get_dmg_download_url(entry["release"])
         if dmg_url:
-            return RedirectResponse(url=dmg_url, status_code=302)
+            version = entry["version_info"]["version"]
+            return HTMLResponse(content=_download_landing_html(dmg_url, channel=channel, version=version))
 
     # Fallback: if no stable release, try beta (for fresh installs before first promotion)
     if channel == "stable":
         for entry in desktop_releases:
             dmg_url = _get_dmg_download_url(entry["release"])
             if dmg_url:
-                return RedirectResponse(url=dmg_url, status_code=302)
+                version = entry["version_info"]["version"]
+                return HTMLResponse(content=_download_landing_html(dmg_url, channel="stable", version=version))
 
     raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
 

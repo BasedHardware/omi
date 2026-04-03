@@ -1,13 +1,22 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
-export 'package:omi/backend/http/api/conversations.dart' show SyncLocalFilesResponse, syncLocalFiles;
+export 'package:omi/backend/http/api/conversations.dart' show syncLocalFiles, syncLocalFilesV2, SyncJobPollCallback;
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase});
+  void onWalSyncedProgress(
+    double percentage, {
+    double? speedKBps,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
+  });
 }
 
 /// Listener for WiFi connection progress
@@ -57,20 +66,27 @@ abstract class IWalService {
   dynamic getSyncs();
 }
 
-enum WalServiceStatus {
-  init,
-  ready,
-  stop,
-}
+enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
   Future<void> addExternalWal(Wal wal);
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
-  void onByteStream(List<int> value);
-  void onBytesSync(List<int> value);
+  Future<void> deleteAllPendingWals();
+
+  /// Ingest a pre-processed audio frame from an AudioSource.
+  /// The frame contains headerless payload and a source-specific sync key.
+  void onFrameCaptured(WalFrame frame);
+
+  /// Mark a frame as synced (sent to server via WebSocket).
+  /// Matches frames by sync key (source-agnostic).
+  void markFrameSynced(FrameSyncKey key);
+
+  /// Notify WAL that the audio codec has changed (resets frame state).
   Future onAudioCodecChanged(BleAudioCodec codec);
+
+  /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
 }
 
@@ -78,6 +94,7 @@ abstract class SDCardWalSync implements IWalSync {
   void setLocalSync(LocalWalSync localSync);
   void setDevice(BtDevice? device);
   Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
   bool get isSyncing;
   double get currentSpeedKBps;
 
@@ -92,9 +109,20 @@ abstract class SDCardWalSync implements IWalSync {
   });
 }
 
+abstract class StorageSync implements IWalSync {
+  void setLocalSync(LocalWalSync localSync);
+  void setDevice(BtDevice? device);
+  Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
+  bool get isSyncing;
+  double get currentSpeedKBps;
+  Future<bool> hasFilesToSync();
+}
+
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);
   Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
   bool get isSyncing;
 }

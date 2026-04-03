@@ -37,6 +37,7 @@ from dependencies import (
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
+from utils.other.endpoints import with_rate_limit
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
@@ -178,7 +179,7 @@ def get_memories(
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
 def create_memory(
     request: CreateMemoryRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
 ):
     """
     Create a new memory for the authenticated user.
@@ -228,7 +229,7 @@ def create_memory(
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories_batch")),
 ):
     """
     Create multiple memories in a batch.
@@ -306,6 +307,8 @@ def delete_memory(
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     memories_db.delete_memory(uid, memory_id)
     return {"success": True}
@@ -329,6 +332,8 @@ def update_memory(
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
@@ -534,8 +539,13 @@ def delete_action_item(
 
     - **action_item_id**: The ID of the action item to delete
     """
-    if not action_items_db.delete_action_item(uid, action_item_id):
+    action_item = action_items_db.get_action_item(uid, action_item_id)
+    if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
+    if action_item.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
+
+    action_items_db.delete_action_item(uid, action_item_id)
     return {"success": True}
 
 
@@ -557,6 +567,8 @@ def update_action_item(
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
+    if action_item.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     # Build update data from non-None fields
     update_data = {}
@@ -775,7 +787,7 @@ def get_conversations(
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from text for the authenticated user.
@@ -882,7 +894,7 @@ def get_conversation_endpoint(
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -1028,6 +1040,8 @@ def delete_conversation_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     conversations_db.delete_conversation(uid, conversation_id)
     return {"success": True}
@@ -1049,6 +1063,8 @@ def update_conversation_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     if request.title is None and request.discarded is None:
         raise HTTPException(status_code=422, detail="At least one field (title or discarded) must be provided")

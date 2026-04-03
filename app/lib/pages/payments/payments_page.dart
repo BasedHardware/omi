@@ -41,26 +41,16 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Color(0xFF35343B),
-          width: 1,
-        ),
+        border: Border.all(color: Color(0xFF35343B), width: 1),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.info_outline,
-            color: Colors.white70,
-            size: 24,
-          ),
+          const Icon(Icons.info_outline, color: Colors.white70, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               context.l10n.connectPaymentMethodInfo,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
         ],
@@ -70,68 +60,62 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PaymentMethodProvider>(builder: (context, provider, child) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: Text(context.l10n.payments, style: const TextStyle(color: Colors.white)),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+    return Consumer<PaymentMethodProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            title: Text(context.l10n.payments, style: const TextStyle(color: Colors.white)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-        ),
-        body: Skeletonizer(
-          enabled: provider.isLoading,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.selectedPaymentMethod,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
+          body: Skeletonizer(
+            enabled: provider.isLoading,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.selectedPaymentMethod,
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Consumer<PaymentMethodProvider>(
-                    builder: (context, provider, child) {
-                      final activeMethod = provider.activeMethod;
-                      final hasActiveMethod = activeMethod != null;
+                    const SizedBox(height: 18),
+                    Consumer<PaymentMethodProvider>(
+                      builder: (context, provider, child) {
+                        final activeMethod = provider.activeMethod;
+                        final hasActiveMethod = activeMethod != null;
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                          if (hasActiveMethod) ...[
-                            _buildActiveMethodCard(activeMethod, provider),
-                            const SizedBox(height: 24)
-                          ],
-                          Text(
-                            context.l10n.availablePaymentMethods,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w500,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
+                            if (hasActiveMethod) ...[
+                              _buildActiveMethodCard(activeMethod, provider),
+                              const SizedBox(height: 24),
+                            ],
+                            Text(
+                              context.l10n.availablePaymentMethods,
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          ..._buildOtherMethodCards(provider, activeMethod),
-                        ],
-                      );
-                    },
-                  ),
-                ],
+                            const SizedBox(height: 16),
+                            ..._buildOtherMethodCards(provider, activeMethod),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   Widget _buildActiveMethodCard(PaymentMethodType method, PaymentMethodProvider provider) {
@@ -187,7 +171,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             isConnected: true,
             isActive: false,
           ),
-          true
+          true,
         ),
       if (provider.isPayPalConnected && activeMethod != PaymentMethodType.paypal)
         (
@@ -205,7 +189,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             isConnected: true,
             isActive: false,
           ),
-          false
+          false,
         ),
       if (!provider.isStripeConnected)
         (
@@ -218,7 +202,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             },
             isConnected: false,
           ),
-          true
+          true,
         ),
       if (!provider.isPayPalConnected)
         (
@@ -231,7 +215,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             },
             isConnected: false,
           ),
-          false
+          false,
         ),
     ];
 

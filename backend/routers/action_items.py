@@ -7,6 +7,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
+import database.conversations as conversations_db
 import database.redis_db as redis_db
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
@@ -66,7 +67,7 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Action item not found")
 
     if action_item.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this action item.")
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     return action_item
 
@@ -310,6 +311,11 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 @router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
     response_items = [ActionItemResponse(**item) for item in action_items]
 

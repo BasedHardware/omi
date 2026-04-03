@@ -20,7 +20,7 @@ use crate::models::{
     NotificationSettings, PersonaDB, Structured, TranscriptSegment, TranscriptionPreferences,
     AIUserProfile, UserProfile,
     AssistantSettingsData, SharedAssistantSettingsData, FocusSettingsData, TaskSettingsData,
-    AdviceSettingsData, MemorySettingsData,
+    AdviceSettingsData, MemorySettingsData, FloatingBarSettingsData,
 };
 
 /// Service account credentials from JSON file
@@ -1072,8 +1072,8 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                tracing::error!("Firestore query error: {}", error_text);
-                break;
+                tracing::error!("Firestore query error for memories: {}", error_text);
+                return Err(format!("Firestore query error: {}", error_text).into());
             }
 
             let results: Vec<Value> = response.json().await?;
@@ -1997,8 +1997,8 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                tracing::error!("Firestore query error: {}", error_text);
-                break;
+                tracing::error!("Firestore query error for action_items: {}", error_text);
+                return Err(format!("Firestore query error: {}", error_text).into());
             }
 
             let results: Vec<Value> = response.json().await?;
@@ -4025,7 +4025,7 @@ impl FirestoreService {
                     Ok(decrypted) => content = decrypted,
                     Err(e) => {
                         tracing::warn!("Failed to decrypt memory {}: {}", id, e);
-                        content = "[Encrypted content — decryption failed]".to_string();
+                        content = "[Protected memory — cannot decrypt with current key]".to_string();
                     }
                 }
             } else {
@@ -4033,7 +4033,7 @@ impl FirestoreService {
                     "Memory {} has enhanced protection but no encryption secret configured",
                     id
                 );
-                content = "[Encrypted content — decryption failed]".to_string();
+                content = "[Protected memory — ENCRYPTION_SECRET not configured]".to_string();
             }
         }
 
@@ -4907,6 +4907,12 @@ impl FirestoreService {
             excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
         });
 
+        let floating_bar = self.parse_sub_map(sf, "floating_bar").map(|f| FloatingBarSettingsData {
+            voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
+            elevenlabs_api_key: self.parse_string(f, "elevenlabs_api_key"),
+            elevenlabs_voice_id: self.parse_string(f, "elevenlabs_voice_id"),
+        });
+
         // Read top-level update_channel from user doc (not from assistant_settings sub-map)
         let update_channel = self.parse_string(fields, "update_channel");
 
@@ -4916,6 +4922,7 @@ impl FirestoreService {
             task,
             advice,
             memory,
+            floating_bar,
             update_channel,
         })
     }
@@ -5033,6 +5040,21 @@ impl FirestoreService {
             if let Some(v) = ea { m.insert("excluded_apps".into(), self.build_string_array_value(&v)); }
             if !m.is_empty() {
                 top_fields.insert("memory".into(), self.build_sub_map_value(m));
+            }
+        }
+
+        if data.floating_bar.is_some() || current.floating_bar.is_some() {
+            let cur = current.floating_bar.unwrap_or_default();
+            let new = data.floating_bar.clone().unwrap_or_default();
+            let mut m = serde_json::Map::new();
+            let vae = new.voice_answers_enabled.or(cur.voice_answers_enabled);
+            if let Some(v) = vae { m.insert("voice_answers_enabled".into(), json!({"booleanValue": v})); }
+            let api_key = new.elevenlabs_api_key.or(cur.elevenlabs_api_key);
+            if let Some(v) = api_key { m.insert("elevenlabs_api_key".into(), json!({"stringValue": v})); }
+            let voice_id = new.elevenlabs_voice_id.or(cur.elevenlabs_voice_id);
+            if let Some(v) = voice_id { m.insert("elevenlabs_voice_id".into(), json!({"stringValue": v})); }
+            if !m.is_empty() {
+                top_fields.insert("floating_bar".into(), self.build_sub_map_value(m));
             }
         }
 
@@ -7354,7 +7376,7 @@ impl FirestoreService {
                     Ok(decrypted) => text = decrypted,
                     Err(e) => {
                         tracing::warn!("Failed to decrypt message {}: {}", id, e);
-                        text = "[Encrypted message — decryption failed]".to_string();
+                        text = "[Protected message — cannot decrypt with current key]".to_string();
                     }
                 }
             } else {
@@ -7362,7 +7384,7 @@ impl FirestoreService {
                     "Message {} has enhanced protection but no encryption secret configured",
                     id
                 );
-                text = "[Encrypted message — decryption failed]".to_string();
+                text = "[Protected message — ENCRYPTION_SECRET not configured]".to_string();
             }
         }
 
@@ -7798,8 +7820,8 @@ impl FirestoreService {
         // Check existing active goals
         let existing_goals = self.get_user_goals(uid, 10).await?;
 
-        // If we have 3 or more active goals, deactivate the oldest one
-        if existing_goals.len() >= 3 {
+        // If we have 4 or more active goals, deactivate the oldest one
+        if existing_goals.len() >= 4 {
             if let Some(oldest) = existing_goals.last() {
                 tracing::info!("Deactivating oldest goal {} to make room for new goal", oldest.id);
                 self.update_goal(uid, &oldest.id, None, None, None, None, None, None, None, Some(false), None).await?;
@@ -7820,6 +7842,7 @@ impl FirestoreService {
         );
 
         let mut fields = json!({
+            "id": {"stringValue": &goal_id},
             "title": {"stringValue": title},
             "goal_type": {"stringValue": match goal_type {
                 GoalType::Boolean => "boolean",

@@ -24,7 +24,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteConversationTitle => 'Dzēst sarunu?';
 
   @override
-  String get deleteConversationMessage => 'Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.';
+  String get deleteConversationMessage =>
+      'Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus. Šo darbību nevar atsaukt.';
 
   @override
   String get confirm => 'Apstiprināt';
@@ -1729,7 +1730,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Vairs nerādīt';
+  String get dontShowAgain => 'Nerādīt vēlreiz';
 
   @override
   String get iUnderstand => 'Es saprotu';
@@ -1818,7 +1819,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get skipThisQuestion => 'Izlaist šo jautājumu';
 
   @override
-  String get skipForNow => 'Izlaist pagaidām';
+  String get skipForNow => 'Pagaidām izlaist';
 
   @override
   String get connectionError => 'Savienojuma kļūda';
@@ -2678,7 +2679,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
+      'Šodien nav uzdevumu.\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
   String get dailyScore => 'DIENAS REZULTĀTS';
@@ -3285,7 +3286,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get aboutYou => 'Par jums';
 
   @override
-  String get manual => 'Manuāls';
+  String get manual => 'Manuāli';
 
   @override
   String get loadingYourMemories => 'Ielādē jūsu atmiņas...';
@@ -8175,6 +8176,14 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Apstrāde serverī...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Apstrāde... $current/$total segmenti';
+  }
+
+  @override
   String get processedStatus => 'Apstrādāts';
 
   @override
@@ -8515,4 +8524,441 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Varbūt vēlāk';
+
+  @override
+  String get deleteSynced => 'Dzēst sinhronizētos';
+
+  @override
+  String get deleteSyncedFiles => 'Dzēst sinhronizētos ierakstus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie ieraksti jau ir sinhronizēti ar jūsu tālruni. To nevar atsaukt.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinhronizētie ieraksti dzēsti';
+
+  @override
+  String get deletePending => 'Dzēst gaidošos';
+
+  @override
+  String get deletePendingFiles => 'Dzēst gaidošos ierakstus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie ieraksti NAV sinhronizēti ar jūsu tālruni un tiks neatgriezeniski zaudēti. To nevar atsaukt.';
+
+  @override
+  String get pendingFilesDeleted => 'Gaidošie ieraksti dzēsti';
+
+  @override
+  String get deleteAllFiles => 'Dzēst visus ierakstus';
+
+  @override
+  String get deleteAll => 'Dzēst visu';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tas dzēsīs sinhronizētos un gaidošos ierakstus. Gaidošie ieraksti NAV sinhronizēti un tiks neatgriezeniski zaudēti.';
+
+  @override
+  String get allFilesDeleted => 'Visi ieraksti dzēsti';
+
+  @override
+  String nFiles(int count) {
+    return '$count ierakstu';
+  }
+
+  @override
+  String get manageStorage => 'Pārvaldīt krātuvi';
+
+  @override
+  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+
+  @override
+  String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
+
+  @override
+  String get clearAll => 'Notīrīt visu';
+
+  @override
+  String get phoneKeypad => 'Tastatūra';
+
+  @override
+  String get phoneHideKeypad => 'Paslēpt tastatūru';
+
+  @override
+  String get fairUsePolicy => 'Godīga lietošana';
+
+  @override
+  String get fairUseLoadError => 'Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get fairUseStatusNormal => 'Jūsu lietojums ir normas robežās.';
+
+  @override
+  String get fairUseStageNormal => 'Normāls';
+
+  @override
+  String get fairUseStageWarning => 'Brīdinājums';
+
+  @override
+  String get fairUseStageThrottle => 'Ierobežots';
+
+  @override
+  String get fairUseStageRestrict => 'Bloķēts';
+
+  @override
+  String get fairUseSpeechUsage => 'Runas lietojums';
+
+  @override
+  String get fairUseToday => 'Šodien';
+
+  @override
+  String get fairUse3Day => '3 dienu periods';
+
+  @override
+  String get fairUseWeekly => 'Nedēļas periods';
+
+  @override
+  String get fairUseAboutTitle => 'Par godīgu lietošanu';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef nokopēts';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Ierakstīšana, atkārtota savienošana';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Joprojām ieraksta — atkārtoti savienojas ar transkripciju...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Godprātīga izmantošana: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Uzlabot savienojumu';
+
+  @override
+  String get improveConnectionContent =>
+      'Mēs esam uzlabojuši veidu, kā Omi paliek savienots ar jūsu ierīci. Lai to aktivizētu, dodieties uz ierīces informācijas lapu, pieskarieties \"Atvienot ierīci\" un savienojiet ierīci pārī no jauna.';
+
+  @override
+  String get improveConnectionAction => 'Sapratu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jūsu ierīces pulkstenis atšķiras par ~$minutes min. Pārbaudiet datuma un laika iestatījumus.';
+  }
+
+  @override
+  String get omisStorage => 'Omi krātuve';
+
+  @override
+  String get phoneStorage => 'Tālruņa krātuve';
+
+  @override
+  String get cloudStorage => 'Mākoņkrātuve';
+
+  @override
+  String get howSyncingWorks => 'Kā darbojas sinhronizācija';
+
+  @override
+  String get noSyncedRecordings => 'Vēl nav sinhronizētu ierakstu';
+
+  @override
+  String get recordingsSyncAutomatically => 'Ieraksti tiek sinhronizēti automātiski — darbība nav nepieciešama.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Jau lejupielādētie faili tiks augšupielādēti nākamreiz.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarunas izveidotas',
+      one: '1 saruna izveidota',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Pieskarieties, lai skatītu';
+
+  @override
+  String get syncFailed => 'Sinhronizācija neizdevās';
+
+  @override
+  String get keepSyncing => 'Turpināt sinhronizāciju';
+
+  @override
+  String get cancelSyncQuestion => 'Atcelt sinhronizāciju?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kad jūsu Omi nav savienots ar tālruni, tas saglabā audio lokāli iebūvētajā atmiņā. Jūs nekad nezaudēsiet ierakstu.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kad Omi atkārtoti pieslēdzas, ieraksti automātiski tiek pārsūtīti uz jūsu tālruni pirms augšupielādes.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Pēc augšupielādes jūsu ieraksti tiek apstrādāti un transkribēti. Sarunas būs pieejamas minūtes laikā.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Turiet tālruni tuvumā ātrākai sinhronizācijai';
+
+  @override
+  String get tipStableInternet => 'Stabils internets paātrina mākoņa augšupielādi';
+
+  @override
+  String get tipAutoSync => 'Ieraksti tiek sinhronizēti automātiski';
+
+  @override
+  String get storageSection => 'KRĀTUVE';
+
+  @override
+  String get permissions => 'Atļaujas';
+
+  @override
+  String get permissionEnabled => 'Iespējota';
+
+  @override
+  String get permissionEnable => 'Iespējot';
+
+  @override
+  String get permissionsPageDescription =>
+      'Šīs atļaujas ir būtiskas Omi darbībai. Tās nodrošina galvenās funkcijas, piemēram, paziņojumus, uz atrašanās vietu balstītas pieredzes un audio ierakstīšanu.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi ir nepieciešamas dažas atļaujas, lai pareizi darbotos. Lūdzu, piešķiriet tās, lai turpinātu.';
+
+  @override
+  String get permissionsSetupTitle => 'Iegūstiet vislabāko pieredzi';
+
+  @override
+  String get permissionsSetupDescription => 'Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.';
+
+  @override
+  String get permissionsChangeAnytime => 'Jūs varat tos mainīt jebkurā laikā sadaļā Iestatījumi > Atļaujas';
+
+  @override
+  String get location => 'Atrašanās vieta';
+
+  @override
+  String get microphone => 'Mikrofons';
+
+  @override
+  String get whyAreYouCanceling => 'Kāpēc jūs atceļat?';
+
+  @override
+  String get cancelReasonSubtitle => 'Vai varat mums pastāstīt, kāpēc aizejat?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Pārāk dārgs';
+
+  @override
+  String get cancelReasonNotUsing => 'Neizmantoju pietiekami';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Trūkstošas funkcijas';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transkripcijas kvalitāte';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Bažas par baterijas iztukšošanos';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Atradu alternatīvu';
+
+  @override
+  String get cancelReasonOther => 'Cits';
+
+  @override
+  String get tellUsMore => 'Pastāstiet mums vairāk (neobligāti)';
+
+  @override
+  String get cancelReasonDetailHint => 'Mēs novērtējam jebkādu atsauksmi...';
+
+  @override
+  String get justAMoment => 'Vienu brīdi, lūdzu';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Mēs ļoti iesakām izpētīt citas iespējas, nevis atcelt.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs tiksiet pārcelts uz bezmaksas versiju ar ierobežotām funkcijām.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ja atcelsiet:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Norēķinu perioda beigās vairs nebūs neierobežotas piekļuves.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lielāks baterijas patēriņš (apstrāde ierīcē)';
+
+  @override
+  String get cancelConsequenceQuality => '30% zemāka transkripcijas kvalitāte (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekunžu apstrādes aizkave (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nevar identificēt runātājus.';
+
+  @override
+  String get confirmAndCancel => 'Apstiprināt un atcelt';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nav reāllaika telefona zvanu transkripcijas';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Kāda cena jums derētu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Kādu funkciju jums pietrūkst?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Kādas problēmas jūs pieredzējāt?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pastāstiet mums par baterijas problēmām';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Uz ko jūs pāriejat?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Kas liktu jums vairāk izmantot Omi?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Jūsu atsauksmes palīdz mums atrast pareizo līdzsvaru.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mēs vienmēr būvējam — tas palīdz mums noteikt prioritātes.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Mēs labprāt saprastu, kas nogāja greizi.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Tas palīdz mūsu aparatūras komandai uzlabot.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Mēs labprāt uzzinātu, kas piesaistīja jūsu uzmanību.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Mēs vēlamies padarīt Omi noderīgāku jums.';
+
+  @override
+  String get deviceDiagnostics => 'Ierīces diagnostika';
+
+  @override
+  String get signalStrength => 'Signāla stiprums';
+
+  @override
+  String get connectionUptime => 'Darbības laiks';
+
+  @override
+  String get reconnections => 'Atkārtoti savienojumi';
+
+  @override
+  String get disconnectHistory => 'Atvienošanas vēsture';
+
+  @override
+  String get noDisconnectsRecorded => 'Nav reģistrētu atvienošanu';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Gaida datus...';
+
+  @override
+  String get liveRssiOverTime => 'Reāllaika RSSI laika gaitā';
+
+  @override
+  String get noRssiDataYet => 'Vēl nav RSSI datu';
+
+  @override
+  String get collectingData => 'Datu vākšana...';
+
+  @override
+  String get cleanDisconnect => 'Tīra atvienošana';
+
+  @override
+  String get connectionTimeout => 'Savienojuma taimauts';
+
+  @override
+  String get remoteDeviceTerminated => 'Attālā ierīce pārtrauca savienojumu';
+
+  @override
+  String get pairedToAnotherPhone => 'Savienots pārī ar citu tālruni';
+
+  @override
+  String get linkKeyMismatch => 'Saites atslēgas neatbilstība';
+
+  @override
+  String get connectionFailed => 'Savienojums neizdevās';
+
+  @override
+  String get appClosed => 'Lietotne aizvērta';
+
+  @override
+  String get manualDisconnect => 'Manuāla atvienošana';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Pēdējie $count notikumi';
+  }
+
+  @override
+  String get signal => 'Signāls';
+
+  @override
+  String get battery => 'Akumulators';
+
+  @override
+  String get excellent => 'Izcili';
+
+  @override
+  String get good => 'Labi';
+
+  @override
+  String get fair => 'Apmierinošs';
+
+  @override
+  String get weak => 'Vājš';
+
+  @override
+  String gattError(String code) {
+    return 'GATT kļūda ($code)';
+  }
 }

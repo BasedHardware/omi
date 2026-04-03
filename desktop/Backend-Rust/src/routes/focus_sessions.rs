@@ -52,7 +52,7 @@ async fn get_focus_sessions(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetFocusSessionsQuery>,
-) -> Json<Vec<FocusSessionDB>> {
+) -> Result<Json<Vec<FocusSessionDB>>, (StatusCode, String)> {
     tracing::info!(
         "Getting focus sessions for user {} with limit={}, offset={}, date={:?}",
         user.uid,
@@ -66,10 +66,10 @@ async fn get_focus_sessions(
         .get_focus_sessions(&user.uid, query.limit, query.offset, query.date.as_deref())
         .await
     {
-        Ok(sessions) => Json(sessions),
+        Ok(sessions) => Ok(Json(sessions)),
         Err(e) => {
             tracing::error!("Failed to get focus sessions: {}", e);
-            Json(vec![])
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get focus sessions: {}", e)))
         }
     }
 }

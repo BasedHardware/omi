@@ -2,15 +2,21 @@ import Cocoa
 import Combine
 import SwiftUI
 
-/// NSWindow subclass for the floating control bar.
-class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
+/// NSPanel subclass for the floating control bar.
+///
+/// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
+/// without surfacing the main Omi window when the app is already running.
+class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 40, height: 10)
-    private static let minBarSize = NSSize(width: 40, height: 10)
+    private static let defaultSize = NSSize(width: 40, height: 14)
+    private static let minBarSize = NSSize(width: 40, height: 14)
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
+    private static let notificationWidth: CGFloat = 430
+    private static let notificationHeight: CGFloat = 108
+    private static let notificationSpacing: CGFloat = 8
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -54,7 +60,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         super.init(
             contentRect: initialRect,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: backingStoreType,
             defer: flag
         )
@@ -88,13 +94,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        // Esc closes the AI conversation only — never hides the entire bar
+        // Esc clears visible floating-bar history without closing the bar.
         if event.keyCode == 53 { // Escape
-            if state.showingAIConversation {
-                closeAIConversation()
+            if state.showingAIConversation && state.hasVisibleConversation {
+                clearVisibleConversationFromUI()
             }
             return
         }
@@ -108,7 +114,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onAskAI: { [weak self] in self?.handleAskAI() },
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
-            onCloseAI: { [weak self] in self?.closeAIConversation() }
+            onCloseAI: { [weak self] in self?.closeAIConversation() },
+            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -279,10 +286,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
-            state.currentAIMessage = nil
-            state.chatHistory = []
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
+            state.isAILoading = false
         }
         // Suppress hover resizes while the close animation plays, otherwise onHover
         // fires mid-animation, reads an intermediate frame, and causes position drift.
@@ -335,6 +341,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Allow hover resizes again after the animation settles.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.suppressHoverResize = false
+            FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
+
+            // If the user has the bar disabled, hide it completely after closing the
+            // AI conversation instead of leaving the compact pill visible.
+            if !FloatingControlBarManager.shared.isEnabled {
+                self?.orderOut(nil)
+            }
         }
     }
 
@@ -353,25 +366,44 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func showAIConversation() {
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+
+        let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
+        if !shouldRestoreVisibleConversation && state.hasVisibleConversation {
+            state.clearVisibleConversation()
+        }
+
         // Resize window BEFORE changing state so SwiftUI content doesn't render
         // in the old 28x28 frame (which causes a visible jump).
         // Save center so we can restore exact position when chat closes (avoids drift).
         preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
 
-        // Anchor from top so the control bar stays visually in place, input grows downward.
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        if shouldRestoreVisibleConversation {
+            cancelInputHeightObserver()
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                state.showingAIConversation = true
+                state.showingAIResponse = true
+                state.isAILoading = false
+                state.aiInputText = ""
+            }
+            resizeToResponseHeight(animated: true)
+        } else {
+            // Anchor from top so the control bar stays visually in place, input grows downward.
+            let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+            resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            state.showingAIConversation = true
-            state.showingAIResponse = false
-            state.isAILoading = false
-            state.aiInputText = ""
-            state.currentAIMessage = nil
-            // Match the explicit resize height so the observer doesn't immediately override it
-            state.inputViewHeight = 120
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                state.showingAIConversation = true
+                state.showingAIResponse = false
+                state.isAILoading = false
+                state.aiInputText = ""
+                state.currentAIMessage = nil
+                // Match the explicit resize height so the observer doesn't immediately override it
+                state.inputViewHeight = 120
+            }
+            setupInputHeightObserver()
         }
-        setupInputHeightObserver()
 
         // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
         // The text editor itself handles focusing via updateNSView once it's in the window.
@@ -386,6 +418,29 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             self?.focusInputField()
         }
 
+    }
+
+    func clearVisibleConversationFromUI() {
+        guard state.showingAIConversation else { return }
+
+        FloatingControlBarManager.shared.cancelChat()
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        cancelInputHeightObserver()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.88)) {
+            state.clearVisibleConversation()
+            state.showingAIConversation = true
+            state.inputViewHeight = 120
+        }
+
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        setupInputHeightObserver()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.focusInputField()
+        }
     }
 
     private func setupInputHeightObserver() {
@@ -507,7 +562,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -515,6 +570,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
+            guard !self.state.showingAIConversation,
+                  !self.state.isVoiceListening,
+                  !self.state.isShowingNotification,
+                  !self.suppressHoverResize
+            else { return }
             let newOrigin = NSPoint(
                 x: self.frame.midX - targetSize.width / 2,
                 y: self.frame.midY - targetSize.height / 2
@@ -547,6 +607,37 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
         resizeAnchored(to: size, makeResizable: false, animated: true)
+    }
+
+    func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
+        guard !state.showingAIConversation else { return }
+        state.currentNotification = notification
+        let barHeight = state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height
+        let targetSize = NSSize(
+            width: Self.notificationWidth,
+            height: barHeight + Self.notificationSpacing + Self.notificationHeight
+        )
+        resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
+    }
+
+    func dismissNotification(animated: Bool = true) {
+        guard state.currentNotification != nil else { return }
+        state.currentNotification = nil
+
+        let targetSize: NSSize
+        if state.isVoiceListening {
+            targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
+        } else {
+            targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
+        }
+        resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
+    }
+
+    /// Restore the compact pill size when we temporarily surface the bar outside
+    /// of an active hover, notification, voice session, or AI conversation.
+    func normalizeForTemporaryShow() {
+        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -671,6 +762,14 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             guard let self, self.resignKeyAnimationToken == token else { return }
             // Phase 2: collapse while invisible (no jarring resize flash).
             self.closeAIConversation()
+
+            // If the bar is disabled, keep it hidden instead of fading the pill back in.
+            if !FloatingControlBarManager.shared.isEnabled {
+                self.orderOut(nil)
+                self.alphaValue = 1
+                return
+            }
+
             // Phase 3: fade the collapsed pill back in (easeOut — decelerates into place).
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.2
@@ -720,6 +819,9 @@ class FloatingControlBarManager {
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var chatProvider: ChatProvider?
+    private var pendingNotifications: [FloatingBarNotification] = []
+    private var notificationDismissWorkItem: DispatchWorkItem?
+    private var notificationWasTemporarilyShown = false
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
@@ -838,13 +940,50 @@ class FloatingControlBarManager {
     func showTemporarily() {
         guard window != nil else { return }
         log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
+        window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func showNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
+        let notification = FloatingBarNotification(title: title, message: message, assistantId: assistantId)
+        guard let window else {
+            log("FloatingControlBarManager: dropping notification because window is not set up")
+            return
+        }
+
+        switch sound {
+        case .focusLost, .focusRegained:
+            sound.playCustomSound()
+        case .default, .none:
+            break
+        }
+
+        if window.state.currentNotification != nil || window.state.showingAIConversation {
+            pendingNotifications.append(notification)
+            return
+        }
+
+        presentNotification(notification, in: window)
+    }
+
+    func dismissCurrentNotification() {
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        dismissNotificationAndAdvanceQueue()
+    }
+
+    func flushQueuedNotificationsIfPossible() {
+        guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation,
+              !pendingNotifications.isEmpty else { return }
+        let nextNotification = pendingNotifications.removeFirst()
+        presentNotification(nextNotification, in: window)
     }
 
     /// Cancel any in-flight chat streaming.
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.stop()
     }
 
     /// Toggle visibility.
@@ -873,13 +1012,15 @@ class FloatingControlBarManager {
     func openAIInput() {
         guard let window = window else { return }
 
-        // Activate the app so the window can become key and accept keyboard input.
-        // Without this, makeFirstResponder silently fails when triggered from a global shortcut.
-        NSApp.activate(ignoringOtherApps: true)
+        // The bar is a non-activating panel, so it can become key for text input
+        // without surfacing the main Omi window.
 
         // If a conversation is already showing, just focus the follow-up input
         if window.state.showingAIConversation && window.state.showingAIResponse {
-            if !window.isVisible { show() }
+            if !window.isVisible {
+                // Show without persisting enabled state — bar hides again when conversation closes
+                window.makeKeyAndOrderFront(nil)
+            }
             window.makeKeyAndOrderFront(nil)
             window.focusInputField()
             return
@@ -887,7 +1028,9 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
         if !window.isVisible {
-            show()
+            // Show window without persisting enabled state — if the user has the bar
+            // disabled, it will hide again when the AI conversation closes.
+            window.makeKeyAndOrderFront(nil)
         }
         window.showAIConversation()
         window.orderFrontRegardless()
@@ -902,14 +1045,10 @@ class FloatingControlBarManager {
         chatCancellable = nil
         window.cancelInputHeightObserver()
 
-        // Reset state directly (no animation) to avoid contract-then-expand flicker
+        // Reset visible state directly (no animation) to avoid contract-then-expand flicker.
+        // Provider session context remains intact; only the floating-bar UI is reset.
         window.state.showingAIConversation = false
-        window.state.showingAIResponse = false
-        window.state.aiInputText = ""
-        window.state.currentAIMessage = nil
-        window.state.chatHistory = []
-        window.state.isVoiceFollowUp = false
-        window.state.voiceFollowUpTranscript = ""
+        window.state.clearVisibleConversation()
 
         guard let provider = self.chatProvider else { return }
 
@@ -922,7 +1061,9 @@ class FloatingControlBarManager {
         }
 
         if !window.isVisible {
-            show()
+            // Show window without persisting enabled state — if the user has the bar
+            // disabled, it will hide again when the AI conversation closes.
+            window.makeKeyAndOrderFront(nil)
         }
 
         // Cancel any in-flight windowDidResignKey dismiss animation before saving the
@@ -941,6 +1082,7 @@ class FloatingControlBarManager {
         window.state.isAILoading = true
         window.state.aiInputText = query
         window.state.displayedQuery = query
+        window.state.markConversationActivity()
         window.state.currentAIMessage = nil
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
@@ -971,10 +1113,59 @@ class FloatingControlBarManager {
 
         // Set up new query
         window.state.displayedQuery = query
+        window.state.markConversationActivity()
         window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
         window.onSendQuery?(query)
+    }
+
+    private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+        if !window.isVisible {
+            notificationWasTemporarilyShown = true
+            window.orderFrontRegardless()
+        } else {
+            notificationWasTemporarilyShown = false
+        }
+
+        window.showNotification(notification)
+        AnalyticsManager.shared.notificationSent(
+            notificationId: notification.id.uuidString,
+            title: notification.title,
+            assistantId: notification.assistantId
+        )
+
+        let dismissWorkItem = DispatchWorkItem { [weak self] in
+            self?.dismissNotificationAndAdvanceQueue()
+        }
+        notificationDismissWorkItem = dismissWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
+    }
+
+    private func dismissNotificationAndAdvanceQueue() {
+        guard let window else { return }
+
+        let dismissedNotification = window.state.currentNotification
+        window.dismissNotification()
+
+        if let dismissedNotification {
+            AnalyticsManager.shared.notificationDismissed(
+                notificationId: dismissedNotification.id.uuidString,
+                title: dismissedNotification.title,
+                assistantId: dismissedNotification.assistantId
+            )
+        }
+
+        if !pendingNotifications.isEmpty, !window.state.showingAIConversation {
+            let nextNotification = pendingNotifications.removeFirst()
+            presentNotification(nextNotification, in: window)
+            return
+        }
+
+        if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
+            window.orderOut(nil)
+        }
+        notificationWasTemporarilyShown = false
     }
 
     /// Access the bar state for PTT updates.
@@ -990,6 +1181,8 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        FloatingBarVoicePlaybackService.shared.stop()
+
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
         // and avoid promoting the main Omi window while capturing a clean screenshot.
         let previousAlpha = barWindow.alphaValue
@@ -1028,6 +1221,10 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
+                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                    aiMessage,
+                    isFinal: !aiMessage.isStreaming
+                )
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1045,7 +1242,15 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6"
+            : ShortcutSettings.shared.selectedModel
+        await provider.sendMessage(message, model: floatingModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+
+        // Cancel the messages subscription now that streaming is done.
+        // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
+        chatCancellable?.cancel()
+        chatCancellable = nil
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
@@ -1071,6 +1276,11 @@ class FloatingControlBarManager {
             }
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
+
+        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+            barWindow.state.currentAIMessage,
+            isFinal: true
+        )
     }
 }
 

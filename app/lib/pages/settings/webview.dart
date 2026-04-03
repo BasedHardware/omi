@@ -49,10 +49,7 @@ class _PageWebViewState extends State<PageWebView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-      ),
+      appBar: AppBar(title: Text(widget.title), backgroundColor: Theme.of(context).colorScheme.primary),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: progress != 100
           ? const Center(child: CircularProgressIndicator(color: Colors.white))

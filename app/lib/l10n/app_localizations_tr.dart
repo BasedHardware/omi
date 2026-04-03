@@ -24,7 +24,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteConversationTitle => 'Konuşma Silinsin mi?';
 
   @override
-  String get deleteConversationMessage => 'Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteConversationMessage =>
+      'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.';
 
   @override
   String get confirm => 'Onayla';
@@ -1731,7 +1732,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Bir daha gösterme';
+  String get dontShowAgain => 'Tekrar gösterme';
 
   @override
   String get iUnderstand => 'Anlıyorum';
@@ -1865,7 +1866,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get continueWithoutDevice => 'Cihaz Olmadan Devam Et';
 
   @override
-  String get permissionsRequired => 'İzinler Gerekli';
+  String get permissionsRequired => 'İzinler gerekli';
 
   @override
   String get permissionsRequiredDesc =>
@@ -2678,7 +2679,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get showAll => 'Hepsini göster →';
 
   @override
-  String get noTasksForToday => 'Bugün için görev yok.\\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
+  String get noTasksForToday => 'Bugün için görev yok.\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
 
   @override
   String get dailyScore => 'GÜNLÜK SKOR';
@@ -8170,6 +8171,14 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Sunucuda işleniyor...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'İşleniyor... $current/$total segment';
+  }
+
+  @override
   String get processedStatus => 'İşlendi';
 
   @override
@@ -8510,4 +8519,442 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Belki daha sonra';
+
+  @override
+  String get deleteSynced => 'Senkronize edilenleri sil';
+
+  @override
+  String get deleteSyncedFiles => 'Senkronize kayıtları sil';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Bu kayıtlar zaten telefonunuzla senkronize edildi. Bu geri alınamaz.';
+
+  @override
+  String get syncedFilesDeleted => 'Senkronize kayıtlar silindi';
+
+  @override
+  String get deletePending => 'Bekleyenleri sil';
+
+  @override
+  String get deletePendingFiles => 'Bekleyen kayıtları sil';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Bu kayıtlar telefonunuzla senkronize EDİLMEDİ ve kalıcı olarak kaybolacak. Bu geri alınamaz.';
+
+  @override
+  String get pendingFilesDeleted => 'Bekleyen kayıtlar silindi';
+
+  @override
+  String get deleteAllFiles => 'Tüm kayıtları sil';
+
+  @override
+  String get deleteAll => 'Tümünü sil';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Bu, senkronize ve bekleyen kayıtları silecek. Bekleyen kayıtlar senkronize EDİLMEDİ ve kalıcı olarak kaybolacak.';
+
+  @override
+  String get allFilesDeleted => 'Tüm kayıtlar silindi';
+
+  @override
+  String nFiles(int count) {
+    return '$count kayıt';
+  }
+
+  @override
+  String get manageStorage => 'Depolamayı yönet';
+
+  @override
+  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+
+  @override
+  String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
+
+  @override
+  String get clearAll => 'Tümünü temizle';
+
+  @override
+  String get phoneKeypad => 'Tuş takımı';
+
+  @override
+  String get phoneHideKeypad => 'Tuş takımını gizle';
+
+  @override
+  String get fairUsePolicy => 'Adil Kullanım';
+
+  @override
+  String get fairUseLoadError => 'Adil kullanım durumu yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get fairUseStatusNormal => 'Kullanımınız normal sınırlar içinde.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Uyarı';
+
+  @override
+  String get fairUseStageThrottle => 'Kısıtlı';
+
+  @override
+  String get fairUseStageRestrict => 'Engelli';
+
+  @override
+  String get fairUseSpeechUsage => 'Konuşma Kullanımı';
+
+  @override
+  String get fairUseToday => 'Bugün';
+
+  @override
+  String get fairUse3Day => '3 günlük süre';
+
+  @override
+  String get fairUseWeekly => 'Haftalık süre';
+
+  @override
+  String get fairUseAboutTitle => 'Adil Kullanım Hakkında';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopyalandı';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Günlük transkripsiyon';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}dk / ${limit}dk';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Günlük transkripsiyon limiti doldu';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Sıfırlanma $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Kaydediyor, yeniden bağlanıyor';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Adil Kullanım: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Bağlantıyı İyileştir';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi\'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.';
+
+  @override
+  String get improveConnectionAction => 'Anladım';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
+  }
+
+  @override
+  String get omisStorage => 'Omi\'nin Depolaması';
+
+  @override
+  String get phoneStorage => 'Telefon Depolaması';
+
+  @override
+  String get cloudStorage => 'Bulut Depolaması';
+
+  @override
+  String get howSyncingWorks => 'Senkronizasyon nasıl çalışır';
+
+  @override
+  String get noSyncedRecordings => 'Henüz senkronize kayıt yok';
+
+  @override
+  String get recordingsSyncAutomatically => 'Kayıtlar otomatik olarak senkronize edilir — herhangi bir işlem gerekmez.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Zaten indirilen dosyalar bir dahaki sefere yüklenecektir.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma oluşturuldu',
+      one: '1 konuşma oluşturuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Görüntülemek için dokunun';
+
+  @override
+  String get syncFailed => 'Senkronizasyon başarısız';
+
+  @override
+  String get keepSyncing => 'Senkronizasyona devam et';
+
+  @override
+  String get cancelSyncQuestion => 'Senkronizasyon iptal edilsin mi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Omi\'niz telefonunuza bağlı olmadığında, sesi yerleşik belleğinde yerel olarak saklar. Hiçbir kaydı kaybetmezsiniz.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Omi yeniden bağlandığında, kayıtlar yüklenmeden önce otomatik olarak telefonunuza aktarılır.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Yüklendikten sonra kayıtlarınız işlenir ve yazıya dökülür. Konuşmalar bir dakika içinde kullanılabilir olacaktır.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Daha hızlı senkronizasyon için telefonunuzu yakında tutun';
+
+  @override
+  String get tipStableInternet => 'Kararlı internet bulut yüklemelerini hızlandırır';
+
+  @override
+  String get tipAutoSync => 'Kayıtlar otomatik olarak senkronize edilir';
+
+  @override
+  String get storageSection => 'DEPOLAMA';
+
+  @override
+  String get permissions => 'İzinler';
+
+  @override
+  String get permissionEnabled => 'Etkin';
+
+  @override
+  String get permissionEnable => 'Etkinleştir';
+
+  @override
+  String get permissionsPageDescription =>
+      'Bu izinler Omi\'nin çalışması için temeldir. Bildirimler, konum tabanlı deneyimler ve ses yakalama gibi temel özellikleri etkinleştirirler.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi düzgün çalışmak için birkaç izne ihtiyaç duyar. Devam etmek için lütfen bunları verin.';
+
+  @override
+  String get permissionsSetupTitle => 'En iyi deneyimi yaşayın';
+
+  @override
+  String get permissionsSetupDescription => 'Omi büyüsünü gösterebilsin diye birkaç izni etkinleştirin.';
+
+  @override
+  String get permissionsChangeAnytime => 'Bunları istediğiniz zaman Ayarlar > İzinler bölümünden değiştirebilirsiniz';
+
+  @override
+  String get location => 'Konum';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Neden iptal ediyorsunuz?';
+
+  @override
+  String get cancelReasonSubtitle => 'Neden ayrıldığınızı bize söyleyebilir misiniz?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Çok pahalı';
+
+  @override
+  String get cancelReasonNotUsing => 'Yeterince kullanmıyorum';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Eksik özellikler';
+
+  @override
+  String get cancelReasonAudioQuality => 'Ses/transkripsiyon kalitesi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Pil tükenme endişeleri';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Bir alternatif buldum';
+
+  @override
+  String get cancelReasonOther => 'Diğer';
+
+  @override
+  String get tellUsMore => 'Daha fazla anlatın (isteğe bağlı)';
+
+  @override
+  String get cancelReasonDetailHint => 'Her türlü geri bildirimi takdir ediyoruz...';
+
+  @override
+  String get justAMoment => 'Bir dakika, lütfen';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'İptal etmek yerine diğer seçeneklerinizi keşfetmenizi şiddetle tavsiye ediyoruz.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planınız $date tarihine kadar aktif kalacaktır. Bundan sonra sınırlı özelliklerle ücretsiz sürüme geçirileceksiniz.';
+  }
+
+  @override
+  String get ifYouCancel => 'İptal ederseniz:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Fatura dönemi sonunda sınırsız erişim olmayacak.';
+
+  @override
+  String get cancelConsequenceBattery => '7 kat daha fazla pil tüketimi (cihazda işleme)';
+
+  @override
+  String get cancelConsequenceQuality => '%30 daha düşük transkripsiyon kalitesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 saniye işleme gecikmesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Konuşmacıları tanımlayamaz.';
+
+  @override
+  String get confirmAndCancel => 'Onayla ve iptal et';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Gerçek zamanlı telefon görüşmesi transkripsiyon yok';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Sizin için hangi fiyat uygun olurdu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Hangi özellikleri kaçırıyorsunuz?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ne tür sorunlar yaşadınız?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pil sorunlarını bize anlatın';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Neye geçiyorsunuz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omi\'yi daha fazla kullanmanızı ne sağlardı?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Geri bildiriminiz doğru dengeyi bulmamıza yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Her zaman inşa ediyoruz — bu önceliklendirmemize yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Neyin yanlış gittiğini anlamak isteriz.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Bu, donanım ekibimizin gelişmesine yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Dikkatinizi çeken şeyi öğrenmek isteriz.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omi\'yi sizin için daha yararlı hale getirmek istiyoruz.';
+
+  @override
+  String get deviceDiagnostics => 'Cihaz Tanılama';
+
+  @override
+  String get signalStrength => 'Sinyal Gücü';
+
+  @override
+  String get connectionUptime => 'Çalışma Süresi';
+
+  @override
+  String get reconnections => 'Yeniden Bağlantılar';
+
+  @override
+  String get disconnectHistory => 'Bağlantı Kesme Geçmişi';
+
+  @override
+  String get noDisconnectsRecorded => 'Bağlantı kesilmesi kaydedilmedi';
+
+  @override
+  String get diagnostics => 'Tanılama';
+
+  @override
+  String get waitingForData => 'Veri bekleniyor...';
+
+  @override
+  String get liveRssiOverTime => 'Zaman içinde canlı RSSI';
+
+  @override
+  String get noRssiDataYet => 'Henüz RSSI verisi yok';
+
+  @override
+  String get collectingData => 'Veri toplanıyor...';
+
+  @override
+  String get cleanDisconnect => 'Temiz bağlantı kesme';
+
+  @override
+  String get connectionTimeout => 'Bağlantı zaman aşımı';
+
+  @override
+  String get remoteDeviceTerminated => 'Uzak cihaz bağlantıyı sonlandırdı';
+
+  @override
+  String get pairedToAnotherPhone => 'Başka bir telefona eşleştirildi';
+
+  @override
+  String get linkKeyMismatch => 'Bağlantı anahtarı uyuşmazlığı';
+
+  @override
+  String get connectionFailed => 'Bağlantı başarısız';
+
+  @override
+  String get appClosed => 'Uygulama kapatıldı';
+
+  @override
+  String get manualDisconnect => 'Manuel bağlantı kesme';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Son $count olay';
+  }
+
+  @override
+  String get signal => 'Sinyal';
+
+  @override
+  String get battery => 'Pil';
+
+  @override
+  String get excellent => 'Mükemmel';
+
+  @override
+  String get good => 'İyi';
+
+  @override
+  String get fair => 'Orta';
+
+  @override
+  String get weak => 'Zayıf';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hatası ($code)';
+  }
 }

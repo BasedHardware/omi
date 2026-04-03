@@ -71,9 +71,13 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
         samples = person.get('speech_samples', [])
         if not samples:
+            if person.get('speaker_embedding'):
+                users_db.clear_person_speaker_embedding(uid, person_id)
+                logger.info(f"v1→v2 migration: cleared stale embedding for person with no samples {uid} {person_id}")
             users_db.update_person_speech_samples_version(uid, person_id, 2)
             person['speech_samples_version'] = 2
             person['speech_sample_transcripts'] = []
+            person['speaker_embedding'] = None
             return person
 
         valid_samples = []
@@ -184,9 +188,15 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
 
         samples = person.get('speech_samples', [])
         if not samples:
-            # No samples, just update version
+            # No samples to re-extract from — clear stale embedding from old model
+            # first, then bump version (order matters: avoids race where a concurrent
+            # sample add writes a valid embedding that we'd then delete)
+            if person.get('speaker_embedding'):
+                users_db.clear_person_speaker_embedding(uid, person_id)
+                logger.info(f"v2→v3 migration: cleared stale embedding for person with no samples {uid} {person_id}")
             users_db.update_person_speech_samples_version(uid, person_id, 3)
             person['speech_samples_version'] = 3
+            person['speaker_embedding'] = None
             return person
 
         # Regenerate embedding from the first (latest) sample using v2/embedding API

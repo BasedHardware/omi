@@ -10,10 +10,11 @@ pub struct Config {
     pub port: u16,
     /// Gemini API key for LLM calls
     pub gemini_api_key: Option<String>,
-    /// Google Application Credentials path for Firestore
-    pub google_application_credentials: Option<String>,
-    /// Firebase project ID
+    /// Firebase project ID (used for Firestore)
     pub firebase_project_id: Option<String>,
+    /// Firebase project ID for auth token validation (defaults to firebase_project_id)
+    /// Set this when OAuth tokens come from a different project than your Firestore
+    pub firebase_auth_project_id: Option<String>,
     /// Firebase Web API key (for identity toolkit)
     pub firebase_api_key: Option<String>,
     /// Base API URL (for OAuth callbacks)
@@ -58,12 +59,20 @@ pub struct Config {
     pub pinecone_api_key: Option<String>,
     /// Pinecone host URL (e.g. https://index-name-xxx.svc.environment.pinecone.io)
     pub pinecone_host: Option<String>,
-    /// GCE project ID for AgentVM provisioning (defaults to "based-hardware")
-    pub gce_project_id: String,
-    /// GCE source image for AgentVM (defaults to "projects/based-hardware/global/images/family/omi-agent")
-    pub gce_source_image: String,
-    /// GCS bucket for agent startup script (defaults to "based-hardware-agent")
-    pub agent_gcs_bucket: String,
+    /// GCE project ID for AgentVM provisioning (from GCE_PROJECT_ID, FIREBASE_PROJECT_ID, or GCP_PROJECT_ID)
+    pub gce_project_id: Option<String>,
+    /// GCE source image for AgentVM (from GCE_SOURCE_IMAGE or derived from gce_project_id)
+    pub gce_source_image: Option<String>,
+    /// GCS bucket for agent startup script (from AGENT_GCS_BUCKET)
+    pub agent_gcs_bucket: Option<String>,
+    /// Deepgram API key for transcription (served to desktop clients)
+    pub deepgram_api_key: Option<String>,
+    /// Anthropic API key for chat (served to desktop clients)
+    pub anthropic_api_key: Option<String>,
+    /// ElevenLabs API key for floating bar voice answers (served to desktop clients)
+    pub elevenlabs_api_key: Option<String>,
+    /// Google Calendar API key (served to desktop clients)
+    pub google_calendar_api_key: Option<String>,
 }
 
 impl Config {
@@ -73,11 +82,14 @@ impl Config {
             port: env::var("PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(8080),
+                .unwrap_or_else(|| {
+                    eprintln!("WARNING: PORT not set — defaulting to 10201. Set PORT in .env (avoid 8080 to prevent port conflicts).");
+                    10201
+                }),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
-            google_application_credentials: env::var("GOOGLE_APPLICATION_CREDENTIALS").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
+            firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
             firebase_api_key: env::var("FIREBASE_API_KEY").ok(),
             base_api_url: env::var("BASE_API_URL").ok(),
             apple_client_id: env::var("APPLE_CLIENT_ID").ok(),
@@ -106,31 +118,27 @@ impl Config {
             crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
             pinecone_api_key: env::var("PINECONE_API_KEY").ok(),
             pinecone_host: env::var("PINECONE_HOST").ok(),
-            gce_project_id: {
-                let p = env::var("GCE_PROJECT_ID")
+            gce_project_id: env::var("GCE_PROJECT_ID")
+                .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                .or_else(|_| env::var("GCP_PROJECT_ID"))
+                .ok(),
+            gce_source_image: env::var("GCE_SOURCE_IMAGE").ok().or_else(|| {
+                env::var("GCE_PROJECT_ID")
                     .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
                     .or_else(|_| env::var("GCP_PROJECT_ID"))
-                    .unwrap_or_else(|_| "based-hardware".to_string());
-                p
-            },
-            gce_source_image: {
-                let gce_proj = env::var("GCE_PROJECT_ID")
-                    .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
-                    .or_else(|_| env::var("GCP_PROJECT_ID"))
-                    .unwrap_or_else(|_| "based-hardware".to_string());
-                env::var("GCE_SOURCE_IMAGE")
-                    .unwrap_or_else(|_| format!("projects/{}/global/images/family/omi-agent", gce_proj))
-            },
-            agent_gcs_bucket: env::var("AGENT_GCS_BUCKET")
-                .unwrap_or_else(|_| "based-hardware-agent".to_string()),
+                    .ok()
+                    .map(|proj| format!("projects/{}/global/images/family/omi-agent", proj))
+            }),
+            agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
+            deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
+            anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
+            google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
         }
     }
 
     /// Validate that required configuration is present
     pub fn validate(&self) -> Result<(), String> {
-        if self.google_application_credentials.is_none() {
-            tracing::warn!("GOOGLE_APPLICATION_CREDENTIALS not set - Firestore will use default credentials");
-        }
         if self.gemini_api_key.is_none() {
             tracing::warn!("GEMINI_API_KEY not set - conversation processing will fail");
         }

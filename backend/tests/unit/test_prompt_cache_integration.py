@@ -94,6 +94,9 @@ clients_mod.llm_medium_stream = mock_llm
 clients_mod.llm_medium_experiment = mock_llm
 clients_mod.llm_agent = mock_llm
 clients_mod.llm_agent_stream = mock_llm
+clients_mod.anthropic_client = MagicMock()
+clients_mod.ANTHROPIC_AGENT_MODEL = "claude-sonnet-4-6-20250514"
+clients_mod.ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-opus-4-6-20250414"
 clients_mod.embeddings = MagicMock()
 clients_mod.encoding = MagicMock()
 clients_mod.num_tokens_from_string = MagicMock(return_value=100)
@@ -121,6 +124,7 @@ if not hasattr(obs_mod, "__path__"):
     obs_mod.__path__ = []
 langsmith_mod = _stub_module("utils.observability.langsmith")
 langsmith_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
+langsmith_mod.is_langsmith_enabled = MagicMock(return_value=False)
 langsmith_prompts_mod = _stub_module("utils.observability.langsmith_prompts")
 langsmith_prompts_mod.get_agentic_system_prompt_template = MagicMock(side_effect=Exception("not available"))
 langsmith_prompts_mod.render_prompt = MagicMock()
@@ -253,16 +257,35 @@ def _get_agentic_module():
         "search_files_tool",
         "manage_daily_summary_tool",
         "create_chart_tool",
+        "get_screen_activity_tool",
+        "search_screen_activity_tool",
+        "save_user_preference_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
-        mock_tool.name = name.replace("_tool", "")
+        mock_tool.name = name
+        # Add args_schema for _convert_tools to work
+        mock_schema = MagicMock()
+        mock_schema.schema.return_value = {"properties": {"query": {"type": "string"}}, "required": ["query"]}
+        mock_tool.args_schema = mock_schema
+        mock_tool.description = f"Mock tool: {name}"
         setattr(tools_pkg, name, mock_tool)
+
+    # Stub sub-modules
+    _stub_module("utils.retrieval.tools.preference_tools")
 
     # Stub app_tools
     app_tools_mod = _stub_module("utils.retrieval.tools.app_tools")
     app_tools_mod.load_app_tools = MagicMock(return_value=[])
     app_tools_mod.get_tool_status_message = MagicMock(return_value=None)
+
+    # Stub Anthropic client
+    anthropic_mod = _stub_module("anthropic")
+    anthropic_mod.AsyncAnthropic = MagicMock
+
+    # Stub langsmith traceable
+    langsmith_mod = _stub_module("langsmith")
+    langsmith_mod.traceable = lambda **kwargs: lambda func: func
 
     return _load_module_from_file("utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py")
 
@@ -470,10 +493,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_22_tools():
-    """CORE_TOOLS must contain exactly 22 tools."""
+def test_core_tools_has_25_tools():
+    """CORE_TOOLS must contain exactly 25 tools."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 22, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 22"
+    assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -496,9 +519,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 23
-    assert len(tools_b) == 22
-    assert len(agentic_mod.CORE_TOOLS) == 22, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 26
+    assert len(tools_b) == 25
+    assert len(agentic_mod.CORE_TOOLS) == 25, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -509,28 +532,31 @@ def test_core_tools_order_matches_exports():
     agentic_mod = _get_agentic_module()
 
     expected_names = [
-        "get_conversations",
-        "search_conversations",
-        "get_memories",
-        "search_memories",
-        "get_action_items",
-        "create_action_item",
-        "update_action_item",
-        "get_omi_product_info",
-        "perplexity_web_search",
-        "get_calendar_events",
-        "create_calendar_event",
-        "update_calendar_event",
-        "delete_calendar_event",
-        "get_gmail_messages",
-        "get_apple_health_steps",
-        "get_apple_health_sleep",
-        "get_apple_health_heart_rate",
-        "get_apple_health_workouts",
-        "get_apple_health_summary",
-        "search_files",
-        "manage_daily_summary",
-        "create_chart",
+        "get_conversations_tool",
+        "search_conversations_tool",
+        "get_memories_tool",
+        "search_memories_tool",
+        "get_action_items_tool",
+        "create_action_item_tool",
+        "update_action_item_tool",
+        "get_omi_product_info_tool",
+        "perplexity_web_search_tool",
+        "get_calendar_events_tool",
+        "create_calendar_event_tool",
+        "update_calendar_event_tool",
+        "delete_calendar_event_tool",
+        "get_gmail_messages_tool",
+        "get_apple_health_steps_tool",
+        "get_apple_health_sleep_tool",
+        "get_apple_health_heart_rate_tool",
+        "get_apple_health_workouts_tool",
+        "get_apple_health_summary_tool",
+        "search_files_tool",
+        "manage_daily_summary_tool",
+        "create_chart_tool",
+        "get_screen_activity_tool",
+        "search_screen_activity_tool",
+        "save_user_preference_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -583,15 +609,21 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
     source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
     source = source.replace("import tiktoken", "")
+    source = source.replace("import anthropic", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
     source = source.replace("from models.conversation import Structured", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
+
+    # Create a fake anthropic module with AsyncAnthropic
+    fake_anthropic = _stub_module("anthropic_fake")
+    fake_anthropic.AsyncAnthropic = MagicMock
 
     ns = {
         "os": os,
         "ChatOpenAI": FakeChatOpenAI,
         "OpenAIEmbeddings": FakeOpenAIEmbeddings,
         "tiktoken": fake_tiktoken,
+        "anthropic": fake_anthropic,
         "PydanticOutputParser": MagicMock(),
         "Structured": MagicMock(),
         "get_usage_callback": MagicMock(return_value=[]),
@@ -627,96 +659,71 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
 # ---------------------------------------------------------------------------
 
 
-def test_execute_agentic_chat_tool_order_via_create_react_agent():
+def test_convert_tools_produces_valid_anthropic_schemas():
     """
-    Call execute_agentic_chat and intercept create_react_agent to capture
-    the actual tools list passed at runtime. Verifies core tools come first
-    and app tools are appended after.
+    _convert_tools should produce valid Anthropic tool schemas from CORE_TOOLS,
+    filtering out the 'config' parameter and preserving tool order.
     """
     agentic_mod = _get_agentic_module()
 
-    # Set up mock app tools — patch on the agentic module directly since
-    # it already imported load_app_tools at module load time
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per tool"
+    assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all tools"
+
+    for schema in tool_schemas:
+        assert "name" in schema, "Schema must have a name"
+        assert "description" in schema, "Schema must have a description"
+        assert "input_schema" in schema, "Schema must have input_schema"
+        # Config parameter should be filtered out
+        props = schema["input_schema"].get("properties", {})
+        assert "config" not in props, f"Tool {schema['name']} should not expose 'config' parameter"
+        # Core tools should NOT have defer_loading
+        assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
+
+
+def test_convert_tools_defers_app_tools():
+    """
+    App tools should be marked with defer_loading=True and tool_search_tool
+    should be added when app tools are present.
+    """
+    agentic_mod = _get_agentic_module()
+
     mock_app_tool = MagicMock()
     mock_app_tool.name = "custom_weather_app"
-    agentic_mod.load_app_tools = MagicMock(return_value=[mock_app_tool])
+    mock_schema = MagicMock()
+    mock_schema.schema.return_value = {"properties": {"query": {"type": "string"}}, "required": ["query"]}
+    mock_app_tool.args_schema = mock_schema
+    mock_app_tool.description = "Mock app tool"
 
-    # Intercept create_react_agent to capture the tools argument
-    captured_tools = []
-    original_create = agentic_mod.create_react_agent
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    def fake_create_react_agent(**kwargs):
-        captured_tools.append(kwargs.get("tools", []))
-        # Return a mock agent that returns a valid result
-        mock_agent = MagicMock()
-        mock_result = {"messages": [MagicMock(content="test answer", tool_calls=[], additional_kwargs={})]}
-        mock_agent.invoke = MagicMock(return_value=mock_result)
-        return mock_agent
+    # Should have tool_search_tool + core tools + 1 app tool
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 2  # +1 search tool, +1 app tool
 
-    agentic_mod.create_react_agent = fake_create_react_agent
+    # First should be tool_search_tool
+    assert tool_schemas[0]["type"] == "tool_search_tool_regex_20251119"
 
-    # Patch _get_agentic_qa_prompt and tracer callbacks on the module
-    agentic_mod._get_agentic_qa_prompt = MagicMock(return_value="test system prompt")
-    agentic_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
+    # Last should be the deferred app tool
+    assert tool_schemas[-1]["name"] == "custom_weather_app"
+    assert tool_schemas[-1]["defer_loading"] is True
 
-    try:
-        # Create a minimal message
-        msg = MagicMock()
-        msg.sender = "human"
-        msg.text = "hello"
-
-        agentic_mod.execute_agentic_chat("test_uid", [msg])
-
-        assert len(captured_tools) == 1, "create_react_agent should have been called once"
-        tools = captured_tools[0]
-
-        # First 22 should be CORE_TOOLS
-        assert len(tools) == 23, f"Expected 22 core + 1 app = 23 tools, got {len(tools)}"
-        core_names = [t.name for t in tools[:22]]
-        expected_core = [t.name for t in agentic_mod.CORE_TOOLS]
-        assert core_names == expected_core, "Core tools order was disrupted in execute path"
-        assert tools[22].name == "custom_weather_app", "App tool should be appended at end"
-    finally:
-        agentic_mod.create_react_agent = original_create
+    # Registry should include all tools
+    assert "custom_weather_app" in tool_registry
 
 
-def test_execute_agentic_chat_no_app_tools_gives_core_only():
+def test_convert_tools_preserves_core_tool_order():
     """
-    Call execute_agentic_chat with no app tools and verify only CORE_TOOLS
-    are passed to create_react_agent.
+    Tool schemas should be in the same order as CORE_TOOLS to ensure
+    deterministic serialization for prompt caching.
     """
     agentic_mod = _get_agentic_module()
 
-    # No app tools — patch on the module directly
-    agentic_mod.load_app_tools = MagicMock(return_value=[])
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    captured_tools = []
-    original_create = agentic_mod.create_react_agent
-
-    def fake_create_react_agent(**kwargs):
-        captured_tools.append(kwargs.get("tools", []))
-        mock_agent = MagicMock()
-        mock_result = {"messages": [MagicMock(content="test", tool_calls=[], additional_kwargs={})]}
-        mock_agent.invoke = MagicMock(return_value=mock_result)
-        return mock_agent
-
-    agentic_mod.create_react_agent = fake_create_react_agent
-    agentic_mod._get_agentic_qa_prompt = MagicMock(return_value="test system prompt")
-    agentic_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
-
-    try:
-        msg = MagicMock()
-        msg.sender = "human"
-        msg.text = "hello"
-
-        agentic_mod.execute_agentic_chat("test_uid", [msg])
-
-        assert len(captured_tools) == 1
-        tools = captured_tools[0]
-        assert len(tools) == 22, f"Expected exactly 22 core tools, got {len(tools)}"
-        assert [t.name for t in tools] == [t.name for t in agentic_mod.CORE_TOOLS]
-    finally:
-        agentic_mod.create_react_agent = original_create
+    schema_names = [s["name"] for s in tool_schemas]
+    core_names = [t.name for t in agentic_mod.CORE_TOOLS]
+    assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 
 
 # ---------------------------------------------------------------------------

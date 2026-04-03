@@ -33,11 +33,7 @@ class FileUtils {
   static Future<File> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
     try {
       // Convert PCM to WAV bytes
-      final wavBytes = WavBytes.fromPcm(
-        pcmBytes,
-        sampleRate: sampleRate,
-        numChannels: channels,
-      ).asBytes();
+      final wavBytes = WavBytes.fromPcm(pcmBytes, sampleRate: sampleRate, numChannels: channels).asBytes();
 
       // Create a temporary file
       final tempDir = await getTemporaryDirectory();

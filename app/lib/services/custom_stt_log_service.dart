@@ -10,12 +10,7 @@ class CustomSttLogEntry {
   final String source;
   final String message;
 
-  CustomSttLogEntry({
-    required this.timestamp,
-    required this.level,
-    required this.source,
-    required this.message,
-  });
+  CustomSttLogEntry({required this.timestamp, required this.level, required this.source, required this.message});
 
   String get formattedTime {
     final h = timestamp.hour.toString().padLeft(2, '0');
@@ -40,23 +35,20 @@ class CustomSttLogService {
 
   bool get hasLogs => _logs.isNotEmpty;
 
-  String get logsAsText => logs.map((l) {
+  String get logsAsText => logs
+      .map((l) {
         final prefix = l.level == CustomSttLogLevel.error
             ? '[ERROR] '
             : l.level == CustomSttLogLevel.warning
-                ? '[WARN] '
-                : '';
+            ? '[WARN] '
+            : '';
         return '$prefix${l.formatted}';
-      }).join('\n');
+      })
+      .join('\n');
 
   void log(CustomSttLogLevel level, String source, String message) {
     Logger.debug("[$source] $message");
-    _logs.add(CustomSttLogEntry(
-      timestamp: DateTime.now(),
-      level: level,
-      source: source,
-      message: message,
-    ));
+    _logs.add(CustomSttLogEntry(timestamp: DateTime.now(), level: level, source: source, message: message));
 
     if (_logs.length > _maxLogs) {
       _logs.removeRange(0, _logs.length - _maxLogs);

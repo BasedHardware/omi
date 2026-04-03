@@ -96,7 +96,7 @@ async fn get_action_items(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetActionItemsQuery>,
-) -> Json<ActionItemsListResponse> {
+) -> Result<Json<ActionItemsListResponse>, (StatusCode, String)> {
     tracing::info!(
         "Getting action items for user {} with limit={}, offset={}, completed={:?}, conversation_id={:?}, sort_by={:?}, deleted={:?}",
         user.uid,
@@ -133,14 +133,11 @@ async fn get_action_items(
             if has_more {
                 items.truncate(query.limit);
             }
-            Json(ActionItemsListResponse { items, has_more })
+            Ok(Json(ActionItemsListResponse { items, has_more }))
         }
         Err(e) => {
             tracing::error!("Failed to get action items: {}", e);
-            Json(ActionItemsListResponse {
-                items: vec![],
-                has_more: false,
-            })
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get action items: {}", e)))
         }
     }
 }

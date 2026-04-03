@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -22,11 +22,7 @@ class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
 
-  const FoundDevices({
-    super.key,
-    required this.goNext,
-    required this.isFromOnboarding,
-  });
+  const FoundDevices({super.key, required this.goNext, required this.isFromOnboarding});
 
   @override
   State<FoundDevices> createState() => _FoundDevicesState();
@@ -38,7 +34,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from FoundDevices');
+        context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
   }
@@ -78,10 +74,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       Logger.debug('Error handling Apple Watch onboarding: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.errorConnectingAppleWatch(e.toString())),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(context.l10n.errorConnectingAppleWatch(e.toString())), backgroundColor: Colors.red),
       );
     }
   }
@@ -162,12 +155,16 @@ class _FoundDevicesState extends State<FoundDevices> {
       return; // No warning needed for this device type
     }
 
-    // Check if user has already acknowledged this device type
-    final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-    final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+    // Critical firmware warnings (e.g. unsupported encrypted firmware) always show,
+    // regardless of prior acknowledgment. Only skip for non-critical compatibility notes.
+    final isCritical = device.type == DeviceType.bee && device.isBeeFirmwareUnsupported;
 
-    if (alreadyAcknowledged) {
-      return; // User already acknowledged this warning
+    if (!isCritical) {
+      final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+      final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+      if (alreadyAcknowledged) {
+        return; // User already acknowledged this warning
+      }
     }
 
     bool dontShowAgain = false;
@@ -180,14 +177,17 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (dialogContext) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
-        checkboxText: context.l10n.dontShowAgain,
+        checkboxText: isCritical ? null : context.l10n.dontShowAgain,
         checkboxValue: dontShowAgain,
-        onCheckboxChanged: (value) {
-          dontShowAgain = value;
-        },
+        onCheckboxChanged: isCritical
+            ? null
+            : (value) {
+                dontShowAgain = value;
+              },
         confirmText: context.l10n.iUnderstand,
         onConfirm: () {
-          if (dontShowAgain) {
+          if (!isCritical && dontShowAgain) {
+            final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
             SharedPreferencesUtil().saveBool(prefKey, true);
           }
           Navigator.pop(dialogContext);
@@ -201,72 +201,55 @@ class _FoundDevicesState extends State<FoundDevices> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<OnboardingProvider>(builder: (context, provider, child) {
-      return MessageListener<OnboardingProvider>(
-        showError: (error) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(error),
-            backgroundColor: Colors.red,
-          ));
-        },
-        showInfo: (info) {
-          if (info == "DEVICE_CONNECTED") {
-            // Navigator.of(context).pushAndRemoveUntil(
-            //   MaterialPageRoute(
-            //     builder: (context) => const HomePageWrapper(),
-            //   ),
-            //   (route) => false,
-            // );
-            if (mounted) Navigator.pop(context);
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(info),
-              backgroundColor: Colors.green,
-            ));
-          }
-        },
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            !provider.isConnected
-                ? Text(
-                    provider.deviceList.isEmpty
-                        ? context.l10n.searchingForDevices
-                        : context.l10n.devicesFoundNearby(provider.deviceList.length),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                      color: Color(0x66FFFFFF),
+    return Consumer<OnboardingProvider>(
+      builder: (context, provider, child) {
+        return MessageListener<OnboardingProvider>(
+          showError: (error) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
+          },
+          showInfo: (info) {
+            if (info == "DEVICE_CONNECTED") {
+              // Navigator.of(context).pushAndRemoveUntil(
+              //   MaterialPageRoute(
+              //     builder: (context) => const HomePageWrapper(),
+              //   ),
+              //   (route) => false,
+              // );
+              if (mounted) Navigator.pop(context);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(info), backgroundColor: Colors.green));
+            }
+          },
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              !provider.isConnected
+                  ? Text(
+                      provider.deviceList.isEmpty
+                          ? context.l10n.searchingForDevices
+                          : context.l10n.devicesFoundNearby(provider.deviceList.length),
+                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14, color: Color(0x66FFFFFF)),
+                    )
+                  : Text(
+                      context.l10n.pairingSuccessful,
+                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12, color: Color(0x66FFFFFF)),
                     ),
-                  )
-                : Text(
-                    context.l10n.pairingSuccessful,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: Color(0x66FFFFFF),
-                    ),
-                  ),
-            if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
-            if (!provider.isConnected) ..._devicesList(provider),
-            if (provider.isConnected)
-              Text(
-                () {
-                  final sameNameCount = provider.deviceList.where((d) => d.name == provider.deviceName).length;
-                  return sameNameCount > 1
-                      ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
-                      : provider.deviceName;
-                }(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 18,
-                  color: Color(0xCCFFFFFF),
+              if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
+              if (!provider.isConnected) ..._devicesList(provider),
+              if (provider.isConnected)
+                Text(
+                  () {
+                    final sameNameCount = provider.deviceList.where((d) => d.name == provider.deviceName).length;
+                    return sameNameCount > 1
+                        ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
+                        : provider.deviceName;
+                  }(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Color(0xCCFFFFFF)),
                 ),
-              ),
-            if (provider.isConnected && provider.batteryPercentage > 0)
-              Padding(
+              if (provider.isConnected && provider.batteryPercentage > 0)
+                Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Text(
                     '🔋 ${provider.batteryPercentage}%',
@@ -280,106 +263,101 @@ class _FoundDevicesState extends State<FoundDevices> {
                               ? Colors.orange
                               : Colors.green,
                     ),
-                  ))
-          ],
-        ),
-      );
-    });
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   _devicesList(OnboardingProvider provider) {
-    return (provider.deviceList.mapIndexed(
-      (index, device) {
-        bool isConnecting = provider.connectingToDeviceId == device.id;
+    return (provider.deviceList.mapIndexed((index, device) {
+      bool isConnecting = provider.connectingToDeviceId == device.id;
 
-        return GestureDetector(
-          onTap: !provider.isClicked
-              ? () async {
-                  if (device.type == DeviceType.appleWatch) {
-                    await _handleAppleWatchOnboarding(device, provider);
-                  } else {
-                    // Handle other devices
-                    await provider.handleTap(
-                      device: device,
-                      isFromOnboarding: widget.isFromOnboarding,
-                      goNext: widget.goNext,
-                    );
+      return GestureDetector(
+        onTap: !provider.isClicked
+            ? () async {
+                if (device.type == DeviceType.appleWatch) {
+                  await _handleAppleWatchOnboarding(device, provider);
+                } else {
+                  // Handle other devices
+                  await provider.handleTap(
+                    device: device,
+                    isFromOnboarding: widget.isFromOnboarding,
+                    goNext: widget.goNext,
+                  );
 
-                    if (!mounted) return;
+                  if (!mounted) return;
 
-                    // Show firmware warning after successful connection
-                    if (provider.isConnected) {
-                      await _showFirmwareWarningIfNeeded(device);
-                    }
+                  // Show firmware warning after successful connection
+                  if (provider.isConnected) {
+                    final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
+                    await _showFirmwareWarningIfNeeded(connectedDevice);
                   }
                 }
-              : null,
-          child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
+              }
+            : null,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          child: Row(
+            children: [
+              // Device icon
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Image.asset(
+                  DeviceUtils.getDeviceImagePath(
+                    deviceType: device.type,
+                    modelNumber: device.modelNumber,
+                    deviceName: device.name,
+                  ),
+                  width: 32,
+                  height: 32,
+                ),
               ),
-              child: Row(
-                children: [
-                  // Device icon
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Image.asset(
-                      DeviceUtils.getDeviceImagePath(
-                        deviceType: device.type,
-                        modelNumber: device.modelNumber,
-                        deviceName: device.name,
+              // Device name and info
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          () {
+                            final sameNameCount = provider.deviceList.where((d) => d.name == device.name).length;
+                            return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
+                          }(),
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Colors.black),
+                        ),
                       ),
-                      width: 32,
-                      height: 32,
-                    ),
-                  ),
-                  // Device name and info
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Stack(
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              () {
-                                final sameNameCount = provider.deviceList.where((d) => d.name == device.name).length;
-                                return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
-                              }(),
-                              textAlign: TextAlign.left,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 18,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 16.0),
-                              child: isConnecting
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          )
-                        ],
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 16.0),
+                          child: isConnecting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              )),
-        );
-      },
-    ).toList());
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList());
   }
 }

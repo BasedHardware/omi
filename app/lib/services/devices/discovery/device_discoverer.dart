@@ -4,10 +4,7 @@ class DeviceDiscoveryResult {
   final List<BtDevice> devices;
   final Map<String, dynamic>? metadata;
 
-  const DeviceDiscoveryResult({
-    required this.devices,
-    this.metadata,
-  });
+  const DeviceDiscoveryResult({required this.devices, this.metadata});
 }
 
 abstract class DeviceDiscoverer {

@@ -147,7 +147,7 @@ class RewindSettingsWindow {
         // If window exists, just bring it to front
         if let existingWindow = window, existingWindow.isVisible {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
@@ -170,7 +170,7 @@ class RewindSettingsWindow {
         newWindow.isReleasedWhenClosed = false
         newWindow.makeKeyAndOrderFront(nil)
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
 
         self.window = newWindow
     }

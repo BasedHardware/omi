@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -37,17 +37,14 @@ class ActionItemNotificationHandler {
       // Use action item ID hash as notification ID
       final notificationId = actionItemId.hashCode;
 
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
           title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? 'Omi Reminder'}',
           body: description,
-          payload: {
-            'action_item_id': actionItemId,
-            'navigate_to': '/action-items',
-          },
+          payload: {'action_item_id': actionItemId, 'navigate_to': '/action-items'},
           notificationLayout: NotificationLayout.Default,
           wakeUpScreen: true,
           category: NotificationCategory.Reminder,
@@ -70,10 +67,7 @@ class ActionItemNotificationHandler {
   }
 
   /// Handle action item reminder data message
-  static Future<void> handleReminderMessage(
-    Map<String, dynamic> data,
-    String channelKey,
-  ) async {
+  static Future<void> handleReminderMessage(Map<String, dynamic> data, String channelKey) async {
     final actionItemId = data['action_item_id'];
     final description = data['description'];
     final dueAt = data['due_at'];
@@ -92,10 +86,7 @@ class ActionItemNotificationHandler {
   }
 
   /// Handle action item update data message
-  static Future<void> handleUpdateMessage(
-    Map<String, dynamic> data,
-    String channelKey,
-  ) async {
+  static Future<void> handleUpdateMessage(Map<String, dynamic> data, String channelKey) async {
     final actionItemId = data['action_item_id'];
     final description = data['description'];
     final dueAt = data['due_at'];

@@ -19,6 +19,7 @@ from models.conversation import CategoryEnum, Conversation, ActionItem, Event, C
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
+from utils.llm.usage_tracker import track_usage, Features
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,8 @@ You know the following about {user_name}: {memories_str}.
 As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
 """
     prompt = prompt.strip()
-    return llm_medium.invoke(prompt).content
+    with track_usage(uid, Features.CHAT):
+        return llm_medium.invoke(prompt).content
 
 
 # *********************************************
@@ -144,9 +146,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     {question}
     
     Is this asking about the Omi/Friend app product itself?
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -197,9 +197,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -212,8 +210,10 @@ class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
-def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None) -> str:
-    content = TranscriptSegment.segments_as_string(segments, people=people)
+def chunk_extraction(
+    segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None, user_name: str = None
+) -> str:
+    content = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
@@ -254,9 +254,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     {conversation_history}
 
     Answer:
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -287,9 +285,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -329,8 +325,7 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return (
-        f"""
+    return f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -389,12 +384,7 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace(
-            '    ', ''
-        )
-        .replace('\n\n\n', '\n\n')
-        .strip()
-    )
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
 def _get_agentic_qa_prompt(
@@ -544,6 +534,7 @@ Write like a real human texting - not an AI writing an essay.
 
 Length:
 - Default: 2-8 lines, conversational
+- Complex/detailed questions (plans, analyses, lists, step-by-step instructions): as long as needed — NEVER cut off or truncate, always finish the full answer
 - Reflections/planning: can be longer but NO SUMMARIES of what they said
 - Quick replies: 1-3 lines
 - **"I don't know" responses: 1-2 lines MAX** - just say you don't have it and stop
@@ -587,7 +578,7 @@ Examples:
 
 <quality_control>
 Before finalizing your response, perform these quality checks:
-- Review your response for accuracy and completeness - ensure you've fully answered the user's question
+- Review your response for accuracy and completeness - ensure you've **fully** answered the user's question — NEVER truncate or end mid-list/mid-explanation
 - Verify all formatting is correct and consistent throughout your response
 - Check that all citations are relevant and properly placed according to the citing rules
 - Ensure the tone matches the instructions (casual, friendly, concise)
@@ -739,6 +730,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way (e.g., "3:45 PM, Tuesday, Oct 16th").
 - If you don’t know, say so honestly.
 - Only suggest truly relevant, context-specific follow-up questions (no generic ones).
+- When you learn a new preference, habit, or personal detail about {user_name} during conversation, save it using save_user_preference_tool so you remember it next time. Don't ask — just save silently. Don't save things you already know from existing memories.
 {plugin_instruction_hint}
 - Follow <quality_control> rules.
 {plugin_personality_hint}
@@ -862,7 +854,8 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = memory.get_transcript(False, people=people)
+    user_name = get_user_name(uid, use_default=False)
+    transcript = memory.get_transcript(False, people=people, user_name=user_name)
     if len(transcript) == 0:
         return []
 
@@ -874,9 +867,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
 
     Conversation:
     {transcript}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
@@ -896,7 +887,7 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = memory.get_transcript(False, people=people)
+    transcript = memory.get_transcript(False, people=people, user_name=user_name)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}
@@ -918,10 +909,9 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     {context}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
-    return llm_mini.invoke(prompt).content
+    """.replace('    ', '').strip()
+    with track_usage(uid, Features.CHAT):
+        return llm_mini.invoke(prompt).content
 
 
 # **********************************************
@@ -1024,7 +1014,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </user_last_messages>
 
     <previous_messages>
-    {Message.get_messages_as_xml(messages)}
+    {Message.get_messages_as_xml(messages[:user_message_idx])}
     </previous_messages>
 
     <date_in_term>
@@ -1035,9 +1025,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1084,11 +1072,10 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        with track_usage(uid, Features.CONVERSATION_PROCESSING):
+            result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1169,9 +1156,7 @@ def retrieve_metadata_from_message(
     ```
     {message_text}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1205,9 +1190,7 @@ def retrieve_metadata_from_text(
     ```
     {text}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1280,9 +1263,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
@@ -1328,12 +1309,11 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
 
     Conversation:
     ```
-    {TranscriptSegment.segments_as_string(segments, people=people)}
+    {TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)}
     ```
-    '''.replace(
-        '    ', ''
-    ).strip()
-    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    '''.replace('    ', '').strip()
+    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
 class OutputMessage(BaseModel):
@@ -1349,7 +1329,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = TranscriptSegment.segments_as_string(segments, people=people)
+    transcript = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""
@@ -1381,7 +1361,6 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
-    return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+    """.replace('    ', '').strip()
+    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+        return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

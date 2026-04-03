@@ -33,7 +33,10 @@ serviceAccount:
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
@@ -102,11 +105,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
     value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
@@ -274,6 +272,11 @@ env:
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -291,26 +294,29 @@ resources:
 livenessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 readinessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 startupProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 60
   periodSeconds: 10
+  timeoutSeconds: 1
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
-  maxReplicas: 60
+  minReplicas: 20
+  maxReplicas: 40
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -318,18 +324,39 @@ autoscaling:
       - type: Percent
         value: 20
         periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 120
       policies:
       - type: Percent
-        value: 20
-        periodSeconds: 1
+        value: 30
+        periodSeconds: 60
       - type: Pods
-        value: 10
-        periodSeconds: 1
+        value: 5
+        periodSeconds: 60
       selectPolicy: Max
-  targetCPUUtilizationPercentage: 60
-  targetMemoryUtilizationPercentage: 60
+  # targetCPUUtilizationPercentage: 60
+  # targetMemoryUtilizationPercentage: 60
+  activeConnectionsPerPod: 22
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -361,3 +388,29 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: version
+              operator: In
+              values:
+                - v2
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-a
+      - weight: 70
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-b
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-c

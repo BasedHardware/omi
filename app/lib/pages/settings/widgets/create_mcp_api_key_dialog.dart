@@ -60,10 +60,7 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
         child: TextFormField(
           controller: _nameController,
           autofocus: true,
-          decoration: InputDecoration(
-            labelText: context.l10n.name,
-            hintText: context.l10n.keyNameHint,
-          ),
+          decoration: InputDecoration(labelText: context.l10n.name, hintText: context.l10n.keyNameHint),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
               return context.l10n.pleaseEnterAName;
@@ -73,10 +70,7 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
         ),
       ),
       actions: <Widget>[
-        TextButton(
-          onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-          child: Text(context.l10n.cancel),
-        ),
+        TextButton(onPressed: _isCreating ? null : () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
         ElevatedButton(
           onPressed: _isCreating ? null : _createKey,
           style: ElevatedButton.styleFrom(

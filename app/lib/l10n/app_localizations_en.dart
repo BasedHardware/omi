@@ -25,7 +25,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Are you sure you want to delete this conversation? This action cannot be undone.';
+      'This will also delete associated memories, tasks, and audio files. This action cannot be undone.';
 
   @override
   String get confirm => 'Confirm';
@@ -1724,7 +1724,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Don\'t show it again';
+  String get dontShowAgain => 'Don\'t show again';
 
   @override
   String get iUnderstand => 'I Understand';
@@ -2677,7 +2677,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showAll => 'Show All';
 
   @override
-  String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
+  String get noTasksForToday => 'No tasks for today.\nAsk Omi for more tasks or create manually.';
 
   @override
   String get dailyScore => 'DAILY SCORE';
@@ -8155,6 +8155,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Processing on server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Processing... $current/$total segments';
+  }
+
+  @override
   String get processedStatus => 'Processed';
 
   @override
@@ -8494,4 +8502,442 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Maybe later';
+
+  @override
+  String get deleteSynced => 'Delete Synced';
+
+  @override
+  String get deleteSyncedFiles => 'Delete Synced Recordings';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'These recordings have already been synced to your phone. This cannot be undone.';
+
+  @override
+  String get syncedFilesDeleted => 'Synced recordings deleted';
+
+  @override
+  String get deletePending => 'Delete Pending';
+
+  @override
+  String get deletePendingFiles => 'Delete Pending Recordings';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get pendingFilesDeleted => 'Pending recordings deleted';
+
+  @override
+  String get deleteAllFiles => 'Delete All Recordings';
+
+  @override
+  String get deleteAll => 'Delete All';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get allFilesDeleted => 'All recordings deleted';
+
+  @override
+  String nFiles(int count) {
+    return '$count recordings';
+  }
+
+  @override
+  String get manageStorage => 'Manage Storage';
+
+  @override
+  String get safelyBackedUp => 'Safely backed up to your phone';
+
+  @override
+  String get notYetSynced => 'Not yet synced to your phone';
+
+  @override
+  String get clearAll => 'Clear All';
+
+  @override
+  String get phoneKeypad => 'Keypad';
+
+  @override
+  String get phoneHideKeypad => 'Hide Keypad';
+
+  @override
+  String get fairUsePolicy => 'Fair Use';
+
+  @override
+  String get fairUseLoadError => 'Unable to load fair use status. Please try again.';
+
+  @override
+  String get fairUseStatusNormal => 'Your usage is within normal limits.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Warning';
+
+  @override
+  String get fairUseStageThrottle => 'Throttled';
+
+  @override
+  String get fairUseStageRestrict => 'Restricted';
+
+  @override
+  String get fairUseSpeechUsage => 'Speech Usage';
+
+  @override
+  String get fairUseToday => 'Today';
+
+  @override
+  String get fairUse3Day => '3-Day Rolling';
+
+  @override
+  String get fairUseWeekly => 'Weekly Rolling';
+
+  @override
+  String get fairUseAboutTitle => 'About Fair Use';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Recording, reconnecting';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Still recording — reconnecting to transcription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair Use: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Improve Connection';
+
+  @override
+  String get improveConnectionContent =>
+      'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.';
+
+  @override
+  String get improveConnectionAction => 'Got it';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Your device clock is off by ~$minutes min. Check your date & time settings.';
+  }
+
+  @override
+  String get omisStorage => 'Omi\'s Storage';
+
+  @override
+  String get phoneStorage => 'Phone Storage';
+
+  @override
+  String get cloudStorage => 'Cloud Storage';
+
+  @override
+  String get howSyncingWorks => 'How syncing works';
+
+  @override
+  String get noSyncedRecordings => 'No synced recordings yet';
+
+  @override
+  String get recordingsSyncAutomatically => 'Recordings sync automatically — no action needed.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Files already downloaded will be uploaded next time.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return '$count conversation$_temp0 created';
+  }
+
+  @override
+  String get tapToView => 'Tap to view';
+
+  @override
+  String get syncFailed => 'Sync failed';
+
+  @override
+  String get keepSyncing => 'Keep syncing';
+
+  @override
+  String get cancelSyncQuestion => 'Cancel sync?';
+
+  @override
+  String get omisStorageDesc =>
+      'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.';
+
+  @override
+  String get phoneStorageDesc =>
+      'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Keep your phone nearby for faster syncing';
+
+  @override
+  String get tipStableInternet => 'Stable internet speeds up cloud uploads';
+
+  @override
+  String get tipAutoSync => 'Recordings sync automatically';
+
+  @override
+  String get storageSection => 'STORAGE';
+
+  @override
+  String get permissions => 'Permissions';
+
+  @override
+  String get permissionEnabled => 'Enabled';
+
+  @override
+  String get permissionEnable => 'Enable';
+
+  @override
+  String get permissionsPageDescription =>
+      'These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi needs a few permissions to work properly. Please grant them to continue.';
+
+  @override
+  String get permissionsSetupTitle => 'Get the best experience';
+
+  @override
+  String get permissionsSetupDescription => 'Enable a few permissions so Omi can work its magic.';
+
+  @override
+  String get permissionsChangeAnytime => 'You can change these anytime in Settings > Permissions';
+
+  @override
+  String get location => 'Location';
+
+  @override
+  String get microphone => 'Microphone';
+
+  @override
+  String get whyAreYouCanceling => 'Why are you canceling?';
+
+  @override
+  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Too expensive';
+
+  @override
+  String get cancelReasonNotUsing => 'Not using it enough';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Missing features';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Found an alternative';
+
+  @override
+  String get cancelReasonOther => 'Other';
+
+  @override
+  String get tellUsMore => 'Tell us more (optional)';
+
+  @override
+  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+
+  @override
+  String get justAMoment => 'Just a moment, please';
+
+  @override
+  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+  }
+
+  @override
+  String get ifYouCancel => 'If you cancel:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+
+  @override
+  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+
+  @override
+  String get confirmAndCancel => 'Confirm & Cancel';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+
+  @override
+  String get feedbackTitleTooExpensive => 'What price would work for you?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+
+  @override
+  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+
+  @override
+  String get deviceDiagnostics => 'Device Diagnostics';
+
+  @override
+  String get signalStrength => 'Signal Strength';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Reconnections';
+
+  @override
+  String get disconnectHistory => 'Disconnect History';
+
+  @override
+  String get noDisconnectsRecorded => 'No disconnects recorded';
+
+  @override
+  String get diagnostics => 'Diagnostics';
+
+  @override
+  String get waitingForData => 'Waiting for data...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI over time';
+
+  @override
+  String get noRssiDataYet => 'No RSSI data yet';
+
+  @override
+  String get collectingData => 'Collecting data...';
+
+  @override
+  String get cleanDisconnect => 'Clean disconnect';
+
+  @override
+  String get connectionTimeout => 'Connection timeout';
+
+  @override
+  String get remoteDeviceTerminated => 'Remote device terminated';
+
+  @override
+  String get pairedToAnotherPhone => 'Paired to another phone';
+
+  @override
+  String get linkKeyMismatch => 'Link key mismatch';
+
+  @override
+  String get connectionFailed => 'Connection failed';
+
+  @override
+  String get appClosed => 'App closed';
+
+  @override
+  String get manualDisconnect => 'Manual disconnect';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Last $count events';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Battery';
+
+  @override
+  String get excellent => 'Excellent';
+
+  @override
+  String get good => 'Good';
+
+  @override
+  String get fair => 'Fair';
+
+  @override
+  String get weak => 'Weak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT error ($code)';
+  }
 }

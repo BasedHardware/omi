@@ -1,608 +1,806 @@
-import SwiftUI
-import AppKit
 import AVKit
+import AppKit
 import SceneKit
+import SwiftUI
 
 struct OnboardingView: View {
-    @ObservedObject var appState: AppState
-    @ObservedObject var chatProvider: ChatProvider
-    var onComplete: (() -> Void)? = nil
-    @AppStorage("onboardingStep") private var currentStep = 0
-    @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
-    @StateObject private var graphViewModel = MemoryGraphViewModel()
-    @State private var graphHasData = false
-    @State private var showTrustPreview = true
-    @State private var showGraphHints = false
-    @State private var hintsHovered = false
+  @ObservedObject var appState: AppState
+  @ObservedObject var chatProvider: ChatProvider
+  var onComplete: (() -> Void)? = nil
+  @AppStorage("onboardingStep") private var currentStep = 0
+  @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
+  @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
+  @AppStorage("onboardingVoiceShortcutStepMigrationDone") private var hasInsertedVoiceShortcutStep =
+    false
+  @AppStorage("onboardingVoiceInputMergeMigrationDone") private var hasMergedVoiceInputStep = false
+  @AppStorage("onboardingNotificationStepRemoved") private var hasRemovedNotificationStep = false
+  @AppStorage("onboardingFloatingBarShortcutStepInserted") private
+    var hasInsertedFloatingBarShortcutStep = false
+  @AppStorage("onboardingTrustStepReordered") private var hasReorderedTrustStep = false
+  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep = false
+  @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
+  @StateObject private var graphViewModel = MemoryGraphViewModel()
 
-    let steps = ["Chat", "Notifications", "FloatingBar", "VoiceInput", "Tasks"]
+  let steps = OnboardingFlow.steps
 
-    var body: some View {
-        ZStack {
-            // Full dark background
-            OmiColors.backgroundPrimary
-                .ignoresSafeArea()
+  var body: some View {
+    ZStack {
+      // Full dark background
+      OmiColors.backgroundPrimary
+        .ignoresSafeArea()
 
-            Group {
-                if appState.hasCompletedOnboarding {
-                    Color.clear
-                        .onAppear {
-                            log("OnboardingView: hasCompletedOnboarding=true, starting monitoring")
-                            if !ProactiveAssistantsPlugin.shared.isMonitoring {
-                                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-                            }
-                            if let onComplete = onComplete {
-                                log("OnboardingView: Calling onComplete handler")
-                                onComplete()
-                            } else {
-                                log("OnboardingView: No onComplete handler, view will transition via DesktopHomeView")
-                            }
-                        }
-                } else {
-                    onboardingContent
-                }
+      Group {
+        if appState.hasCompletedOnboarding {
+          Color.clear
+            .onAppear {
+              log("OnboardingView: hasCompletedOnboarding=true, starting monitoring")
+              if !ProactiveAssistantsPlugin.shared.isMonitoring {
+                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+              }
+              if let onComplete = onComplete {
+                log("OnboardingView: Calling onComplete handler")
+                onComplete()
+              } else {
+                log(
+                  "OnboardingView: No onComplete handler, view will transition via DesktopHomeView")
+              }
             }
+        } else {
+          onboardingContent
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            // One-time migration after removing the dedicated video step:
-            // old indices (0-5) become new indices (0-4), shifting all non-zero steps down by 1.
-            if !hasMigratedOnboardingSteps {
-                if currentStep > 0 {
-                    currentStep -= 1
-                }
-                hasMigratedOnboardingSteps = true
-            }
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onAppear {
+      currentStep = OnboardingFlow.migratedStep(
+        currentStep: currentStep,
+        hasMigratedVideoStep: hasMigratedOnboardingSteps,
+        hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
+        hasMergedVoiceInputStep: hasMergedVoiceInputStep,
+        hasRemovedNotificationStep: hasRemovedNotificationStep,
+        hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
+        hasMigratedPagedIntro: hasMigratedPagedIntro,
+        hasReorderedTrustStep: hasReorderedTrustStep,
+        hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep
+      )
+      hasMigratedPagedIntro = true
+      hasMigratedOnboardingSteps = true
+      hasInsertedVoiceShortcutStep = true
+      hasMergedVoiceInputStep = true
+      hasRemovedNotificationStep = true
+      hasInsertedFloatingBarShortcutStep = true
+      hasReorderedTrustStep = true
+      hasInsertedHowDidYouHearStep = true
+      introCoordinator.prepare(appState: appState)
+    }
+    .task {
+      // Pre-warm the ACP bridge before the chat step starts.
+      await chatProvider.warmupBridge()
+      await graphViewModel.addGraphFromStorage()
+      if graphViewModel.isEmpty {
+        await graphViewModel.loadGraph()
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
+      log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
+      currentStep = 0
+    }
+  }
 
-            // If currentStep is beyond the 5-step flow (0-4), clamp to last step.
-            if currentStep > 4 {
-                currentStep = 4
+  private var onboardingContent: some View {
+    Group {
+      if currentStep == 0 {
+        OnboardingWelcomeStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 0,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
+            currentStep = 1
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 1 {
+        OnboardingLanguageStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 1,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
+            currentStep = 2
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 2 {
+        OnboardingHowDidYouHearStepView(
+          graphViewModel: graphViewModel,
+          stepIndex: 2,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "HowDidYouHear")
+            currentStep = 3
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 3 {
+        OnboardingTrustStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 3,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Trust")
+            currentStep = 4
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 4 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 4,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
+          title: "Let Omi read your screen.",
+          description: "Screen Recording lets Omi see what you're working on.",
+          permissionType: "screen_recording",
+          icon: "display.and.arrow.down",
+          reasonTitle: "Screen Recording",
+          reasonDetail: "Screen Recording lets Omi see what you're working on.",
+          primaryActionLabel: "Open Screen Recording settings",
+          requiresRestart: true,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
+            startMonitoringIfNeeded()
+            currentStep = 5
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 4, stepName: "ScreenRecording_Skipped")
+            currentStep = 5
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 5 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 5,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Access",
+          title: "Let Omi scan your work.",
+          description: "File access lets Omi map your projects and files.",
+          permissionType: "full_disk_access",
+          icon: "externaldrive.fill.badge.person.crop",
+          reasonTitle: "Disk Access",
+          reasonDetail: "This lets Omi scan your projects and recent files.",
+          primaryActionLabel: "Open Disk Access",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
+            currentStep = 6
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 5, stepName: "FullDiskAccess_Skipped")
+            currentStep = 6
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 6 {
+        OnboardingFileScanStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 6,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan")
+            currentStep = 7
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan_Skipped")
+            currentStep = 7
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 7 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 7,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
+          title: "Let Omi use your mic.",
+          description: "Microphone lets Omi transcribe meetings.",
+          permissionType: "microphone",
+          icon: "mic.fill",
+          reasonTitle: "Microphone",
+          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
+          primaryActionLabel: "Grant microphone access",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
+            currentStep = 8
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone_Skipped")
+            currentStep = 8
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 8 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 8,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
+          title: "Let Omi send reminders.",
+          description: "Notifications let Omi send proactive tips.",
+          permissionType: "notifications",
+          icon: "bell.badge.fill",
+          reasonTitle: "Notifications",
+          reasonDetail: "This lets Omi send reminders and proactive tips.",
+          primaryActionLabel: "Enable notifications",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Notifications")
+            currentStep = 9
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 8, stepName: "Notifications_Skipped")
+            currentStep = 9
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 9 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 9,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
+          title: "Let Omi see the active app.",
+          description: "Accessibility lets Omi know which app is active.",
+          permissionType: "accessibility",
+          icon: "figure.wave",
+          reasonTitle: "Accessibility",
+          reasonDetail: "This lets Omi know which app you are using.",
+          primaryActionLabel: "Open Accessibility settings",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Accessibility")
+            currentStep = 10
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 9, stepName: "Accessibility_Skipped")
+            currentStep = 10
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 10 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 10,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
+          title: "Let Omi act when asked.",
+          description: "Automation lets Omi take actions for you.",
+          permissionType: "automation",
+          icon: "bolt.horizontal.circle.fill",
+          reasonTitle: "Automation",
+          reasonDetail: "This lets Omi take actions when you ask.",
+          primaryActionLabel: "Grant automation access",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Automation")
+            currentStep = 11
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Automation_Skipped")
+            currentStep = 11
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 11 {
+        OnboardingFloatingBarShortcutStepView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 11, stepName: "FloatingBarShortcut")
+            currentStep = 12
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 11, stepName: "FloatingBarShortcut_Skipped")
+            currentStep = 12
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 12 {
+        OnboardingFloatingBarDemoView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "FloatingBar")
+            currentStep = 13
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 12, stepName: "FloatingBar_Skipped")
+            currentStep = 13
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 13 {
+        OnboardingVoiceShortcutStepView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceShortcut")
+            currentStep = 14
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 13, stepName: "VoiceShortcut_Skipped")
+            currentStep = 14
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 14 {
+        OnboardingVoiceDemoView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "VoiceDemo")
+            currentStep = 15
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 14, stepName: "VoiceDemo_Skipped")
+            currentStep = 15
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 15 {
+        OnboardingResearchStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 15,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Research")
+            currentStep = 16
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 16 {
+        OnboardingGoalStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 16,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
+            if !ProactiveAssistantsPlugin.shared.isMonitoring {
+              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
-        }
-        .task {
-            // Pre-warm the ACP bridge before the chat step starts.
-            await chatProvider.warmupBridge()
-        }
+            currentStep = 17
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else {
+        OnboardingTasksStepView(
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
+            handleOnboardingComplete()
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
+            handleOnboardingComplete()
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      }
+    }
+  }
+
+  /// Complete onboarding — start all services and transition to the app
+  private func handleOnboardingComplete() {
+    log("OnboardingView: Onboarding complete")
+    AnalyticsManager.shared.onboardingCompleted()
+
+    // Stop the AI if it's still running
+    chatProvider.stopAgent()
+
+    // Navigate to Tasks page after transition
+    UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+    PostOnboardingPromptSuggestions.save(OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
+
+    // Clean up onboarding state and persisted chat data
+    chatProvider.isOnboarding = false
+    OnboardingChatPersistence.clear()
+
+    if let onComplete = onComplete {
+      onComplete()
     }
 
-    private var onboardingContent: some View {
-        Group {
-            if currentStep == 0 {
-                // Step 0: Interactive AI Chat + Live Knowledge Graph
-                HStack(spacing: 0) {
-                    OnboardingChatView(
-                        appState: appState,
-                        chatProvider: chatProvider,
-                        graphViewModel: graphViewModel,
-                        onComplete: {
-                            AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Chat")
-                            currentStep = 1
-                        },
-                        onSkip: {
-                            currentStep = 1
-                        }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    // Right pane: Knowledge graph (dark background, graph appears when data arrives)
-                    ZStack {
-                        OmiColors.backgroundSecondary.ignoresSafeArea()
-
-                        if graphHasData && !showTrustPreview {
-                            MemoryGraphSceneView(viewModel: graphViewModel)
-                                .ignoresSafeArea()
-                                .transition(.opacity)
-                        }
-
-                        if showTrustPreview {
-                            OnboardingTrustPreviewCard()
-                                .padding(.horizontal, 48)
-                                .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .top) {
-                        if graphHasData && !showTrustPreview {
-                            Text("This is your second brain.")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.black.opacity(0.35))
-                                .cornerRadius(8)
-                                .padding(.top, 18)
-                                .transition(.opacity)
-                        }
-                    }
-                    // Use .overlay so hints composite above the NSViewRepresentable SCNView
-                    .overlay(alignment: .bottom) {
-                        HStack(spacing: 20) {
-                            graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
-                            graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
-                            graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .onHover { hovering in
-                            hintsHovered = hovering
-                        }
-                        .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.3), value: showGraphHints)
-                        .animation(.easeInOut(duration: 0.3), value: hintsHovered)
-                        .animation(.easeInOut(duration: 0.3), value: graphHasData)
-                    }
-                    .onAppear {
-                        showTrustPreview = true
-                        // Handle case where graph already has data on appear
-                        if !graphViewModel.isEmpty && !graphHasData {
-                            handleGraphDataArrival()
-                        }
-                    }
-                    .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
-                        if !isEmpty && !graphHasData {
-                            handleGraphDataArrival()
-                        }
-                    }
-                }
-            } else if currentStep == 1 {
-                // Step 1: Smart Notifications Demo
-                OnboardingNotificationStepView(
-                    appState: appState,
-                    onContinue: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Notifications")
-                        currentStep = 2
-                    },
-                    onSkip: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Notifications_Skipped")
-                        currentStep = 2
-                    }
-                )
-            } else if currentStep == 2 {
-                // Step 2: Floating Bar Demo
-                OnboardingFloatingBarDemoView(
-                    appState: appState,
-                    chatProvider: chatProvider,
-                    onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "FloatingBar")
-                        currentStep = 3
-                    },
-                    onSkip: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "FloatingBar_Skipped")
-                        currentStep = 3
-                    }
-                )
-            } else if currentStep == 3 {
-                // Step 3: Voice Input Demo
-                OnboardingVoiceInputDemoView(
-                    appState: appState,
-                    chatProvider: chatProvider,
-                    onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "VoiceInput")
-                        currentStep = 4
-                    },
-                    onSkip: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "VoiceInput_Skipped")
-                        currentStep = 4
-                    }
-                )
-            } else {
-                // Step 4: Tasks
-                OnboardingTasksStepView(
-                    onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
-                        handleOnboardingComplete()
-                    }
-                )
-            }
-        }
+    // Transition UI FIRST — service failures must never block the UI.
+    // Setting this synchronously crashes in Button.body.getter, so defer it.
+    DispatchQueue.main.async {
+      appState.hasCompletedOnboarding = true
     }
 
-    private func graphHintItem(icon: String, label: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-            Text(label)
-                .font(.system(size: 11))
-        }
-        .foregroundColor(.white.opacity(0.5))
+    // Start services AFTER UI transition is queued — failures are non-blocking.
+    Task {
+      await AgentVMService.shared.startPipeline()
+      await GoalGenerationService.shared.generateNow()
     }
-
-    private func flashGraphHints() {
-        showGraphHints = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            showGraphHints = false
-        }
+    if LaunchAtLoginManager.shared.setEnabled(true) {
+      AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
     }
+    startMonitoringIfNeeded()
+    appState.startTranscription()
 
-    private func handleGraphDataArrival() {
-        withAnimation(.easeIn(duration: 0.35)) {
-            graphHasData = true
-        }
-
-        // Keep the trust panel visible briefly, then transition to the graph.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            withAnimation(.easeInOut(duration: 0.45)) {
-                showTrustPreview = false
-            }
-            flashGraphHints()
-        }
+    // Create welcome task
+    Task {
+      let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+      let alreadyExists = await ActionItemStorage.shared.actionItemExists(
+        description: welcomeDescription)
+      if !alreadyExists {
+        await TasksStore.shared.createTask(
+          description: welcomeDescription,
+          dueAt: Date(),
+          priority: "low"
+        )
+      }
     }
+  }
 
-    /// Complete onboarding — start all services and transition to the app
-    private func handleOnboardingComplete() {
-        log("OnboardingView: Onboarding complete")
-        AnalyticsManager.shared.onboardingCompleted()
-
-        // Stop the AI if it's still running
-        chatProvider.stopAgent()
-
-        // Navigate to Tasks page after transition
-        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-
-        // Start essential services
-        Task {
-            await AgentVMService.shared.startPipeline()
-            await GoalGenerationService.shared.generateNow()
-        }
-        if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
-        }
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-        appState.startTranscription()
-
-        // Create welcome task
-        Task {
-            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
-            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
-            if !alreadyExists {
-                await TasksStore.shared.createTask(
-                    description: welcomeDescription,
-                    dueAt: Date(),
-                    priority: "low"
-                )
-            }
-        }
-
-        // Clean up onboarding state and persisted chat data
-        chatProvider.isOnboarding = false
-        OnboardingChatPersistence.clear()
-
-        if let onComplete = onComplete {
-            onComplete()
-        }
-
-        // Defer the view hierarchy change so SwiftUI finishes rendering the
-        // current button before the OnboardingView is removed from the tree.
-        // Setting this synchronously crashes in Button.body.getter.
-        DispatchQueue.main.async {
-            appState.hasCompletedOnboarding = true
-        }
+  private func startMonitoringIfNeeded() {
+    AssistantSettings.shared.screenAnalysisEnabled = true
+    if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
     }
+  }
 }
 
-private struct OnboardingTrustPreviewCard: View {
-    var body: some View {
-        VStack(spacing: 24) {
-            OnboardingVideoView(cornerRadius: 14)
-                .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
-                )
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            OmiColors.backgroundQuaternary.opacity(0),
-                            OmiColors.backgroundQuaternary.opacity(0.4),
-                            OmiColors.backgroundQuaternary.opacity(0)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 1)
-                .padding(.horizontal, 20)
-
-            HStack(spacing: 8) {
-                Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(OmiColors.purplePrimary.opacity(0.9))
-                Text("Trust & Privacy")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundColor(OmiColors.textSecondary)
-                    .lineLimit(1)
-                Text("omi protects your data")
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundColor(OmiColors.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            .padding(.top, 2)
-            .padding(.bottom, 6)
-            .frame(maxWidth: .infinity, alignment: .center)
-
-            VStack(spacing: 10) {
-                trustRow(icon: "chevron.left.forwardslash.chevron.right", title: "Open Source", detail: "Code is ")
-                trustRow(icon: "lock.shield", title: "Encrypted", detail: "Cloud sync data is encrypted in transit and at rest.")
-                trustRow(icon: "externaldrive.badge.person.crop", title: "User-Owned", detail: "Primary data stays local and belongs to you.")
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.75))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(OmiColors.purplePrimary.opacity(0.25), lineWidth: 1)
-                    )
-            )
-        }
+struct OnboardingTrustPreviewCard: View {
+  var body: some View {
+    VStack(spacing: 24) {
+      OnboardingVideoView(cornerRadius: 14)
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+          RoundedRectangle(cornerRadius: 16)
+            .stroke(OmiColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
+        )
+
+      Rectangle()
+        .fill(
+          LinearGradient(
+            colors: [
+              OmiColors.backgroundQuaternary.opacity(0),
+              OmiColors.backgroundQuaternary.opacity(0.4),
+              OmiColors.backgroundQuaternary.opacity(0),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+          )
+        )
+        .frame(height: 1)
+        .padding(.horizontal, 20)
+
+      HStack(spacing: 8) {
+        Image(systemName: "shield.lefthalf.filled")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(OmiColors.textSecondary)
+        Text("Trust & Privacy")
+          .font(.system(size: 17, weight: .medium))
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+        Text("omi protects your data")
+          .font(.system(size: 15, weight: .regular))
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+      }
+      .padding(.top, 2)
+      .padding(.bottom, 6)
+      .frame(maxWidth: .infinity, alignment: .center)
+
+      VStack(spacing: 10) {
+        trustRow(
+          icon: "chevron.left.forwardslash.chevron.right", title: "Open Source", detail: "Code is ")
+        trustRow(
+          icon: "lock.shield", title: "Encrypted",
+          detail: "Cloud sync data is encrypted in transit and at rest.")
+        trustRow(
+          icon: "externaldrive.badge.person.crop", title: "User-Owned",
+          detail: "Primary data stays local and belongs to you.")
+      }
+      .padding(16)
+      .background(
+        RoundedRectangle(cornerRadius: 16)
+          .fill(OmiColors.backgroundTertiary.opacity(0.75))
+          .overlay(
+            RoundedRectangle(cornerRadius: 16)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1)
+          )
+      )
     }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 24)
+  }
 
-    @ViewBuilder
-    private func trustRow(icon: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(OmiColors.purplePrimary)
-                .frame(width: 20, height: 20)
+  @ViewBuilder
+  private func trustRow(icon: String, title: String, detail: String) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: icon)
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(OmiColors.textSecondary)
+        .frame(width: 20, height: 20)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
-                if title == "Open Source" {
-                    HStack(spacing: 0) {
-                        Text(detail)
-                            .foregroundColor(OmiColors.textSecondary)
-                        if let url = URL(string: "https://github.com/basedhardware/omi/") {
-                            Link("public", destination: url)
-                                .foregroundColor(OmiColors.purpleSecondary)
-                                .underline()
-                        }
-                        Text(" and auditable.")
-                            .foregroundColor(OmiColors.textSecondary)
-                    }
-                    .font(.system(size: 12))
-                } else {
-                    Text(detail)
-                        .font(.system(size: 12))
-                        .foregroundColor(OmiColors.textSecondary)
-                }
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundColor(OmiColors.textPrimary)
+        if title == "Open Source" {
+          HStack(spacing: 0) {
+            Text(detail)
+              .foregroundColor(OmiColors.textSecondary)
+            if let url = URL(string: "https://github.com/basedhardware/omi/") {
+              Link("public", destination: url)
+                .foregroundColor(OmiColors.textPrimary)
+                .underline()
             }
-            Spacer()
+            Text(" and auditable.")
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          .font(.system(size: 12))
+        } else {
+          Text(detail)
+            .font(.system(size: 12))
+            .foregroundColor(OmiColors.textSecondary)
         }
+      }
+      Spacer()
     }
+  }
 }
 
 // MARK: - Onboarding Video View
 
 struct OnboardingVideoView: NSViewRepresentable {
-    var cornerRadius: CGFloat = 12
+  var cornerRadius: CGFloat = 12
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  func makeNSView(context: Context) -> AVPlayerView {
+    let playerView = AVPlayerView()
+    playerView.wantsLayer = true
+    playerView.layer?.cornerRadius = cornerRadius
+    playerView.layer?.cornerCurve = .continuous
+    playerView.layer?.masksToBounds = true
+    playerView.videoGravity = .resizeAspect
+    if let url = Bundle.resourceBundle.url(forResource: "omi-demo", withExtension: "mp4") {
+      let player = AVPlayer(url: url)
+      playerView.player = player
+      playerView.controlsStyle = .none
+      playerView.showsFullScreenToggleButton = false
+      playerView.showsSharingServiceButton = false
+      player.play()
+
+      NotificationCenter.default.addObserver(
+        context.coordinator,
+        selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
+        name: .AVPlayerItemDidPlayToEndTime,
+        object: player.currentItem
+      )
+      context.coordinator.player = player
     }
+    return playerView
+  }
 
-    func makeNSView(context: Context) -> AVPlayerView {
-        let playerView = AVPlayerView()
-        playerView.wantsLayer = true
-        playerView.layer?.cornerRadius = cornerRadius
-        playerView.layer?.cornerCurve = .continuous
-        playerView.layer?.masksToBounds = true
-        playerView.videoGravity = .resizeAspect
-        if let url = Bundle.resourceBundle.url(forResource: "omi-demo", withExtension: "mp4") {
-            let player = AVPlayer(url: url)
-            playerView.player = player
-            playerView.controlsStyle = .none
-            playerView.showsFullScreenToggleButton = false
-            playerView.showsSharingServiceButton = false
-            player.play()
+  func updateNSView(_ nsView: AVPlayerView, context: Context) {
+    nsView.layer?.cornerRadius = cornerRadius
+  }
 
-            NotificationCenter.default.addObserver(
-                context.coordinator,
-                selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
-                name: .AVPlayerItemDidPlayToEndTime,
-                object: player.currentItem
-            )
-            context.coordinator.player = player
-        }
-        return playerView
+  class Coordinator: NSObject {
+    var player: AVPlayer?
+
+    @objc func playerDidFinishPlaying(_ notification: Notification) {
+      player?.seek(to: .zero)
+      player?.play()
     }
-
-    func updateNSView(_ nsView: AVPlayerView, context: Context) {
-        nsView.layer?.cornerRadius = cornerRadius
-    }
-
-    class Coordinator: NSObject {
-        var player: AVPlayer?
-
-        @objc func playerDidFinishPlaying(_ notification: Notification) {
-            player?.seek(to: .zero)
-            player?.play()
-        }
-    }
+  }
 }
 
 // MARK: - Animated GIF View
 
 struct AnimatedGIFView: NSViewRepresentable {
-    let gifName: String
+  let gifName: String
 
-    func makeNSView(context: Context) -> NSImageView {
-        let imageView = NSImageView()
-        imageView.imageScaling = .scaleProportionallyDown
-        imageView.animates = true
-        imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+  func makeNSView(context: Context) -> NSImageView {
+    let imageView = NSImageView()
+    imageView.imageScaling = .scaleProportionallyDown
+    imageView.animates = true
+    imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
-        if let url = Bundle.resourceBundle.url(forResource: gifName, withExtension: "gif"),
-           let image = NSImage(contentsOf: url) {
-            imageView.image = image
-        }
-
-        return imageView
+    if let url = Bundle.resourceBundle.url(forResource: gifName, withExtension: "gif"),
+      let image = NSImage(contentsOf: url)
+    {
+      imageView.image = image
     }
 
-    func updateNSView(_ nsView: NSImageView, context: Context) {
-        nsView.animates = true
-    }
+    return imageView
+  }
+
+  func updateNSView(_ nsView: NSImageView, context: Context) {
+    nsView.animates = true
+  }
 }
 
 // MARK: - Onboarding Privacy Sheet
 
 struct OnboardingPrivacySheet: View {
-    @Binding var isPresented: Bool
+  @Binding var isPresented: Bool
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "shield.lefthalf.filled")
-                    .scaledFont(size: 16)
-                    .foregroundColor(OmiColors.purplePrimary)
+  var body: some View {
+    VStack(spacing: 0) {
+      // Header
+      HStack {
+        Image(systemName: "shield.lefthalf.filled")
+          .scaledFont(size: 16)
+          .foregroundColor(OmiColors.textSecondary)
 
-                Text("Data & Privacy")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+        Text("Data & Privacy")
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
 
-                Spacer()
+        Spacer()
 
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 18)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Encryption
-                    privacyCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label("Encryption", systemImage: "lock.shield")
-                                .scaledFont(size: 13, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .scaledFont(size: 11)
-                                    .foregroundColor(.green)
-                                Text("Server-side encryption")
-                                    .scaledFont(size: 12)
-                                    .foregroundColor(OmiColors.textSecondary)
-                                Text("Active")
-                                    .scaledFont(size: 10, weight: .semibold)
-                                    .foregroundColor(.green)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.green.opacity(0.15))
-                                    .cornerRadius(3)
-                            }
-
-                            Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
-                                .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
-                                .padding(.top, 2)
-                        }
-                    }
-
-                    // What We Track
-                    privacyCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("What We Track", systemImage: "list.bullet")
-                                .scaledFont(size: 13, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                sheetTrackingItem("Onboarding steps completed")
-                                sheetTrackingItem("Settings changes")
-                                sheetTrackingItem("App installations and usage")
-                                sheetTrackingItem("Device connection status")
-                                sheetTrackingItem("Transcript processing events")
-                                sheetTrackingItem("Conversation creation and updates")
-                                sheetTrackingItem("Memory extraction events")
-                                sheetTrackingItem("Chat interactions")
-                                sheetTrackingItem("Speech profile creation")
-                                sheetTrackingItem("Focus session events")
-                                sheetTrackingItem("App open/close events")
-                            }
-                        }
-                    }
-
-                    // Privacy Guarantees
-                    privacyCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Privacy Guarantees", systemImage: "hand.raised.fill")
-                                .scaledFont(size: 13, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            VStack(alignment: .leading, spacing: 5) {
-                                sheetBullet("Anonymous tracking with randomly generated IDs")
-                                sheetBullet("No personal info stored in analytics")
-                                sheetBullet("Data is never sold or shared with third parties")
-                                sheetBullet("Opt out of tracking at any time")
-                            }
-                        }
-                    }
-                }
-                .padding(20)
-            }
+        Button(action: { isPresented = false }) {
+          Image(systemName: "xmark.circle.fill")
+            .scaledFont(size: 18)
+            .foregroundColor(OmiColors.textTertiary)
         }
-        .frame(width: 400, height: 480)
-        .background(OmiColors.backgroundSecondary)
-    }
+        .buttonStyle(.plain)
+      }
+      .padding(20)
 
-    private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
-                    )
-            )
-    }
+      Divider()
 
-    private func sheetTrackingItem(_ text: String) -> some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(OmiColors.textTertiary.opacity(0.5))
-                .frame(width: 3, height: 3)
-            Text(text)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          // Encryption
+          privacyCard {
+            VStack(alignment: .leading, spacing: 10) {
+              Label("Encryption", systemImage: "lock.shield")
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                  .scaledFont(size: 11)
+                  .foregroundColor(.green)
+                Text("Server-side encryption")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textSecondary)
+                Text("Active")
+                  .scaledFont(size: 10, weight: .semibold)
+                  .foregroundColor(.green)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 1)
+                  .background(Color.green.opacity(0.15))
+                  .cornerRadius(3)
+              }
+
+              Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                 .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
-        }
-    }
+                .padding(.top, 2)
+            }
+          }
 
-    private func sheetBullet(_ text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark")
-                .scaledFont(size: 8, weight: .bold)
-                .foregroundColor(.green)
-            Text(text)
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textSecondary)
+          // What We Track
+          privacyCard {
+            VStack(alignment: .leading, spacing: 8) {
+              Label("What We Track", systemImage: "list.bullet")
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              VStack(alignment: .leading, spacing: 4) {
+                sheetTrackingItem("Onboarding steps completed")
+                sheetTrackingItem("Settings changes")
+                sheetTrackingItem("App installations and usage")
+                sheetTrackingItem("Device connection status")
+                sheetTrackingItem("Transcript processing events")
+                sheetTrackingItem("Conversation creation and updates")
+                sheetTrackingItem("Memory extraction events")
+                sheetTrackingItem("Chat interactions")
+                sheetTrackingItem("Speech profile creation")
+                sheetTrackingItem("Focus session events")
+                sheetTrackingItem("App open/close events")
+              }
+            }
+          }
+
+          // Privacy Guarantees
+          privacyCard {
+            VStack(alignment: .leading, spacing: 8) {
+              Label("Privacy Guarantees", systemImage: "hand.raised.fill")
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              VStack(alignment: .leading, spacing: 5) {
+                sheetBullet("Anonymous tracking with randomly generated IDs")
+                sheetBullet("No personal info stored in analytics")
+                sheetBullet("Data is never sold or shared with third parties")
+                sheetBullet("Opt out of tracking at any time")
+              }
+            }
+          }
         }
+        .padding(20)
+      }
     }
+    .frame(width: 400, height: 480)
+    .background(OmiColors.backgroundSecondary)
+  }
+
+  private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    content()
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 10)
+          .fill(OmiColors.backgroundTertiary.opacity(0.5))
+          .overlay(
+            RoundedRectangle(cornerRadius: 10)
+              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+          )
+      )
+  }
+
+  private func sheetTrackingItem(_ text: String) -> some View {
+    HStack(spacing: 6) {
+      Circle()
+        .fill(OmiColors.textTertiary.opacity(0.5))
+        .frame(width: 3, height: 3)
+      Text(text)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+  }
+
+  private func sheetBullet(_ text: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "checkmark")
+        .scaledFont(size: 8, weight: .bold)
+        .foregroundColor(.green)
+      Text(text)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+  }
 }

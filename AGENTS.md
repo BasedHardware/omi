@@ -8,7 +8,7 @@ These rules apply to Codex when working in this repository.
 
 ## Setup
 
-- Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
+- **Install pre-commit hook (required):** `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit` — formatting is enforced by CI
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`)
 
 ## Safety Rules
@@ -64,6 +64,8 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
 
+If a PR changes how audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol works — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR. This includes changes to timeouts, event types, processing flow, or inter-service communication between listen and pusher.
+
 ### App (Flutter)
 
 - All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
@@ -78,13 +80,12 @@ Edit → Verify → Evidence loop:
 1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
 2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
 3. Verify: `agent-flutter snapshot -i` (see widgets on screen)
-4. Interact: `agent-flutter press @e3` / `find type button press` / `fill @e5 "text"`
+4. Interact: `agent-flutter press @e3` / `press 540 1200` (coordinates) / `find type button press` / `fill @e5 "text"` / `dismiss` (system dialogs)
 5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
 
 Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
-- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
-- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Refs go stale frequently (Flutter rebuilds aggressively) — always re-snapshot before every interaction. Use `press x y` as fallback.
 - Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
 - Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
 - When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
@@ -117,8 +118,10 @@ Key rules:
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- If you launch a custom-named desktop test build, keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
 - App flows & exploration skill: See `desktop/e2e/SKILL.md` for navigation architecture, interaction patterns, and reference flows.
 - Full command reference: `agent-swift --help` or `agent-swift schema`.
+- When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 
 ## Formatting
 
@@ -128,6 +131,13 @@ Always format code after making changes. The pre-commit hook handles this automa
   - Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
 - **Python (backend/)**: `black --line-length 120 --skip-string-normalization <files>`
 - **C/C++ (firmware: omi/, omiGlass/)**: `clang-format -i <files>`
+
+## Git
+
+- Never push directly to `main`.
+- Never merge directly from a local branch. Land changes through a PR only.
+- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
+- Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
 
 ## Documentation Maintenance
 

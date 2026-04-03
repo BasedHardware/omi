@@ -1,0 +1,46 @@
+# E2E Flow: Delete Account confirmation page
+# Tests: navigation to delete account, checkbox confirmation, text input, safety check
+# Discovered by: flow-walker run10 (screen-gesture-6: 1 Checkbox, 4 GestureDetector, 1 TextField)
+
+name: delete-account
+description: Settings → Profile → Delete Account — confirmation checkbox, text input, safety gate
+covers:
+  - app/lib/pages/settings/delete_account.dart
+  - app/lib/pages/settings/profile.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Open Profile
+    press: { type: gesture, hint: "Profile row — 1st item in settings" }
+    screenshot: profile-page
+
+  - name: Scroll to bottom of profile
+    scroll: down
+    scroll: down
+    screenshot: profile-bottom
+
+  - name: Tap Delete Account
+    press: { type: gesture, hint: "Delete Account — last item in profile, red text" }
+    screenshot: delete-account-page
+
+  - name: Verify delete account page
+    assert:
+      interactive_count: { min: 4, verified: "flow-walker run10: 6 elements (1 checkbox, 4 gesture, 1 textfield)" }
+    note: >
+      Page has: confirmation checkbox, text field to type "DELETE",
+      and submit button. All are safety gates to prevent accidental deletion.
+
+  - name: Back to profile (DO NOT proceed with deletion)
+    back: true
+    note: "SAFETY: Never complete the delete account flow in E2E testing"
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

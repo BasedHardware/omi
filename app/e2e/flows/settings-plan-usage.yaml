@@ -1,0 +1,34 @@
+# E2E Flow: Settings → Plan & Usage — subscription management
+# Tests: usage page, upgrade dialog, plan details
+
+name: settings-plan-usage
+description: Settings → Plan & Usage — view current plan, usage stats, upgrade options
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/usage_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Open Plan & Usage
+    press: { type: gesture, hint: "Plan & Usage row — may show PRO badge if unlimited" }
+    screenshot: plan-usage
+
+  - name: Verify usage page
+    assert:
+      interactive_count: { min: 2 }
+    note: "UsagePage shows current plan, usage stats, upgrade button if not PRO"
+
+  - name: Scroll usage details
+    scroll: down
+    screenshot: usage-scrolled
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

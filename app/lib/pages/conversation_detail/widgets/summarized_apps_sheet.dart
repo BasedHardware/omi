@@ -46,10 +46,7 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
               children: [
                 const _SheetHeader(),
                 Expanded(
-                  child: _AppsList(
-                    provider: provider,
-                    currentAppId: currentAppId,
-                  ),
+                  child: _AppsList(provider: provider, currentAppId: currentAppId),
                 ),
               ],
             );
@@ -64,10 +61,7 @@ class _SheetContainer extends StatelessWidget {
   final ScrollController scrollController;
   final List<Widget> children;
 
-  const _SheetContainer({
-    required this.scrollController,
-    required this.children,
-  });
+  const _SheetContainer({required this.scrollController, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -94,27 +88,15 @@ class _SheetHeader extends StatelessWidget {
           width: 40,
           height: 4,
           margin: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.grey[600],
-            borderRadius: BorderRadius.circular(2),
-          ),
+          decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
         ),
 
         // Title
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              context.l10n.summaryTemplate,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.pop(context),
-            ),
+            Text(context.l10n.summaryTemplate, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
           ],
         ),
         const SizedBox(height: 16),
@@ -127,10 +109,7 @@ class _AppsList extends StatefulWidget {
   final ConversationDetailProvider provider;
   final String? currentAppId;
 
-  const _AppsList({
-    required this.provider,
-    required this.currentAppId,
-  });
+  const _AppsList({required this.provider, required this.currentAppId});
 
   @override
   State<_AppsList> createState() => _AppsListState();
@@ -182,11 +161,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.suggestedTemplates,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ),
         _buildShimmerListItem(),
@@ -197,11 +172,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.availableTemplates,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ),
         _buildShimmerListItem(),
@@ -223,10 +194,7 @@ class _AppsListState extends State<_AppsList> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
             ),
             const SizedBox(width: 16),
             // Title and subtitle placeholders
@@ -237,19 +205,13 @@ class _AppsListState extends State<_AppsList> {
                   Container(
                     width: double.infinity,
                     height: 16,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(4)),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     width: 200,
                     height: 12,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(4)),
                   ),
                 ],
               ),
@@ -286,10 +248,12 @@ class _AppsListState extends State<_AppsList> {
 
     // Get other apps (excluding suggested, preferred, and last used)
     var otherApps = enabledApps
-        .where((app) =>
-            !suggestedAppIds.contains(app.id) &&
-            (preferredApp == null || app.id != preferredApp.id) &&
-            (lastUsedApp == null || app.id != lastUsedApp.id))
+        .where(
+          (app) =>
+              !suggestedAppIds.contains(app.id) &&
+              (preferredApp == null || app.id != preferredApp.id) &&
+              (lastUsedApp == null || app.id != lastUsedApp.id),
+        )
         .toList();
 
     // Sort: user's own apps first, then alphabetically by name
@@ -309,11 +273,7 @@ class _AppsListState extends State<_AppsList> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               context.l10n.suggestedTemplates,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
           ...suggestedApps.map((app) {
@@ -337,11 +297,7 @@ class _AppsListState extends State<_AppsList> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               suggestedApps.isNotEmpty ? context.l10n.otherTemplates : context.l10n.availableTemplates,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
           // 1. Show default/preferred app first if available (and not in suggested)
@@ -364,13 +320,15 @@ class _AppsListState extends State<_AppsList> {
               provider: widget.provider,
             ),
           // 3. Then show other apps (user's own apps first, then alphabetically)
-          ...otherApps.map((app) => _AppListItem(
-                app: app,
-                isSelected: app.id == widget.currentAppId,
-                onTap: () => _handleAppTap(context, app),
-                isDefault: false,
-                provider: widget.provider,
-              )),
+          ...otherApps.map(
+            (app) => _AppListItem(
+              app: app,
+              isSelected: app.id == widget.currentAppId,
+              onTap: () => _handleAppTap(context, app),
+              isDefault: false,
+              provider: widget.provider,
+            ),
+          ),
         ],
 
         // Get Creative section
@@ -378,11 +336,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.getCreative,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ),
 
@@ -551,9 +505,7 @@ class _AppListItemState extends State<_AppListItem> {
           title: Text(context.l10n.setDefaultApp),
           content: Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            child: Text(
-              context.l10n.setDefaultAppContent(widget.app.name.decodeString),
-            ),
+            child: Text(context.l10n.setDefaultAppContent(widget.app.name.decodeString)),
           ),
           actions: [
             CupertinoDialogAction(
@@ -577,10 +529,7 @@ class _AppListItemState extends State<_AppListItem> {
         gradient: LinearGradient(
           begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
           end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: [
-            Colors.deepPurple.withValues(alpha: 0.7),
-            Colors.transparent,
-          ],
+          colors: [Colors.deepPurple.withValues(alpha: 0.7), Colors.transparent],
         ),
       ),
       alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
@@ -588,19 +537,11 @@ class _AppListItemState extends State<_AppListItem> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.star_rounded,
-            color: Colors.amber.shade300,
-            size: 20,
-          ),
+          Icon(Icons.star_rounded, color: Colors.amber.shade300, size: 20),
           const SizedBox(height: 2),
           Text(
             context.l10n.defaultLabel,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-            ),
+            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 11),
           ),
         ],
       ),
@@ -627,13 +568,7 @@ class _AppListItemState extends State<_AppListItem> {
           selected: widget.isSelected,
           onTap: widget.onTap,
         ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
+        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
       ],
     );
   }
@@ -657,20 +592,12 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(
-                    FontAwesomeIcons.solidStar,
-                    size: 7,
-                    color: Colors.amber.shade300,
-                  ),
+                  child: Icon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.defaultLabel,
-                  style: TextStyle(
-                    color: Colors.amber.shade300,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Colors.amber.shade300, fontSize: 9, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -694,20 +621,12 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(
-                    FontAwesomeIcons.clock,
-                    size: 7,
-                    color: Colors.grey.shade400,
-                  ),
+                  child: Icon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.lastUsedLabel,
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 9, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -722,15 +641,14 @@ class _AppListItemState extends State<_AppListItem> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        children: tags,
-      ),
+      child: Row(children: tags),
     );
   }
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing = widget.provider != null &&
+    final isProcessing =
+        widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
@@ -740,19 +658,13 @@ class _AppListItemState extends State<_AppListItem> {
       return const SizedBox(
         width: 20,
         height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
       );
     } else if (isProcessing) {
       return const SizedBox(
         width: 20,
         height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
       );
     } else {
       return const SizedBox.shrink();
@@ -763,11 +675,7 @@ class _AppListItemState extends State<_AppListItem> {
     return CachedNetworkImage(
       imageUrl: widget.app.getImageUrl(),
       imageBuilder: (context, imageProvider) {
-        return CircleAvatar(
-          backgroundColor: Colors.white,
-          radius: 16,
-          backgroundImage: imageProvider,
-        );
+        return CircleAvatar(backgroundColor: Colors.white, radius: 16, backgroundImage: imageProvider);
       },
       errorWidget: (context, url, error) {
         return const CircleAvatar(
@@ -802,19 +710,11 @@ class _CreateTemplateListItem extends StatelessWidget {
           leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
-            child: Icon(
-              FontAwesomeIcons.plus,
-              color: Colors.black,
-              size: 18,
-            ),
+            child: Icon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
           ),
           title: Text(
             context.l10n.createCustomTemplate,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 16,
-            ),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
           ),
           trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
@@ -828,13 +728,7 @@ class _CreateTemplateListItem extends StatelessWidget {
             showCreateTemplateBottomSheet(context, conversationId: conversationId);
           },
         ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
+        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
       ],
     );
   }
@@ -853,19 +747,11 @@ class _EnableAppsListItem extends StatelessWidget {
           leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
-            child: FaIcon(
-              FontAwesomeIcons.solidFolderOpen,
-              color: Colors.black,
-              size: 14,
-            ),
+            child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: Colors.black, size: 14),
           ),
           title: Text(
             context.l10n.allTemplates,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 16,
-            ),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
           ),
           trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
@@ -880,23 +766,14 @@ class _EnableAppsListItem extends StatelessWidget {
             routeToPage(
               context,
               CapabilityAppsPage(
-                capability: AppCapability(
-                  title: context.l10n.summary,
-                  id: 'memories',
-                ),
+                capability: AppCapability(title: context.l10n.summary, id: 'memories'),
                 apps: memoriesApps,
               ),
             );
             MixpanelManager().pageOpened('Summary Apps');
           },
         ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
+        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
       ],
     );
   }

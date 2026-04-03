@@ -11,11 +11,7 @@ class MemoryDialog extends StatefulWidget {
   final MemoriesProvider provider;
   final Memory? memory;
 
-  const MemoryDialog({
-    super.key,
-    required this.provider,
-    this.memory,
-  });
+  const MemoryDialog({super.key, required this.provider, this.memory});
 
   @override
   State<MemoryDialog> createState() => _MemoryDialogState();
@@ -30,9 +26,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
   void initState() {
     super.initState();
     contentController = TextEditingController(text: widget.memory?.content ?? '');
-    contentController.selection = TextSelection.fromPosition(
-      TextPosition(offset: contentController.text.length),
-    );
+    contentController.selection = TextSelection.fromPosition(TextPosition(offset: contentController.text.length));
   }
 
   @override
@@ -69,24 +63,17 @@ class _MemoryDialogState extends State<MemoryDialog> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        isEditing ? Icons.label_outline : Icons.add_circle_outline,
-                        size: 14,
-                        color: Colors.white,
-                      ),
+                      Icon(isEditing ? Icons.label_outline : Icons.add_circle_outline, size: 14, color: Colors.white),
                       const SizedBox(width: 4),
                       Text(
                         isEditing
                             ? (widget.memory!.category == MemoryCategory.manual
-                                ? context.l10n.filterManual
-                                : widget.memory!.category == MemoryCategory.interesting
-                                    ? context.l10n.filterInteresting
-                                    : context.l10n.filterSystem)
+                                  ? context.l10n.filterManual
+                                  : widget.memory!.category == MemoryCategory.interesting
+                                  ? context.l10n.filterInteresting
+                                  : context.l10n.filterSystem)
                             : context.l10n.newMemory,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ],
                   ),
@@ -114,11 +101,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                   minLines: 3,
                   textInputAction: TextInputAction.newline,
                   keyboardType: TextInputType.multiline,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
                   decoration: InputDecoration(
                     hintText: isEditing ? null : context.l10n.memoryContentHint,
                     hintStyle: const TextStyle(color: Colors.grey),
@@ -133,10 +116,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
             if (_saveFailed) ...[
               Text(
                 context.l10n.failedToSaveMemory,
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -149,9 +129,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                   backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
                   disabledForegroundColor: Colors.white.withOpacity(0.7),
                 ),
@@ -166,10 +144,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                       )
                     : Text(
                         _saveFailed ? context.l10n.retry : context.l10n.saveMemory,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
               ),
             ),

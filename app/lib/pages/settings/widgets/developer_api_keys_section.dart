@@ -27,11 +27,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
             context.l10n.docs,
-            style: const TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ),
       ),
@@ -46,10 +42,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -57,11 +50,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -84,11 +73,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 children: [
                   Text(
                     context.l10n.developerApi,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
                   _buildDocsButton(context, 'https://docs.omi.me/doc/developer/api', 'Developer API'),
@@ -104,22 +89,14 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 if (provider.isLoading && provider.keys.isEmpty) {
                   return Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
                   );
                 }
                 if (provider.error != null) {
                   return Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
                     child: Center(
                       child: Text(
                         context.l10n.errorWithMessage(provider.error!),
@@ -131,18 +108,12 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 if (provider.keys.isEmpty) {
                   return Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
                     child: Column(
                       children: [
                         FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
                         const SizedBox(height: 12),
-                        Text(
-                          context.l10n.noApiKeys,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 15),
-                        ),
+                        Text(context.l10n.noApiKeys, style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
                         const SizedBox(height: 4),
                         Text(
                           context.l10n.createAKeyToGetStarted,
@@ -153,10 +124,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   );
                 }
                 return Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1C1C1E),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     children: provider.keys.asMap().entries.map((entry) {
                       final index = entry.key;

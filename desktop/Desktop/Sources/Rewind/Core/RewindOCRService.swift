@@ -174,13 +174,23 @@ actor RewindOCRService {
                     return
                 }
 
+                // Defensive copy — Vision framework results are bridged NSArray objects
+                // that can trigger EXC_BREAKPOINT / _objectAt assertion failures if the
+                // underlying buffer is mutated or released during enumeration (see #5891, #5151).
+                let safeObservations = Array(observations)
+
                 var blocks: [OCRTextBlock] = []
                 var fullTextLines: [String] = []
 
-                for observation in observations {
-                    guard let candidate = observation.topCandidates(1).first else { continue }
+                for observation in safeObservations {
+                    let candidates = observation.topCandidates(1)
+                    guard !candidates.isEmpty, let candidate = candidates.first else { continue }
 
                     let boundingBox = observation.boundingBox
+                    // Validate bounding box values are finite before using them
+                    guard boundingBox.origin.x.isFinite, boundingBox.origin.y.isFinite,
+                          boundingBox.width.isFinite, boundingBox.height.isFinite else { continue }
+
                     let block = OCRTextBlock(
                         text: candidate.string,
                         x: Double((boundingBox.origin.x * 1000).rounded()) / 1000,

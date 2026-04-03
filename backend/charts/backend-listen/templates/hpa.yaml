@@ -51,4 +51,13 @@ spec:
           type: Value
           value: {{ .Values.autoscaling.failedResponseCode }}
     {{- end }}
+    {{- if .Values.autoscaling.activeConnectionsPerPod }}
+    - type: External
+      external:
+        metric:
+          name: backend_listen_active_ws_connections_per_pod
+        target:
+          type: Value
+          value: {{ .Values.autoscaling.activeConnectionsPerPod }}
+    {{- end }}
 {{- end }}

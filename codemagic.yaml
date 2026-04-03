@@ -12,16 +12,18 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -197,6 +199,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -361,16 +364,18 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -750,6 +755,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -912,16 +918,18 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1468,35 +1476,23 @@ workflows:
 
           xcrun stapler staple "$APP_PATH"
 
-      - name: Install create-dmg
-        script: |
-          brew install create-dmg
-
       - name: Create DMG installer
         script: |
           set -e
+          pip3 install --break-system-packages dmgbuild
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_NAME="Omi.dmg"
-          DMG_PATH="build/macos/dmg/${DMG_NAME}"
+          DMG_PATH="build/macos/dmg/Omi.dmg"
 
-          # Create professional DMG with Applications folder shortcut
-          # Use --skip-jenkins to avoid AppleScript timeout issues in CI
-          create-dmg \
-            --volname "Omi ${VERSION}" \
-            --volicon "$APP_PATH/Contents/Resources/prodAppIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 660 400 \
-            --icon-size 130 \
-            --text-size 16 \
-            --icon "Omi.app" 180 180 \
-            --hide-extension "Omi.app" \
-            --app-drop-link 480 180 \
-            --no-internet-enable \
-            --skip-jenkins \
-            "$DMG_PATH" \
-            "$APP_PATH"
+          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
+          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
+          dmgbuild -s ../desktop/dmg-assets/dmgbuild_settings.py \
+            -D app_path="$APP_PATH" \
+            -D app_name=Omi \
+            -D assets_dir="$(pwd)/../desktop/dmg-assets" \
+            "Omi ${VERSION}" \
+            "$DMG_PATH"
 
           # Sign DMG
           codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
@@ -1674,6 +1670,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1835,13 +1832,25 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV             — base64-encoded .env.app (runtime secrets bundled into .app)
+  #   OMI_DESKTOP_APP_ENV_V2          — base64-encoded .env bundled into .app at build time
+  #                                     Contains:
+  #                                       OMI_API_URL=https://api.omi.me
+  #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
+  #                                       FIREBASE_API_KEY=<prod firebase web api key>
+  #                                       MIXPANEL_PROJECT_TOKEN=<token>
+  #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
+  #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
+  #                                       GOOGLE_CALENDAR_API_KEY
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
+  #
+  # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
+  #   DESKTOP_DEEPGRAM_API_KEY, DESKTOP_ANTHROPIC_API_KEY, DESKTOP_GOOGLE_CALENDAR_API_KEY
+  #   (mapped to DEEPGRAM_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_API_KEY inside the container)
   #
   # Re-uses from existing groups:
   #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
@@ -1871,6 +1880,7 @@ workflows:
         GCP_REGION: "us-central1"
         CLOUD_RUN_SERVICE: "desktop-backend"
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
+        GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
       xcode: 16.4
     triggering:
       events:
@@ -2153,11 +2163,11 @@ workflows:
           [ -f "Desktop/embedded.provisionprofile" ] && \
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
-          # Write runtime .env from OMI_DESKTOP_APP_ENV secret (base64-encoded .env.app contents)
-          echo "$OMI_DESKTOP_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # Never ship shared Anthropic API keys inside production app bundles.
-          # Anthropic access must come from backend or user OAuth mode.
-          sed -i '' '/^ANTHROPIC_API_KEY=/d' "$APP_BUNDLE/Contents/Resources/.env"
+          # Write runtime .env from OMI_DESKTOP_APP_ENV_V2 secret (base64-encoded, slimmed down)
+          # V2 contains: OMI_API_URL, OMI_AUTH_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
+          # runtime from backend /v1/config/api-keys via APIKeyService
+          echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app
@@ -2279,13 +2289,11 @@ workflows:
           xcrun stapler staple "$APP_BUNDLE"
           echo "App stapled"
 
-      - name: Install create-dmg
-        script: |
-          brew install create-dmg || true
-
       - name: Create DMG installer
         script: |
           set -e
+          pip3 install --break-system-packages dmgbuild
+
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
           mkdir -p "$STAGING_DIR"
           # Use ditto to preserve the notarization staple ticket (cp -R drops it)
@@ -2294,22 +2302,14 @@ workflows:
           xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
             xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
 
-          BG_ARGS=""
-          [ -f "dmg-assets/background.png" ] && BG_ARGS="--background dmg-assets/background.png"
-
-          create-dmg \
-            --volname "$APP_NAME" \
-            --volicon "$STAGING_DIR/$APP_NAME.app/Contents/Resources/OmiIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 610 365 \
-            --icon-size 80 \
-            --icon "$APP_NAME.app" 455 175 \
-            --hide-extension "$APP_NAME.app" \
-            --app-drop-link 155 175 \
-            --no-internet-enable \
-            $BG_ARGS \
-            "$DMG_PATH" \
-            "$STAGING_DIR/$APP_NAME.app"
+          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
+          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
+          dmgbuild -s dmg-assets/dmgbuild_settings.py \
+            -D app_path="$STAGING_DIR/$APP_NAME.app" \
+            -D app_name="$APP_NAME" \
+            -D assets_dir="$(pwd)/dmg-assets" \
+            "$APP_NAME" \
+            "$DMG_PATH"
 
           rm -rf "$STAGING_DIR"
           echo "DMG created"
@@ -2414,6 +2414,66 @@ workflows:
             "$DMG_PATH"
 
           echo "GitHub release created: $CM_TAG"
+
+      - name: Publish static beta redirect artifacts
+        script: |
+          set -e
+
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          rm /tmp/gcp_key.json
+
+          export BETA_DMG_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/omi.dmg"
+          export RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          cat > /tmp/macos-beta-index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=${BETA_DMG_URL}">
+            <meta name="robots" content="noindex">
+            <title>Redirecting to latest Omi Beta download…</title>
+          </head>
+          <body>
+            <p>Redirecting to the latest Omi Beta download.</p>
+            <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
+            <script>window.location.replace("${BETA_DMG_URL}");</script>
+          </body>
+          </html>
+          EOF
+
+          python3 - <<'PY' > /tmp/macos-beta-redirect.json
+          import json, os
+          print(json.dumps({
+              "channel": "beta",
+              "version": os.environ["VERSION"],
+              "build_number": int(os.environ["BUILD_NUMBER"]),
+              "tag": os.environ["CM_TAG"],
+              "download_url": os.environ["BETA_DMG_URL"],
+              "published_at": os.environ["RELEASED_AT"],
+          }, indent=2))
+          PY
+
+          echo "$BETA_DMG_URL" > /tmp/macos-beta-latest-url.txt
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-index.html \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/index.html"
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-redirect.json \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/redirect.json"
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-latest-url.txt \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/latest-url.txt"
+
+          echo "Static beta redirect artifacts published to $GCS_DESKTOP_UPDATES_BUCKET/beta/"
 
       - name: Bridge release to Firestore for old clients
         script: |

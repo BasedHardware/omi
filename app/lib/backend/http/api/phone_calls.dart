@@ -46,12 +46,7 @@ Future<Map<String, dynamic>?> checkPhoneVerification(String phoneNumber) async {
 }
 
 Future<List<VerifiedPhoneNumber>> getVerifiedPhoneNumbers() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/phone/numbers',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/numbers', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = jsonDecode(response.body);
@@ -76,12 +71,7 @@ Future<bool> deleteVerifiedPhoneNumber(String phoneNumberId) async {
 // ************************************************
 
 Future<PhoneCallToken?> getPhoneCallToken() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/phone/token',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/token', headers: {}, method: 'POST', body: '');
   if (response == null) return null;
   Logger.debug('getPhoneCallToken: ${response.body}');
   if (response.statusCode == 200) {

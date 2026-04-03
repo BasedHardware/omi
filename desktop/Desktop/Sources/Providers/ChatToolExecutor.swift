@@ -21,6 +21,12 @@ class ChatToolExecutor {
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
+    /// Called when request_permission returns "pending" — used to trigger the permission help timer
+    static var onPermissionPending: ((_ permissionType: String) -> Void)?
+
+    /// Email/calendar insights from background reading (set by OnboardingChatView)
+    static var emailInsightsText: String?
+    static var calendarInsightsText: String?
 
     private static var fileScanFileCount = 0
     private static var followupContinuation: CheckedContinuation<String, Never>?
@@ -54,7 +60,11 @@ class ChatToolExecutor {
         case "request_permission":
             let result = await executeRequestPermission(toolCall.arguments)
             let permType = toolCall.arguments["type"] as? String ?? "unknown"
-            AnalyticsManager.shared.onboardingChatToolUsed(tool: "request_permission", properties: ["permission": permType, "result": result.contains("granted") ? "granted" : "pending"])
+            let granted = result.contains("granted")
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "request_permission", properties: ["permission": permType, "result": granted ? "granted" : "pending"])
+            if !granted {
+                DispatchQueue.main.async { onPermissionPending?(permType) }
+            }
             return result
 
         case "check_permission_status":
@@ -85,6 +95,9 @@ class ChatToolExecutor {
             return result
 
         case "complete_onboarding":
+            if !OnboardingChatPersistence.isGoalCompleted {
+                return "ERROR: Cannot complete onboarding yet. The user has NOT set their monthly goal. You MUST call ask_followup to ask about their top goal this month BEFORE calling complete_onboarding. Call get_email_insights first for context, then ask the goal question."
+            }
             let result = await executeCompleteOnboarding(toolCall.arguments)
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "complete_onboarding")
             return result
@@ -95,6 +108,27 @@ class ChatToolExecutor {
             let edgeCount = (toolCall.arguments["edges"] as? [[String: Any]])?.count ?? 0
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "save_knowledge_graph", properties: ["nodes": nodeCount, "edges": edgeCount])
             return result
+
+        case "get_email_insights":
+            let result = executeGetEmailInsights()
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "get_email_insights", properties: ["has_email": emailInsightsText != nil, "has_calendar": calendarInsightsText != nil])
+            return result
+
+        // Backend RAG tools — call Python backend /v1/tools/* endpoints
+        case "get_conversations":
+            return await executeBackendTool(toolCall)
+        case "search_conversations":
+            return await executeBackendTool(toolCall)
+        case "get_memories":
+            return await executeBackendTool(toolCall)
+        case "search_memories":
+            return await executeBackendTool(toolCall)
+        case "get_action_items":
+            return await executeBackendTool(toolCall)
+        case "create_action_item":
+            return await executeBackendTool(toolCall)
+        case "update_action_item":
+            return await executeBackendTool(toolCall)
 
         default:
             return "Unknown tool: \(toolCall.name)"
@@ -503,7 +537,11 @@ class ChatToolExecutor {
 
         switch type {
         case "screen_recording":
+            appState.screenRecordingGrantAttempts += 1
             appState.triggerScreenRecordingPermission()
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             appState.checkScreenRecordingPermission()
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -559,8 +597,22 @@ class ChatToolExecutor {
                 return "pending - user needs to toggle Automation for omi in System Settings"
             }
 
+        case "full_disk_access":
+            // Open System Settings to Full Disk Access pane
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                NSWorkspace.shared.open(url)
+            }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            appState.checkFullDiskAccess()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasFullDiskAccess {
+                return "granted"
+            } else {
+                return "pending - user needs to toggle Full Disk Access for omi in System Settings > Privacy & Security > Full Disk Access"
+            }
+
         default:
-            return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation"
+            return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation, full_disk_access"
         }
     }
 
@@ -584,6 +636,7 @@ class ChatToolExecutor {
             "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
             "accessibility": appState.hasAccessibilityPermission ? "granted" : "not_granted",
             "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
+            "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
         ]
 
         if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
@@ -798,6 +851,24 @@ class ChatToolExecutor {
         }
     }
 
+    /// Return email/calendar insights from background reading
+    private static func executeGetEmailInsights() -> String {
+        var sections: [String] = []
+
+        if let email = emailInsightsText, !email.isEmpty {
+            sections.append("## Email Insights\n\(email)")
+        }
+        if let calendar = calendarInsightsText, !calendar.isEmpty {
+            sections.append("## Calendar Insights\n\(calendar)")
+        }
+
+        if sections.isEmpty {
+            return "No email insights available yet. The background reading may still be in progress, or no browser with a Gmail session was found."
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
     /// Set user preferences (language, name)
     private static func executeSetUserPreferences(_ args: [String: Any]) async -> String {
         var results: [String] = []
@@ -880,10 +951,8 @@ class ChatToolExecutor {
             let remappedSource = idRemap[sourceId] ?? sourceId
             let remappedTarget = idRemap[targetId] ?? targetId
 
-            // Skip self-referencing edges and edges to missing nodes
-            guard remappedSource != remappedTarget,
-                  seenLabels.values.contains(remappedSource),
-                  seenLabels.values.contains(remappedTarget) else { continue }
+            // Skip self-referencing edges
+            guard remappedSource != remappedTarget else { continue }
 
             let edgeId = "\(remappedSource)_\(remappedTarget)_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))"
             edgeRecords.append(LocalKGEdgeRecord(
@@ -955,8 +1024,103 @@ class ChatToolExecutor {
         onQuickReplyQuestion = nil
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
+        onPermissionPending = nil
         fileScanFileCount = 0
 
         return "Onboarding completed successfully! The app is now set up."
+    }
+
+    // MARK: - Backend RAG Tools
+
+    private static func executeBackendTool(_ toolCall: ToolCall) async -> String {
+        do {
+            let api = APIClient.shared
+            let args = toolCall.arguments
+
+            switch toolCall.name {
+            case "get_conversations":
+                let resp = try await api.toolGetConversations(
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    limit: args["limit"] as? Int ?? 20,
+                    offset: args["offset"] as? Int ?? 0,
+                    includeTranscript: args["include_transcript"] as? Bool ?? true
+                )
+                return resp.resultText
+
+            case "search_conversations":
+                guard let query = args["query"] as? String, !query.isEmpty else {
+                    return "Error: query is required"
+                }
+                let resp = try await api.toolSearchConversations(
+                    query: query,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    limit: args["limit"] as? Int ?? 5,
+                    includeTranscript: args["include_transcript"] as? Bool ?? true
+                )
+                return resp.resultText
+
+            case "get_memories":
+                let resp = try await api.toolGetMemories(
+                    limit: args["limit"] as? Int ?? 50,
+                    offset: args["offset"] as? Int ?? 0,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String
+                )
+                return resp.resultText
+
+            case "search_memories":
+                guard let query = args["query"] as? String, !query.isEmpty else {
+                    return "Error: query is required"
+                }
+                let resp = try await api.toolSearchMemories(
+                    query: query,
+                    limit: args["limit"] as? Int ?? 5
+                )
+                return resp.resultText
+
+            case "get_action_items":
+                let resp = try await api.toolGetActionItems(
+                    limit: args["limit"] as? Int ?? 50,
+                    offset: args["offset"] as? Int ?? 0,
+                    completed: args["completed"] as? Bool,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    dueStartDate: args["due_start_date"] as? String,
+                    dueEndDate: args["due_end_date"] as? String
+                )
+                return resp.resultText
+
+            case "create_action_item":
+                guard let desc = args["description"] as? String, !desc.isEmpty else {
+                    return "Error: description is required"
+                }
+                let resp = try await api.toolCreateActionItem(
+                    description: desc,
+                    dueAt: args["due_at"] as? String,
+                    conversationId: args["conversation_id"] as? String
+                )
+                return resp.resultText
+
+            case "update_action_item":
+                guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
+                    return "Error: action_item_id is required"
+                }
+                let resp = try await api.toolUpdateActionItem(
+                    id: itemId,
+                    completed: args["completed"] as? Bool,
+                    description: args["description"] as? String,
+                    dueAt: args["due_at"] as? String
+                )
+                return resp.resultText
+
+            default:
+                return "Unknown backend tool: \(toolCall.name)"
+            }
+        } catch {
+            log("Backend tool error (\(toolCall.name)): \(error)")
+            return "Error calling backend: \(error.localizedDescription)"
+        }
     }
 }

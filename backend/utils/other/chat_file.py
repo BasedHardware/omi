@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import openai
-from openai import AssistantEventHandler
+from openai import AsyncOpenAI, AssistantEventHandler
 from PIL import Image
 
 import database.chat as chat_db
@@ -14,6 +14,8 @@ from models.chat import ChatSession, FileChat
 import logging
 
 logger = logging.getLogger(__name__)
+
+_async_openai = AsyncOpenAI()
 
 
 class File:
@@ -101,7 +103,7 @@ class FileChatTool:
         answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
         return answer
 
-    def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
+    async def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
         """Process chat with file attachments (streaming)"""
         files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
         files = [FileChat(**f) for f in files_data]
@@ -109,40 +111,49 @@ class FileChatTool:
 
         if all_images and files:
             logger.info(f"[FileChat] All {len(files)} files are images, using Chat Completions vision API")
-            answer = self._ask_vision_stream(question, files, callback)
+            answer = await self._ask_vision_stream(question, files, callback)
             return answer
 
-        self._ensure_thread_and_assistant()
+        # _ensure_thread_and_assistant can fail before ask_stream runs.
+        # ask_stream has its own try/finally on callback, so only guard
+        # the setup phase here.
+        try:
+            self._ensure_thread_and_assistant()
+        except Exception:
+            callback.end_nowait()
+            raise
         answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
         return answer
 
-    def _ask_vision_stream(self, question: str, files: list, callback=None):
+    async def _ask_vision_stream(self, question: str, files: list, callback=None):
         """Use Chat Completions API with vision for image-only chats (streaming)"""
-        contents = [{"type": "text", "text": question}]
-        for file in files:
-            file_content = openai.files.content(file.openai_file_id)
-            b64 = base64.b64encode(file_content.read()).decode('utf-8')
-            mime = file.mime_type or 'image/png'
-            contents.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
-                }
-            )
-
         output_list = []
-        stream = openai.chat.completions.create(
-            model="gpt-4.1",
-            messages=[{"role": "user", "content": contents}],
-            stream=True,
-            max_tokens=2048,
-        )
-        for chunk in stream:
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if delta and delta.content:
-                callback.put_data_nowait(delta.content)
-                output_list.append(delta.content)
-        callback.end_nowait()
+        try:
+            contents = [{"type": "text", "text": question}]
+            for file in files:
+                file_content = await _async_openai.files.content(file.openai_file_id)
+                b64 = base64.b64encode(file_content.read()).decode('utf-8')
+                mime = file.mime_type or 'image/png'
+                contents.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
+                    }
+                )
+
+            stream = await _async_openai.chat.completions.create(
+                model="gpt-4.1",
+                messages=[{"role": "user", "content": contents}],
+                stream=True,
+                max_tokens=2048,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    await callback.put_data(delta.content)
+                    output_list.append(delta.content)
+        finally:
+            await callback.end()
         return ''.join(output_list)
 
     def _ensure_thread_and_assistant(self):
@@ -257,20 +268,22 @@ class FileChatTool:
 
     def ask_stream(self, uid, question, file_ids: List[str], thread_id: str, assistant_id: str, callback=None):
 
-        self._fill_question(uid, question, file_ids, thread_id)
-
         output_list = []
 
-        with openai.beta.threads.runs.stream(
-            thread_id=thread_id,
-            assistant_id=assistant_id,
-            event_handler=AssistantEventHandler(),
-            timeout=30.0,
-        ) as stream:
-            for text in stream.text_deltas:
-                callback.put_data_nowait(text)
-                output_list.append(text)
-            stream.until_done()
+        try:
+            self._fill_question(uid, question, file_ids, thread_id)
+
+            with openai.beta.threads.runs.stream(
+                thread_id=thread_id,
+                assistant_id=assistant_id,
+                event_handler=AssistantEventHandler(),
+                timeout=30.0,
+            ) as stream:
+                for text in stream.text_deltas:
+                    callback.put_data_nowait(text)
+                    output_list.append(text)
+                stream.until_done()
+        finally:
             callback.end_nowait()
 
         return ''.join(output_list)

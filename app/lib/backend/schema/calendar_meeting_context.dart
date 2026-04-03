@@ -2,23 +2,14 @@ class MeetingParticipant {
   final String? name;
   final String? email;
 
-  MeetingParticipant({
-    this.name,
-    this.email,
-  });
+  MeetingParticipant({this.name, this.email});
 
   factory MeetingParticipant.fromJson(Map<String, dynamic> json) {
-    return MeetingParticipant(
-      name: json['name'],
-      email: json['email'],
-    );
+    return MeetingParticipant(name: json['name'], email: json['email']);
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'email': email,
-    };
+    return {'name': name, 'email': email};
   }
 
   String get displayName {

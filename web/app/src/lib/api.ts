@@ -2227,3 +2227,42 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
     console.warn('Failed to unregister FCM token:', error);
   }
 }
+
+// ============================================================================
+// Fair Use Status
+// ============================================================================
+
+export interface FairUseStatus {
+  stage: 'none' | 'warning' | 'throttle' | 'restrict';
+  case_ref: string;
+  speech_hours_today: number;
+  speech_hours_3day: number;
+  speech_hours_weekly: number;
+  limits: {
+    daily_hours: number;
+    three_day_hours: number;
+    weekly_hours: number;
+  };
+  usage_pct: {
+    daily: number;
+    three_day: number;
+    weekly: number;
+  };
+  message: string;
+  dg_budget?: {
+    daily_limit_ms: number;
+    used_ms: number;
+    remaining_ms: number;
+    exhausted: boolean;
+    resets_at: string;
+  };
+}
+
+export async function getFairUseStatus(): Promise<FairUseStatus | null> {
+  try {
+    return await fetchWithAuth<FairUseStatus>('/v1/fair-use/status');
+  } catch (error) {
+    console.error('getFairUseStatus error:', error);
+    return null;
+  }
+}

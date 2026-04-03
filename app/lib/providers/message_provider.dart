@@ -21,24 +21,16 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class MessageProvider extends ChangeNotifier {
-  static late MethodChannel _askAIChannel;
-
-  MessageProvider() {
-    if (PlatformService.isDesktop) {
-      _askAIChannel = const MethodChannel('com.omi/ask_ai');
-      _askAIChannel.setMethodCallHandler(_handleAskAIMethodCall);
-    }
-  }
+  MessageProvider();
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
@@ -109,10 +101,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await retrieveAppsSearch(
-        installedApps: true,
-        limit: 50,
-      );
+      final result = await retrieveAppsSearch(installedApps: true, limit: 50);
 
       chatApps = result.apps.where((app) => app.worksWithChat()).toList();
     } catch (e) {
@@ -211,12 +200,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void captureImage() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
-    if (PlatformService.isDesktop) {
-      AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
-      return;
-    }
-
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     try {
       var res = await ImagePicker().pickImage(source: ImageSource.camera);
       if (res != null) {
@@ -229,10 +213,12 @@ class MessageProvider extends ChangeNotifier {
     } on PlatformException catch (e) {
       if (e.code == 'camera_access_denied') {
         AppSnackbar.showSnackbarError(
-            l10n?.msgCameraPermissionDenied ?? 'Camera permission denied. Please allow access to camera');
+          l10n?.msgCameraPermissionDenied ?? 'Camera permission denied. Please allow access to camera',
+        );
       } else {
         AppSnackbar.showSnackbarError(
-            l10n?.msgCameraAccessError(e.message ?? e.code) ?? 'Error accessing camera: ${e.message ?? e.code}');
+          l10n?.msgCameraAccessError(e.message ?? e.code) ?? 'Error accessing camera: ${e.message ?? e.code}',
+        );
       }
     } catch (e) {
       AppSnackbar.showSnackbarError(l10n?.msgPhotoError ?? 'Error taking photo. Please try again.');
@@ -240,7 +226,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectImage() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError(l10n?.msgMaxImagesLimit ?? 'You can only select up to 4 images');
       return;
@@ -249,49 +235,18 @@ class MessageProvider extends ChangeNotifier {
     try {
       List<File> files = [];
 
-      if (PlatformService.isDesktop) {
-        try {
-          FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
-            allowMultiple: true,
-            dialogTitle: 'Select image files',
-            withData: false,
-            withReadStream: false,
-          );
-
-          if (result != null && result.files.isNotEmpty) {
-            for (var file in result.files) {
-              if (file.path != null && files.length < (4 - selectedFiles.length)) {
-                files.add(File(file.path!));
-              }
-            }
-          } else {
-            return;
-          }
-        } on PlatformException catch (e) {
-          AppSnackbar.showSnackbarError(
-              l10n?.msgFilePickerError(e.message ?? '') ?? 'Error opening file picker: ${e.message}');
-          return;
-        } catch (e) {
-          Logger.debug('FilePicker general error: $e');
-          AppSnackbar.showSnackbarError(l10n?.msgSelectImagesError(e.toString()) ?? 'Error selecting images: $e');
-          return;
+      List res = [];
+      if (4 - selectedFiles.length == 1) {
+        var image = await ImagePicker().pickImage(source: ImageSource.gallery);
+        if (image != null) {
+          res = [image];
         }
       } else {
-        List res = [];
-        if (4 - selectedFiles.length == 1) {
-          var image = await ImagePicker().pickImage(source: ImageSource.gallery);
-          if (image != null) {
-            res = [image];
-          }
-        } else {
-          res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
-        }
+        res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+      }
 
-        for (var r in res) {
-          files.add(File(r.path));
-        }
+      for (var r in res) {
+        files.add(File(r.path));
       }
 
       if (files.isNotEmpty) {
@@ -303,11 +258,13 @@ class MessageProvider extends ChangeNotifier {
     } on PlatformException catch (e) {
       Logger.debug('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
       if (e.code == 'photo_access_denied') {
-        AppSnackbar.showSnackbarError(l10n?.msgPhotosPermissionDenied ??
-            'Photos permission denied. Please allow access to photos to select images');
+        AppSnackbar.showSnackbarError(
+          l10n?.msgPhotosPermissionDenied ?? 'Photos permission denied. Please allow access to photos to select images',
+        );
       } else {
         AppSnackbar.showSnackbarError(
-            l10n?.msgSelectImagesError(e.message ?? e.code) ?? 'Error selecting images: ${e.message ?? e.code}');
+          l10n?.msgSelectImagesError(e.message ?? e.code) ?? 'Error selecting images: ${e.message ?? e.code}',
+        );
       }
     } catch (e) {
       Logger.debug('🖼️ General exception during image picking: $e');
@@ -316,7 +273,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectFile() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError(l10n?.msgMaxFilesLimit ?? 'You can only select up to 4 files');
       return;
@@ -349,7 +306,8 @@ class MessageProvider extends ChangeNotifier {
       }
     } on PlatformException catch (e) {
       AppSnackbar.showSnackbarError(
-          l10n?.msgSelectFilesError(e.message ?? e.code) ?? 'Error selecting files: ${e.message ?? e.code}');
+        l10n?.msgSelectFilesError(e.message ?? e.code) ?? 'Error selecting files: ${e.message ?? e.code}',
+      );
     } catch (e) {
       AppSnackbar.showSnackbarError(l10n?.msgSelectFilesGenericError ?? 'Error selecting files. Please try again.');
     }
@@ -381,7 +339,7 @@ class MessageProvider extends ChangeNotifier {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        final l10n = MyApp.navigatorKey.currentContext?.l10n;
+        final l10n = globalNavigatorKey.currentContext?.l10n;
         AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
@@ -424,16 +382,13 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (!hasCachedMessages) {
       firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
-    var mes = await getMessagesServer(
-      appId: appProvider?.selectedChatAppId,
-      dropdownSelected: dropdownSelected,
-    );
+    var mes = await getMessagesServer(appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
     if (!hasCachedMessages) {
       firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
       notifyListeners();
@@ -502,8 +457,11 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
-      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
+  Future sendVoiceMessageStreamToServer(
+    List<List<int>> audioBytes, {
+    Function? onFirstChunkRecived,
+    BleAudioCodec? codec,
+  }) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -518,10 +476,7 @@ class MessageProvider extends ChangeNotifier {
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
 
-    MixpanelManager().chatVoiceInputUsed(
-      chatTargetId: chatTargetId,
-      isPersonaChat: isPersonaChat,
-    );
+    MixpanelManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
@@ -533,8 +488,12 @@ class MessageProvider extends ChangeNotifier {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
         if (!firstChunkRecieved &&
-            [MessageChunkType.message, MessageChunkType.data, MessageChunkType.done, MessageChunkType.think]
-                .contains(chunk.type)) {
+            [
+              MessageChunkType.message,
+              MessageChunkType.data,
+              MessageChunkType.done,
+              MessageChunkType.think,
+            ].contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -612,7 +571,8 @@ class MessageProvider extends ChangeNotifier {
 
     await initAgentLog();
     agentLog(
-        '[MessageProvider] sending via /v2/messages — appId=$currentAppId, text="${text.length > 80 ? text.substring(0, 80) : text}"');
+      '[MessageProvider] sending via /v2/messages — appId=$currentAppId, text="${text.length > 80 ? text.substring(0, 80) : text}"',
+    );
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
@@ -642,12 +602,19 @@ class MessageProvider extends ChangeNotifier {
           flushBuffer();
           agentLog('[MessageProvider] think: ${chunk.text.length > 100 ? chunk.text.substring(0, 100) : chunk.text}');
           message.thinkings.add(chunk.text);
+          if (message.text.isNotEmpty) {
+            agentThinkingAfterText = true;
+          }
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
           if (chunkCount <= 3) agentLog('[MessageProvider] first data chunk received');
+          if (agentThinkingAfterText) {
+            agentThinkingAfterText = false;
+            notifyListeners();
+          }
           textBuffer += chunk.text;
           timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
             flushBuffer();
@@ -926,61 +893,5 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
-  }
-
-  Future<void> _handleAskAIMethodCall(MethodCall call) async {
-    if (!PlatformService.isDesktop) {
-      return;
-    }
-    switch (call.method) {
-      case 'sendQuery':
-        final args = call.arguments as Map<dynamic, dynamic>;
-        final message = args['message'] as String;
-        final filePath = args['filePath'] as String?;
-
-        List<String>? fileIds;
-        if (filePath != null && filePath.isNotEmpty) {
-          final file = File(filePath);
-          final uploadedFilesResult = await uploadFiles([file], null);
-          if (uploadedFilesResult != null) {
-            fileIds = uploadedFilesResult.map((f) => f.id).toList();
-          } else {
-            final l10n = MyApp.navigatorKey.currentContext?.l10n;
-            _askAIChannel.invokeMethod('aiResponseChunk', {
-              'type': 'error',
-              'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
-            });
-            return;
-          }
-        }
-
-        try {
-          await for (var chunk in sendMessageStreamServer(message, filesId: fileIds)) {
-            final chunkMap = {
-              'type': chunk.type.toString().split('.').last,
-              'text': chunk.text,
-              'messageId': chunk.messageId,
-            };
-            if (chunk.type == MessageChunkType.done && chunk.message != null) {
-              chunkMap['text'] = chunk.message!.text;
-            }
-            _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-          }
-        } catch (e) {
-          final failedChunk = ServerMessageChunk.failedMessage();
-          final chunkMap = {
-            'type': failedChunk.type.toString().split('.').last,
-            'text': failedChunk.text,
-            'messageId': failedChunk.messageId,
-          };
-          _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-        }
-        break;
-      default:
-        throw PlatformException(
-          code: 'Unimplemented',
-          details: 'Method ${call.method} not implemented.',
-        );
-    }
   }
 }

@@ -28,6 +28,7 @@ PERMANENT_FAILURE_CODES = frozenset(
     [
         'UNREGISTERED',  # App uninstalled
         'INVALID_REGISTRATION_TOKEN',  # Token format invalid
+        'NOT_FOUND',  # FCM/APNs token no longer maps to a valid registration
     ]
 )
 

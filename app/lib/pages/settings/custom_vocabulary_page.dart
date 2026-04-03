@@ -37,10 +37,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -50,17 +47,8 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: FaIcon(
-                    FontAwesomeIcons.book,
-                    color: Colors.grey.shade400,
-                    size: 16,
-                  ),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+                child: Center(child: FaIcon(FontAwesomeIcons.book, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -71,11 +59,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                       children: [
                         Text(
                           context.l10n.addWords,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(width: 8),
                         Container(
@@ -86,23 +70,13 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                           ),
                           child: Text(
                             '${userProvider.transcriptionVocabulary.length}',
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      context.l10n.addWordsDesc,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
-                    ),
+                    Text(context.l10n.addWordsDesc, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
               ),
@@ -115,10 +89,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
             children: [
               Expanded(
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C2C2E),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
                   child: TextField(
                     controller: _vocabularyController,
                     enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
@@ -304,11 +275,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
           ),
           title: Text(
             context.l10n.customVocabularyTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           centerTitle: true,
         ),
@@ -318,11 +285,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 16),
-                  _buildVocabularyCard(userProvider),
-                  const SizedBox(height: 32),
-                ],
+                children: [const SizedBox(height: 16), _buildVocabularyCard(userProvider), const SizedBox(height: 32)],
               ),
             );
           },

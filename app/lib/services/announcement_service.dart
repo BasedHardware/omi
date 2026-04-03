@@ -50,10 +50,7 @@ class AnnouncementService {
 
       // 1. Show changelogs on version upgrade (fetched separately)
       if (isVersionUpgrade && context.mounted) {
-        final changelogs = await getAppChangelogs(
-          fromVersion: lastKnownVersion,
-          toVersion: currentVersion,
-        );
+        final changelogs = await getAppChangelogs(fromVersion: lastKnownVersion, toVersion: currentVersion);
         if (changelogs.isNotEmpty && context.mounted) {
           _isShowingAnnouncement = true;
           try {
@@ -113,10 +110,7 @@ class AnnouncementService {
   /// Display all pending announcements in priority order.
   /// Announcements are automatically marked as dismissed after being shown.
   /// Note: Changelogs are handled separately via getAppChangelogs().
-  Future<void> _showPendingAnnouncements(
-    BuildContext context,
-    AnnouncementProvider provider,
-  ) async {
+  Future<void> _showPendingAnnouncements(BuildContext context, AnnouncementProvider provider) async {
     _isShowingAnnouncement = true;
 
     try {

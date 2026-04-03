@@ -18,29 +18,19 @@ class AiAppGeneratorBanner extends StatelessWidget {
         // Track banner click
         MixpanelManager().track('AI App Generator Banner Clicked');
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const AiAppGeneratorPage(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AiAppGeneratorPage()));
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              const Color(0xFF6366F1).withOpacity(0.3),
-              const Color(0xFF8B5CF6).withOpacity(0.3),
-            ],
+            colors: [const Color(0xFF6366F1).withOpacity(0.3), const Color(0xFF8B5CF6).withOpacity(0.3)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(18.0),
-          border: Border.all(
-            color: const Color(0xFF8B5CF6).withOpacity(0.3),
-            width: 1,
-          ),
+          border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.3), width: 1),
         ),
         child: Row(
           children: [
@@ -49,18 +39,10 @@ class AiAppGeneratorBanner extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                ),
+                gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Center(
-                child: FaIcon(
-                  FontAwesomeIcons.wandMagicSparkles,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
+              child: const Center(child: FaIcon(FontAwesomeIcons.wandMagicSparkles, color: Colors.white, size: 16)),
             ),
 
             const SizedBox(width: 12),
@@ -69,11 +51,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
             const Expanded(
               child: Text(
                 'Build apps using AI in 1 click!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
 
@@ -81,19 +59,12 @@ class AiAppGeneratorBanner extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
-                ),
+                gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)]),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
                 'BETA',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5),
               ),
             ),
           ],

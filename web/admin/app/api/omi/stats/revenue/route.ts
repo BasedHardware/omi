@@ -1,0 +1,112 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
+import type Stripe from 'stripe';
+import { getStripe } from '@/lib/stripe';
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const stripe = getStripe();
+  try {
+    const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
+    const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
+
+    if (!monthlyPriceId || !annualPriceId) {
+      return NextResponse.json(
+        { error: 'Stripe price IDs not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Fetch all active subscriptions with pagination
+    const fetchAllSubscriptions = async (priceId: string) => {
+      let allSubscriptions: Stripe.Subscription[] = [];
+      let hasMore = true;
+      let startingAfter: string | undefined = undefined;
+
+      while (hasMore) {
+        const params: Stripe.SubscriptionListParams = {
+          status: 'active',
+          price: priceId,
+          limit: 100,
+          expand: ['data.items.data.price'],
+        };
+
+        if (startingAfter) {
+          params.starting_after = startingAfter;
+        }
+
+        const subscriptions = await stripe.subscriptions.list(params);
+        allSubscriptions = allSubscriptions.concat(subscriptions.data);
+        
+        hasMore = subscriptions.has_more;
+        if (hasMore && subscriptions.data.length > 0) {
+          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
+        }
+      }
+
+      return allSubscriptions;
+    };
+
+    const [monthlySubscriptions, annualSubscriptions] = await Promise.all([
+      fetchAllSubscriptions(monthlyPriceId),
+      fetchAllSubscriptions(annualPriceId),
+    ]);
+
+    let monthlyMRR = 0;
+    let annualMRR = 0;
+    let monthlyARR = 0;
+    let annualARR = 0;
+
+    // Calculate MRR from monthly subscriptions using Stripe's subscription amount
+    monthlySubscriptions.forEach((subscription) => {
+      // Use the subscription's current period amount (which is the MRR for monthly subscriptions)
+      const amount = subscription.items.data.reduce((sum, item) => {
+        const price = typeof item.price === 'string' ? null : item.price;
+        if (!price) return sum;
+        
+        const unitAmount = price.unit_amount || 0;
+        const quantity = item.quantity || 1;
+        return sum + (unitAmount * quantity);
+      }, 0);
+      
+      const totalAmount = amount / 100; // Convert from cents to dollars
+      monthlyMRR += totalAmount;
+      monthlyARR += totalAmount * 12;
+    });
+
+    // Calculate MRR from annual subscriptions - convert to monthly equivalent
+    annualSubscriptions.forEach((subscription) => {
+      // Use the subscription's current period amount and convert to monthly
+      const amount = subscription.items.data.reduce((sum, item) => {
+        const price = typeof item.price === 'string' ? null : item.price;
+        if (!price) return sum;
+        
+        const unitAmount = price.unit_amount || 0;
+        const quantity = item.quantity || 1;
+        return sum + (unitAmount * quantity);
+      }, 0);
+      
+      const totalAmount = amount / 100; // Convert from cents to dollars
+      annualMRR += totalAmount / 12; // Convert annual to monthly equivalent
+      annualARR += totalAmount;
+    });
+
+    // Calculate combined totals
+    const totalMRR = monthlyMRR + annualMRR;
+    const totalARR = monthlyARR + annualARR;
+
+    return NextResponse.json({
+      mrr: totalMRR,
+      arr: totalARR,
+    });
+  } catch (error) {
+    console.error('Error calculating revenue metrics:', error);
+    return NextResponse.json(
+      { error: 'Failed to calculate revenue metrics' },
+      { status: 500 }
+    );
+  }
+}
