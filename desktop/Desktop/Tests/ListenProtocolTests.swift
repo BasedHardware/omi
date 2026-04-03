@@ -1,7 +1,7 @@
 import XCTest
 @testable import Omi_Computer
 
-/// Tests for the Python backend `/v4/listen` WebSocket protocol parsing.
+/// Tests for the Python backend WebSocket protocol parsing.
 /// Exercises TranscriptionService.parseBackendResponse() end-to-end with real callback dispatch.
 final class ListenProtocolTests: XCTestCase {
 
@@ -76,7 +76,7 @@ final class ListenProtocolTests: XCTestCase {
     ) -> TranscriptionService? {
         // Use batch init to skip auth/URL requirements, then set callbacks manually
         guard let service = try? TranscriptionService(language: "en", forBatchOnly: true) else {
-            // Batch init requires proxy/deepgram URL — create with streaming init fallback
+            // Batch init — create with streaming init fallback if needed
             return try? TranscriptionService(language: "en")
         }
         service.start(
