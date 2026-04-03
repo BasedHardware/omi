@@ -52,6 +52,10 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/services/apple_reminders_sync_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
@@ -207,6 +211,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
         ensureAgentVm();
         Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
+      }
+
+      // Sync Apple Reminders on foreground resume
+      if (mounted && PlatformService.isApple) {
+        final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+        if (taskProvider.selectedApp == TaskIntegrationApp.appleReminders) {
+          AppleRemindersSyncService().syncOnForegroundResume().then((_) {
+            if (mounted) {
+              Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
+            }
+          });
+        }
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
