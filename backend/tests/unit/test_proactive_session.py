@@ -7,6 +7,7 @@ and auth verification without hitting external services.
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
 
 from proactive.v1 import proactive_pb2 as pb2
@@ -183,7 +184,4 @@ async def test_auth_failure_aborts():
 
     context.abort.assert_called_once()
     args = context.abort.call_args
-    # grpc.StatusCode.UNAUTHENTICATED
-    import grpc
-
     assert args[0][0] == grpc.StatusCode.UNAUTHENTICATED
