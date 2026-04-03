@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed floating bar screenshots not capturing screen content when screen recording permission was revoked after app update"
+  ],
   "releases": [
     {
       "version": "0.11.206",
