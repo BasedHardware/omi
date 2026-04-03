@@ -314,7 +314,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     return _wals
-        .where((w) => w.status == WalStatus.miss && w.timerStart >= sessionStartSeconds && w.timerStart <= now)
+        .where((w) =>
+            w.status == WalStatus.miss &&
+            w.storage == WalStorage.disk &&
+            w.timerStart >= sessionStartSeconds &&
+            w.timerStart <= now)
         .toList();
   }
 
