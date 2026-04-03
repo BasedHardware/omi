@@ -110,6 +110,9 @@ pusher
 agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
+proactive (proactive/main.py)
+  └── REST ──► Gemini API (generativelanguage.googleapis.com)
+
 notifications-job (modal/job.py)  [cron]
 ```
 
