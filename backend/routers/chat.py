@@ -392,6 +392,11 @@ async def transcribe_voice_message(
         except ValueError:
             raise HTTPException(status_code=422, detail='sample_rate and channels must be integers')
 
+        if sample_rate < 8000 or sample_rate > 48000:
+            raise HTTPException(status_code=422, detail='sample_rate must be between 8000 and 48000')
+        if channels < 1 or channels > 2:
+            raise HTTPException(status_code=422, detail='channels must be 1 or 2')
+
         resolved_language = resolve_voice_message_language(uid, language)
         try:
             transcript, detected_language = transcribe_pcm_bytes(
@@ -527,7 +532,9 @@ async def transcribe_voice_message_stream(
         codec: Audio codec, must be 'linear16' (default 'linear16')
         channels: Number of audio channels (default 1)
 
-    Client sends: binary audio frames (PCM 16-bit)
+    Client sends:
+        - binary frames: audio data (PCM 16-bit)
+        - text "finalize": flush remaining audio + trigger Deepgram finalization
     Server sends: JSON arrays of transcript segments
         [{"speaker": "SPEAKER_00", "start": 0.0, "end": 1.5, "text": "Hello world",
           "is_user": false, "person_id": null}]
@@ -536,6 +543,14 @@ async def transcribe_voice_message_stream(
 
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
+        return
+
+    if sample_rate < 8000 or sample_rate > 48000:
+        await websocket.close(code=1008, reason='sample_rate must be between 8000 and 48000')
+        return
+
+    if channels < 1 or channels > 2:
+        await websocket.close(code=1008, reason='channels must be 1 or 2')
         return
 
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
@@ -612,6 +627,21 @@ async def transcribe_voice_message_stream(
 
             if message.get("type") == "websocket.disconnect":
                 break
+
+            # Handle text "finalize" message: flush remaining audio, finalize Deepgram,
+            # wait for final transcript, then continue receiving (client closes when ready).
+            text_data = message.get("text")
+            if text_data and text_data.strip() == "finalize":
+                if dg_socket and not dg_socket.is_connection_dead:
+                    if len(stt_audio_buffer) > 0:
+                        dg_socket.send(bytes(stt_audio_buffer))
+                        stt_audio_buffer.clear()
+                    try:
+                        dg_socket.finalize()
+                        await asyncio.sleep(0.3)
+                    except Exception:
+                        pass
+                continue
 
             data = message.get("bytes")
             if data is None:
