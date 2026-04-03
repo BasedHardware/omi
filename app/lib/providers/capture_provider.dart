@@ -214,8 +214,7 @@ class CaptureProvider extends ChangeNotifier
   /// Empty when all frames have been streamed successfully (clean UI).
   List<Wal> get unsyncedSessionWals {
     if (_sessionStartSeconds == 0) return [];
-    final syncs = (_wal as WalService).getSyncs() as WalSyncs;
-    return syncs.phone.getSessionUnsyncedWals(_sessionStartSeconds);
+    return _wal.getSyncs().phone.getSessionUnsyncedWals(_sessionStartSeconds);
   }
 
   // Version counter for segments/photos content changes. Incremented on in-place mutations
@@ -1219,8 +1218,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
-    final syncs = (_wal as WalService).getSyncs() as WalSyncs;
-    final unsyncedWals = syncs.phone.getSessionUnsyncedWals(sessionStartSeconds);
+    final phoneSync = _wal.getSyncs().phone;
+    final unsyncedWals = phoneSync.getSessionUnsyncedWals(sessionStartSeconds);
     if (unsyncedWals.isEmpty) return;
 
     Logger.debug('Auto-syncing ${unsyncedWals.length} session WALs to conversation $conversationId');
@@ -1232,7 +1231,7 @@ class CaptureProvider extends ChangeNotifier
         final file = File(fullPath);
         if (!file.existsSync()) continue;
         await syncLocalFilesV2([file], conversationId: conversationId);
-        await syncs.phone.markWalSyncedAndPersist(wal);
+        await phoneSync.markWalSyncedAndPersist(wal);
       } catch (e) {
         Logger.debug('Auto-sync WAL ${wal.id} failed: $e');
       }
