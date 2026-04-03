@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 PROTOCOL_VERSION = '1.0'
 MAX_MODEL_ITERATIONS = 5
 
+_STREAM_END = object()
+
 
 class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
     """Handles bidirectional Session streams from desktop clients."""
@@ -39,9 +41,22 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
         cached_context = None
         context_version = None
         task_assistant = ServerTaskAssistant()
-        # Queue for passing tool results from the bidi stream into analyze_frame.
-        # Uses a keyed approach to enforce request_id matching.
         tool_result_queue = asyncio.Queue(maxsize=4)
+
+        # Pump client messages into a queue so we can read from it concurrently
+        # without conflicting with async-for iteration.
+        client_queue = asyncio.Queue()
+
+        async def _pump_client():
+            try:
+                async for msg in request_iterator:
+                    await client_queue.put(msg)
+            except Exception:
+                pass
+            finally:
+                await client_queue.put(_STREAM_END)
+
+        pump_task = asyncio.create_task(_pump_client())
 
         async def receive_tool_result(request_id: str, timeout_ms: int = 10000) -> pb2.ToolResult:
             """Wait for a ToolResult matching request_id from the client stream."""
@@ -57,7 +72,6 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     raise TimeoutError(f'ToolResult timeout after {timeout_ms}ms for request_id={request_id}')
                 if result.request_id == request_id:
                     return result
-                # Mismatched request_id — discard and keep waiting
                 logger.warning(
                     'ToolResult request_id mismatch: expected=%s got=%s uid=%s — discarding',
                     request_id,
@@ -66,7 +80,11 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                 )
 
         try:
-            async for client_event in request_iterator:
+            while True:
+                client_event = await client_queue.get()
+                if client_event is _STREAM_END:
+                    break
+
                 event_type = client_event.WhichOneof('event')
 
                 if event_type == 'client_hello':
@@ -96,7 +114,6 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     frame = client_event.frame_event
                     frame_id = frame.screenshot_id or str(frame.frame_number)
 
-                    # Update context if client sent a refresh
                     if frame.HasField('session_context') and frame.context_version != context_version:
                         cached_context = frame.session_context
                         context_version = frame.context_version
@@ -113,8 +130,6 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                         )
                         continue
 
-                    # Run analyze_frame in a background task so it can block on
-                    # receive_tool_result while we read from the bidi stream.
                     output_queue = asyncio.Queue()
                     gen = task_assistant.analyze_frame(
                         frame=frame,
@@ -125,15 +140,11 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     )
                     gen_task = asyncio.create_task(self._run_generator(gen, output_queue))
 
-                    # Drain output events. When a ToolCallRequest is yielded, we need to
-                    # concurrently: (a) yield it to the client and (b) read the next
-                    # client message to feed into tool_result_queue.
                     awaiting_tool_result = False
                     while True:
                         if awaiting_tool_result:
-                            # Concurrently wait for the next output event AND the next client message
                             output_get = asyncio.ensure_future(output_queue.get())
-                            client_read = asyncio.ensure_future(request_iterator.__aiter__().__anext__())
+                            client_read = asyncio.ensure_future(client_queue.get())
                             done, pending = await asyncio.wait(
                                 {output_get, client_read},
                                 timeout=30.0,
@@ -141,7 +152,6 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                             )
 
                             if not done:
-                                # Both timed out
                                 for p in pending:
                                     p.cancel()
                                 logger.warning('Both output and client read timed out: uid=%s', uid)
@@ -152,9 +162,8 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                                 p.cancel()
 
                             if client_read in done:
-                                try:
-                                    next_msg = client_read.result()
-                                except StopAsyncIteration:
+                                next_msg = client_read.result()
+                                if next_msg is _STREAM_END:
                                     logger.warning('Client disconnected during tool wait: uid=%s', uid)
                                     gen_task.cancel()
                                     break
@@ -162,18 +171,17 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                                 if msg_type == 'tool_result':
                                     await tool_result_queue.put(next_msg.tool_result)
                                 elif msg_type == 'heartbeat':
-                                    pass  # Heartbeats are fine during tool waits
+                                    pass
                                 else:
                                     logger.warning('Unexpected %s during tool wait: uid=%s', msg_type, uid)
 
                             if output_get in done:
                                 event = output_get.result()
                                 if event is None:
-                                    break  # Generator finished
+                                    break
                                 yield event
                                 awaiting_tool_result = event.WhichOneof('event') == 'tool_call_request'
                         else:
-                            # Normal mode: just wait for the next output event
                             try:
                                 event = await asyncio.wait_for(output_queue.get(), timeout=60.0)
                             except asyncio.TimeoutError:
@@ -181,7 +189,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                                 gen_task.cancel()
                                 break
                             if event is None:
-                                break  # Generator finished
+                                break
                             yield event
                             awaiting_tool_result = event.WhichOneof('event') == 'tool_call_request'
 
@@ -193,10 +201,9 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                             pass
 
                 elif event_type == 'heartbeat':
-                    pass  # Heartbeats keep the stream alive; no response needed
+                    pass
 
                 elif event_type == 'tool_result':
-                    # Standalone tool_result outside of a frame analysis
                     try:
                         tool_result_queue.put_nowait(client_event.tool_result)
                     except asyncio.QueueFull:
@@ -216,6 +223,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                 )
             )
         finally:
+            pump_task.cancel()
             logger.info('Session closed: uid=%s session=%s', uid, session_id)
 
     @staticmethod
