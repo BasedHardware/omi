@@ -391,7 +391,7 @@ Future<SyncLocalFilesResponse> syncLocalFilesV2(
     // Step 1: Submit files
     var url = '${Env.apiBaseUrl}v2/sync-local-files';
     if (conversationId != null) {
-      url += '?conversation_id=$conversationId';
+      url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
     }
     var response = await makeMultipartApiCall(
       url: url,
