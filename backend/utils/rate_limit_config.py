@@ -44,6 +44,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "chat:initial": (60, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
+    "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
     # Agent/MCP — bursty tool calls
