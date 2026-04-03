@@ -920,6 +920,7 @@ def process_segment(
     is_locked: bool = False,
     transcription_prefs: dict = None,
     person_embeddings_cache: dict = None,
+    target_conversation_id: str = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -977,7 +978,13 @@ def process_segment(
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
-        closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+
+        # When a target conversation is specified (auto-sync from live capture),
+        # attach segments to it directly instead of searching by timestamp.
+        if target_conversation_id:
+            closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
+        else:
+            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
         if not closest_memory:
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -1074,7 +1081,13 @@ def _cleanup_files(file_paths):
 
 
 @router.post("/v1/sync-local-files")
-async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+    conversation_id: str = Query(
+        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
+    ),
+):
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
@@ -1196,6 +1209,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     is_locked,
                     transcription_prefs,
                     person_embeddings_cache,
+                    conversation_id,
                 ),
             )
             for path in segmented_paths
@@ -1301,6 +1315,7 @@ def _process_segments_background(
     job_dir: str,
     transcription_prefs: Optional[dict] = None,
     person_embeddings_cache: Optional[Dict[str, dict]] = None,
+    target_conversation_id: str = None,
 ):
     """Background worker: runs segment processing and updates Redis job status."""
     try:
@@ -1335,6 +1350,7 @@ def _process_segments_background(
                     is_locked,
                     transcription_prefs,
                     person_embeddings_cache,
+                    target_conversation_id,
                 ),
             )
             for path in segmented_paths
@@ -1394,7 +1410,13 @@ def _process_segments_background(
 
 
 @router.post("/v2/sync-local-files")
-async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files_v2(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+    conversation_id: str = Query(
+        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
+    ),
+):
     """
     Async version of sync-local-files. Does fast-path work (decode, VAD) inline,
     then starts background processing and returns 202 with a job_id for polling.
@@ -1524,6 +1546,7 @@ async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = De
                 job_dir,
                 transcription_prefs,
                 person_embeddings_cache,
+                conversation_id,
             ),
             daemon=True,
         )
