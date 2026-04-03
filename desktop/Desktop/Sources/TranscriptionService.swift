@@ -205,13 +205,21 @@ class TranscriptionService {
         )
     }
 
-    /// Legacy finishStream — delegates to stop() for backward compatibility.
-    /// PTT live mode calls this to flush remaining audio before finalizing.
+    /// Flush remaining audio and tell the backend to finalize transcription.
+    /// PTT live mode calls this to get the final transcript segment before closing.
+    /// Sends a "finalize" text message so the backend flushes any sub-threshold audio
+    /// to Deepgram and triggers its endpointing/finalization.
     func finishStream() {
         flushAudioBuffer()
-        // Note: unlike stop(), finishStream keeps the service alive briefly
-        // for any remaining server responses. With the Python backend, segments
-        // arrive as they're processed, so flushing the buffer is sufficient.
+
+        // Send "finalize" text message to backend to trigger server-side flush + Deepgram finalization
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let message = URLSessionWebSocketTask.Message.string("finalize")
+        webSocketTask.send(message) { error in
+            if let error = error {
+                logError("TranscriptionService: finishStream send error", error: error)
+            }
+        }
     }
 
     // MARK: - Public Methods (Streaming)
