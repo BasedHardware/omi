@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed floating bar screenshots not capturing screen content when screen recording permission was revoked after app update"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.222",
+      "date": "2026-04-03",
+      "changes": [
+        "Fixed floating bar screenshots not capturing screen content when screen recording permission was revoked after app update"
+      ]
+    },
     {
       "version": "0.11.221",
       "date": "2026-04-02",
