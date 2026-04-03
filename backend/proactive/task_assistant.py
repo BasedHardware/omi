@@ -58,7 +58,7 @@ TOOL_DECLARATIONS = [
                 'context_summary': {'type': 'STRING'},
                 'current_activity': {'type': 'STRING'},
             },
-            'required': ['title', 'context_summary', 'current_activity'],
+            'required': ['title', 'description', 'priority', 'confidence', 'context_summary', 'current_activity'],
         },
     },
     {
@@ -271,7 +271,7 @@ class ServerTaskAssistant:
                     confidence=func_args.get('confidence', 0.0),
                     source_category=func_args.get('source_category', ''),
                     source_subcategory=func_args.get('source_subcategory', ''),
-                    relevance_score=int(func_args.get('relevance_score', 0)),
+                    relevance_score=_safe_int(func_args.get('relevance_score', 0)),
                 )
                 yield pb2.ServerEvent(
                     analysis_outcome=pb2.AnalysisOutcome(
@@ -367,3 +367,11 @@ def _parse_priority(priority_str: str) -> int:
         'low': pb2.PRIORITY_LOW,
     }
     return mapping.get(priority_str.lower(), pb2.PRIORITY_MEDIUM)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    """Safely convert model output to int, returning default on failure."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
