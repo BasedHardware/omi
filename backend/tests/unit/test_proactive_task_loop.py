@@ -11,8 +11,11 @@ import pytest
 
 from proactive.v1 import proactive_pb2 as pb2
 from proactive.task_assistant import (
+    GEMINI_API_URL,
+    GEMINI_MODEL,
     ServerTaskAssistant,
     _build_prompt,
+    _call_gemini,
     _parse_function_call,
     _parse_priority,
     _safe_int,
@@ -637,3 +640,40 @@ async def test_extract_task_with_bad_relevance_score():
     assert len(events) == 1
     assert events[0].analysis_outcome.outcome_kind == pb2.EXTRACT_TASK
     assert events[0].analysis_outcome.task.relevance_score == 0  # safe default
+
+
+# ---------------------------------------------------------------------------
+# P5: _call_gemini request construction tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_gemini_uses_header_not_query_param():
+    """P5: _call_gemini should send API key in x-goog-api-key header, not URL query."""
+    captured_requests = []
+
+    async def mock_post(url, json=None, headers=None):
+        captured_requests.append({'url': url, 'headers': headers, 'json': json})
+        mock_resp = httpx.Response(200, json={'candidates': []})
+        mock_resp._request = httpx.Request('POST', url)
+        return mock_resp
+
+    with patch('proactive.task_assistant.GEMINI_API_KEY', 'test-key-abc'):
+        with patch('httpx.AsyncClient') as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post = mock_post
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            await _call_gemini([{'role': 'user', 'parts': [{'text': 'test'}]}], [])
+
+    assert len(captured_requests) == 1
+    req = captured_requests[0]
+    # URL should NOT contain the API key
+    assert 'test-key-abc' not in req['url']
+    assert 'key=' not in req['url']
+    # URL should be the expected endpoint
+    assert f'{GEMINI_API_URL}/{GEMINI_MODEL}:generateContent' == req['url']
+    # Header should contain the API key
+    assert req['headers']['x-goog-api-key'] == 'test-key-abc'
