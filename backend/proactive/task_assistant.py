@@ -4,7 +4,7 @@ import base64
 import logging
 import os
 import uuid
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable, Awaitable
 
 import httpx
 
@@ -52,6 +52,9 @@ TOOL_DECLARATIONS = [
                 'source_app': {'type': 'STRING'},
                 'inferred_deadline': {'type': 'STRING', 'description': 'ISO date or empty'},
                 'confidence': {'type': 'NUMBER'},
+                'source_category': {'type': 'STRING', 'description': 'Origin category (e.g. communication, code)'},
+                'source_subcategory': {'type': 'STRING', 'description': 'Origin subcategory'},
+                'relevance_score': {'type': 'INTEGER', 'description': '0-100 relevance ranking'},
                 'context_summary': {'type': 'STRING'},
                 'current_activity': {'type': 'STRING'},
             },
@@ -154,6 +157,19 @@ def _parse_function_call(response: dict) -> tuple:
     return None, None
 
 
+def _format_search_results(tool_result: pb2.ToolResult) -> str:
+    """Format ToolResult search results for Gemini context injection."""
+    if tool_result.error:
+        return f'Search error: {tool_result.error}'
+    if not tool_result.result or not tool_result.result.items:
+        return 'No matching tasks found.'
+    lines = []
+    for item in tool_result.result.items:
+        status = pb2.TaskStatus.Name(item.status) if item.status else 'unknown'
+        lines.append(f'- [{status}] (sim={item.similarity:.2f}) {item.description}')
+    return '\n'.join(lines)
+
+
 class ServerTaskAssistant:
     """Server-side task extraction loop that mirrors the desktop TaskAssistant."""
 
@@ -163,15 +179,14 @@ class ServerTaskAssistant:
         session_context: pb2.SessionContext,
         frame_id: str,
         uid: str,
-        send_tool_request,
-        receive_tool_result,
+        receive_tool_result: Callable[[str, int], Awaitable[pb2.ToolResult]],
     ) -> AsyncIterator[pb2.ServerEvent]:
         """Run the Gemini tool loop for one frame.
 
         Yields ServerEvent messages (ToolCallRequest or AnalysisOutcome).
-        When a ToolCallRequest is yielded, the caller must send it to the client
-        and feed the ToolResult back by sending it on the bidi stream. The next
-        client message after a ToolCallRequest must be a ToolResult.
+        When a search tool is needed, yields a ToolCallRequest, then awaits
+        receive_tool_result() to get the desktop's response. The result is
+        injected back into the Gemini conversation and the loop continues.
         """
         prompt = _build_prompt(session_context, frame.app_name)
 
@@ -188,16 +203,19 @@ class ServerTaskAssistant:
         if image_b64:
             contents[0]['parts'].append({'inline_data': {'mime_type': 'image/jpeg', 'data': image_b64}})
 
-        search_count = 0
         for iteration in range(MAX_ITERATIONS):
             try:
                 response = await _call_gemini(contents, TOOL_DECLARATIONS)
             except Exception as e:
-                logger.error('Gemini call failed: uid=%s frame=%s iter=%d error=%s', uid, frame_id, iteration, e)
+                # Sanitize error — httpx includes full URL (with API key) in HTTPStatusError
+                error_type = type(e).__name__
+                logger.error(
+                    'Gemini call failed: uid=%s frame=%s iter=%d error_type=%s', uid, frame_id, iteration, error_type
+                )
                 yield pb2.ServerEvent(
                     server_error=pb2.ServerError(
                         code='GEMINI_ERROR',
-                        message=f'Gemini API error: {e}',
+                        message=f'Gemini API error ({error_type})',
                         retryable=True,
                         frame_id=frame_id,
                     )
@@ -250,6 +268,9 @@ class ServerTaskAssistant:
                     source_app=func_args.get('source_app', frame.app_name),
                     inferred_deadline=func_args.get('inferred_deadline', ''),
                     confidence=func_args.get('confidence', 0.0),
+                    source_category=func_args.get('source_category', ''),
+                    source_subcategory=func_args.get('source_subcategory', ''),
+                    relevance_score=int(func_args.get('relevance_score', 0)),
                 )
                 yield pb2.ServerEvent(
                     analysis_outcome=pb2.AnalysisOutcome(
@@ -262,13 +283,12 @@ class ServerTaskAssistant:
                 )
                 return
 
-            # Search tools: delegate to desktop via gRPC stream
+            # Search tools: delegate to desktop via gRPC stream, then resume model loop
             if func_name in ('search_similar', 'search_keywords'):
-                search_count += 1
                 request_id = str(uuid.uuid4())
                 tool_kind = pb2.SEARCH_SIMILAR if func_name == 'search_similar' else pb2.SEARCH_KEYWORDS
 
-                # Yield the tool call request — the bidi stream handler sends this to the client
+                # Yield ToolCallRequest to client
                 yield pb2.ServerEvent(
                     tool_call_request=pb2.ToolCallRequest(
                         request_id=request_id,
@@ -279,12 +299,40 @@ class ServerTaskAssistant:
                     )
                 )
 
-                # The caller (service.py) will feed the ToolResult back.
-                # For now, signal that we need a tool result by setting a sentinel.
-                # The actual result handling is done in the service layer.
-                self._pending_request_id = request_id
-                self._pending_func_name = func_name
-                return  # Service layer will resume the loop when tool result arrives
+                # Wait for desktop to respond with search results
+                try:
+                    tool_result = await receive_tool_result(request_id, 10000)
+                except Exception as e:
+                    logger.warning(
+                        'Tool result timeout/error: uid=%s request_id=%s error=%s', uid, request_id, type(e).__name__
+                    )
+                    yield pb2.ServerEvent(
+                        analysis_outcome=pb2.AnalysisOutcome(
+                            outcome_kind=pb2.NO_TASK_FOUND,
+                            context_summary=f'Search tool timed out ({func_name})',
+                            current_activity=frame.app_name,
+                            frame_id=frame_id,
+                        )
+                    )
+                    return
+
+                # Inject the tool result into Gemini conversation and continue the loop
+                result_text = _format_search_results(tool_result)
+                # Append the model's function call
+                contents.append(
+                    {
+                        'role': 'model',
+                        'parts': [{'functionCall': {'name': func_name, 'args': func_args}}],
+                    }
+                )
+                # Append the function response
+                contents.append(
+                    {
+                        'role': 'user',
+                        'parts': [{'functionResponse': {'name': func_name, 'response': {'result': result_text}}}],
+                    }
+                )
+                continue  # Re-enter the loop — Gemini will now decide extract/reject/no_task
 
             # Unknown function
             logger.warning('Unknown function call: %s uid=%s', func_name, uid)
