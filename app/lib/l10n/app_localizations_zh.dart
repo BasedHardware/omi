@@ -8782,4 +8782,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String gattError(String code) {
     return 'GATT错误 ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 音频已本地保存';
+  }
+
+  @override
+  String get willSyncAutomatically => '将自动同步';
 }

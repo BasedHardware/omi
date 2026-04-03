@@ -8945,4 +8945,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String gattError(String code) {
     return 'Lỗi GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration âm thanh đã lưu cục bộ';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sẽ tự động đồng bộ';
 }

@@ -8943,4 +8943,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-virhe ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ääntä tallennettu paikallisesti';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkronoidaan automaattisesti';
 }

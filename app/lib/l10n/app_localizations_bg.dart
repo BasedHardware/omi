@@ -8979,4 +8979,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String gattError(String code) {
     return 'GATT грешка ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио запазено локално';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ще се синхронизира автоматично';
 }

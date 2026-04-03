@@ -8940,4 +8940,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String gattError(String code) {
     return 'Chyba GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženo lokálně';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje se automaticky';
 }

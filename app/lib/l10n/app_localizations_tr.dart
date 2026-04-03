@@ -8957,4 +8957,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String gattError(String code) {
     return 'GATT hatası ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ses yerel olarak kaydedildi';
+  }
+
+  @override
+  String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
 }

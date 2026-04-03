@@ -8948,4 +8948,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-fel ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ljud sparat lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseras automatiskt';
 }
