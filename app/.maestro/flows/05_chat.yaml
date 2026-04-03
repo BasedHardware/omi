@@ -33,9 +33,8 @@ tags:
 - tapOn:
     id: ".*send.*"
     optional: true
-- pressKey:
-    key: "Enter"
-    optional: true
+- optional: true
+  pressKey: "Enter"
 - takeScreenshot: "05_chat_sent"
 
 # Wait for AI response (wait for loading to disappear, then verify actual content)
