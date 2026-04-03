@@ -50,6 +50,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   @visibleForTesting
   List<Wal> get testWals => _wals;
 
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
   @override
   void cancelSync() {
     _isCancelled = true;
