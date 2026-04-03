@@ -10,7 +10,13 @@ import httpx
 import pytest
 
 from proactive.v1 import proactive_pb2 as pb2
-from proactive.task_assistant import ServerTaskAssistant, _build_prompt, _parse_function_call, _parse_priority
+from proactive.task_assistant import (
+    ServerTaskAssistant,
+    _build_prompt,
+    _parse_function_call,
+    _parse_priority,
+    _safe_int,
+)
 
 # ---------------------------------------------------------------------------
 # _build_prompt tests
@@ -566,3 +572,68 @@ async def test_gemini_error_does_not_leak_api_key():
     error_msg = events[0].server_error.message
     assert 'SECRET_KEY_123' not in error_msg
     assert 'HTTPStatusError' in error_msg
+
+
+# ---------------------------------------------------------------------------
+# _safe_int tests
+# ---------------------------------------------------------------------------
+
+
+def test_safe_int_valid():
+    """Valid int values should convert normally."""
+    assert _safe_int(42) == 42
+    assert _safe_int('85') == 85
+    assert _safe_int(0) == 0
+
+
+def test_safe_int_invalid():
+    """Invalid values should return the default."""
+    assert _safe_int('not-an-int') == 0
+    assert _safe_int('not-an-int', default=50) == 50
+    assert _safe_int(None) == 0
+    assert _safe_int(None, default=-1) == -1
+
+
+# ---------------------------------------------------------------------------
+# extract_task with bad relevance_score (robustness)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_extract_task_with_bad_relevance_score():
+    """Model returning non-integer relevance_score should still produce a valid ExtractedTask."""
+    gemini_response = {
+        'candidates': [
+            {
+                'content': {
+                    'parts': [
+                        {
+                            'functionCall': {
+                                'name': 'extract_task',
+                                'args': {
+                                    'title': 'Test task',
+                                    'description': 'A test',
+                                    'priority': 'low',
+                                    'confidence': 0.5,
+                                    'relevance_score': 'not-a-number',
+                                    'context_summary': 'test',
+                                    'current_activity': 'Safari',
+                                },
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    assistant = ServerTaskAssistant()
+    frame = pb2.FrameEvent(app_name='Safari', frame_number=1)
+    ctx = pb2.SessionContext()
+
+    with patch('proactive.task_assistant._call_gemini', new_callable=AsyncMock, return_value=gemini_response):
+        events = await _collect_events(assistant, frame, ctx)
+
+    assert len(events) == 1
+    assert events[0].analysis_outcome.outcome_kind == pb2.EXTRACT_TASK
+    assert events[0].analysis_outcome.task.relevance_score == 0  # safe default
