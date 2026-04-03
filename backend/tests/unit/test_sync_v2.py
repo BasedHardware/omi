@@ -873,7 +873,9 @@ class TestBackgroundWorkerBehavioral:
 
         call_count = [0]
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             call_count[0] += 1
             if call_count[0] % 2 == 0:
                 with lock:
@@ -907,7 +909,9 @@ class TestBackgroundWorkerBehavioral:
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             with lock:
                 errors.append(f'Failed: {path}')
 
@@ -1037,7 +1041,9 @@ class TestBackgroundWorkerBehavioral:
 
         received_args = []
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             received_args.append({'prefs': prefs, 'cache': cache})
 
         mod.process_segment = mock_process_segment
@@ -1071,7 +1077,9 @@ class TestBackgroundWorkerBehavioral:
 
         received_args = []
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             received_args.append({'prefs': prefs, 'cache': cache})
 
         mod.process_segment = mock_process_segment
@@ -1090,6 +1098,66 @@ class TestBackgroundWorkerBehavioral:
         assert len(received_args) == 1
         assert received_args[0]['prefs'] is None
         assert received_args[0]['cache'] is None
+
+    def test_bg_worker_forwards_target_conversation_id_to_process_segment(self):
+        """Worker must forward target_conversation_id to each process_segment call."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'target_conversation_id': target_conversation_id})
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='target-conv-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/tc1.wav', '/tmp/tc2.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=10.0,
+            job_dir='/tmp/target-conv-dir',
+            target_conversation_id='conv-123',
+        )
+
+        assert len(received_args) == 2
+        for args in received_args:
+            assert args['target_conversation_id'] == 'conv-123'
+
+    def test_bg_worker_defaults_target_conversation_id_to_none(self):
+        """Worker must default target_conversation_id to None when not provided."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'target_conversation_id': target_conversation_id})
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='no-target-conv-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/nt1.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=5.0,
+            job_dir='/tmp/no-target-conv-dir',
+        )
+
+        assert len(received_args) == 1
+        assert received_args[0]['target_conversation_id'] is None
 
 
 # ---------------------------------------------------------------------------
