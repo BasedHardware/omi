@@ -449,6 +449,102 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     return count
 
 
+# *****************************
+# ****** REMINDERS SYNC *******
+# *****************************
+
+
+def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
+    """Mark multiple action items as sync_requested in a single batch write."""
+    if not item_ids:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    for item_id in item_ids:
+        doc_ref = action_items_ref.document(item_id)
+        batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+
+    batch.commit()
+
+
+def get_pending_apple_reminders_sync(uid: str) -> dict:
+    """
+    Get items needing Apple Reminders sync:
+    - pending_export: sync_requested=True but not yet exported (FCM missed items)
+    - synced_items: exported to apple_reminders with apple_reminder_id (for bidirectional sync)
+    """
+    user_ref = db.collection('users').document(uid)
+    items_ref = user_ref.collection(action_items_collection)
+
+    # Pending export: sync_requested=True, filter exported!=True in Python
+    # (avoids composite index + handles missing 'exported' field)
+    pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
+    pending_docs = pending_query.stream()
+    pending_export = []
+    for doc in pending_docs:
+        data = doc.to_dict()
+        if data.get('exported') is True:
+            continue
+        data['id'] = doc.id
+        pending_export.append(_prepare_action_item_for_read(data))
+
+    # Synced items: exported to apple_reminders (for bidirectional sync)
+    # Uses only equality filters to avoid composite index requirement
+    synced_query = (
+        items_ref.where(filter=FieldFilter('export_platform', '==', 'apple_reminders'))
+        .where(filter=FieldFilter('exported', '==', True))
+        .limit(100)
+    )
+    synced_docs = synced_query.stream()
+    synced_items = []
+    for doc in synced_docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        synced_items.append(_prepare_action_item_for_read(data))
+    # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
+    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    return {"pending_export": pending_export, "synced_items": synced_items}
+
+
+def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
+    """
+    Batch update action items during reminders sync. Single Firestore batch commit.
+
+    Args:
+        uid: User ID
+        updates: List of {'id': str, 'data': dict} entries
+    """
+    if not updates:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    count = 0
+
+    for entry in updates:
+        update_data = _prepare_action_item_for_write(entry['data'])
+        update_data['updated_at'] = now
+        doc_ref = action_items_ref.document(entry['id'])
+        batch.update(doc_ref, update_data)
+        count += 1
+
+        if count >= 499:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
+        batch.commit()
+
+
 def unlock_all_action_items(uid: str):
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
