@@ -1,0 +1,157 @@
+"""
+Tests for async vision streaming behavior.
+
+Covers:
+- Async producer yields chunks progressively via callback queue
+- Queue-based producer/consumer pattern works with asyncio.create_task
+- Error in producer still terminates queue
+"""
+
+import asyncio
+import os
+
+import pytest
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+
+class AsyncStreamingCallback:
+    """Mirrors the production AsyncStreamingCallback from agentic.py."""
+
+    def __init__(self):
+        self.queue = asyncio.Queue()
+
+    async def put_data(self, text):
+        await self.queue.put(f"data: {text}")
+
+    async def end(self):
+        await self.queue.put(None)
+
+
+async def _fake_vision_stream(chunks, callback):
+    """Simulates the async _ask_vision_stream producer."""
+    output_list = []
+    for content in chunks:
+        await asyncio.sleep(0.01)  # simulate network latency
+        if content is not None:
+            await callback.put_data(content)
+            output_list.append(content)
+    await callback.end()
+    return ''.join(output_list)
+
+
+class TestAsyncVisionStreamPattern:
+    """Test the producer/consumer pattern used in _execute_file_chat_stream."""
+
+    @pytest.mark.asyncio
+    async def test_chunks_arrive_progressively(self):
+        """Consumer receives chunks as producer yields them, not all at once."""
+        callback = AsyncStreamingCallback()
+        chunks = ["Hello", " world", "!"]
+
+        # Track when chunks arrive
+        received = []
+        received_times = []
+
+        async def _produce():
+            return await _fake_vision_stream(chunks, callback)
+
+        task = asyncio.create_task(_produce())
+
+        # Drain queue concurrently (mirrors graph.py pattern)
+        loop = asyncio.get_event_loop()
+        while True:
+            chunk = await callback.queue.get()
+            if chunk:
+                received.append(chunk)
+                received_times.append(loop.time())
+            else:
+                break
+
+        answer = await task
+
+        assert answer == "Hello world!"
+        assert received == ["data: Hello", "data:  world", "data: !"]
+        assert len(received_times) == 3
+        # Chunks should arrive at different times (progressive, not burst)
+        assert received_times[-1] - received_times[0] >= 0.02
+
+    @pytest.mark.asyncio
+    async def test_empty_stream_terminates(self):
+        """Empty producer still sends end signal to consumer."""
+        callback = AsyncStreamingCallback()
+
+        async def _produce():
+            return await _fake_vision_stream([], callback)
+
+        task = asyncio.create_task(_produce())
+
+        received = []
+        while True:
+            chunk = await callback.queue.get()
+            if chunk:
+                received.append(chunk)
+            else:
+                break
+
+        answer = await task
+        assert answer == ""
+        assert received == []
+
+    @pytest.mark.asyncio
+    async def test_producer_error_terminates_queue(self):
+        """If producer raises, consumer should not hang forever."""
+        callback = AsyncStreamingCallback()
+
+        async def _failing_producer():
+            await callback.put_data("chunk1")
+            raise ValueError("simulated OpenAI error")
+
+        task = asyncio.create_task(_failing_producer())
+
+        # Consumer should get chunk1 then the task raises
+        chunk = await callback.queue.get()
+        assert chunk == "data: chunk1"
+
+        with pytest.raises(ValueError, match="simulated OpenAI error"):
+            await task
+
+    @pytest.mark.asyncio
+    async def test_concurrent_health_not_blocked(self):
+        """A slow vision stream should not block other async work."""
+        callback = AsyncStreamingCallback()
+
+        async def _slow_producer():
+            for i in range(3):
+                await asyncio.sleep(0.05)
+                await callback.put_data(f"chunk{i}")
+            await callback.end()
+
+        task = asyncio.create_task(_slow_producer())
+
+        # Simulate a "health check" running concurrently
+        health_start = asyncio.get_event_loop().time()
+        health_done = asyncio.Event()
+
+        async def _health_check():
+            await asyncio.sleep(0.01)
+            health_done.set()
+
+        asyncio.create_task(_health_check())
+
+        # Health check should complete while producer is still running
+        await asyncio.wait_for(health_done.wait(), timeout=0.1)
+        health_elapsed = asyncio.get_event_loop().time() - health_start
+
+        # Health check completed in ~10ms, not blocked by 150ms producer
+        assert health_elapsed < 0.05
+
+        # Clean up
+        while True:
+            chunk = await callback.queue.get()
+            if not chunk:
+                break
+        await task

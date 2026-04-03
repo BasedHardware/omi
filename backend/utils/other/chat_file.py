@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import openai
-from openai import AssistantEventHandler
+from openai import AsyncOpenAI, AssistantEventHandler
 from PIL import Image
 
 import database.chat as chat_db
@@ -14,6 +14,8 @@ from models.chat import ChatSession, FileChat
 import logging
 
 logger = logging.getLogger(__name__)
+
+_async_openai = AsyncOpenAI()
 
 
 class File:
@@ -101,7 +103,7 @@ class FileChatTool:
         answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
         return answer
 
-    def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
+    async def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
         """Process chat with file attachments (streaming)"""
         files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
         files = [FileChat(**f) for f in files_data]
@@ -109,18 +111,18 @@ class FileChatTool:
 
         if all_images and files:
             logger.info(f"[FileChat] All {len(files)} files are images, using Chat Completions vision API")
-            answer = self._ask_vision_stream(question, files, callback)
+            answer = await self._ask_vision_stream(question, files, callback)
             return answer
 
         self._ensure_thread_and_assistant()
         answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
         return answer
 
-    def _ask_vision_stream(self, question: str, files: list, callback=None):
+    async def _ask_vision_stream(self, question: str, files: list, callback=None):
         """Use Chat Completions API with vision for image-only chats (streaming)"""
         contents = [{"type": "text", "text": question}]
         for file in files:
-            file_content = openai.files.content(file.openai_file_id)
+            file_content = await _async_openai.files.content(file.openai_file_id)
             b64 = base64.b64encode(file_content.read()).decode('utf-8')
             mime = file.mime_type or 'image/png'
             contents.append(
@@ -131,18 +133,18 @@ class FileChatTool:
             )
 
         output_list = []
-        stream = openai.chat.completions.create(
+        stream = await _async_openai.chat.completions.create(
             model="gpt-4.1",
             messages=[{"role": "user", "content": contents}],
             stream=True,
             max_tokens=2048,
         )
-        for chunk in stream:
+        async for chunk in stream:
             delta = chunk.choices[0].delta if chunk.choices else None
             if delta and delta.content:
-                callback.put_data_nowait(delta.content)
+                await callback.put_data(delta.content)
                 output_list.append(delta.content)
-        callback.end_nowait()
+        await callback.end()
         return ''.join(output_list)
 
     def _ensure_thread_and_assistant(self):
