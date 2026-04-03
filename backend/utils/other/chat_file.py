@@ -114,7 +114,14 @@ class FileChatTool:
             answer = await self._ask_vision_stream(question, files, callback)
             return answer
 
-        self._ensure_thread_and_assistant()
+        # _ensure_thread_and_assistant can fail before ask_stream runs.
+        # ask_stream has its own try/finally on callback, so only guard
+        # the setup phase here.
+        try:
+            self._ensure_thread_and_assistant()
+        except Exception:
+            callback.end_nowait()
+            raise
         answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
         return answer
 
@@ -261,11 +268,11 @@ class FileChatTool:
 
     def ask_stream(self, uid, question, file_ids: List[str], thread_id: str, assistant_id: str, callback=None):
 
-        self._fill_question(uid, question, file_ids, thread_id)
-
         output_list = []
 
         try:
+            self._fill_question(uid, question, file_ids, thread_id)
+
             with openai.beta.threads.runs.stream(
                 thread_id=thread_id,
                 assistant_id=assistant_id,
