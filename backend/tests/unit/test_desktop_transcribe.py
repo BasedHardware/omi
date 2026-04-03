@@ -622,6 +622,34 @@ class TestVoiceMessageTranscribeEndpoint:
         finally:
             _cleanup_chat_client(saved)
 
+    def test_octet_stream_sample_rate_zero_422(self):
+        """sample_rate=0 should return 422."""
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?sample_rate=0',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 422
+            assert 'sample_rate' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_octet_stream_channels_zero_422(self):
+        """channels=0 should return 422."""
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?channels=0',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 422
+            assert 'channels' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_no_speech_empty_transcript(self, mock_transcribe):
         """No speech detected should return 200 with empty transcript (not 422)."""
@@ -706,5 +734,73 @@ class TestTranscribeStreamWebSocket:
                     with pytest.raises(Exception):
                         with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                             ws.receive_json()  # Should not get here
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_rejects_zero_sample_rate(self):
+        """sample_rate=0 should be rejected with WS close 1008."""
+        client, module, saved = _make_chat_client()
+        try:
+            with pytest.raises(Exception):
+                with client.websocket_connect('/v2/voice-message/transcribe-stream?sample_rate=0') as ws:
+                    ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_rejects_invalid_channels(self):
+        """channels=0 should be rejected with WS close 1008."""
+        client, module, saved = _make_chat_client()
+        try:
+            with pytest.raises(Exception):
+                with client.websocket_connect('/v2/voice-message/transcribe-stream?channels=0') as ws:
+                    ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_finalize_flushes_and_finalizes(self):
+        """Sending 'finalize' text should flush buffer and call dg_socket.finalize()."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                def fake_send(data):
+                    if len(data) > 0:
+                        stream_transcript(
+                            [
+                                {
+                                    'speaker': 'SPEAKER_00',
+                                    'start': 0.0,
+                                    'end': 1.0,
+                                    'text': 'Final',
+                                    'is_user': False,
+                                    'person_id': None,
+                                }
+                            ]
+                        )
+
+                mock_dg_socket.send = MagicMock(side_effect=fake_send)
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                    with client.websocket_connect(
+                        '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
+                    ) as ws:
+                        # Send sub-threshold audio (less than 960 bytes = 30ms at 16kHz)
+                        ws.send_bytes(b'\x00' * 500)
+                        # Send finalize — should flush the sub-threshold buffer
+                        ws.send_text('finalize')
+                        # Receive the transcript from flushed audio
+                        data = ws.receive_json()
+                        assert isinstance(data, list)
+                        assert data[0]['text'] == 'Final'
+
+            # Verify finalize was called
+            mock_dg_socket.finalize.assert_called()
         finally:
             _cleanup_chat_client(saved)
