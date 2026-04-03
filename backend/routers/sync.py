@@ -1064,9 +1064,10 @@ def process_segment(
             if is_locked:
                 conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
 
-            # If the conversation was previously discarded, reprocess it with the new segments
-            if closest_memory.get('discarded', False):
-                logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+            # Reprocess if conversation was discarded or if auto-synced WALs added new segments
+            if closest_memory.get('discarded', False) or target_conversation_id:
+                reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
+                logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
                 _reprocess_conversation_after_update(uid, closest_memory['id'], language)
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
