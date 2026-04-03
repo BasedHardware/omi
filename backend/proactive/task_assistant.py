@@ -128,7 +128,8 @@ def _build_prompt(session_context: pb2.SessionContext, app_name: str) -> str:
 
 async def _call_gemini(contents: list, tools: list) -> dict:
     """Call Gemini generateContent API with function calling support."""
-    url = f'{GEMINI_API_URL}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}'
+    url = f'{GEMINI_API_URL}/{GEMINI_MODEL}:generateContent'
+    headers = {'x-goog-api-key': GEMINI_API_KEY}
     body = {
         'contents': contents,
         'tools': [{'function_declarations': tools}],
@@ -136,7 +137,7 @@ async def _call_gemini(contents: list, tools: list) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(url, json=body)
+        resp = await client.post(url, json=body, headers=headers)
         resp.raise_for_status()
         return resp.json()
 
