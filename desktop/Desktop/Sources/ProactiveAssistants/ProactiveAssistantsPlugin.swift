@@ -1,4 +1,6 @@
 import Cocoa
+import GRPC
+@preconcurrency import FirebaseAuth
 import UserNotifications
 
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
@@ -20,6 +22,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
     private var insightAssistant: InsightAssistant?
+    private var grpcClient: ProactiveGRPCClient?
+    private var adviceAssistant: AdviceAssistant?
     private var memoryAssistant: MemoryAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
@@ -165,6 +169,125 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
     }
 
+
+    // MARK: - gRPC Lifecycle
+
+    /// Connect to the ProactiveAI gRPC server and wire the client to TaskAssistant.
+    /// Runs asynchronously — monitoring starts regardless of whether gRPC connects.
+    private func connectGRPCClient(for taskAssistant: TaskAssistant) async {
+        // Read gRPC server config from environment (set via .env or run.sh)
+        let host: String
+        let port: Int
+        if let cString = getenv("OMI_GRPC_HOST"), let h = String(validatingUTF8: cString), !h.isEmpty {
+            host = h
+        } else {
+            // Default: same host as OMI_API_URL backend
+            host = "localhost"
+        }
+        if let cString = getenv("OMI_GRPC_PORT"), let p = String(validatingUTF8: cString), let pInt = Int(p) {
+            port = pInt
+        } else {
+            port = 50051
+        }
+
+        // Get Firebase auth token
+        let authToken: String
+        do {
+            authToken = try await AuthService.shared.getIdToken(forceRefresh: false)
+        } catch {
+            log("ProactiveGRPC: Skipping — no auth token: \(error.localizedDescription)")
+            return
+        }
+
+        // Build SessionContext from local task store
+        let context = await buildSessionContext()
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+
+        let client = ProactiveGRPCClient(host: host, port: port)
+        do {
+            let ready = try await client.connect(
+                authToken: authToken,
+                context: context,
+                appVersion: appVersion,
+                osVersion: osVersion
+            )
+            log("ProactiveGRPC: Connected — session \(ready.sessionID)")
+
+            // Wire client to TaskAssistant so it uses server-side analysis
+            await taskAssistant.setGRPCClient(client)
+            self.grpcClient = client
+        } catch {
+            log("ProactiveGRPC: Connection failed — falling back to local: \(error.localizedDescription)")
+            // TaskAssistant continues using local Gemini proxy (no grpcClient set)
+        }
+    }
+
+    /// Build a SessionContext proto from the local task store and goals.
+    private func buildSessionContext() async -> Proactive_V1_SessionContext {
+        var ctx = Proactive_V1_SessionContext()
+
+        // Active tasks
+        do {
+            let topTasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 30)
+            let recentTasks = try await ActionItemStorage.shared.getRecentActiveTasks(limit: 30)
+            let topIds = Set(topTasks.map { $0.id })
+            let merged = topTasks + recentTasks.filter { !topIds.contains($0.id) }
+            ctx.activeTasks = merged.map { t in
+                Proactive_V1_ActiveTask.with {
+                    $0.taskID = t.id
+                    $0.description_p = t.description
+                    $0.priority = t.priority ?? "medium"
+                    if let r = t.relevanceScore { $0.relevanceScore = Int32(r) }
+                }
+            }
+        } catch {
+            log("ProactiveGRPC: Failed to load active tasks for context: \(error.localizedDescription)")
+        }
+
+        // Completed tasks
+        do {
+            let completed = try await ActionItemStorage.shared.getRecentCompletedTasks(limit: 10)
+            ctx.completedTasks = completed.map { t in
+                Proactive_V1_HistoricalTask.with {
+                    $0.taskID = t.id
+                    $0.description_p = t.description
+                }
+            }
+        } catch {
+            log("ProactiveGRPC: Failed to load completed tasks for context: \(error.localizedDescription)")
+        }
+
+        // Deleted tasks
+        do {
+            let deleted = try await ActionItemStorage.shared.getRecentDeletedTasks(limit: 10, deletedBy: "user")
+            ctx.deletedTasks = deleted.map { t in
+                Proactive_V1_HistoricalTask.with {
+                    $0.taskID = t.id
+                    $0.description_p = t.description
+                }
+            }
+        } catch {
+            log("ProactiveGRPC: Failed to load deleted tasks for context: \(error.localizedDescription)")
+        }
+
+        // Goals
+        do {
+            let goals = try await APIClient.shared.getGoals()
+            ctx.goals = goals.map { g in
+                Proactive_V1_Goal.with {
+                    $0.goalID = g.id
+                    $0.title = g.title
+                    if let desc = g.description { $0.description_p = desc }
+                }
+            }
+        } catch {
+            log("ProactiveGRPC: Failed to load goals for context: \(error.localizedDescription)")
+        }
+
+        return ctx
+    }
 
     // MARK: - Assistant Management
 
@@ -357,6 +480,12 @@ public class ProactiveAssistantsPlugin: NSObject {
                 AssistantCoordinator.shared.register(task)
             }
 
+            // Connect gRPC client for server-side proactive AI (non-blocking)
+            if let task = taskAssistant {
+                let capturedTask = task
+                Task { await self.connectGRPCClient(for: capturedTask) }
+            }
+
             Task { await TaskDeduplicationService.shared.start() }
             Task { await TaskPrioritizationService.shared.start() }
             Task { await TaskPromotionService.shared.start() }
@@ -462,6 +591,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             Task {
                 await task.stop()
             }
+        }
+        if let client = grpcClient {
+            Task { await client.disconnect() }
+            grpcClient = nil
         }
         Task { await TaskDeduplicationService.shared.stop() }
         Task { await TaskPromotionService.shared.stop() }
