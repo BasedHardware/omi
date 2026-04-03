@@ -1,4 +1,5 @@
 import Foundation
+import GRPC
 
 /// Task extraction assistant that identifies tasks and action items from screen content
 /// Uses single-stage Gemini tool calling with vector + FTS5 search for deduplication
@@ -19,6 +20,13 @@ actor TaskAssistant: ProactiveAssistant {
     // MARK: - Properties
 
     private let geminiClient: GeminiClient
+    /// gRPC client for server-side Gemini tool loop (nil = use local Gemini via proxy)
+    private(set) var grpcClient: ProactiveGRPCClient?
+
+    /// Set the gRPC client for server-side analysis (called from ProactiveAssistantsPlugin)
+    func setGRPCClient(_ client: ProactiveGRPCClient?) {
+        grpcClient = client
+    }
     private var isRunning = false
     private var previousTasks: [ExtractedTask] = [] // Last 10 extracted tasks for context
     private let maxPreviousTasks = 10
@@ -590,7 +598,21 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Analyzing frame from \(frame.appName)...")
         do {
-            let (result, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+            let result: TaskExtractionResult?
+            let searchCount: Int
+
+            if let client = grpcClient, await client.isConnected {
+                // Server-side Gemini tool loop via gRPC
+                (result, searchCount) = try await extractTaskViaGRPC(
+                    client: client, frame: frame
+                )
+            } else {
+                // Local Gemini tool loop via proxy (fallback)
+                (result, searchCount) = try await extractTaskSingleStage(
+                    from: frame.jpegData, appName: frame.appName
+                )
+            }
+
             guard let result = result else {
                 log("Task: Analysis returned no result")
                 return
@@ -605,6 +627,105 @@ actor TaskAssistant: ProactiveAssistant {
             }
         } catch {
             logError("Task extraction error", error: error)
+        }
+    }
+
+    // MARK: - Server-Side Analysis (gRPC)
+
+    /// Send a frame to the ProactiveAI gRPC server and handle the bidi tool loop.
+    /// Local searches are executed on-device via the toolExecutor callback.
+    private func extractTaskViaGRPC(
+        client: ProactiveGRPCClient,
+        frame: CapturedFrame
+    ) async throws -> (TaskExtractionResult?, Int) {
+        var searchCount = 0
+
+        let analysisResult = try await client.analyzeFrame(
+            jpegData: frame.jpegData,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle ?? "",
+            ocrText: "",  // OCR extracted server-side from screenshot
+            frameNumber: Int64(frame.frameNumber),
+            screenshotId: frame.screenshotId.map { String($0) } ?? String(frame.frameNumber),
+            toolExecutor: { [weak self] toolKind, query in
+                guard let self = self else { return [] }
+                searchCount += 1
+
+                let results: [TaskSearchResult]
+                switch toolKind {
+                case .searchSimilar:
+                    results = await self.executeVectorSearch(query: query)
+                case .searchKeywords:
+                    results = await self.executeKeywordSearch(query: query)
+                default:
+                    results = []
+                }
+
+                return results.map { r in
+                    let status: Proactive_V1_TaskStatus
+                    switch r.status {
+                    case "completed": status = .completed
+                    case "deleted": status = .deleted
+                    default: status = .active
+                    }
+                    let matchType: Proactive_V1_MatchType
+                    switch r.matchType {
+                    case "vector": matchType = .vector
+                    case "fts": matchType = .fts
+                    case "both": matchType = .both
+                    default: matchType = .unspecified
+                    }
+                    return SearchResultEntry(
+                        taskId: r.id,
+                        description: r.description,
+                        status: status,
+                        similarity: r.similarity ?? 0,
+                        matchType: matchType,
+                        relevanceScore: Int32(r.relevanceScore ?? 0)
+                    )
+                }
+            }
+        )
+
+        // Convert ProactiveAnalysisResult → TaskExtractionResult
+        switch analysisResult.outcome {
+        case .extractTask(let extracted):
+            let priority = TaskPriority(rawValue: extracted.priority) ?? .medium
+            let task = ExtractedTask(
+                title: extracted.title,
+                description: extracted.description.isEmpty ? nil : extracted.description,
+                priority: priority,
+                sourceApp: extracted.sourceApp.isEmpty ? frame.appName : extracted.sourceApp,
+                inferredDeadline: extracted.inferredDeadline.isEmpty ? nil : extracted.inferredDeadline,
+                confidence: extracted.confidence,
+                tags: extracted.tags,
+                sourceCategory: extracted.sourceCategory,
+                sourceSubcategory: extracted.sourceSubcategory,
+                relevanceScore: extracted.relevanceScore == 0 ? nil : extracted.relevanceScore
+            )
+            return (TaskExtractionResult(
+                hasNewTask: true,
+                task: task,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
+
+        case .rejectTask(let reason):
+            log("Task: Server rejected — \(reason)")
+            return (TaskExtractionResult(
+                hasNewTask: false,
+                task: nil,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
+
+        case .noTaskFound:
+            return (TaskExtractionResult(
+                hasNewTask: false,
+                task: nil,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
         }
     }
 
