@@ -120,20 +120,20 @@ class FileChatTool:
 
     async def _ask_vision_stream(self, question: str, files: list, callback=None):
         """Use Chat Completions API with vision for image-only chats (streaming)"""
-        contents = [{"type": "text", "text": question}]
-        for file in files:
-            file_content = await _async_openai.files.content(file.openai_file_id)
-            b64 = base64.b64encode(file_content.read()).decode('utf-8')
-            mime = file.mime_type or 'image/png'
-            contents.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
-                }
-            )
-
         output_list = []
         try:
+            contents = [{"type": "text", "text": question}]
+            for file in files:
+                file_content = await _async_openai.files.content(file.openai_file_id)
+                b64 = base64.b64encode(file_content.read()).decode('utf-8')
+                mime = file.mime_type or 'image/png'
+                contents.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
+                    }
+                )
+
             stream = await _async_openai.chat.completions.create(
                 model="gpt-4.1",
                 messages=[{"role": "user", "content": contents}],

@@ -102,21 +102,20 @@ class TestAsyncVisionStreamPattern:
         assert received == []
 
     @pytest.mark.asyncio
-    async def test_producer_error_terminates_queue(self):
-        """If producer raises, queue must still receive end sentinel (None)."""
+    async def test_producer_error_mid_stream_terminates_queue(self):
+        """Mid-stream error: queue receives end sentinel via try/finally."""
         callback = AsyncStreamingCallback()
 
-        async def _failing_producer():
-            """Mirrors _ask_vision_stream with try/finally on callback.end()."""
+        async def _failing_mid_stream():
+            """Mirrors _ask_vision_stream: try/finally wraps entire body."""
             try:
                 await callback.put_data("chunk1")
-                raise ValueError("simulated OpenAI error")
+                raise ValueError("simulated OpenAI stream error")
             finally:
                 await callback.end()
 
-        task = asyncio.create_task(_failing_producer())
+        task = asyncio.create_task(_failing_mid_stream())
 
-        # Consumer should get chunk1 then the end sentinel
         received = []
         while True:
             chunk = await asyncio.wait_for(callback.queue.get(), timeout=2.0)
@@ -127,7 +126,28 @@ class TestAsyncVisionStreamPattern:
 
         assert received == ["data: chunk1"]
 
-        with pytest.raises(ValueError, match="simulated OpenAI error"):
+        with pytest.raises(ValueError, match="simulated OpenAI stream error"):
+            await task
+
+    @pytest.mark.asyncio
+    async def test_producer_error_before_stream_terminates_queue(self):
+        """Early error (e.g. files.content fails): queue still gets sentinel."""
+        callback = AsyncStreamingCallback()
+
+        async def _failing_early():
+            """Mirrors _ask_vision_stream failing during file fetch."""
+            try:
+                raise ConnectionError("simulated files.content failure")
+            finally:
+                await callback.end()
+
+        task = asyncio.create_task(_failing_early())
+
+        # Consumer should get the end sentinel without hanging
+        chunk = await asyncio.wait_for(callback.queue.get(), timeout=2.0)
+        assert chunk is None  # End sentinel, no data chunks
+
+        with pytest.raises(ConnectionError, match="simulated files.content failure"):
             await task
 
     @pytest.mark.asyncio
