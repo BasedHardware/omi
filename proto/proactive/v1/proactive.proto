@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package proactive.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service ProactiveAI {
+  rpc Session(stream ClientEvent) returns (stream ServerEvent);
+}
+
+enum ToolKind {
+  TOOL_KIND_UNSPECIFIED = 0;
+  SEARCH_SIMILAR = 1;
+  SEARCH_KEYWORDS = 2;
+}
+
+enum OutcomeKind {
+  OUTCOME_KIND_UNSPECIFIED = 0;
+  EXTRACT_TASK = 1;
+  REJECT_TASK = 2;
+  NO_TASK_FOUND = 3;
+}
+
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_HIGH = 1;
+  PRIORITY_MEDIUM = 2;
+  PRIORITY_LOW = 3;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_ACTIVE = 1;
+  TASK_STATUS_COMPLETED = 2;
+  TASK_STATUS_DELETED = 3;
+}
+
+enum MatchType {
+  MATCH_TYPE_UNSPECIFIED = 0;
+  MATCH_TYPE_VECTOR = 1;
+  MATCH_TYPE_FTS = 2;
+  MATCH_TYPE_BOTH = 3;
+}
+
+message ClientEvent {
+  oneof event {
+    ClientHello client_hello = 1;
+    FrameEvent frame_event = 2;
+    ToolResult tool_result = 3;
+    Heartbeat heartbeat = 4;
+  }
+}
+
+message ServerEvent {
+  oneof event {
+    SessionReady session_ready = 1;
+    ToolCallRequest tool_call_request = 2;
+    AnalysisOutcome analysis_outcome = 3;
+    CancelToolRequest cancel_tool_request = 4;
+    ServerError server_error = 5;
+  }
+}
+
+message ClientHello {
+  string protocol_version = 1;
+  string client_instance_id = 2;
+  string app_version = 3;
+  string os_version = 4;
+  string device_name = 5;
+  string context_version = 6;
+  SessionContext session_context = 7;
+}
+
+message SessionReady {
+  string session_id = 1;
+  string protocol_version = 2;
+  string context_version = 3;
+  int32 max_model_iterations = 4;
+  repeated ToolKind supported_tool_kinds = 5;
+}
+
+message FrameEvent {
+  bytes jpeg_bytes = 1;
+  string app_name = 2;
+  string window_title = 3;
+  string ocr_text = 4;
+  google.protobuf.Timestamp capture_time = 5;
+  int64 frame_number = 6;
+  string screenshot_id = 7;
+  string context_version = 8;
+  SessionContext session_context = 9;
+}
+
+message Heartbeat {
+  google.protobuf.Timestamp sent_at = 1;
+}
+
+message ToolCallRequest {
+  string request_id = 1;
+  ToolKind tool_kind = 2;
+  ToolCallArguments arguments = 3;
+  int64 deadline_ms = 4;
+  string frame_id = 5;
+}
+
+message ToolCallArguments {
+  string query = 1;
+}
+
+message ToolResult {
+  string request_id = 1;
+  SearchResults result = 2;
+  string error = 3;
+  string frame_id = 4;
+}
+
+message AnalysisOutcome {
+  OutcomeKind outcome_kind = 1;
+  ExtractedTask task = 2;
+  string reason = 3;
+  string context_summary = 4;
+  string current_activity = 5;
+  string frame_id = 6;
+}
+
+message CancelToolRequest {
+  string request_id = 1;
+  string frame_id = 2;
+  string reason = 3;
+}
+
+message ServerError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  string frame_id = 4;
+  string request_id = 5;
+}
+
+message ExtractedTask {
+  string title = 1;
+  string description = 2;
+  TaskPriority priority = 3;
+  repeated string tags = 4;
+  string source_app = 5;
+  string inferred_deadline = 6;
+  double confidence = 7;
+  string source_category = 8;
+  string source_subcategory = 9;
+  int32 relevance_score = 10;
+}
+
+message SearchResults {
+  repeated SearchResult items = 1;
+}
+
+message SearchResult {
+  int64 task_id = 1;
+  string description = 2;
+  TaskStatus status = 3;
+  double similarity = 4;
+  MatchType match_type = 5;
+  int32 relevance_score = 6;
+}
+
+message SessionContext {
+  repeated ActiveTask active_tasks = 1;
+  repeated HistoricalTask completed_tasks = 2;
+  repeated HistoricalTask deleted_tasks = 3;
+  repeated Goal goals = 4;
+  google.protobuf.Timestamp generated_at = 5;
+}
+
+message ActiveTask {
+  int64 task_id = 1;
+  string description = 2;
+  string priority = 3;
+  int32 relevance_score = 4;
+  bool staged = 5;
+}
+
+message HistoricalTask {
+  int64 task_id = 1;
+  string description = 2;
+}
+
+message Goal {
+  string goal_id = 1;
+  string title = 2;
+  string description = 3;
+}
