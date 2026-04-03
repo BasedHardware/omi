@@ -148,16 +148,16 @@ public actor ProactiveGRPCClient {
         }
 
         for await event in events {
-            if event.hasSessionReady {
-                self.sessionId = event.sessionReady.sessionID
+            if case .sessionReady(let ready) = event.event {
+                self.sessionId = ready.sessionID
                 self.isConnected = true
-                logger.info("Session established: \(event.sessionReady.sessionID)")
-                return event.sessionReady
+                logger.info("Session established: \(ready.sessionID)")
+                return ready
             }
-            if event.hasServerError {
+            if case .serverError(let err) = event.event {
                 throw ProactiveGRPCError.serverError(
-                    code: event.serverError.code,
-                    message: event.serverError.message
+                    code: err.code,
+                    message: err.message
                 )
             }
         }
@@ -228,9 +228,12 @@ public actor ProactiveGRPCClient {
         }
 
         for await serverEvent in events {
-            if serverEvent.hasToolCallRequest {
-                let req = serverEvent.toolCallRequest
-                logger.info("Tool call: \(req.toolKind) query=\(req.arguments.query.prefix(50))")
+            guard let eventKind = serverEvent.event else { continue }
+
+            switch eventKind {
+            case .toolCallRequest(let req):
+                let toolKindStr = String(describing: req.toolKind)
+                logger.info("Tool call: \(toolKindStr) query=\(req.arguments.query.prefix(50))")
 
                 // Execute local search
                 let results = await toolExecutor(req.toolKind, req.arguments.query)
@@ -255,25 +258,22 @@ public actor ProactiveGRPCClient {
                     }
                 }
                 call.sendMessage(toolResult, promise: nil)
-                continue
-            }
 
-            if serverEvent.hasAnalysisOutcome {
-                return convertOutcome(serverEvent.analysisOutcome)
-            }
+            case .analysisOutcome(let outcome):
+                return convertOutcome(outcome)
 
-            if serverEvent.hasServerError {
-                let err = serverEvent.serverError
+            case .serverError(let err):
                 logger.error("Server error: \(err.code) — \(err.message)")
                 if err.retryable {
                     throw ProactiveGRPCError.retryableError(code: err.code, message: err.message)
                 }
                 throw ProactiveGRPCError.serverError(code: err.code, message: err.message)
-            }
 
-            if serverEvent.hasCancelToolRequest {
-                logger.info("Tool call cancelled: \(serverEvent.cancelToolRequest.requestID)")
-                continue
+            case .cancelToolRequest(let cancel):
+                logger.info("Tool call cancelled: \(cancel.requestID)")
+
+            case .sessionReady:
+                break  // Unexpected during frame analysis
             }
         }
 
@@ -318,7 +318,7 @@ public actor ProactiveGRPCClient {
             ))
         case .rejectTask:
             resultOutcome = .rejectTask(reason: outcome.reason)
-        case .noTaskFound, .UNRECOGNIZED:
+        case .noTaskFound, .unspecified, .UNRECOGNIZED:
             resultOutcome = .noTaskFound
         }
 
@@ -332,9 +332,9 @@ public actor ProactiveGRPCClient {
 
     private func priorityString(_ p: Proactive_V1_TaskPriority) -> String {
         switch p {
-        case .high: return "high"
-        case .medium: return "medium"
-        case .low: return "low"
+        case .priorityHigh: return "high"
+        case .priorityMedium: return "medium"
+        case .priorityLow: return "low"
         default: return "medium"
         }
     }
