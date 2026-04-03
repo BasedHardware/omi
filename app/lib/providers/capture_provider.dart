@@ -206,6 +206,10 @@ class CaptureProvider extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
+  /// Preserved session start for auto-sync after socket-driven conversation completion.
+  /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
+  int _pendingAutoSyncSessionStart = 0;
+
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
   List<Wal> get unsyncedSessionWals {
@@ -1101,6 +1105,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
       conversationProvider!.addProcessingConversation(event.memory);
+      _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _resetStateVariables();
       return;
     }
@@ -1109,6 +1114,11 @@ class CaptureProvider extends ChangeNotifier
       event.memory.isNew = true;
       conversationProvider!.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
+      if (_pendingAutoSyncSessionStart > 0) {
+        final sessionStart = _pendingAutoSyncSessionStart;
+        _pendingAutoSyncSessionStart = 0;
+        _autoSyncSessionWals(sessionStart, event.memory.id);
+      }
       return;
     }
 
@@ -1222,7 +1232,7 @@ class CaptureProvider extends ChangeNotifier
         final file = File(fullPath);
         if (!file.existsSync()) continue;
         await syncLocalFilesV2([file], conversationId: conversationId);
-        wal.status = WalStatus.synced;
+        await syncs.phone.markWalSyncedAndPersist(wal);
       } catch (e) {
         Logger.debug('Auto-sync WAL ${wal.id} failed: $e');
       }
