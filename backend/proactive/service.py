@@ -228,5 +228,14 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
             pass
         except Exception as e:
             logger.exception('Generator error: %s', type(e).__name__)
+            await output_queue.put(
+                pb2.ServerEvent(
+                    server_error=pb2.ServerError(
+                        code='INTERNAL',
+                        message=f'Analysis failed ({type(e).__name__})',
+                        retryable=True,
+                    )
+                )
+            )
         finally:
             await output_queue.put(None)
