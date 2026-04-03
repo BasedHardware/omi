@@ -873,7 +873,7 @@ class TestBackgroundWorkerBehavioral:
 
         call_count = [0]
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None):
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
             call_count[0] += 1
             if call_count[0] % 2 == 0:
                 with lock:
@@ -907,7 +907,7 @@ class TestBackgroundWorkerBehavioral:
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None):
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
             with lock:
                 errors.append(f'Failed: {path}')
 
@@ -1037,7 +1037,7 @@ class TestBackgroundWorkerBehavioral:
 
         received_args = []
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None):
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
             received_args.append({'prefs': prefs, 'cache': cache})
 
         mod.process_segment = mock_process_segment
@@ -1071,7 +1071,7 @@ class TestBackgroundWorkerBehavioral:
 
         received_args = []
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None):
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None):
             received_args.append({'prefs': prefs, 'cache': cache})
 
         mod.process_segment = mock_process_segment
