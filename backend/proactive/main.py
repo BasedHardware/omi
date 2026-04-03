@@ -36,6 +36,9 @@ def _init_firebase():
 
 async def serve():
     """Start the async gRPC server."""
+    if not os.environ.get('GEMINI_API_KEY'):
+        raise RuntimeError('GEMINI_API_KEY environment variable is required')
+
     _init_firebase()
 
     server = grpc.aio.server(
