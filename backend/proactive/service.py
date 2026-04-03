@@ -39,24 +39,31 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
         cached_context = None
         context_version = None
         task_assistant = ServerTaskAssistant()
-        # Queue for passing tool results from the bidi stream into analyze_frame
-        tool_result_queue = asyncio.Queue(maxsize=1)
+        # Queue for passing tool results from the bidi stream into analyze_frame.
+        # Uses a keyed approach to enforce request_id matching.
+        tool_result_queue = asyncio.Queue(maxsize=4)
 
         async def receive_tool_result(request_id: str, timeout_ms: int = 10000) -> pb2.ToolResult:
-            """Wait for a ToolResult from the client stream (fed by the main loop)."""
+            """Wait for a ToolResult matching request_id from the client stream."""
             timeout_s = timeout_ms / 1000.0
-            try:
-                result = await asyncio.wait_for(tool_result_queue.get(), timeout=timeout_s)
-            except asyncio.TimeoutError:
-                raise TimeoutError(f'ToolResult timeout after {timeout_ms}ms for request_id={request_id}')
-            if result.request_id != request_id:
+            deadline = asyncio.get_event_loop().time() + timeout_s
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError(f'ToolResult timeout after {timeout_ms}ms for request_id={request_id}')
+                try:
+                    result = await asyncio.wait_for(tool_result_queue.get(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    raise TimeoutError(f'ToolResult timeout after {timeout_ms}ms for request_id={request_id}')
+                if result.request_id == request_id:
+                    return result
+                # Mismatched request_id — discard and keep waiting
                 logger.warning(
-                    'ToolResult request_id mismatch: expected=%s got=%s uid=%s',
+                    'ToolResult request_id mismatch: expected=%s got=%s uid=%s — discarding',
                     request_id,
                     result.request_id,
                     uid,
                 )
-            return result
 
         try:
             async for client_event in request_iterator:
@@ -106,29 +113,9 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                         )
                         continue
 
-                    # Run the server-side task extraction loop.
-                    # analyze_frame is an async generator that yields ServerEvents.
-                    # When it needs a tool result, it yields a ToolCallRequest and then
-                    # awaits receive_tool_result(). The bidi stream pauses here while
-                    # waiting — the client sends back a ToolResult which we feed into
-                    # the queue from the tool_result branch below.
-                    #
-                    # However, because this is a bidi generator (we yield AND read from
-                    # request_iterator), we need to interleave: the analyze_frame generator
-                    # blocks on receive_tool_result while the main loop needs to read the
-                    # next client message. We solve this with asyncio.create_task.
-                    analysis_task = asyncio.create_task(
-                        self._drain_analysis(task_assistant, frame, cached_context, frame_id, uid, receive_tool_result)
-                    )
-                    # The analysis task will put events into an output queue
-                    # We need a different approach — use an output queue too
-                    # Actually, let's use a simpler model: collect events one at a time
-                    # by running the generator in a task that writes to an output queue.
-                    analysis_task.cancel()  # Cancel the placeholder
-
-                    # Simpler approach: run analyze_frame inline. When it yields a
-                    # ToolCallRequest, we yield it to the client, then read the next
-                    # client message inline (it must be a tool_result).
+                    # Run analyze_frame in a background task so it can block on
+                    # receive_tool_result while we read from the bidi stream.
+                    output_queue = asyncio.Queue()
                     gen = task_assistant.analyze_frame(
                         frame=frame,
                         session_context=cached_context,
@@ -136,41 +123,67 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                         uid=uid,
                         receive_tool_result=receive_tool_result,
                     )
-                    # We can't iterate the generator with async for because it blocks
-                    # on receive_tool_result which needs us to read from request_iterator.
-                    # Instead, we run the generator in a background task and shuttle events.
-                    output_queue = asyncio.Queue()
                     gen_task = asyncio.create_task(self._run_generator(gen, output_queue))
 
-                    # Drain events: yield ServerEvents and feed ToolResults
+                    # Drain output events. When a ToolCallRequest is yielded, we need to
+                    # concurrently: (a) yield it to the client and (b) read the next
+                    # client message to feed into tool_result_queue.
+                    awaiting_tool_result = False
                     while True:
-                        try:
-                            event = await asyncio.wait_for(output_queue.get(), timeout=60.0)
-                        except asyncio.TimeoutError:
-                            logger.warning('Analysis timed out: uid=%s frame=%s', uid, frame_id)
-                            break
-                        if event is None:
-                            break  # Generator finished
-                        yield event
-                        # If we just yielded a ToolCallRequest, read the next client
-                        # message which should be the ToolResult
-                        if event.WhichOneof('event') == 'tool_call_request':
+                        if awaiting_tool_result:
+                            # Concurrently wait for the next output event AND the next client message
+                            output_get = asyncio.ensure_future(output_queue.get())
+                            client_read = asyncio.ensure_future(request_iterator.__aiter__().__anext__())
+                            done, pending = await asyncio.wait(
+                                {output_get, client_read},
+                                timeout=30.0,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+
+                            if not done:
+                                # Both timed out
+                                for p in pending:
+                                    p.cancel()
+                                logger.warning('Both output and client read timed out: uid=%s', uid)
+                                gen_task.cancel()
+                                break
+
+                            for p in pending:
+                                p.cancel()
+
+                            if client_read in done:
+                                try:
+                                    next_msg = client_read.result()
+                                except StopAsyncIteration:
+                                    logger.warning('Client disconnected during tool wait: uid=%s', uid)
+                                    gen_task.cancel()
+                                    break
+                                msg_type = next_msg.WhichOneof('event')
+                                if msg_type == 'tool_result':
+                                    await tool_result_queue.put(next_msg.tool_result)
+                                elif msg_type == 'heartbeat':
+                                    pass  # Heartbeats are fine during tool waits
+                                else:
+                                    logger.warning('Unexpected %s during tool wait: uid=%s', msg_type, uid)
+
+                            if output_get in done:
+                                event = output_get.result()
+                                if event is None:
+                                    break  # Generator finished
+                                yield event
+                                awaiting_tool_result = event.WhichOneof('event') == 'tool_call_request'
+                        else:
+                            # Normal mode: just wait for the next output event
                             try:
-                                next_msg = await asyncio.wait_for(
-                                    request_iterator.__aiter__().__anext__(), timeout=15.0
-                                )
-                            except (StopAsyncIteration, asyncio.TimeoutError):
-                                logger.warning('Client disconnected while waiting for ToolResult: uid=%s', uid)
+                                event = await asyncio.wait_for(output_queue.get(), timeout=60.0)
+                            except asyncio.TimeoutError:
+                                logger.warning('Analysis timed out: uid=%s frame=%s', uid, frame_id)
                                 gen_task.cancel()
                                 break
-                            if next_msg.WhichOneof('event') == 'tool_result':
-                                await tool_result_queue.put(next_msg.tool_result)
-                            else:
-                                logger.warning(
-                                    'Expected tool_result, got %s: uid=%s', next_msg.WhichOneof('event'), uid
-                                )
-                                gen_task.cancel()
-                                break
+                            if event is None:
+                                break  # Generator finished
+                            yield event
+                            awaiting_tool_result = event.WhichOneof('event') == 'tool_call_request'
 
                     if not gen_task.done():
                         gen_task.cancel()
@@ -183,8 +196,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     pass  # Heartbeats keep the stream alive; no response needed
 
                 elif event_type == 'tool_result':
-                    # Standalone tool_result outside of a frame analysis — feed it to the queue
-                    # in case the analysis is still waiting
+                    # Standalone tool_result outside of a frame analysis
                     try:
                         tool_result_queue.put_nowait(client_event.tool_result)
                     except asyncio.QueueFull:
@@ -218,8 +230,3 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
             logger.exception('Generator error: %s', type(e).__name__)
         finally:
             await output_queue.put(None)
-
-    @staticmethod
-    async def _drain_analysis(task_assistant, frame, cached_context, frame_id, uid, receive_tool_result):
-        """Placeholder — not used. Kept for documentation."""
-        pass
