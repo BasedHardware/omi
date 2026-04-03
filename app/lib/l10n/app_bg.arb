@@ -2877,5 +2877,13 @@
     "good": "Добро",
     "fair": "Задоволително",
     "weak": "Слабо",
-    "gattError": "GATT грешка ({code})"
+    "gattError": "GATT грешка ({code})",
+    "rollbackToStableFirmware": "Връщане към стабилен фърмуер",
+    "rollbackConfirmTitle": "Връщане на фърмуера?",
+    "rollbackConfirmMessage": "Това ще замени текущия фърмуер с последната стабилна версия ({version}). Устройството ви ще се рестартира след актуализацията.",
+    "stableFirmware": "Стабилен фърмуер",
+    "fetchingStableFirmware": "Извличане на последния стабилен фърмуер...",
+    "noStableFirmwareFound": "Не може да се намери стабилна версия на фърмуера за вашето устройство.",
+    "installStableFirmware": "Инсталиране на стабилен фърмуер",
+    "alreadyOnStableFirmware": "Вече сте на последната стабилна версия."
 }

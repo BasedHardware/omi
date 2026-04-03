@@ -2908,5 +2908,13 @@
     "good": "Buono",
     "fair": "Discreto",
     "weak": "Debole",
-    "gattError": "Errore GATT ({code})"
+    "gattError": "Errore GATT ({code})",
+    "rollbackToStableFirmware": "Torna al firmware stabile",
+    "rollbackConfirmTitle": "Tornare al firmware?",
+    "rollbackConfirmMessage": "Questo sostituirà il firmware attuale con l'ultima versione stabile ({version}). Il dispositivo si riavvierà dopo l'aggiornamento.",
+    "stableFirmware": "Firmware stabile",
+    "fetchingStableFirmware": "Recupero dell'ultimo firmware stabile...",
+    "noStableFirmwareFound": "Impossibile trovare una versione stabile del firmware per il tuo dispositivo.",
+    "installStableFirmware": "Installa firmware stabile",
+    "alreadyOnStableFirmware": "Sei già sull'ultima versione stabile."
 }

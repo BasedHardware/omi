@@ -2908,5 +2908,13 @@
     "good": "Добре",
     "fair": "Задовільно",
     "weak": "Слабкий",
-    "gattError": "Помилка GATT ({code})"
+    "gattError": "Помилка GATT ({code})",
+    "rollbackToStableFirmware": "Повернутися до стабільної прошивки",
+    "rollbackConfirmTitle": "Повернути прошивку?",
+    "rollbackConfirmMessage": "Це замінить поточну прошивку на останню стабільну версію ({version}). Ваш пристрій перезавантажиться після оновлення.",
+    "stableFirmware": "Стабільна прошивка",
+    "fetchingStableFirmware": "Отримання останньої стабільної прошивки...",
+    "noStableFirmwareFound": "Не вдалося знайти стабільну версію прошивки для вашого пристрою.",
+    "installStableFirmware": "Встановити стабільну прошивку",
+    "alreadyOnStableFirmware": "Ви вже використовуєте останню стабільну версію."
 }

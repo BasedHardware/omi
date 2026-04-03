@@ -2875,5 +2875,13 @@
     "good": "جيد",
     "fair": "مقبول",
     "weak": "ضعيف",
-    "gattError": "خطأ GATT ({code})"
+    "gattError": "خطأ GATT ({code})",
+    "rollbackToStableFirmware": "الرجوع إلى البرنامج الثابت المستقر",
+    "rollbackConfirmTitle": "الرجوع إلى البرنامج الثابت؟",
+    "rollbackConfirmMessage": "سيتم استبدال البرنامج الثابت الحالي بأحدث إصدار مستقر ({version}). سيتم إعادة تشغيل جهازك بعد التحديث.",
+    "stableFirmware": "البرنامج الثابت المستقر",
+    "fetchingStableFirmware": "جارٍ جلب أحدث برنامج ثابت مستقر...",
+    "noStableFirmwareFound": "تعذر العثور على إصدار مستقر من البرنامج الثابت لجهازك.",
+    "installStableFirmware": "تثبيت البرنامج الثابت المستقر",
+    "alreadyOnStableFirmware": "أنت بالفعل على أحدث إصدار مستقر."
 }

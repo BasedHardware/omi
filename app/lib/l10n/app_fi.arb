@@ -2908,5 +2908,13 @@
     "good": "Hyvä",
     "fair": "Kohtalainen",
     "weak": "Heikko",
-    "gattError": "GATT-virhe ({code})"
+    "gattError": "GATT-virhe ({code})",
+    "rollbackToStableFirmware": "Palaa vakaaseen laiteohjelmistoon",
+    "rollbackConfirmTitle": "Palauta laiteohjelmisto?",
+    "rollbackConfirmMessage": "Tämä korvaa nykyisen laiteohjelmiston uusimmalla vakaalla versiolla ({version}). Laitteesi käynnistyy uudelleen päivityksen jälkeen.",
+    "stableFirmware": "Vakaa laiteohjelmisto",
+    "fetchingStableFirmware": "Haetaan uusinta vakaata laiteohjelmistoa...",
+    "noStableFirmwareFound": "Laitteellesi ei löytynyt vakaata laiteohjelmistoversiota.",
+    "installStableFirmware": "Asenna vakaa laiteohjelmisto",
+    "alreadyOnStableFirmware": "Sinulla on jo uusin vakaa versio."
 }
