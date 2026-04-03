@@ -8910,4 +8910,89 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Volem fer Omi més útil per a tu.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnòstics del dispositiu';
+
+  @override
+  String get signalStrength => 'Intensitat del senyal';
+
+  @override
+  String get connectionUptime => 'Temps d\'activitat';
+
+  @override
+  String get reconnections => 'Reconnexions';
+
+  @override
+  String get disconnectHistory => 'Historial de desconnexions';
+
+  @override
+  String get noDisconnectsRecorded => 'No s\'han registrat desconnexions';
+
+  @override
+  String get diagnostics => 'Diagnòstics';
+
+  @override
+  String get waitingForData => 'Esperant dades...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI en temps real';
+
+  @override
+  String get noRssiDataYet => 'Encara no hi ha dades RSSI';
+
+  @override
+  String get collectingData => 'Recollint dades...';
+
+  @override
+  String get cleanDisconnect => 'Desconnexió neta';
+
+  @override
+  String get connectionTimeout => 'Temps d\'espera de connexió esgotat';
+
+  @override
+  String get remoteDeviceTerminated => 'El dispositiu remot ha finalitzat';
+
+  @override
+  String get pairedToAnotherPhone => 'Vinculat a un altre telèfon';
+
+  @override
+  String get linkKeyMismatch => 'Clau d\'enllaç no coincident';
+
+  @override
+  String get connectionFailed => 'Connexió fallida';
+
+  @override
+  String get appClosed => 'Aplicació tancada';
+
+  @override
+  String get manualDisconnect => 'Desconnexió manual';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Últims $count esdeveniments';
+  }
+
+  @override
+  String get signal => 'Senyal';
+
+  @override
+  String get battery => 'Bateria';
+
+  @override
+  String get excellent => 'Excel·lent';
+
+  @override
+  String get good => 'Bo';
+
+  @override
+  String get fair => 'Acceptable';
+
+  @override
+  String get weak => 'Feble';
+
+  @override
+  String gattError(String code) {
+    return 'Error GATT ($code)';
+  }
 }

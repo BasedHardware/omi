@@ -8901,4 +8901,89 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnosticarea dispozitivului';
+
+  @override
+  String get signalStrength => 'Puterea semnalului';
+
+  @override
+  String get connectionUptime => 'Timp de funcționare';
+
+  @override
+  String get reconnections => 'Reconectări';
+
+  @override
+  String get disconnectHistory => 'Istoric deconectări';
+
+  @override
+  String get noDisconnectsRecorded => 'Nicio deconectare înregistrată';
+
+  @override
+  String get diagnostics => 'Diagnosticare';
+
+  @override
+  String get waitingForData => 'Se așteaptă date...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI în timp real';
+
+  @override
+  String get noRssiDataYet => 'Încă nu există date RSSI';
+
+  @override
+  String get collectingData => 'Se colectează date...';
+
+  @override
+  String get cleanDisconnect => 'Deconectare curată';
+
+  @override
+  String get connectionTimeout => 'Expirarea timpului de conectare';
+
+  @override
+  String get remoteDeviceTerminated => 'Dispozitivul la distanță a încheiat conexiunea';
+
+  @override
+  String get pairedToAnotherPhone => 'Asociat cu alt telefon';
+
+  @override
+  String get linkKeyMismatch => 'Nepotrivire cheie de legătură';
+
+  @override
+  String get connectionFailed => 'Conectare eșuată';
+
+  @override
+  String get appClosed => 'Aplicație închisă';
+
+  @override
+  String get manualDisconnect => 'Deconectare manuală';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ultimele $count evenimente';
+  }
+
+  @override
+  String get signal => 'Semnal';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Excelent';
+
+  @override
+  String get good => 'Bun';
+
+  @override
+  String get fair => 'Acceptabil';
+
+  @override
+  String get weak => 'Slab';
+
+  @override
+  String gattError(String code) {
+    return 'Eroare GATT ($code)';
+  }
 }

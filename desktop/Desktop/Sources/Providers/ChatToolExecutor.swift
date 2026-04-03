@@ -114,6 +114,22 @@ class ChatToolExecutor {
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "get_email_insights", properties: ["has_email": emailInsightsText != nil, "has_calendar": calendarInsightsText != nil])
             return result
 
+        // Backend RAG tools — call Python backend /v1/tools/* endpoints
+        case "get_conversations":
+            return await executeBackendTool(toolCall)
+        case "search_conversations":
+            return await executeBackendTool(toolCall)
+        case "get_memories":
+            return await executeBackendTool(toolCall)
+        case "search_memories":
+            return await executeBackendTool(toolCall)
+        case "get_action_items":
+            return await executeBackendTool(toolCall)
+        case "create_action_item":
+            return await executeBackendTool(toolCall)
+        case "update_action_item":
+            return await executeBackendTool(toolCall)
+
         default:
             return "Unknown tool: \(toolCall.name)"
         }
@@ -1012,5 +1028,99 @@ class ChatToolExecutor {
         fileScanFileCount = 0
 
         return "Onboarding completed successfully! The app is now set up."
+    }
+
+    // MARK: - Backend RAG Tools
+
+    private static func executeBackendTool(_ toolCall: ToolCall) async -> String {
+        do {
+            let api = APIClient.shared
+            let args = toolCall.arguments
+
+            switch toolCall.name {
+            case "get_conversations":
+                let resp = try await api.toolGetConversations(
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    limit: args["limit"] as? Int ?? 20,
+                    offset: args["offset"] as? Int ?? 0,
+                    includeTranscript: args["include_transcript"] as? Bool ?? true
+                )
+                return resp.resultText
+
+            case "search_conversations":
+                guard let query = args["query"] as? String, !query.isEmpty else {
+                    return "Error: query is required"
+                }
+                let resp = try await api.toolSearchConversations(
+                    query: query,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    limit: args["limit"] as? Int ?? 5,
+                    includeTranscript: args["include_transcript"] as? Bool ?? true
+                )
+                return resp.resultText
+
+            case "get_memories":
+                let resp = try await api.toolGetMemories(
+                    limit: args["limit"] as? Int ?? 50,
+                    offset: args["offset"] as? Int ?? 0,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String
+                )
+                return resp.resultText
+
+            case "search_memories":
+                guard let query = args["query"] as? String, !query.isEmpty else {
+                    return "Error: query is required"
+                }
+                let resp = try await api.toolSearchMemories(
+                    query: query,
+                    limit: args["limit"] as? Int ?? 5
+                )
+                return resp.resultText
+
+            case "get_action_items":
+                let resp = try await api.toolGetActionItems(
+                    limit: args["limit"] as? Int ?? 50,
+                    offset: args["offset"] as? Int ?? 0,
+                    completed: args["completed"] as? Bool,
+                    startDate: args["start_date"] as? String,
+                    endDate: args["end_date"] as? String,
+                    dueStartDate: args["due_start_date"] as? String,
+                    dueEndDate: args["due_end_date"] as? String
+                )
+                return resp.resultText
+
+            case "create_action_item":
+                guard let desc = args["description"] as? String, !desc.isEmpty else {
+                    return "Error: description is required"
+                }
+                let resp = try await api.toolCreateActionItem(
+                    description: desc,
+                    dueAt: args["due_at"] as? String,
+                    conversationId: args["conversation_id"] as? String
+                )
+                return resp.resultText
+
+            case "update_action_item":
+                guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
+                    return "Error: action_item_id is required"
+                }
+                let resp = try await api.toolUpdateActionItem(
+                    id: itemId,
+                    completed: args["completed"] as? Bool,
+                    description: args["description"] as? String,
+                    dueAt: args["due_at"] as? String
+                )
+                return resp.resultText
+
+            default:
+                return "Unknown backend tool: \(toolCall.name)"
+            }
+        } catch {
+            log("Backend tool error (\(toolCall.name)): \(error)")
+            return "Error calling backend: \(error.localizedDescription)"
+        }
     }
 }

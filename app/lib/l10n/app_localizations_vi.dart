@@ -8860,4 +8860,89 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
+
+  @override
+  String get deviceDiagnostics => 'Chẩn đoán thiết bị';
+
+  @override
+  String get signalStrength => 'Cường độ tín hiệu';
+
+  @override
+  String get connectionUptime => 'Thời gian hoạt động';
+
+  @override
+  String get reconnections => 'Kết nối lại';
+
+  @override
+  String get disconnectHistory => 'Lịch sử ngắt kết nối';
+
+  @override
+  String get noDisconnectsRecorded => 'Không có ngắt kết nối nào được ghi nhận';
+
+  @override
+  String get diagnostics => 'Chẩn đoán';
+
+  @override
+  String get waitingForData => 'Đang chờ dữ liệu...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI trực tiếp theo thời gian';
+
+  @override
+  String get noRssiDataYet => 'Chưa có dữ liệu RSSI';
+
+  @override
+  String get collectingData => 'Đang thu thập dữ liệu...';
+
+  @override
+  String get cleanDisconnect => 'Ngắt kết nối sạch';
+
+  @override
+  String get connectionTimeout => 'Hết thời gian kết nối';
+
+  @override
+  String get remoteDeviceTerminated => 'Thiết bị từ xa đã ngắt kết nối';
+
+  @override
+  String get pairedToAnotherPhone => 'Đã ghép nối với điện thoại khác';
+
+  @override
+  String get linkKeyMismatch => 'Khóa liên kết không khớp';
+
+  @override
+  String get connectionFailed => 'Kết nối thất bại';
+
+  @override
+  String get appClosed => 'Ứng dụng đã đóng';
+
+  @override
+  String get manualDisconnect => 'Ngắt kết nối thủ công';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count sự kiện gần nhất';
+  }
+
+  @override
+  String get signal => 'Tín hiệu';
+
+  @override
+  String get battery => 'Pin';
+
+  @override
+  String get excellent => 'Xuất sắc';
+
+  @override
+  String get good => 'Tốt';
+
+  @override
+  String get fair => 'Khá';
+
+  @override
+  String get weak => 'Yếu';
+
+  @override
+  String gattError(String code) {
+    return 'Lỗi GATT ($code)';
+  }
 }

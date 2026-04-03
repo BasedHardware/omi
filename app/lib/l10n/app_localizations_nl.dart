@@ -8887,4 +8887,89 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'We willen Omi nuttiger maken voor je.';
+
+  @override
+  String get deviceDiagnostics => 'Apparaatdiagnostiek';
+
+  @override
+  String get signalStrength => 'Signaalsterkte';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Herverbindingen';
+
+  @override
+  String get disconnectHistory => 'Ontkoppelingsgeschiedenis';
+
+  @override
+  String get noDisconnectsRecorded => 'Geen ontkoppelingen geregistreerd';
+
+  @override
+  String get diagnostics => 'Diagnostiek';
+
+  @override
+  String get waitingForData => 'Wachten op gegevens...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI in de tijd';
+
+  @override
+  String get noRssiDataYet => 'Nog geen RSSI-gegevens';
+
+  @override
+  String get collectingData => 'Gegevens verzamelen...';
+
+  @override
+  String get cleanDisconnect => 'Schone ontkoppeling';
+
+  @override
+  String get connectionTimeout => 'Verbindingstime-out';
+
+  @override
+  String get remoteDeviceTerminated => 'Extern apparaat heeft de verbinding verbroken';
+
+  @override
+  String get pairedToAnotherPhone => 'Gekoppeld aan een andere telefoon';
+
+  @override
+  String get linkKeyMismatch => 'Koppelingssleutel komt niet overeen';
+
+  @override
+  String get connectionFailed => 'Verbinding mislukt';
+
+  @override
+  String get appClosed => 'App gesloten';
+
+  @override
+  String get manualDisconnect => 'Handmatige ontkoppeling';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Laatste $count gebeurtenissen';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Batterij';
+
+  @override
+  String get excellent => 'Uitstekend';
+
+  @override
+  String get good => 'Goed';
+
+  @override
+  String get fair => 'Redelijk';
+
+  @override
+  String get weak => 'Zwak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fout ($code)';
+  }
 }

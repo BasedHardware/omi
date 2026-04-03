@@ -8854,4 +8854,89 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vi ønsker å gjøre Omi mer nyttig for deg.';
+
+  @override
+  String get deviceDiagnostics => 'Enhetsdiagnostikk';
+
+  @override
+  String get signalStrength => 'Signalstyrke';
+
+  @override
+  String get connectionUptime => 'Oppetid';
+
+  @override
+  String get reconnections => 'Gjenoppkoblinger';
+
+  @override
+  String get disconnectHistory => 'Frakoblingshistorikk';
+
+  @override
+  String get noDisconnectsRecorded => 'Ingen frakoblinger registrert';
+
+  @override
+  String get diagnostics => 'Diagnostikk';
+
+  @override
+  String get waitingForData => 'Venter på data...';
+
+  @override
+  String get liveRssiOverTime => 'Sanntids RSSI over tid';
+
+  @override
+  String get noRssiDataYet => 'Ingen RSSI-data ennå';
+
+  @override
+  String get collectingData => 'Samler inn data...';
+
+  @override
+  String get cleanDisconnect => 'Ren frakobling';
+
+  @override
+  String get connectionTimeout => 'Tilkoblingstidsavbrudd';
+
+  @override
+  String get remoteDeviceTerminated => 'Fjernenheten avsluttet tilkoblingen';
+
+  @override
+  String get pairedToAnotherPhone => 'Paret med en annen telefon';
+
+  @override
+  String get linkKeyMismatch => 'Koblingsnøkkel stemmer ikke';
+
+  @override
+  String get connectionFailed => 'Tilkobling mislyktes';
+
+  @override
+  String get appClosed => 'Appen lukket';
+
+  @override
+  String get manualDisconnect => 'Manuell frakobling';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Siste $count hendelser';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Batteri';
+
+  @override
+  String get excellent => 'Utmerket';
+
+  @override
+  String get good => 'Bra';
+
+  @override
+  String get fair => 'Brukbar';
+
+  @override
+  String get weak => 'Svak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-feil ($code)';
+  }
 }

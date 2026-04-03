@@ -156,6 +156,85 @@ data class BleService (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/**
+ * A single disconnect event stored in native preferences.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class BleDisconnectEvent (
+  val timestamp: Long,
+  val reason: String,
+  val reasonCode: Long,
+  val isManual: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BleDisconnectEvent {
+      val timestamp = pigeonVar_list[0] as Long
+      val reason = pigeonVar_list[1] as String
+      val reasonCode = pigeonVar_list[2] as Long
+      val isManual = pigeonVar_list[3] as Boolean
+      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      timestamp,
+      reason,
+      reasonCode,
+      isManual,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BleDisconnectEvent) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
+ * Diagnostics data read from native preferences on demand.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class BleDeviceDiagnostics (
+  val disconnectHistory: List<BleDisconnectEvent>,
+  val reconnectionCount: Long,
+  val connectedAt: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BleDeviceDiagnostics {
+      val disconnectHistory = pigeonVar_list[0] as List<BleDisconnectEvent>
+      val reconnectionCount = pigeonVar_list[1] as Long
+      val connectedAt = pigeonVar_list[2] as Long
+      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      disconnectHistory,
+      reconnectionCount,
+      connectedAt,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BleDeviceDiagnostics) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -169,6 +248,16 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
           BleService.fromList(it)
         }
       }
+      131.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          BleDisconnectEvent.fromList(it)
+        }
+      }
+      132.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          BleDeviceDiagnostics.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -180,6 +269,14 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       is BleService -> {
         stream.write(130)
+        writeValue(stream, value.toList())
+      }
+      is BleDisconnectEvent -> {
+        stream.write(131)
+        writeValue(stream, value.toList())
+      }
+      is BleDeviceDiagnostics -> {
+        stream.write(132)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -619,6 +716,9 @@ interface BleHostApi {
   fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
   fun getBluetoothState(): String
   fun isPeripheralConnected(uuid: String): Boolean
+  fun startRssiStreaming(uuid: String)
+  fun stopRssiStreaming(uuid: String)
+  fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit)
   /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
   /** (Android only) Initiate CompanionDeviceManager association for a device. */
@@ -842,6 +942,62 @@ interface BleHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.startRssiStreaming$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.startRssiStreaming(uuidArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.stopRssiStreaming$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.stopRssiStreaming(uuidArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getDeviceDiagnostics$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            api.getDeviceDiagnostics(uuidArg) { result: Result<BleDeviceDiagnostics> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
@@ -961,6 +1117,23 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
     val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(peripheralUuidArg, serviceUuidArg, characteristicUuidArg, valueArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onRssiUpdate(peripheralUuidArg: String, rssiArg: Long, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(peripheralUuidArg, rssiArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

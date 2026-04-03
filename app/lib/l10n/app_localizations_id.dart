@@ -8869,4 +8869,89 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Kami ingin membuat Omi lebih berguna untuk Anda.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostik Perangkat';
+
+  @override
+  String get signalStrength => 'Kekuatan Sinyal';
+
+  @override
+  String get connectionUptime => 'Waktu Aktif';
+
+  @override
+  String get reconnections => 'Koneksi Ulang';
+
+  @override
+  String get disconnectHistory => 'Riwayat Pemutusan';
+
+  @override
+  String get noDisconnectsRecorded => 'Tidak ada pemutusan yang tercatat';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Menunggu data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI langsung seiring waktu';
+
+  @override
+  String get noRssiDataYet => 'Belum ada data RSSI';
+
+  @override
+  String get collectingData => 'Mengumpulkan data...';
+
+  @override
+  String get cleanDisconnect => 'Pemutusan bersih';
+
+  @override
+  String get connectionTimeout => 'Waktu koneksi habis';
+
+  @override
+  String get remoteDeviceTerminated => 'Perangkat jarak jauh memutuskan koneksi';
+
+  @override
+  String get pairedToAnotherPhone => 'Dipasangkan dengan ponsel lain';
+
+  @override
+  String get linkKeyMismatch => 'Ketidakcocokan kunci tautan';
+
+  @override
+  String get connectionFailed => 'Koneksi gagal';
+
+  @override
+  String get appClosed => 'Aplikasi ditutup';
+
+  @override
+  String get manualDisconnect => 'Pemutusan manual';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count peristiwa terakhir';
+  }
+
+  @override
+  String get signal => 'Sinyal';
+
+  @override
+  String get battery => 'Baterai';
+
+  @override
+  String get excellent => 'Sangat Baik';
+
+  @override
+  String get good => 'Baik';
+
+  @override
+  String get fair => 'Cukup';
+
+  @override
+  String get weak => 'Lemah';
+
+  @override
+  String gattError(String code) {
+    return 'Kesalahan GATT ($code)';
+  }
 }

@@ -12,6 +12,8 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -38,6 +40,10 @@ class OmiBleForegroundService : Service() {
         private const val PREFS_KEY = "managed_device"
         private const val PREFS_USER_DISCONNECTED = "user_disconnected"
         private const val DFU_SERVICE_UUID = "00001530-1212-efde-1523-785feabcd123"
+        private const val PREFS_DIAGNOSTICS = "ble_diagnostics"
+        private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
+        private const val KEY_RECONNECT_COUNT = "reconnect_count"
+        private const val MAX_DISCONNECT_HISTORY = 20
 
         @Volatile
         var instance: OmiBleForegroundService? = null
@@ -116,6 +122,9 @@ class OmiBleForegroundService : Service() {
             val managed = managedDevices[addr] ?: return
 
             Log.i(TAG, "onGattConnected: $addr")
+            if (managed.hasEverConnected) {
+                incrementReconnectionCount(addr)
+            }
             managed.retryCount = 0
             managed.hasEverConnected = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
@@ -253,6 +262,8 @@ class OmiBleForegroundService : Service() {
             .putBoolean(PREFS_USER_DISCONNECTED, true)
             .apply()
 
+        persistDisconnectEvent(addr, 0, isManual = true)
+
         bleManager.mainHandler.post {
             bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
         }
@@ -335,6 +346,12 @@ class OmiBleForegroundService : Service() {
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {
             Log.w(TAG, "Device $addr disconnected before ever connecting (status=$status)")
+        }
+
+        val userDisconnected = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(PREFS_USER_DISCONNECTED, false)
+        if (!userDisconnected) {
+            persistDisconnectEvent(addr, status, isManual = false)
         }
 
         bleManager.mainHandler.post {
@@ -498,6 +515,7 @@ class OmiBleForegroundService : Service() {
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
+            persistDisconnectEvent(addr, -1, isManual = false)
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
             bleManager.mainHandler.post {
@@ -516,6 +534,78 @@ class OmiBleForegroundService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    // ── Diagnostics persistence ──
+
+    private fun hciStatusDescription(status: Int): String = when (status) {
+        0 -> "clean_disconnect"
+        8 -> "connection_timeout"
+        19 -> "remote_device_terminated"
+        22 -> "paired_to_another_phone"
+        34 -> "link_key_mismatch"
+        62 -> "connection_failed_instant_passed"
+        -1 -> "app_closed"
+        else -> "gatt_error_$status"
+    }
+
+    private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
+    private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
+
+    private fun persistDisconnectEvent(address: String, status: Int, isManual: Boolean) {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val key = historyKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+
+        val event = JSONObject().apply {
+            put("timestamp", System.currentTimeMillis())
+            put("reason", if (isManual) "manual" else hciStatusDescription(status))
+            put("reasonCode", status)
+            put("isManual", isManual)
+        }
+        history.put(event)
+
+        // Keep only the last MAX_DISCONNECT_HISTORY entries
+        while (history.length() > MAX_DISCONNECT_HISTORY) {
+            history.remove(0)
+        }
+
+        prefs.edit().putString(key, history.toString()).apply()
+    }
+
+    private fun incrementReconnectionCount(address: String) {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val key = reconnectKey(address)
+        val count = prefs.getInt(key, 0)
+        prefs.edit().putInt(key, count + 1).apply()
+    }
+
+    fun getDeviceDiagnostics(address: String): BleDeviceDiagnostics {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val historyJson = prefs.getString(historyKey(address), "[]") ?: "[]"
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+        val reconnectCount = prefs.getInt(reconnectKey(address), 0)
+
+        val events = mutableListOf<BleDisconnectEvent>()
+        for (i in 0 until history.length()) {
+            val obj = history.getJSONObject(i)
+            events.add(BleDisconnectEvent(
+                timestamp = obj.getLong("timestamp"),
+                reason = obj.getString("reason"),
+                reasonCode = obj.getInt("reasonCode").toLong(),
+                isManual = obj.getBoolean("isManual")
+            ))
+        }
+
+        val addr = address.uppercase()
+        val connectedAt = managedDevices[addr]?.connectionStartTime ?: 0L
+
+        return BleDeviceDiagnostics(
+            disconnectHistory = events,
+            reconnectionCount = reconnectCount.toLong(),
+            connectedAt = connectedAt
+        )
+    }
 
     // ── Notification ──
 

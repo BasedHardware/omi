@@ -8697,4 +8697,89 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => '我们想让 Omi 对您更有用。';
+
+  @override
+  String get deviceDiagnostics => '设备诊断';
+
+  @override
+  String get signalStrength => '信号强度';
+
+  @override
+  String get connectionUptime => '运行时间';
+
+  @override
+  String get reconnections => '重新连接';
+
+  @override
+  String get disconnectHistory => '断开连接记录';
+
+  @override
+  String get noDisconnectsRecorded => '没有记录到断开连接';
+
+  @override
+  String get diagnostics => '诊断';
+
+  @override
+  String get waitingForData => '等待数据...';
+
+  @override
+  String get liveRssiOverTime => '实时RSSI变化';
+
+  @override
+  String get noRssiDataYet => '暂无RSSI数据';
+
+  @override
+  String get collectingData => '正在收集数据...';
+
+  @override
+  String get cleanDisconnect => '正常断开';
+
+  @override
+  String get connectionTimeout => '连接超时';
+
+  @override
+  String get remoteDeviceTerminated => '远程设备终止了连接';
+
+  @override
+  String get pairedToAnotherPhone => '已配对到其他手机';
+
+  @override
+  String get linkKeyMismatch => '链接密钥不匹配';
+
+  @override
+  String get connectionFailed => '连接失败';
+
+  @override
+  String get appClosed => '应用已关闭';
+
+  @override
+  String get manualDisconnect => '手动断开连接';
+
+  @override
+  String lastNEvents(int count) {
+    return '最近$count个事件';
+  }
+
+  @override
+  String get signal => '信号';
+
+  @override
+  String get battery => '电池';
+
+  @override
+  String get excellent => '优秀';
+
+  @override
+  String get good => '良好';
+
+  @override
+  String get fair => '一般';
+
+  @override
+  String get weak => '弱';
+
+  @override
+  String gattError(String code) {
+    return 'GATT错误 ($code)';
+  }
 }

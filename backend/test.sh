@@ -52,6 +52,7 @@ pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_listen_pipeline.py -v
@@ -71,6 +72,7 @@ pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
+pytest tests/unit/test_vision_stream_async.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
