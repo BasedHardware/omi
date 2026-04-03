@@ -686,15 +686,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             const Icon(Icons.lock_outline, size: 14, color: Color(0xFF8B8B9E)),
             const SizedBox(width: 6),
             Text(
-              '$label audio saved locally',
+              context.l10n.audioSavedLocally(label),
               style: const TextStyle(color: Color(0xFF8B8B9E), fontSize: 12, height: 1.3),
             ),
             const SizedBox(width: 6),
             const Text('·', style: TextStyle(color: Color(0xFF8B8B9E), fontSize: 12)),
             const SizedBox(width: 6),
-            const Text(
-              'will sync automatically',
-              style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.3),
+            Text(
+              context.l10n.willSyncAutomatically,
+              style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.3),
             ),
           ],
         ),
