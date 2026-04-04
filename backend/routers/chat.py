@@ -569,9 +569,11 @@ async def transcribe_voice_message_stream(
     dg_socket = None
     sender_task = None
     stt_audio_buffer = bytearray()
-    # 30ms flush threshold for Deepgram streaming quality
-    stt_buffer_flush_size = int(sample_rate * 2 * 0.03)
+    # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
+    stt_buffer_flush_size = int(sample_rate * channels * 2 * 0.03)
 
+    # PTT transcribe-stream always uses Deepgram (lightweight, no conversation lifecycle).
+    # get_stt_service_for_language resolves the language/model for the DG call.
     _, stt_language, stt_model = get_stt_service_for_language(language)
 
     loop = asyncio.get_running_loop()
