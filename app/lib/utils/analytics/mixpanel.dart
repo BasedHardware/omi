@@ -1143,6 +1143,34 @@ class MixpanelManager {
     );
   }
 
+  void appleRemindersSyncCompleted({
+    required int pendingExported,
+    required int syncedChecked,
+    required int completionsPulled,
+    required int completionsPushed,
+    required int titleDuePulled,
+    required int titleDuePushed,
+    required int remindersUnlinked,
+  }) {
+    track('Apple Reminders Sync Completed', properties: {
+      'pending_exported': pendingExported,
+      'synced_checked': syncedChecked,
+      'completions_pulled': completionsPulled,
+      'completions_pushed': completionsPushed,
+      'title_due_pulled': titleDuePulled,
+      'title_due_pushed': titleDuePushed,
+      'reminders_unlinked': remindersUnlinked,
+    });
+  }
+
+  void appleReminderDirectSync({required String actionItemId}) {
+    track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
+  }
+
+  void appleReminderDeleted({required String actionItemId}) {
+    track('Apple Reminder Deleted', properties: {'action_item_id': actionItemId});
+  }
+
   // ============================================================================
   // SETTINGS PAGE TRACKING
   // ============================================================================

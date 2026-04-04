@@ -1,6 +1,7 @@
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Orchestrates bidirectional Apple Reminders sync on foreground resume.
@@ -26,9 +27,19 @@ class AppleRemindersSyncService {
       final syncData = await getPendingSyncItems();
       if (syncData == null) return;
 
-      await _performOutboundSync(syncData.pendingExport);
-      await _performBidirectionalSync(syncData.syncedItems);
+      final exported = await _performOutboundSync(syncData.pendingExport);
+      final stats = await _performBidirectionalSync(syncData.syncedItems);
       _lastSyncTime = DateTime.now();
+
+      MixpanelManager().appleRemindersSyncCompleted(
+        pendingExported: exported,
+        syncedChecked: stats['checked'] ?? 0,
+        completionsPulled: stats['completionsPulled'] ?? 0,
+        completionsPushed: stats['completionsPushed'] ?? 0,
+        titleDuePulled: stats['titleDuePulled'] ?? 0,
+        titleDuePushed: stats['titleDuePushed'] ?? 0,
+        remindersUnlinked: stats['unlinked'] ?? 0,
+      );
     } catch (e) {
       Logger.debug('[AppleRemindersSync] Error: $e');
     } finally {
@@ -36,8 +47,8 @@ class AppleRemindersSyncService {
     }
   }
 
-  Future<void> _performOutboundSync(List<ActionItemWithMetadata> pendingItems) async {
-    if (pendingItems.isEmpty) return;
+  Future<int> _performOutboundSync(List<ActionItemWithMetadata> pendingItems) async {
+    if (pendingItems.isEmpty) return 0;
 
     final batchUpdates = <Map<String, dynamic>>[];
 
@@ -62,10 +73,19 @@ class AppleRemindersSyncService {
     if (batchUpdates.isNotEmpty) {
       await syncBatchUpdate(batchUpdates);
     }
+    return batchUpdates.length;
   }
 
-  Future<void> _performBidirectionalSync(List<ActionItemWithMetadata> syncedItems) async {
-    if (syncedItems.isEmpty) return;
+  Future<Map<String, int>> _performBidirectionalSync(List<ActionItemWithMetadata> syncedItems) async {
+    final stats = {
+      'checked': 0,
+      'completionsPulled': 0,
+      'completionsPushed': 0,
+      'titleDuePulled': 0,
+      'titleDuePushed': 0,
+      'unlinked': 0
+    };
+    if (syncedItems.isEmpty) return stats;
 
     final mappings = <String, String>{};
     for (final item in syncedItems) {
@@ -73,10 +93,11 @@ class AppleRemindersSyncService {
         mappings[item.id] = item.appleReminderId!;
       }
     }
-    if (mappings.isEmpty) return;
+    if (mappings.isEmpty) return stats;
 
     final statuses = await _remindersService.getRemindersStatus(mappings);
-    if (statuses.isEmpty) return;
+    if (statuses.isEmpty) return stats;
+    stats['checked'] = statuses.length;
 
     final backendUpdates = <Map<String, dynamic>>[];
 
@@ -89,6 +110,7 @@ class AppleRemindersSyncService {
 
       if (!exists) {
         backendUpdates.add({'id': item.id, 'exported': false, 'apple_reminder_id': ''});
+        stats['unlinked'] = stats['unlinked']! + 1;
         continue;
       }
 
@@ -109,8 +131,10 @@ class AppleRemindersSyncService {
       // Completion sync
       if (reminderCompleted && !item.completed) {
         backendUpdates.add({'id': item.id, 'completed': true});
+        stats['completionsPulled'] = stats['completionsPulled']! + 1;
       } else if (item.completed && !reminderCompleted) {
         await _remindersService.updateReminderById(item.appleReminderId!, completed: true);
+        stats['completionsPushed'] = stats['completionsPushed']! + 1;
       }
 
       // Title/due date sync (last-writer-wins)
@@ -127,6 +151,7 @@ class AppleRemindersSyncService {
         }
         if (updates.length > 1) {
           backendUpdates.add(updates);
+          stats['titleDuePulled'] = stats['titleDuePulled']! + 1;
         }
       } else if (item.updatedAt != null &&
           (reminderLastModified == null || item.updatedAt!.isAfter(reminderLastModified))) {
@@ -139,6 +164,7 @@ class AppleRemindersSyncService {
             title: needsTitleUpdate ? item.description : null,
             dueDate: needsDueUpdate ? item.dueAt : null,
           );
+          stats['titleDuePushed'] = stats['titleDuePushed']! + 1;
         }
       }
     }
@@ -146,6 +172,7 @@ class AppleRemindersSyncService {
     if (backendUpdates.isNotEmpty) {
       await syncBatchUpdate(backendUpdates);
     }
+    return stats;
   }
 
   bool _dueDatesAreDifferent(DateTime? a, DateTime? b) {

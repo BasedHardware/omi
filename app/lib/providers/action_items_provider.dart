@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -469,6 +470,7 @@ class ActionItemsProvider extends ChangeNotifier {
             exportPlatform: 'apple_reminders',
             appleReminderId: calendarItemId,
           );
+          MixpanelManager().appleReminderDirectSync(actionItemId: item.id);
         }
       } catch (e) {
         Logger.debug('Direct Apple Reminders sync failed: $e');
@@ -491,6 +493,7 @@ class ActionItemsProvider extends ChangeNotifier {
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
     AppleRemindersService().deleteReminderById(item.appleReminderId!);
+    MixpanelManager().appleReminderDeleted(actionItemId: item.id);
   }
 
   // Sort order and indent level persistence
