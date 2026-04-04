@@ -15,6 +15,7 @@ Options (via environment variables):
   AUTH_PORT=10200           Auth service port (default: 10200)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_PYTHON_API_URL="..."  Python backend URL for PTT transcription (default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
 
@@ -58,6 +59,7 @@ if [ "$1" = "--yolo" ]; then
     export OMI_SKIP_AUTH=1
     export OMI_SKIP_TUNNEL=1
     export OMI_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
+    export OMI_PYTHON_API_URL="https://api.omi.me"
     export OMI_AUTH_URL="https://omi-desktop-auth-208440318997.us-central1.run.app/"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 fi
@@ -528,6 +530,20 @@ if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     fi
     echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
     substep "Set OMI_AUTH_URL=$AUTH_URL"
+fi
+# Bootstrap OMI_PYTHON_API_URL — Python backend for PTT transcription (/v2/voice-message/*)
+# Do NOT fall back to OMI_API_URL — that's the Rust backend which returns 404 for these routes
+if ! grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
+    if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
+        PYTHON_API_URL=$(grep "^OMI_PYTHON_API_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    fi
+    if [ -z "$PYTHON_API_URL" ]; then
+        PYTHON_API_URL="https://api.omi.me"
+        substep "OMI_PYTHON_API_URL not set — defaulting to production: $PYTHON_API_URL"
+    fi
+    echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 fi
 
 substep "Copying app icon"
