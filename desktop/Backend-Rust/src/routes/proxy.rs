@@ -186,22 +186,43 @@ async fn gemini_stream_proxy(
         .unwrap())
 }
 
-/// POST /v1/proxy/deepgram/v1/listen?<query_params>
-/// Proxies pre-recorded (batch) transcription to Deepgram REST API.
-/// Client sends audio body; server adds Deepgram auth.
+/// Check if the Deepgram proxy deprecation period has passed.
+/// Returns true after 2026-04-05 05:00:00 UTC (24h after migration PR #6287 merge).
+fn is_deepgram_proxy_deprecated() -> bool {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    // 2026-04-05 05:00:00 UTC = 1775,541,600 seconds since epoch
+    const DEPRECATION_TIMESTAMP: u64 = 1_775_541_600;
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() >= DEPRECATION_TIMESTAMP)
+        .unwrap_or(false)
+}
+
+/// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
+/// STT moved to Python backend endpoints: POST /v2/voice-message/transcribe
+/// and WS /v2/voice-message/transcribe-stream (PR #6287).
+/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
 async fn deepgram_listen_proxy(
     State(state): State<AppState>,
     _user: AuthUser,
     axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
     body: Bytes,
 ) -> Result<Response, StatusCode> {
+    if is_deepgram_proxy_deprecated() {
+        tracing::warn!("deepgram_listen_proxy: endpoint deprecated, returning 410 Gone");
+        return Ok((
+            StatusCode::GONE,
+            "Deepgram proxy is deprecated. Use POST /v2/voice-message/transcribe instead.",
+        )
+            .into_response());
+    }
+
     let dg_key = state
         .config
         .deepgram_api_key
         .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    // Forward query params from the original request
     let query = original_uri.query().unwrap_or("");
     let url = build_deepgram_rest_url(query);
 
@@ -227,15 +248,24 @@ async fn deepgram_listen_proxy(
     Ok((status, bytes).into_response())
 }
 
-/// WebSocket proxy for Deepgram streaming transcription.
-/// GET /v1/proxy/deepgram/ws/v1/listen?<query_params> — upgrades to WS,
-/// then pipes bidirectionally to wss://api.deepgram.com/v1/listen.
+/// WS /v1/proxy/deepgram/ws/v1/listen — DEPRECATED.
+/// STT moved to Python backend: WS /v2/voice-message/transcribe-stream (PR #6287).
+/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
 async fn deepgram_ws_proxy(
     ws: axum::extract::WebSocketUpgrade,
     State(state): State<AppState>,
     _user: AuthUser,
     axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Response, StatusCode> {
+    if is_deepgram_proxy_deprecated() {
+        tracing::warn!("deepgram_ws_proxy: endpoint deprecated, returning 410 Gone");
+        return Ok((
+            StatusCode::GONE,
+            "Deepgram WS proxy is deprecated. Use WS /v2/voice-message/transcribe-stream instead.",
+        )
+            .into_response());
+    }
+
     let dg_key = state
         .config
         .deepgram_api_key
@@ -250,7 +280,8 @@ async fn deepgram_ws_proxy(
         if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
             tracing::error!("deepgram_ws_proxy: proxy error: {}", e);
         }
-    }))
+    })
+    .into_response())
 }
 
 /// Which side of the proxy terminated first
