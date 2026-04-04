@@ -203,6 +203,20 @@ class TestClearFairUseOnUpgrade:
 
         _mock_redis.delete.assert_called_with('fair_use:stage:user1')
 
+    @patch.object(fair_use_mod, 'users_db')
+    def test_noop_when_classifier_type_missing(self, mock_users):
+        """No-op when last_classifier_type is missing (legacy/malformed state)."""
+        mock_users.get_user_valid_subscription.return_value = _make_paid_subscription()
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            # No last_classifier_type field at all
+        }
+
+        result = fair_use_mod.clear_fair_use_on_upgrade('user1')
+
+        assert result is False
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
 
 class TestIsHardRestrictedPaidGuard:
     """Test is_hard_restricted() defense-in-depth for paid + free_exhausted."""
