@@ -8982,4 +8982,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String gattError(String code) {
     return 'GATT hiba ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration hang helyben mentve';
+  }
+
+  @override
+  String get willSyncAutomatically => 'automatikusan szinkronizálódik';
 }

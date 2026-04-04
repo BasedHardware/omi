@@ -8941,4 +8941,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String gattError(String code) {
     return 'GATT viga ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration heli salvestatud kohapeal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
 }

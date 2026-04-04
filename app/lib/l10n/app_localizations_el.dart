@@ -9008,4 +9008,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String gattError(String code) {
     return 'Σφάλμα GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ήχου αποθηκεύτηκε τοπικά';
+  }
+
+  @override
+  String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
 }

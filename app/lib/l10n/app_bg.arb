@@ -2877,5 +2877,14 @@
     "good": "Добро",
     "fair": "Задоволително",
     "weak": "Слабо",
-    "gattError": "GATT грешка ({code})"
+    "gattError": "GATT грешка ({code})",
+    "audioSavedLocally": "{duration} аудио запазено локално",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "ще се синхронизира автоматично"
 }

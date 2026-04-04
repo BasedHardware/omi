@@ -2877,5 +2877,14 @@
     "good": "Dobré",
     "fair": "Uspokojivé",
     "weak": "Slabé",
-    "gattError": "Chyba GATT ({code})"
+    "gattError": "Chyba GATT ({code})",
+    "audioSavedLocally": "{duration} zvuku uloženo lokálně",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synchronizuje se automaticky"
 }

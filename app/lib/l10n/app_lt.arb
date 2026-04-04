@@ -2908,5 +2908,14 @@
     "good": "Gerai",
     "fair": "Patenkinamai",
     "weak": "Silpnas",
-    "gattError": "GATT klaida ({code})"
+    "gattError": "GATT klaida ({code})",
+    "audioSavedLocally": "{duration} garso įrašyta vietoje",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "bus sinchronizuota automatiškai"
 }

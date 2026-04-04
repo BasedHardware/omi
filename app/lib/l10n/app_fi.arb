@@ -2908,5 +2908,14 @@
     "good": "Hyvä",
     "fair": "Kohtalainen",
     "weak": "Heikko",
-    "gattError": "GATT-virhe ({code})"
+    "gattError": "GATT-virhe ({code})",
+    "audioSavedLocally": "{duration} ääntä tallennettu paikallisesti",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkronoidaan automaattisesti"
 }

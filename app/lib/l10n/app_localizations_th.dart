@@ -8898,4 +8898,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String gattError(String code) {
     return 'ข้อผิดพลาด GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'บันทึกเสียง $duration ไว้ในเครื่อง';
+  }
+
+  @override
+  String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 }

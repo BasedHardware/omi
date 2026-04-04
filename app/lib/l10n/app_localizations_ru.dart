@@ -8972,4 +8972,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String gattError(String code) {
     return 'Ошибка GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио сохранено локально';
+  }
+
+  @override
+  String get willSyncAutomatically => 'синхронизируется автоматически';
 }

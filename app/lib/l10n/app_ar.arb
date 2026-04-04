@@ -2875,5 +2875,14 @@
     "good": "جيد",
     "fair": "مقبول",
     "weak": "ضعيف",
-    "gattError": "خطأ GATT ({code})"
+    "gattError": "خطأ GATT ({code})",
+    "audioSavedLocally": "تم حفظ {duration} من الصوت محليًا",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "ستتم المزامنة تلقائيًا"
 }

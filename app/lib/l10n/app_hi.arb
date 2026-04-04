@@ -2909,5 +2909,14 @@
     "good": "अच्छा",
     "fair": "ठीक",
     "weak": "कमज़ोर",
-    "gattError": "GATT त्रुटि ({code})"
+    "gattError": "GATT त्रुटि ({code})",
+    "audioSavedLocally": "{duration} ऑडियो स्थानीय रूप से सहेजा गया",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा"
 }

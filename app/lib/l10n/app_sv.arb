@@ -2908,5 +2908,14 @@
     "good": "Bra",
     "fair": "Godtagbar",
     "weak": "Svag",
-    "gattError": "GATT-fel ({code})"
+    "gattError": "GATT-fel ({code})",
+    "audioSavedLocally": "{duration} ljud sparat lokalt",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkroniseras automatiskt"
 }

@@ -2930,5 +2930,14 @@
     "good": "良好",
     "fair": "一般",
     "weak": "弱",
-    "gattError": "GATT错误 ({code})"
+    "gattError": "GATT错误 ({code})",
+    "audioSavedLocally": "{duration} 音频已本地保存",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "将自动同步"
 }

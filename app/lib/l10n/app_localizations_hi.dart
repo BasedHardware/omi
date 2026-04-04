@@ -8925,4 +8925,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String gattError(String code) {
     return 'GATT त्रुटि ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ऑडियो स्थानीय रूप से सहेजा गया';
+  }
+
+  @override
+  String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
 }

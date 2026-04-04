@@ -2908,5 +2908,14 @@
     "good": "Labi",
     "fair": "Apmierinošs",
     "weak": "Vājš",
-    "gattError": "GATT kļūda ({code})"
+    "gattError": "GATT kļūda ({code})",
+    "audioSavedLocally": "{duration} audio saglabāts lokāli",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "tiks sinhronizēts automātiski"
 }

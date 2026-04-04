@@ -385,11 +385,16 @@ Future<SyncLocalFilesResponse> syncLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   SyncJobPollCallback? onPollProgress,
+  String? conversationId,
 }) async {
   try {
     // Step 1: Submit files
+    var url = '${Env.apiBaseUrl}v2/sync-local-files';
+    if (conversationId != null) {
+      url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+    }
     var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v2/sync-local-files',
+      url: url,
       files: files,
       onUploadProgress: onUploadProgress,
     );

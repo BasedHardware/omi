@@ -2943,5 +2943,14 @@
     "good": "Dobry",
     "fair": "Dostateczny",
     "weak": "Słaby",
-    "gattError": "Błąd GATT ({code})"
+    "gattError": "Błąd GATT ({code})",
+    "audioSavedLocally": "{duration} dźwięku zapisano lokalnie",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "zsynchronizuje się automatycznie"
 }

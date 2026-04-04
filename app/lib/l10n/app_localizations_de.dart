@@ -9019,4 +9019,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-Fehler ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration Audio lokal gespeichert';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wird automatisch synchronisiert';
 }

@@ -8940,4 +8940,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String gattError(String code) {
     return 'GATT error ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saved locally';
+  }
+
+  @override
+  String get willSyncAutomatically => 'will sync automatically';
 }

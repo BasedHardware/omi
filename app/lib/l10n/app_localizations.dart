@@ -16694,6 +16694,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GATT error ({code})'**
   String gattError(String code);
+
+  /// No description provided for @audioSavedLocally.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} audio saved locally'**
+  String audioSavedLocally(String duration);
+
+  /// No description provided for @willSyncAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'will sync automatically'**
+  String get willSyncAutomatically;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

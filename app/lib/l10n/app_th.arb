@@ -2908,5 +2908,14 @@
     "good": "ดี",
     "fair": "พอใช้",
     "weak": "อ่อน",
-    "gattError": "ข้อผิดพลาด GATT ({code})"
+    "gattError": "ข้อผิดพลาด GATT ({code})",
+    "audioSavedLocally": "บันทึกเสียง {duration} ไว้ในเครื่อง",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ"
 }

@@ -2908,5 +2908,14 @@
     "good": "Bra",
     "fair": "Brukbar",
     "weak": "Svak",
-    "gattError": "GATT-feil ({code})"
+    "gattError": "GATT-feil ({code})",
+    "audioSavedLocally": "{duration} lyd lagret lokalt",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkroniseres automatisk"
 }
