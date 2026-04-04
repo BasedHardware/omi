@@ -373,6 +373,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
+    // Delete linked Apple Reminder if one exists
+    _deleteAppleReminderIfLinked(item);
+
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
@@ -478,8 +481,16 @@ class ActionItemsProvider extends ChangeNotifier {
     if (!PlatformService.isApple) return;
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
-    final service = AppleRemindersService();
-    service.updateReminderById(item.appleReminderId!, completed: completed, title: title, dueDate: dueDate);
+    AppleRemindersService()
+        .updateReminderById(item.appleReminderId!, completed: completed, title: title, dueDate: dueDate);
+  }
+
+  /// Delete the linked Apple Reminder when action item is deleted.
+  void _deleteAppleReminderIfLinked(ActionItemWithMetadata item) {
+    if (!PlatformService.isApple) return;
+    if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
+
+    AppleRemindersService().deleteReminderById(item.appleReminderId!);
   }
 
   // Sort order and indent level persistence
