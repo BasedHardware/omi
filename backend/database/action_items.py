@@ -532,6 +532,9 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
     for entry in updates:
         update_data = _prepare_action_item_for_write(entry['data'])
         update_data['updated_at'] = now
+        # Clear sync_requested when item is successfully exported
+        if update_data.get('exported') is True:
+            update_data['sync_requested'] = False
         doc_ref = action_items_ref.document(entry['id'])
         batch.update(doc_ref, update_data)
         count += 1
