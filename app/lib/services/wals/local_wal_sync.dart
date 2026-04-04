@@ -34,6 +34,12 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   bool _isCancelled = false;
 
+  /// Completes when _initializeWals() finishes loading WALs from disk.
+  final Completer<void> _walReady = Completer<void>();
+
+  /// Future that resolves when WALs are loaded and ready to query.
+  Future<void> get walReady => _walReady.future;
+
   /// Accumulated conversation IDs from completed batches during an ongoing sync.
   /// Accessible so that cancel can retrieve partial results.
   SyncLocalFilesResponse? _accumulatedResponse;
@@ -109,6 +115,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     // Fix any inconsistent WAL states from old implementations
     await WalFileManager.migrateInconsistentWals(_wals);
 
+    if (!_walReady.isCompleted) _walReady.complete();
     listener.onWalUpdated();
   }
 
