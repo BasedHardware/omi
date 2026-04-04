@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
+
+import pytest
 
 from routers import sync
 
@@ -8,7 +10,7 @@ def _conversation(idx: int, *, audio_files=None, discarded=False):
     return {
         'id': f'conv-{idx}',
         'structured': {'title': f'Title {idx}'},
-        'created_at': datetime(2026, 1, min(idx, 28), tzinfo=timezone.utc),
+        'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=idx),
         'audio_files': audio_files or [],
         'discarded': discarded,
     }
@@ -31,6 +33,19 @@ def test_list_conversations_with_audio_iterates_all_batches(monkeypatch):
     assert result['conversations'][-1]['id'] == 'conv-2'
 
 
+def test_list_conversations_with_audio_skips_locked_conversations(monkeypatch):
+    conversations = [
+        _conversation(1, audio_files=[{'duration': 1.0}], discarded=False),
+        {**_conversation(2, audio_files=[{'duration': 2.0}], discarded=False), 'is_locked': True},
+    ]
+
+    monkeypatch.setattr(sync.conversations_db, 'iter_all_conversations', MagicMock(return_value=iter(conversations)))
+
+    result = sync.list_conversations_with_audio(uid='user-1')
+
+    assert [conversation['id'] for conversation in result['conversations']] == ['conv-1']
+
+
 def test_delete_all_cloud_audio_clears_every_matching_conversation(monkeypatch):
     conversations = [_conversation(i, audio_files=[{'duration': 1.0}]) for i in range(1, 505)]
     conversations.append(_conversation(999, audio_files=[]))
@@ -51,3 +66,20 @@ def test_delete_all_cloud_audio_clears_every_matching_conversation(monkeypatch):
     update_mock.assert_any_call('user-1', 'conv-1', {'audio_files': []})
     update_mock.assert_any_call('user-1', 'conv-504', {'audio_files': []})
     assert result == {'deleted_blobs': 77, 'cleared_conversations': 504}
+
+
+def test_delete_all_cloud_audio_stops_before_blob_delete_when_metadata_clear_fails(monkeypatch):
+    conversations = [_conversation(1, audio_files=[{'duration': 1.0}])]
+    iter_mock = MagicMock(return_value=iter(conversations))
+    update_mock = MagicMock(side_effect=RuntimeError('firestore down'))
+    delete_mock = MagicMock()
+
+    monkeypatch.setattr(sync.conversations_db, 'iter_all_conversations', iter_mock)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', update_mock)
+    monkeypatch.setattr(sync, 'delete_all_user_cloud_audio', delete_mock)
+
+    with pytest.raises(sync.HTTPException) as exc_info:
+        sync.delete_all_cloud_audio(uid='user-1')
+
+    assert exc_info.value.status_code == 503
+    delete_mock.assert_not_called()

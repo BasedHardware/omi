@@ -50,7 +50,9 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         setState(() {});
       }
     });
-    _loadCloudAudioConversations();
+    if (context.read<UserProvider>().privateCloudSyncEnabled) {
+      _loadCloudAudioConversations();
+    }
   }
 
   @override
@@ -133,9 +135,11 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
 
     try {
       final audioFileInfos = await getConversationAudioSignedUrls(conversation.id);
-      final cachedFiles = audioFileInfos.where((af) => af.isCached).toList();
+      if (audioFileInfos.isEmpty) {
+        throw Exception('No audio files available to play');
+      }
 
-      if (cachedFiles.isEmpty) {
+      if (audioFileInfos.any((af) => !af.isCached)) {
         await precacheConversationAudio(conversation.id);
         if (!mounted) return;
         setState(() {
@@ -151,7 +155,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       final headers = await getAudioHeaders();
       final urls = getConversationAudioUrls(
         conversationId: conversation.id,
-        audioFileIds: cachedFiles.map((af) => af.id).toList(),
+        audioFileIds: audioFileInfos.map((af) => af.id).toList(),
         format: 'wav',
       );
 
@@ -181,9 +185,11 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     AudioDownloadService? service;
     try {
       final audioFileInfos = await getConversationAudioSignedUrls(conversation.id);
-      final cachedFiles = audioFileInfos.where((af) => af.isCached && af.signedUrl != null).toList();
+      if (audioFileInfos.isEmpty) {
+        throw Exception('No audio file available to share');
+      }
 
-      if (cachedFiles.isEmpty) {
+      if (audioFileInfos.any((af) => !af.isCached || af.signedUrl == null)) {
         await precacheConversationAudio(conversation.id);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -195,7 +201,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       service = AudioDownloadService();
       final file = await service.downloadAndCombineCloudAudio(
         conversation.title,
-        cachedFiles.map((audio) => DownloadableCloudAudioFile(url: audio.signedUrl!)).toList(),
+        audioFileInfos.map((audio) => DownloadableCloudAudioFile(url: audio.signedUrl!)).toList(),
       );
 
       if (file == null) {

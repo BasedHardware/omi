@@ -178,7 +178,7 @@ def list_conversations_with_audio(
     result = []
     for conv in conversations_db.iter_all_conversations(uid, include_discarded=False):
         audio_files = conv.get('audio_files') or []
-        if not audio_files:
+        if not audio_files or conv.get('is_locked', False):
             continue
 
         result.append(
@@ -205,16 +205,26 @@ def delete_all_cloud_audio(
     This removes audio chunks, merged files, and cached files from cloud storage,
     and clears the audio_files array from each conversation document.
     """
-    deleted_count = delete_all_user_cloud_audio(uid)
-
+    conversations_to_clear = []
     cleared_conversations = 0
     for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
         if not conv.get('audio_files'):
             continue
-        conversations_db.update_conversation(uid, conv['id'], {'audio_files': []})
-        cleared_conversations += 1
+        conversations_to_clear.append(conv['id'])
 
-    logger.info(f"Deleted {deleted_count} cloud audio blobs and cleared {cleared_conversations} conversations for user {uid}")
+    for conversation_id in conversations_to_clear:
+        try:
+            conversations_db.update_conversation(uid, conversation_id, {'audio_files': []})
+            cleared_conversations += 1
+        except Exception as e:
+            logger.error(f"Failed to clear audio_files for conversation {conversation_id}: {e}")
+            raise HTTPException(status_code=503, detail="Failed to clear conversation audio metadata.") from e
+
+    deleted_count = delete_all_user_cloud_audio(uid)
+
+    logger.info(
+        f"Deleted {deleted_count} cloud audio blobs and cleared {cleared_conversations} conversations for user {uid}"
+    )
     return {
         'deleted_blobs': deleted_count,
         'cleared_conversations': cleared_conversations,

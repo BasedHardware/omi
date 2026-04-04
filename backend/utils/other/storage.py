@@ -657,11 +657,19 @@ def delete_all_user_cloud_audio(uid: str) -> int:
     """
     bucket = storage_client.bucket(private_cloud_sync_bucket)
     deleted = 0
+    failed = 0
 
     for prefix in (f'chunks/{uid}/', f'audio/{uid}/', f'merged/{uid}/'):
         for blob in bucket.list_blobs(prefix=prefix):
-            blob.delete()
-            deleted += 1
+            try:
+                blob.delete()
+                deleted += 1
+            except Exception as e:
+                failed += 1
+                logger.error(f'Failed to delete cloud audio blob {blob.name}: {e}')
+
+    if failed:
+        logger.warning(f'Failed to delete {failed} cloud audio blobs for user {uid}')
 
     return deleted
 
