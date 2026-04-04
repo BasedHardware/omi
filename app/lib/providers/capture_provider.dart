@@ -1304,16 +1304,33 @@ class CaptureProvider extends ChangeNotifier
   /// Retries up to 3 times with exponential delays (5s, 10s, 20s).
   /// Network/transient errors (SocketException, no connectivity) do NOT increment retryCount.
   Future<void> _syncSingleWal(Wal wal, String conversationId, LocalWalSyncImpl phoneSync) async {
-    if (wal.filePath == null) return;
+    if (wal.filePath == null) {
+      Logger.debug('Auto-sync WAL ${wal.id}: no filePath, marking corrupted');
+      wal.status = WalStatus.corrupted;
+      await phoneSync.persistRetryMetadata(wal);
+      return;
+    }
     final fullPath = await Wal.getFilePath(wal.filePath);
-    if (fullPath == null) return;
+    if (fullPath == null) {
+      Logger.debug('Auto-sync WAL ${wal.id}: path resolution failed, marking corrupted');
+      wal.status = WalStatus.corrupted;
+      await phoneSync.persistRetryMetadata(wal);
+      return;
+    }
     final file = File(fullPath);
-    if (!file.existsSync()) return;
+    if (!file.existsSync()) {
+      Logger.debug('Auto-sync WAL ${wal.id}: file missing, marking corrupted');
+      wal.status = WalStatus.corrupted;
+      await phoneSync.persistRetryMetadata(wal);
+      return;
+    }
 
+    // Remaining attempts = maxRetries minus already-persisted retryCount
     const maxRetries = 3;
     const baseDelay = 5;
+    final startAttempt = wal.retryCount;
 
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
+    for (int attempt = startAttempt; attempt < maxRetries; attempt++) {
       if (!_isConnected) {
         Logger.debug('Auto-sync WAL ${wal.id}: offline, aborting without incrementing retryCount');
         return;
@@ -1321,19 +1338,16 @@ class CaptureProvider extends ChangeNotifier
       try {
         final result = await syncLocalFilesV2([file], conversationId: conversationId);
         if (result.hasPartialFailure) {
-          // Partial failure — don't mark synced; treat as a retryable error
           throw Exception('Partial sync failure: ${result.failedSegments}/${result.totalSegments} segments failed');
         }
         await phoneSync.markWalSyncedAndPersist(wal);
         return;
       } on SocketException {
-        // Network error — don't burn a retry, just stop
         Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
         return;
       } catch (e) {
         wal.retryCount = attempt + 1;
         wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        // Persist retry metadata after every attempt so app-kill doesn't reset the budget
         await phoneSync.persistRetryMetadata(wal);
         if (attempt < maxRetries - 1) {
           final delay = baseDelay * (1 << attempt); // 5s, 10s, 20s
