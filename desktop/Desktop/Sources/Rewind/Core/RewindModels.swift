@@ -47,6 +47,9 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     /// Whether OCR was skipped because the Mac was on battery (needs backfill when AC reconnects)
     var skippedForBattery: Bool
 
+    /// Machine hostname that captured this screenshot (for multi-device disambiguation)
+    var deviceName: String?
+
     static let databaseTableName = "screenshots"
 
     // MARK: - Storage Type
@@ -72,7 +75,8 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
         focusStatus: String? = nil,
         extractedTasksJson: String? = nil,
         adviceJson: String? = nil,
-        skippedForBattery: Bool = false
+        skippedForBattery: Bool = false,
+        deviceName: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -88,6 +92,7 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
         self.extractedTasksJson = extractedTasksJson
         self.adviceJson = adviceJson
         self.skippedForBattery = skippedForBattery
+        self.deviceName = deviceName
     }
 
     // MARK: - Persistence Callbacks

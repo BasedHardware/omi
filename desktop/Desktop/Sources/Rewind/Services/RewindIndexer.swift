@@ -212,7 +212,8 @@ actor RewindIndexer {
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                skippedForBattery: skippedForBattery,
+                deviceName: Host.current().localizedName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -293,7 +294,8 @@ actor RewindIndexer {
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                skippedForBattery: skippedForBattery,
+                deviceName: Host.current().localizedName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -398,7 +400,8 @@ actor RewindIndexer {
                 focusStatus: focusStatus,
                 extractedTasksJson: tasksJson,
                 adviceJson: adviceJson,
-                skippedForBattery: skippedForBattery
+                skippedForBattery: skippedForBattery,
+                deviceName: Host.current().localizedName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -613,7 +616,8 @@ actor RewindIndexer {
                         frameOffset: frame.frameOffset,
                         ocrText: nil,
                         ocrDataJson: nil,
-                        isIndexed: false  // Will need re-OCR
+                        isIndexed: false,  // Will need re-OCR
+                        deviceName: Host.current().localizedName
                     )
 
                     try await RewindDatabase.shared.insertScreenshot(screenshot)
