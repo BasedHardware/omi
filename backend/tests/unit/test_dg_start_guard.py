@@ -15,7 +15,9 @@ import pytest
 # Minimal stubs — only what streaming.py actually needs at import time
 # ---------------------------------------------------------------------------
 
-# Stub database and heavy deps before importing
+# Stub database, heavy deps, and deepgram before importing.
+# deepgram stubs must match test_streaming_deepgram_backoff.py pattern to avoid
+# import-order pollution when pytest collects both files in the same process.
 for _mod_name in [
     'database',
     'database._client',
@@ -33,8 +35,20 @@ for _mod_name in [
     'models.conversation',
     'models.notification_message',
     'utils.log_sanitizer',
+    'deepgram',
+    'deepgram.clients',
+    'deepgram.clients.live',
+    'deepgram.clients.live.v1',
+    'websockets',
+    'websockets.exceptions',
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())
+
+# Provide expected attributes for type-annotation imports
+sys.modules['deepgram'].DeepgramClient = MagicMock
+sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
+sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 
