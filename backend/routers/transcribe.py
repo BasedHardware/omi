@@ -309,9 +309,17 @@ async def _stream_handler(
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
 
+    # Get fair-use stage for STT model selection (#6314: throttle/restrict → nova-2)
+    _fair_use_stt_stage = 'none'
+    if FAIR_USE_ENABLED:
+        try:
+            _fair_use_stt_stage = get_enforcement_stage(uid)
+        except Exception:
+            pass
+
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(
-        language, multi_lang_enabled=not single_language_mode
+        language, multi_lang_enabled=not single_language_mode, fair_use_stage=_fair_use_stt_stage
     )
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
@@ -420,19 +428,19 @@ async def _stream_handler(
     # Fair-use state (#5746)
     fair_use_last_check_ts: float = 0.0
     # DG budget gate — checked at session start + per cap-check interval
-    # Covers restrict-stage users (#5746) and free-exhausted users (#6083)
+    # Covers throttle/restrict-stage users (#5746, #6083, #6314)
     fair_use_dg_budget_exhausted: bool = False
-    # Track DG usage only for restrict-stage users (not all users)
+    # Track DG usage for throttle/restrict-stage users (#6314: extended from restrict-only)
     fair_use_track_dg_usage: bool = False
     # DG usage accumulator: batch Redis writes every 60s instead of per-chunk (#5854)
     dg_usage_ms_pending: int = 0
 
-    # Session-start: check DG budget for restrict-stage users (#6083)
+    # Session-start: check DG budget for throttle/restrict-stage users (#6083, #6314)
     if FAIR_USE_ENABLED:
         try:
             _init_stage = get_enforcement_stage(uid)
             logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
-            if _init_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+            if _init_stage in ('throttle', 'restrict') and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                 fair_use_track_dg_usage = True
                 fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
                 if fair_use_dg_budget_exhausted:
@@ -503,8 +511,8 @@ async def _stream_handler(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
-                        # Start DG tracking proactively — classifier may escalate to restrict
-                        # before next poll. Harmless if user isn't actually escalated.
+                        # Start DG tracking proactively — classifier may escalate to throttle/restrict
+                        # before next poll. Harmless if user isn't actually escalated. (#6314)
                         if FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                             fair_use_track_dg_usage = True
                     else:
@@ -517,16 +525,16 @@ async def _stream_handler(
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
-                # DG budget gate: check restrict-stage budget (#6083)
+                # DG budget gate: check throttle/restrict-stage budget (#6083, #6314)
                 # Re-check stage after classifier may have escalated (fire-and-forget task above)
                 try:
                     stage = get_enforcement_stage(uid)
-                    if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    if stage in ('throttle', 'restrict') and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                         fair_use_track_dg_usage = True
                         was_exhausted = fair_use_dg_budget_exhausted
                         fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
                         if fair_use_dg_budget_exhausted and not was_exhausted:
-                            logger.info(f'fair_use: DG budget exhausted for {uid} session={session_id}')
+                            logger.info(f'fair_use: DG budget exhausted for {uid} session={session_id} stage={stage}')
                     else:
                         fair_use_track_dg_usage = False
                         fair_use_dg_budget_exhausted = False
