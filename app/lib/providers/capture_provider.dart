@@ -1378,6 +1378,12 @@ class CaptureProvider extends ChangeNotifier
     for (final wal in orphaned) {
       await _syncSingleWal(wal, wal.conversationId!, phoneSync);
     }
+    // Check if any orphaned WALs remain (e.g., transient SocketException while "online").
+    // If so, allow onConnectionStateChanged to re-trigger recovery on next transition.
+    final remaining = phoneSync.getOrphanedWals();
+    if (remaining.isNotEmpty) {
+      _orphanRecoveryDone = false;
+    }
   }
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
