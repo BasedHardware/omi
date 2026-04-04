@@ -8985,4 +8985,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

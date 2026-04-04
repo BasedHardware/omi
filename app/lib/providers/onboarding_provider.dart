@@ -23,6 +23,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
@@ -118,10 +119,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
       updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
       // Android 11 and below require location permission for BLE scanning
-      final deviceInfo = await DeviceInfoPlugin().androidInfo;
-      if (deviceInfo.version.sdkInt <= 30) {
-        PermissionStatus locationStatus = await Permission.locationWhenInUse.request();
-        updateLocationPermission(locationStatus.isGranted);
+      if (PlatformService.isAndroid) {
+        final deviceInfo = await DeviceInfoPlugin().androidInfo;
+        if (deviceInfo.version.sdkInt <= 30) {
+          PermissionStatus locationStatus = await Permission.locationWhenInUse.request();
+          updateLocationPermission(locationStatus.isGranted);
+        }
       }
     }
     notifyListeners();
@@ -271,7 +274,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     }
 
     // Android 11 and below: location permission required for BLE scanning
-    if (Platform.isAndroid) {
+    if (PlatformService.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
       if (deviceInfo.version.sdkInt <= 30) {
         final locationGranted = await Permission.locationWhenInUse.isGranted;

@@ -8959,4 +8959,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

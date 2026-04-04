@@ -85,8 +85,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                 openAppSettings();
               },
               () {},
-              'Enable Location',
-              'Location permission is needed to find nearby Bluetooth devices.',
+              context.l10n.enableLocationTitle,
+              context.l10n.enableLocationDescription,
               singleButton: true,
             ),
           );

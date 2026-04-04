@@ -8816,4 +8816,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => '将自动同步';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

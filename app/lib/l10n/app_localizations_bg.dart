@@ -9013,4 +9013,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'ще се синхронизира автоматично';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }
