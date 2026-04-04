@@ -4,7 +4,7 @@ import Foundation
 /// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
 /// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
 /// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
-/// Full stereo batch: Rust proxy Deepgram endpoint (unchanged).
+/// Full stereo batch: removed (formerly Rust proxy Deepgram, now dead code).
 class TranscriptionService {
 
     // MARK: - Types
