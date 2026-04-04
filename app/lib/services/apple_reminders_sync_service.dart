@@ -100,6 +100,7 @@ class AppleRemindersSyncService {
     stats['checked'] = statuses.length;
 
     final backendUpdates = <Map<String, dynamic>>[];
+    final deleteIds = <String>[];
 
     for (final item in syncedItems) {
       if (item.appleReminderId == null) continue;
@@ -109,7 +110,7 @@ class AppleRemindersSyncService {
       final exists = status['exists'] as bool? ?? false;
 
       if (!exists) {
-        backendUpdates.add({'id': item.id, 'exported': false, 'apple_reminder_id': ''});
+        deleteIds.add(item.id);
         stats['unlinked'] = stats['unlinked']! + 1;
         continue;
       }
@@ -171,6 +172,9 @@ class AppleRemindersSyncService {
 
     if (backendUpdates.isNotEmpty) {
       await syncBatchUpdate(backendUpdates);
+    }
+    for (final id in deleteIds) {
+      await deleteActionItem(id);
     }
     return stats;
   }
