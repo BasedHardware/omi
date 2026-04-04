@@ -105,10 +105,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               const SizedBox(height: 20),
               Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2E),
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
                 child: TextField(
                   controller: controller,
                   autofocus: true,
@@ -166,10 +163,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
                         child: Center(
                           child: Text(
                             context.l10n.save,
@@ -358,7 +352,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             icon: FontAwesomeIcons.microchip,
             title: context.l10n.deviceName,
             chipValue: deviceName,
-            copyValue: deviceName,
             showChevron: true,
             onTap: () => _showRenameDeviceDialog(device),
           ),
