@@ -8979,4 +8979,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'sẽ tự động đồng bộ';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -9002,4 +9002,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'akan disegerakkan secara automatik';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

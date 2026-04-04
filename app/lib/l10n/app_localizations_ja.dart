@@ -8828,4 +8828,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => '自動的に同期されます';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

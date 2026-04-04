@@ -8830,4 +8830,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => '자동으로 동기화됩니다';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

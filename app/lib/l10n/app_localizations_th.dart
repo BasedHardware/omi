@@ -8932,4 +8932,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }
