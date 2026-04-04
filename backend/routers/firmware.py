@@ -174,7 +174,12 @@ def _find_candidate_releases(
     for release in releases:
         tag_name = release.get("tag_name", "")
 
-        if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
+        if (
+            release.get("draft")
+            or release.get("prerelease")
+            or not release.get("published_at")
+            or not release.get("tag_name")
+        ):
             continue
 
         regex_pattern = f"^{release_prefix}_v[0-9]+(?:\\.[0-9]+){{1,2}}$"
