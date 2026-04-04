@@ -4,7 +4,7 @@ import Foundation
 /// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
 /// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
 /// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
-/// Full stereo batch: Rust proxy Deepgram endpoint (unchanged).
+/// Full stereo batch: removed (formerly Rust proxy Deepgram, now dead code).
 class TranscriptionService {
 
     // MARK: - Types
@@ -39,34 +39,13 @@ class TranscriptionService {
         let raw: [String: Any]  // Full JSON for event-specific fields
     }
 
-    /// Legacy TranscriptSegment for batchTranscribeFull (stereo) — kept for backward compatibility
-    struct TranscriptSegment {
-        let text: String
-        let isFinal: Bool
-        let speechFinal: Bool
-        let confidence: Double
-        let words: [Word]
-        let channelIndex: Int  // 0 = mic (user), 1 = system audio (others)
-
-        struct Word {
-            let word: String
-            let start: Double
-            let end: Double
-            let confidence: Double
-            let speaker: Int?
-            let punctuatedWord: String
-        }
-    }
-
     /// Callback types
     typealias BackendSegmentsHandler = ([BackendSegment]) -> Void
     typealias ListenEventHandler = (ListenEvent) -> Void
-    typealias TranscriptHandler = (TranscriptSegment) -> Void  // Legacy PTT callback
     typealias ErrorHandler = (Error) -> Void
     typealias ConnectionHandler = () -> Void
 
     enum TranscriptionError: LocalizedError {
-        case missingAPIKey
         case missingBackendURL
         case connectionFailed(Error)
         case invalidResponse
@@ -74,8 +53,6 @@ class TranscriptionService {
 
         var errorDescription: String? {
             switch self {
-            case .missingAPIKey:
-                return "DEEPGRAM_API_KEY not set"
             case .missingBackendURL:
                 return "Python backend URL not configured (OMI_PYTHON_API_URL or api.omi.me)"
             case .connectionFailed(let error):
@@ -112,34 +89,14 @@ class TranscriptionService {
     private let streamingMode: StreamingMode
 
     /// Python backend base URL for transcription endpoints.
-    /// Resolution order: OMI_PYTHON_API_URL → OMI_API_URL → https://api.omi.me/
-    /// OMI_API_URL fallback ensures dev builds (which wire OMI_API_URL via run.sh) route
-    /// PTT batch/streaming to the local backend instead of silently hitting production.
+    /// Resolution order: OMI_PYTHON_API_URL → https://api.omi.me/
+    /// NOTE: Do NOT fall back to OMI_API_URL — that points to the Rust desktop-backend
+    /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
     private static let pythonBackendBaseURL: String = {
         if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
-        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
-        }
         return "https://api.omi.me/"
-    }()
-
-    /// Rust backend proxy base URL (from OMI_API_URL env var).
-    /// Only used for batch (PTT) transcription via Deepgram proxy.
-    private static let proxyBaseURL: String = {
-        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
-        }
-        return ""
-    }()
-
-    /// Legacy deepgramBaseURL for backward compatibility (batch/PTT only).
-    private static let deepgramBaseURL: String = {
-        if let envURL = getenv("DEEPGRAM_API_URL"), let url = String(validatingUTF8: envURL), !url.isEmpty {
-            return url.hasSuffix("/") ? String(url.dropLast()) : url
-        }
-        return ""  // Empty means use proxy
     }()
 
     // Reconnection (internal for @testable import)
@@ -193,36 +150,6 @@ class TranscriptionService {
     /// Routes to `/v2/voice-message/transcribe-stream` (PTT-only transcription).
     convenience init(language: String = "en", channels: Int) throws {
         try self.init(language: language, mode: .ptt)
-    }
-
-    /// Legacy start with `onTranscript:` callback — wraps the new `onSegments:` API.
-    /// Converts BackendSegments to the old TranscriptSegment format for PTT compatibility.
-    func start(
-        onTranscript: @escaping TranscriptHandler,
-        onError: ErrorHandler? = nil,
-        onConnected: ConnectionHandler? = nil,
-        onDisconnected: ConnectionHandler? = nil
-    ) {
-        start(
-            onSegments: { segments in
-                // Convert backend segments to legacy TranscriptSegment format
-                for seg in segments {
-                    let legacySeg = TranscriptSegment(
-                        text: seg.text,
-                        isFinal: true,  // Backend segments are always final
-                        speechFinal: true,
-                        confidence: 1.0,
-                        words: [],
-                        channelIndex: seg.is_user ? 0 : 1
-                    )
-                    onTranscript(legacySeg)
-                }
-            },
-            onEvent: { _ in },  // PTT doesn't use events
-            onError: onError,
-            onConnected: onConnected,
-            onDisconnected: onDisconnected
-        )
     }
 
     /// Flush remaining audio and (for PTT mode) tell the backend to finalize transcription.
@@ -643,108 +570,6 @@ extension TranscriptionService {
         return transcript
     }
 
-    /// Transcribe a stereo audio buffer using Deepgram's pre-recorded REST API (via Rust proxy).
-    /// Returns full TranscriptSegment per channel with word-level timestamps.
-    /// Note: stereo/multichannel mode is NOT supported by the Python backend — stays on Deepgram.
-    static func batchTranscribeFull(
-        audioData: Data,
-        language: String = "en",
-        vocabulary: [String] = [],
-        apiKey: String? = nil
-    ) async throws -> [TranscriptSegment] {
-        // Determine auth and base URL
-        let authHeader: String
-        let baseURLString: String
-        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
-            let authService = await MainActor.run { AuthService.shared }
-            authHeader = try await authService.getAuthHeader()
-            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
-        } else {
-            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
-                throw TranscriptionError.missingAPIKey
-            }
-            authHeader = "Token \(key)"
-            baseURLString = "\(deepgramBaseURL)/v1/listen"
-        }
-
-        guard var components = URLComponents(string: baseURLString) else {
-            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
-        }
-        var queryItems = [
-            URLQueryItem(name: "model", value: "nova-3"),
-            URLQueryItem(name: "language", value: language),
-            URLQueryItem(name: "channels", value: "2"),
-            URLQueryItem(name: "multichannel", value: "true"),
-            URLQueryItem(name: "diarize", value: "true"),
-            URLQueryItem(name: "smart_format", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
-            URLQueryItem(name: "utterances", value: "true"),
-            URLQueryItem(name: "utt_split", value: "0.8"),
-            URLQueryItem(name: "encoding", value: "linear16"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-        ]
-
-        for term in vocabulary {
-            queryItems.append(URLQueryItem(name: "keyterm", value: term))
-        }
-
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.httpBody = audioData
-
-        log("TranscriptionService: Batch transcribing (full) \(audioData.count) bytes (\(String(format: "%.1f", Double(audioData.count) / 64000.0))s stereo)")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            logError("TranscriptionService: Batch full transcription failed with status \(statusCode): \(body)", error: nil)
-            throw TranscriptionError.invalidResponse
-        }
-
-        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
-
-        var segments: [TranscriptSegment] = []
-        guard let channels = json.results?.channels else { return segments }
-
-        for (channelIndex, channel) in channels.enumerated() {
-            guard let alt = channel.alternatives.first,
-                  !alt.transcript.isEmpty else { continue }
-
-            let words = alt.words?.map { bw in
-                TranscriptSegment.Word(
-                    word: bw.word,
-                    start: bw.start,
-                    end: bw.end,
-                    confidence: bw.confidence,
-                    speaker: bw.speaker,
-                    punctuatedWord: bw.punctuated_word ?? bw.word
-                )
-            } ?? []
-
-            segments.append(TranscriptSegment(
-                text: alt.transcript,
-                isFinal: true,
-                speechFinal: true,
-                confidence: alt.confidence,
-                words: words,
-                channelIndex: channelIndex
-            ))
-
-            log("TranscriptionService: Batch ch\(channelIndex): \(words.count) words, \(alt.transcript.prefix(80))...")
-        }
-
-        return segments
-    }
 }
 
 /// Response model for Python backend `/v2/voice-message/transcribe` (batch PTT)
@@ -753,30 +578,3 @@ private struct PythonTranscribeResponse: Decodable {
     let language: String?
 }
 
-/// Response model for Deepgram pre-recorded API (stereo batchTranscribeFull only)
-private struct BatchResponse: Decodable {
-    let results: BatchResults?
-
-    struct BatchResults: Decodable {
-        let channels: [BatchChannel]
-    }
-
-    struct BatchChannel: Decodable {
-        let alternatives: [BatchAlternative]
-    }
-
-    struct BatchAlternative: Decodable {
-        let transcript: String
-        let confidence: Double
-        let words: [BatchWord]?
-    }
-
-    struct BatchWord: Decodable {
-        let word: String
-        let start: Double
-        let end: Double
-        let confidence: Double
-        let speaker: Int?
-        let punctuated_word: String?
-    }
-}

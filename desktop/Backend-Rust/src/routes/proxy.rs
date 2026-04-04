@@ -186,22 +186,50 @@ async fn gemini_stream_proxy(
         .unwrap())
 }
 
-/// POST /v1/proxy/deepgram/v1/listen?<query_params>
-/// Proxies pre-recorded (batch) transcription to Deepgram REST API.
-/// Client sends audio body; server adds Deepgram auth.
+/// Epoch seconds for Deepgram proxy deprecation: 2026-04-05 05:00:00 UTC.
+const DEEPGRAM_DEPRECATION_EPOCH: u64 = 1_775_365_200;
+
+/// Check if the Deepgram proxy deprecation period has passed.
+/// Returns true after 2026-04-05 05:00:00 UTC (~26h after PR #6287 merge, rounded up).
+fn is_deepgram_proxy_deprecated() -> bool {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() >= DEEPGRAM_DEPRECATION_EPOCH)
+        .unwrap_or(false)
+}
+
+/// Testable: returns true when `now_epoch` is at or after the deprecation cutoff.
+#[cfg(test)]
+fn is_deprecated_at(now_epoch: u64) -> bool {
+    now_epoch >= DEEPGRAM_DEPRECATION_EPOCH
+}
+
+/// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
+/// STT moved to Python backend endpoints: POST /v2/voice-message/transcribe
+/// and WS /v2/voice-message/transcribe-stream (PR #6287).
+/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
 async fn deepgram_listen_proxy(
     State(state): State<AppState>,
     _user: AuthUser,
     axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
     body: Bytes,
 ) -> Result<Response, StatusCode> {
+    if is_deepgram_proxy_deprecated() {
+        tracing::warn!("deepgram_listen_proxy: endpoint deprecated, returning 410 Gone");
+        return Ok((
+            StatusCode::GONE,
+            "Deepgram proxy is deprecated. Use POST /v2/voice-message/transcribe instead.",
+        )
+            .into_response());
+    }
+
     let dg_key = state
         .config
         .deepgram_api_key
         .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    // Forward query params from the original request
     let query = original_uri.query().unwrap_or("");
     let url = build_deepgram_rest_url(query);
 
@@ -227,15 +255,24 @@ async fn deepgram_listen_proxy(
     Ok((status, bytes).into_response())
 }
 
-/// WebSocket proxy for Deepgram streaming transcription.
-/// GET /v1/proxy/deepgram/ws/v1/listen?<query_params> — upgrades to WS,
-/// then pipes bidirectionally to wss://api.deepgram.com/v1/listen.
+/// WS /v1/proxy/deepgram/ws/v1/listen — DEPRECATED.
+/// STT moved to Python backend: WS /v2/voice-message/transcribe-stream (PR #6287).
+/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
 async fn deepgram_ws_proxy(
     ws: axum::extract::WebSocketUpgrade,
     State(state): State<AppState>,
     _user: AuthUser,
     axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Response, StatusCode> {
+    if is_deepgram_proxy_deprecated() {
+        tracing::warn!("deepgram_ws_proxy: endpoint deprecated, returning 410 Gone");
+        return Ok((
+            StatusCode::GONE,
+            "Deepgram WS proxy is deprecated. Use WS /v2/voice-message/transcribe-stream instead.",
+        )
+            .into_response());
+    }
+
     let dg_key = state
         .config
         .deepgram_api_key
@@ -250,7 +287,8 @@ async fn deepgram_ws_proxy(
         if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
             tracing::error!("deepgram_ws_proxy: proxy error: {}", e);
         }
-    }))
+    })
+    .into_response())
 }
 
 /// Which side of the proxy terminated first
@@ -588,6 +626,31 @@ mod tests {
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
+    }
+
+    // --- ProxyCloseOrigin ---
+
+    // --- Deepgram deprecation boundary ---
+
+    #[test]
+    fn deepgram_deprecation_timestamp_matches_target_date() {
+        // 2026-04-05 05:00:00 UTC
+        assert_eq!(DEEPGRAM_DEPRECATION_EPOCH, 1_775_365_200);
+    }
+
+    #[test]
+    fn deepgram_deprecation_before_cutoff() {
+        assert!(!is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH - 1));
+    }
+
+    #[test]
+    fn deepgram_deprecation_at_cutoff() {
+        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH));
+    }
+
+    #[test]
+    fn deepgram_deprecation_after_cutoff() {
+        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH + 1));
     }
 
     // --- ProxyCloseOrigin ---
