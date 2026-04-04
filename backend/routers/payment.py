@@ -14,6 +14,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.redis_db import set_credits_invalidation_signal
+from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
@@ -496,6 +497,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 conversations_db.unlock_all_conversations(uid)
                 memories_db.unlock_all_memories(uid)
                 action_items_db.unlock_all_action_items(uid)
+                clear_fair_use_on_upgrade(uid)
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
@@ -549,6 +551,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
+                    clear_fair_use_on_upgrade(uid)
                 users_db.update_user_subscription(uid, new_subscription.dict())
                 set_credits_invalidation_signal(uid)
                 logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
@@ -571,6 +574,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
                         users_db.update_user_subscription(uid, new_subscription.dict())
                         set_credits_invalidation_signal(uid)
+                        if new_subscription and is_paid_plan(new_subscription.plan):
+                            clear_fair_use_on_upgrade(uid)
                         logger.info(
                             f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
                         )

@@ -391,6 +391,49 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
     }
 
 
+def clear_fair_use_on_upgrade(uid: str) -> bool:
+    """Clear free-tier-derived fair-use enforcement when a user upgrades to a paid plan.
+
+    Only clears enforcement that originated from free-tier credit exhaustion
+    (last_classifier_type == 'free_exhausted'). Abuse-derived enforcement is preserved.
+
+    Returns True if enforcement was cleared, False otherwise.
+    """
+    subscription = users_db.get_user_valid_subscription(uid)
+    if not subscription or not is_paid_plan(subscription.plan):
+        return False
+
+    state = fair_use_db.get_fair_use_state(uid)
+    stage = state.get('stage', 'none')
+    if stage == 'none':
+        return False
+
+    if state.get('last_classifier_type') != 'free_exhausted':
+        logger.info(
+            'fair_use: upgrade clear skipped uid=%s stage=%s classifier_type=%s (not free_exhausted)',
+            uid,
+            stage,
+            state.get('last_classifier_type'),
+        )
+        return False
+
+    fair_use_db.update_fair_use_state(
+        uid,
+        {
+            'stage': 'none',
+            'violation_count_7d': 0,
+            'violation_count_30d': 0,
+            'throttle_until': None,
+            'restrict_until': None,
+            'cleared_by': 'subscription_upgrade',
+            'cleared_at': datetime.utcnow(),
+        },
+    )
+    invalidate_enforcement_cache(uid)
+    logger.info('fair_use: cleared free-exhausted enforcement on upgrade uid=%s previous_stage=%s', uid, stage)
+    return True
+
+
 def is_hard_restricted(uid: str) -> bool:
     """Check if a user is hard-restricted (speech cap enforced as hard block)."""
     if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
@@ -404,6 +447,14 @@ def is_hard_restricted(uid: str) -> bool:
     stage = state.get('stage', 'none')
     if stage != 'restrict':
         return False
+
+    # Defense-in-depth: paid users with free-exhausted restrictions should not be blocked.
+    # Primary clearing happens in payment webhooks via clear_fair_use_on_upgrade(),
+    # but this guard catches missed webhook edge cases.
+    if state.get('last_classifier_type') == 'free_exhausted':
+        subscription = users_db.get_user_valid_subscription(uid)
+        if subscription and is_paid_plan(subscription.plan):
+            return False
 
     # Check if restriction has expired
     restrict_until = state.get('restrict_until')
