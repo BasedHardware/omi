@@ -80,16 +80,26 @@ _deepgram_nova3_languages = {
 }
 
 
-def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
+def get_deepgram_model_for_language(language: str, fair_use_stage: str = 'none') -> Tuple[str, str]:
     """
     Determine the appropriate Deepgram model and language for pre-recorded transcription.
 
     Args:
         language: The requested language code or 'multi' for auto-detection
+        fair_use_stage: Fair-use enforcement stage. 'throttle'/'restrict' forces nova-2 (#6314).
 
     Returns:
         Tuple of (language_to_use, model_name)
     """
+    # Fair-use enforcement: throttle/restrict stages force nova-2 to reduce cost (#6314)
+    if fair_use_stage in ('throttle', 'restrict'):
+        if language == 'multi':
+            return 'multi', 'nova-2-general'
+        if language in _deepgram_nova2_only_languages:
+            return language, 'nova-2-general'
+        # For nova-3-only languages, fall back to nova-2 multi
+        return 'multi', 'nova-2-general'
+
     # For multi-language mode
     if language == 'multi':
         return 'multi', 'nova-3'
