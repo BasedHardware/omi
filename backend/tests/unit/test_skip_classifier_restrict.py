@@ -67,7 +67,6 @@ class TestSkipClassifierRestrict:
     def test_restrict_skips_classifier(self):
         """Users at restrict stage should not trigger the LLM classifier."""
         fair_use_mod.redis_client = MagicMock()
-        fair_use_mod.redis_client.set.return_value = True
 
         mock_classify = AsyncMock(return_value={'misuse_score': 0.9, 'usage_type': 'audiobook'})
 
@@ -79,10 +78,19 @@ class TestSkipClassifierRestrict:
             )
             mock_getter.assert_not_called()
 
+    def test_restrict_skips_redis_lock(self):
+        """Users at restrict stage should not even acquire the Redis lock."""
+        fair_use_mod.redis_client = MagicMock()
+
+        with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'):
+            asyncio.get_event_loop().run_until_complete(
+                fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger())
+            )
+            fair_use_mod.redis_client.set.assert_not_called()
+
     def test_restrict_does_not_escalate(self):
         """Users at restrict should not call escalate_enforcement either."""
         fair_use_mod.redis_client = MagicMock()
-        fair_use_mod.redis_client.set.return_value = True
 
         with patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict'), patch.object(
             fair_use_mod, 'escalate_enforcement'
