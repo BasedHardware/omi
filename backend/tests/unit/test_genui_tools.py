@@ -14,27 +14,41 @@ from pathlib import Path
 
 def _load_genui_tools_module():
     """Load genui_tools.py with a minimal stub for the @tool decorator."""
-    if "langchain_core" not in sys.modules:
-        langchain_core = types.ModuleType("langchain_core")
-        sys.modules["langchain_core"] = langchain_core
-    else:
-        langchain_core = sys.modules["langchain_core"]
+    original_langchain_core = sys.modules.get("langchain_core")
+    original_langchain_tools = sys.modules.get("langchain_core.tools")
 
-    tools_mod = types.ModuleType("langchain_core.tools")
+    try:
+        if original_langchain_core is None:
+            langchain_core = types.ModuleType("langchain_core")
+            sys.modules["langchain_core"] = langchain_core
+        else:
+            langchain_core = original_langchain_core
 
-    def tool(fn):
-        return fn
+        tools_mod = types.ModuleType("langchain_core.tools")
 
-    tools_mod.tool = tool
-    sys.modules["langchain_core.tools"] = tools_mod
-    setattr(langchain_core, "tools", tools_mod)
+        def tool(fn):
+            return fn
 
-    path = Path(__file__).resolve().parents[2] / "utils" / "retrieval" / "tools" / "genui_tools.py"
-    spec = importlib.util.spec_from_file_location("test_genui_tools_module", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+        tools_mod.tool = tool
+        sys.modules["langchain_core.tools"] = tools_mod
+        setattr(langchain_core, "tools", tools_mod)
+
+        path = Path(__file__).resolve().parents[2] / "utils" / "retrieval" / "tools" / "genui_tools.py"
+        spec = importlib.util.spec_from_file_location("test_genui_tools_module", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec is not None and spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if original_langchain_tools is None:
+            sys.modules.pop("langchain_core.tools", None)
+        else:
+            sys.modules["langchain_core.tools"] = original_langchain_tools
+
+        if original_langchain_core is None:
+            sys.modules.pop("langchain_core", None)
+        else:
+            sys.modules["langchain_core"] = original_langchain_core
 
 
 def test_create_map_ui_stores_block_in_agent_config():
