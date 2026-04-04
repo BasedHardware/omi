@@ -159,8 +159,6 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
-    // Recover orphaned WALs from previous sessions on startup
-    Future.microtask(() => recoverOrphanedWals());
   }
 
   void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
@@ -168,6 +166,13 @@ class CaptureProvider extends ChangeNotifier
     messageProvider = mp;
     peopleProvider = pp;
     usageProvider = up;
+
+    // Run orphan recovery once after providers are wired up and WAL service is initialized.
+    // Uses Future.delayed to let the WAL service finish loading wals.json from disk.
+    if (!_orphanRecoveryDone) {
+      _orphanRecoveryDone = true;
+      Future.delayed(const Duration(seconds: 5), () => recoverOrphanedWals());
+    }
 
     notifyListeners();
   }
@@ -210,6 +215,8 @@ class CaptureProvider extends ChangeNotifier
 
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
+
+  bool _orphanRecoveryDone = false;
 
   /// Preserved session start for auto-sync after socket-driven conversation completion.
   /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
@@ -1286,7 +1293,7 @@ class CaptureProvider extends ChangeNotifier
 
   /// Sync a single WAL to a conversation with retry and backoff.
   /// Retries up to 3 times with exponential delays (5s, 10s, 20s).
-  Future<void> _syncSingleWal(Wal wal, String conversationId, dynamic phoneSync) async {
+  Future<void> _syncSingleWal(Wal wal, String conversationId, LocalWalSyncImpl phoneSync) async {
     if (wal.filePath == null) return;
     final fullPath = await Wal.getFilePath(wal.filePath);
     if (fullPath == null) return;
