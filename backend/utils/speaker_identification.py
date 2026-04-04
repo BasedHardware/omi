@@ -2,7 +2,7 @@ import asyncio
 import io
 import re
 import wave
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple
 
 import av
 import numpy as np
@@ -16,6 +16,7 @@ from utils.other.storage import (
 from utils.speaker_sample import verify_and_transcribe_sample
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from utils.speaker_identification_hybrid import detect_speaker_hybrid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -230,7 +231,8 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
+def _detect_speaker_from_regex(text: str) -> Optional[str]:
+    """Stage 1: Legacy Regex (Multi-language) - Pure sync function."""
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
@@ -238,6 +240,50 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
             if name and len(name) >= 2:
                 return name.capitalize()
     return None
+
+
+async def detect_speaker_from_text_async(text: str) -> Optional[str]:
+    """
+    Detect speaker name from text using the Hybrid Identification Engine (Async).
+    Stage 1: Regex
+    Stage 2: Hybrid Regex/NER/LLM (Optimized EN/ZH)
+    """
+    name = _detect_speaker_from_regex(text)
+    if name:
+        return name
+    
+    # Fallback to Hybrid Engine (NER/LLM)
+    return await detect_speaker_hybrid(text)
+
+
+def detect_speaker_from_text(text: str) -> Optional[str]:
+    """
+    Synchronous wrapper for detect_speaker_from_text_async.
+    Used for legacy compatibility in threads and tests.
+    """
+    # Try Stage 1 sync first
+    name = _detect_speaker_from_regex(text)
+    if name:
+        return name
+    
+    # Try full hybrid (Warning: might block thread if it has to run LLM/NER)
+    try:
+        # Check if we are already in an event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+            
+        if loop and loop.is_running():
+            # Already in a loop - can't use asyncio.run. 
+            # We skip Stage 2/3 and return Stage 1 result (already tried).
+            # This is a safety measure to prevent crash.
+            return name
+        
+        return asyncio.run(detect_speaker_hybrid(text))
+    except Exception as e:
+        logger.debug(f"Hybrid speaker ID fallback failed: {e}")
+        return None
 
 
 async def extract_speaker_samples(

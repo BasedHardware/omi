@@ -70,7 +70,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
-from utils.speaker_identification import detect_speaker_from_text
+from utils.speaker_identification import detect_speaker_from_text_async
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
@@ -2164,7 +2164,7 @@ async def _stream_handler(
                                 pass  # Drop if queue is full
 
                     # Text-based detection
-                    detected_name = detect_speaker_from_text(segment.text)
+                    detected_name = await detect_speaker_from_text_async(segment.text)
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         if person:
