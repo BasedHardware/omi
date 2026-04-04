@@ -1319,7 +1319,11 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       try {
-        await syncLocalFilesV2([file], conversationId: conversationId);
+        final result = await syncLocalFilesV2([file], conversationId: conversationId);
+        if (result.hasPartialFailure) {
+          // Partial failure — don't mark synced; treat as a retryable error
+          throw Exception('Partial sync failure: ${result.failedSegments}/${result.totalSegments} segments failed');
+        }
         await phoneSync.markWalSyncedAndPersist(wal);
         return;
       } on SocketException {
