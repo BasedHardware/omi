@@ -8961,4 +8961,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String gattError(String code) {
     return 'GATT kļūda ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saglabāts lokāli';
+  }
+
+  @override
+  String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
 }

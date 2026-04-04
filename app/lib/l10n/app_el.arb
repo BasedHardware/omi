@@ -2908,5 +2908,14 @@
     "good": "Καλό",
     "fair": "Μέτριο",
     "weak": "Αδύναμο",
-    "gattError": "Σφάλμα GATT ({code})"
+    "gattError": "Σφάλμα GATT ({code})",
+    "audioSavedLocally": "{duration} ήχου αποθηκεύτηκε τοπικά",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
 }

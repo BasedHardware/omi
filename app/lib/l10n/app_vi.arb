@@ -2913,5 +2913,14 @@
     "good": "Tốt",
     "fair": "Khá",
     "weak": "Yếu",
-    "gattError": "Lỗi GATT ({code})"
+    "gattError": "Lỗi GATT ({code})",
+    "audioSavedLocally": "{duration} âm thanh đã lưu cục bộ",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sẽ tự động đồng bộ"
 }

@@ -8883,4 +8883,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String gattError(String code) {
     return 'خطأ GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'تم حفظ $duration من الصوت محليًا';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
 }

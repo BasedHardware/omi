@@ -2908,5 +2908,14 @@
     "good": "Goed",
     "fair": "Redelijk",
     "weak": "Zwak",
-    "gattError": "GATT-fout ({code})"
+    "gattError": "GATT-fout ({code})",
+    "audioSavedLocally": "{duration} audio lokaal opgeslagen",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
 }

@@ -8794,4 +8794,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String gattError(String code) {
     return 'GATTエラー ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration の音声をローカルに保存しました';
+  }
+
+  @override
+  String get willSyncAutomatically => '自動的に同期されます';
 }

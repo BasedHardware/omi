@@ -2917,5 +2917,14 @@
     "good": "God",
     "fair": "Rimelig",
     "weak": "Svag",
-    "gattError": "GATT-fejl ({code})"
+    "gattError": "GATT-fejl ({code})",
+    "audioSavedLocally": "{duration} lyd gemt lokalt",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkroniseres automatisk"
 }

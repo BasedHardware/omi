@@ -2950,5 +2950,14 @@
     "good": "Baik",
     "fair": "Cukup",
     "weak": "Lemah",
-    "gattError": "Kesalahan GATT ({code})"
+    "gattError": "Kesalahan GATT ({code})",
+    "audioSavedLocally": "{duration} audio disimpan secara lokal",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "akan disinkronkan secara otomatis"
 }

@@ -2943,5 +2943,14 @@
     "good": "Хорошо",
     "fair": "Удовлетворительно",
     "weak": "Слабый",
-    "gattError": "Ошибка GATT ({code})"
+    "gattError": "Ошибка GATT ({code})",
+    "audioSavedLocally": "{duration} аудио сохранено локально",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "синхронизируется автоматически"
 }

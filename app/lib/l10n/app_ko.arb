@@ -2908,5 +2908,14 @@
     "good": "양호",
     "fair": "보통",
     "weak": "약함",
-    "gattError": "GATT 오류 ({code})"
+    "gattError": "GATT 오류 ({code})",
+    "audioSavedLocally": "{duration} 오디오가 로컬에 저장됨",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "자동으로 동기화됩니다"
 }

@@ -2943,5 +2943,14 @@
     "good": "İyi",
     "fair": "Orta",
     "weak": "Zayıf",
-    "gattError": "GATT hatası ({code})"
+    "gattError": "GATT hatası ({code})",
+    "audioSavedLocally": "{duration} ses yerel olarak kaydedildi",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
 }

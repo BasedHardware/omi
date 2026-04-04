@@ -2909,5 +2909,14 @@
     "good": "良好",
     "fair": "普通",
     "weak": "弱い",
-    "gattError": "GATTエラー ({code})"
+    "gattError": "GATTエラー ({code})",
+    "audioSavedLocally": "{duration} の音声をローカルに保存しました",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "自動的に同期されます"
 }

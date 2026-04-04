@@ -1,13 +1,25 @@
 import Foundation
 
-/// Service for real-time speech-to-text transcription using the Python backend `/v4/listen` WebSocket API.
-/// Streams audio over WebSocket and receives transcript segments and message events.
-/// Batch transcription (PTT) still uses the Rust proxy's Deepgram endpoint.
+/// Service for real-time speech-to-text transcription.
+/// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
+/// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
+/// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
+/// Full stereo batch: Rust proxy Deepgram endpoint (unchanged).
 class TranscriptionService {
 
     // MARK: - Types
 
-    /// Transcript segment from Python backend `/v4/listen`
+    /// Streaming mode determines which backend endpoint and parameters are used.
+    enum StreamingMode {
+        /// Conversation capture via `/v4/listen` — full pipeline with speech profiles,
+        /// speaker assignment, memory creation events, and conversation lifecycle.
+        case conversation
+        /// PTT live transcription via `/v2/voice-message/transcribe-stream` — transcription only,
+        /// no conversation lifecycle. Supports "finalize" text message for flush.
+        case ptt
+    }
+
+    /// Transcript segment from Python backend
     /// Matches `models.transcript_segment.TranscriptSegment` on the backend
     struct BackendSegment: Decodable {
         let id: String?
@@ -20,14 +32,14 @@ class TranscriptionService {
         let end: Double
     }
 
-    /// Message event from Python backend `/v4/listen`
+    /// Message event (from `/v4/listen` only — not used by PTT transcribe-stream)
     /// JSON object with a `type` field indicating the event kind
     struct ListenEvent {
         let type: String
         let raw: [String: Any]  // Full JSON for event-specific fields
     }
 
-    /// Legacy TranscriptSegment for batch (PTT) mode — kept for backward compatibility
+    /// Legacy TranscriptSegment for batchTranscribeFull (stereo) — kept for backward compatibility
     struct TranscriptSegment {
         let text: String
         let isFinal: Bool
@@ -97,11 +109,17 @@ class TranscriptionService {
     private let sampleRate = 16000
     private let encoding = "linear16"
     private let channels = 1  // Always mono for Python backend streaming
+    private let streamingMode: StreamingMode
 
-    /// Python backend base URL for streaming transcription.
-    /// Uses OMI_PYTHON_API_URL env var or falls back to https://api.omi.me/
+    /// Python backend base URL for transcription endpoints.
+    /// Resolution order: OMI_PYTHON_API_URL → OMI_API_URL → https://api.omi.me/
+    /// OMI_API_URL fallback ensures dev builds (which wire OMI_API_URL via run.sh) route
+    /// PTT batch/streaming to the local backend instead of silently hitting production.
     private static let pythonBackendBaseURL: String = {
         if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         return "https://api.omi.me/"
@@ -142,42 +160,39 @@ class TranscriptionService {
 
     // MARK: - Initialization
 
-    /// Initialize the transcription service for streaming via Python backend `/v4/listen`
+    /// Initialize the transcription service for streaming.
     /// - Parameters:
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
-    init(language: String = "en") throws {
+    ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
+    init(language: String = "en", mode: StreamingMode = .conversation) throws {
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
-        log("TranscriptionService: Initialized for Python backend streaming, language=\(language), channels=\(channels)")
+        self.streamingMode = mode
+        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language)")
     }
 
-    /// Initialize for batch (PTT) mode only — uses Deepgram proxy
+    /// Initialize for batch (PTT) mode only — uses Python backend `/v2/voice-message/transcribe`
     /// - Parameters:
-    ///   - apiKey: DeepGram API key (ignored when backend proxy is available)
+    ///   - apiKey: Ignored (kept for API compatibility with callers)
     ///   - language: Language code
     ///   - forBatchOnly: Must be true
     init(apiKey: String? = nil, language: String = "en", forBatchOnly: Bool) throws {
         guard forBatchOnly else {
             throw TranscriptionError.webSocketError("Use init(language:) for streaming mode")
         }
-        // Batch mode needs either direct Deepgram or proxy
-        if !Self.deepgramBaseURL.isEmpty, let key = apiKey ?? APIKeyService.currentDeepgramKey {
-            self.apiKey = key
-        } else if !Self.proxyBaseURL.isEmpty {
-            self.apiKey = ""
-        } else {
-            throw TranscriptionError.missingAPIKey
-        }
+        // Batch mode uses Firebase auth + Python backend — no DG key needed
+        self.apiKey = ""
         self.language = language
-        log("TranscriptionService: Initialized for batch (PTT) mode")
+        self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
+        log("TranscriptionService: Initialized for batch (PTT) mode via Python backend")
     }
 
     // MARK: - Legacy Streaming API (PTT backward compatibility)
 
-    /// Legacy init with channels parameter — delegates to new streaming init.
-    /// PTT live mode on main branch uses `TranscriptionService(language:, channels:)`.
+    /// Legacy init with channels parameter — used by PushToTalkManager for PTT live mode.
+    /// Routes to `/v2/voice-message/transcribe-stream` (PTT-only transcription).
     convenience init(language: String = "en", channels: Int) throws {
-        try self.init(language: language)
+        try self.init(language: language, mode: .ptt)
     }
 
     /// Legacy start with `onTranscript:` callback — wraps the new `onSegments:` API.
@@ -210,18 +225,29 @@ class TranscriptionService {
         )
     }
 
-    /// Legacy finishStream — delegates to stop() for backward compatibility.
-    /// PTT live mode calls this to flush remaining audio before finalizing.
+    /// Flush remaining audio and (for PTT mode) tell the backend to finalize transcription.
+    /// PTT live mode calls this to get the final transcript segment before closing.
+    /// In PTT mode, sends a "finalize" text message so the backend flushes any sub-threshold
+    /// audio to Deepgram and triggers its endpointing/finalization.
+    /// In conversation mode, just flushes the local audio buffer (no "finalize" — `/v4/listen`
+    /// manages its own endpointing via the pusher pipeline).
     func finishStream() {
         flushAudioBuffer()
-        // Note: unlike stop(), finishStream keeps the service alive briefly
-        // for any remaining server responses. With the Python backend, segments
-        // arrive as they're processed, so flushing the buffer is sufficient.
+
+        // Only PTT mode uses the "finalize" protocol — conversation mode (/v4/listen) doesn't support it
+        guard streamingMode == .ptt else { return }
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let message = URLSessionWebSocketTask.Message.string("finalize")
+        webSocketTask.send(message) { error in
+            if let error = error {
+                logError("TranscriptionService: finishStream send error", error: error)
+            }
+        }
     }
 
     // MARK: - Public Methods (Streaming)
 
-    /// Start the streaming transcription service via Python backend `/v4/listen`
+    /// Start the streaming transcription service (endpoint selected by `streamingMode`)
     func start(
         onSegments: @escaping BackendSegmentsHandler,
         onEvent: @escaping ListenEventHandler,
@@ -320,27 +346,46 @@ class TranscriptionService {
     }
 
     private func connectToBackend(authHeader: String) {
-        // Build WebSocket URL for Python backend /v4/listen
         let base = Self.pythonBackendBaseURL
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
         let wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
 
-        guard var components = URLComponents(string: "\(wsBase)/v4/listen") else {
+        // Select endpoint and query params based on streaming mode
+        let path: String
+        let queryItems: [URLQueryItem]
+
+        switch streamingMode {
+        case .conversation:
+            // Full conversation pipeline with speech profiles, speaker assignment, memory events
+            path = "/v4/listen"
+            queryItems = [
+                URLQueryItem(name: "language", value: language),
+                URLQueryItem(name: "sample_rate", value: String(sampleRate)),
+                URLQueryItem(name: "codec", value: encoding),
+                URLQueryItem(name: "channels", value: String(channels)),
+                URLQueryItem(name: "include_speech_profile", value: "true"),
+                URLQueryItem(name: "source", value: "desktop"),
+                URLQueryItem(name: "speaker_auto_assign", value: "enabled"),
+            ]
+        case .ptt:
+            // PTT-only transcription — no conversation lifecycle
+            path = "/v2/voice-message/transcribe-stream"
+            queryItems = [
+                URLQueryItem(name: "language", value: language),
+                URLQueryItem(name: "sample_rate", value: String(sampleRate)),
+                URLQueryItem(name: "codec", value: encoding),
+                URLQueryItem(name: "channels", value: String(channels)),
+            ]
+        }
+
+        guard var components = URLComponents(string: "\(wsBase)\(path)") else {
             log("TranscriptionService: Invalid URL base: \(wsBase)")
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
             return
         }
 
-        components.queryItems = [
-            URLQueryItem(name: "language", value: language),
-            URLQueryItem(name: "sample_rate", value: String(sampleRate)),
-            URLQueryItem(name: "codec", value: encoding),
-            URLQueryItem(name: "channels", value: String(channels)),
-            URLQueryItem(name: "include_speech_profile", value: "true"),
-            URLQueryItem(name: "source", value: "desktop"),
-            URLQueryItem(name: "speaker_auto_assign", value: "enabled"),
-        ]
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
@@ -510,10 +555,10 @@ class TranscriptionService {
         }
     }
 
-    /// Parse response from Python backend `/v4/listen`
-    /// Three message types:
-    /// 1. JSON array = transcript segments
-    /// 2. JSON object with "type" field = message event
+    /// Parse response from Python backend transcription WebSocket.
+    /// Message types:
+    /// 1. JSON array = transcript segments (primary, from `/v2/voice-message/transcribe-stream`)
+    /// 2. JSON object with "type" field = message event (from `/v4/listen` only, kept for compatibility)
     /// 3. Plain text "ping" = heartbeat (ignore)
     /// Visible to tests (`@testable import`) so ListenProtocolTests can drive real callback dispatch.
     func parseBackendResponse(_ text: String) {
@@ -548,41 +593,25 @@ class TranscriptionService {
 // MARK: - Batch (Pre-Recorded) Transcription (PTT only)
 
 extension TranscriptionService {
-    /// Transcribe a complete audio buffer using Deepgram's pre-recorded REST API.
+    /// Transcribe a complete audio buffer using the Python backend `/v2/voice-message/transcribe`.
     /// Returns the transcript string, or nil if transcription failed.
     static func batchTranscribe(
         audioData: Data,
         language: String = "en",
         apiKey: String? = nil
     ) async throws -> String? {
-        // Determine auth and base URL
-        let authHeader: String
-        let baseURLString: String
-        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
-            // Proxy mode: use Firebase auth, route through backend
-            let authService = await MainActor.run { AuthService.shared }
-            authHeader = try await authService.getAuthHeader()
-            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
-        } else {
-            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
-                throw TranscriptionError.missingAPIKey
-            }
-            authHeader = "Token \(key)"
-            baseURLString = "\(deepgramBaseURL)/v1/listen"
-        }
+        // Always use Firebase auth + Python backend
+        let authService = await MainActor.run { AuthService.shared }
+        let authHeader = try await authService.getAuthHeader()
+        let baseURLString = "\(pythonBackendBaseURL)v2/voice-message/transcribe"
 
         guard var components = URLComponents(string: baseURLString) else {
-            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid backend URL", code: -1))
         }
         components.queryItems = [
-            URLQueryItem(name: "model", value: "nova-3"),
             URLQueryItem(name: "language", value: language),
-            URLQueryItem(name: "smart_format", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
-            URLQueryItem(name: "diarize", value: "true"),
-            // Raw PCM parameters (same as streaming API uses)
-            URLQueryItem(name: "encoding", value: "linear16"),
             URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "encoding", value: "linear16"),
             URLQueryItem(name: "channels", value: "1"),
         ]
 
@@ -596,7 +625,7 @@ extension TranscriptionService {
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.httpBody = audioData
 
-        log("TranscriptionService: Batch transcribing \(audioData.count) bytes")
+        log("TranscriptionService: Batch transcribing \(audioData.count) bytes via Python backend")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -607,15 +636,16 @@ extension TranscriptionService {
             throw TranscriptionError.invalidResponse
         }
 
-        // Parse the response — same structure as streaming but wrapped in "results"
-        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
-        let transcript = json.results?.channels.first?.alternatives.first?.transcript
+        // Parse Python backend response: {"transcript": "...", "language": "..."}
+        let json = try JSONDecoder().decode(PythonTranscribeResponse.self, from: data)
+        let transcript = json.transcript.isEmpty ? nil : json.transcript
         log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
         return transcript
     }
 
-    /// Transcribe a stereo audio buffer using Deepgram's pre-recorded REST API.
+    /// Transcribe a stereo audio buffer using Deepgram's pre-recorded REST API (via Rust proxy).
     /// Returns full TranscriptSegment per channel with word-level timestamps.
+    /// Note: stereo/multichannel mode is NOT supported by the Python backend — stays on Deepgram.
     static func batchTranscribeFull(
         audioData: Data,
         language: String = "en",
@@ -717,7 +747,13 @@ extension TranscriptionService {
     }
 }
 
-/// Response model for Deepgram pre-recorded API (batch/PTT only)
+/// Response model for Python backend `/v2/voice-message/transcribe` (batch PTT)
+private struct PythonTranscribeResponse: Decodable {
+    let transcript: String
+    let language: String?
+}
+
+/// Response model for Deepgram pre-recorded API (stereo batchTranscribeFull only)
 private struct BatchResponse: Decodable {
     let results: BatchResults?
 

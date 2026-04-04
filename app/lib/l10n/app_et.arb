@@ -2908,5 +2908,14 @@
     "good": "Hea",
     "fair": "Rahuldav",
     "weak": "Nõrk",
-    "gattError": "GATT viga ({code})"
+    "gattError": "GATT viga ({code})",
+    "audioSavedLocally": "{duration} heli salvestatud kohapeal",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
 }

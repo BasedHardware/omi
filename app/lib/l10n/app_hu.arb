@@ -3004,5 +3004,14 @@
     "good": "Jó",
     "fair": "Elfogadható",
     "weak": "Gyenge",
-    "gattError": "GATT hiba ({code})"
+    "gattError": "GATT hiba ({code})",
+    "audioSavedLocally": "{duration} hang helyben mentve",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "automatikusan szinkronizálódik"
 }

@@ -9024,4 +9024,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String gattError(String code) {
     return 'Erreur GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration d\'audio enregistré localement';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sera synchronisé automatiquement';
 }

@@ -8931,4 +8931,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String gattError(String code) {
     return 'Chyba GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženého lokálne';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje sa automaticky';
 }

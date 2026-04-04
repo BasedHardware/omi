@@ -8796,4 +8796,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String gattError(String code) {
     return 'GATT 오류 ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 오디오가 로컬에 저장됨';
+  }
+
+  @override
+  String get willSyncAutomatically => '자동으로 동기화됩니다';
 }

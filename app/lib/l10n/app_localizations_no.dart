@@ -8939,4 +8939,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-feil ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration lyd lagret lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseres automatisk';
 }

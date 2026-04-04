@@ -10681,5 +10681,14 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "audioSavedLocally": "{duration} audio saved locally",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "will sync automatically"
 }

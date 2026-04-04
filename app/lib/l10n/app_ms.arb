@@ -2908,5 +2908,14 @@
     "good": "Baik",
     "fair": "Sederhana",
     "weak": "Lemah",
-    "gattError": "Ralat GATT ({code})"
+    "gattError": "Ralat GATT ({code})",
+    "audioSavedLocally": "{duration} audio disimpan secara tempatan",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "akan disegerakkan secara automatik"
 }

@@ -8962,4 +8962,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String gattError(String code) {
     return 'Błąd GATT ($code)';
   }
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration dźwięku zapisano lokalnie';
+  }
+
+  @override
+  String get willSyncAutomatically => 'zsynchronizuje się automatycznie';
 }
