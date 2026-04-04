@@ -597,21 +597,16 @@ actor TaskAssistant: ProactiveAssistant {
         }
 
         log("Task: Analyzing frame from \(frame.appName)...")
-        do {
-            let result: TaskExtractionResult?
-            let searchCount: Int
 
-            if let client = grpcClient, await client.isConnected {
-                // Server-side Gemini tool loop via gRPC
-                (result, searchCount) = try await extractTaskViaGRPC(
-                    client: client, frame: frame
-                )
-            } else {
-                // Local Gemini tool loop via proxy (fallback)
-                (result, searchCount) = try await extractTaskSingleStage(
-                    from: frame.jpegData, appName: frame.appName
-                )
-            }
+        guard let client = grpcClient, await client.isConnected else {
+            log("Task: Skipping analysis (gRPC not connected)")
+            return
+        }
+
+        do {
+            let (result, searchCount) = try await extractTaskViaGRPC(
+                client: client, frame: frame
+            )
 
             guard let result = result else {
                 log("Task: Analysis returned no result")
