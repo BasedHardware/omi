@@ -551,9 +551,10 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
-                    clear_fair_use_on_upgrade(uid)
                 users_db.update_user_subscription(uid, new_subscription.dict())
                 set_credits_invalidation_signal(uid)
+                if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
+                    clear_fair_use_on_upgrade(uid)
                 logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
 
     # Handle subscription schedule events
