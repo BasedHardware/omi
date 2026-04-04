@@ -6,6 +6,9 @@ import Foundation
 actor RewindIndexer {
     static let shared = RewindIndexer()
 
+    /// Capture-time computer name for new screenshots created by this app session.
+    private let currentComputerName = Host.current().localizedName
+
     private var isInitialized = false
     private var isInitializing = false
 
@@ -213,7 +216,7 @@ actor RewindIndexer {
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
                 skippedForBattery: skippedForBattery,
-                deviceName: Host.current().localizedName
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -295,7 +298,7 @@ actor RewindIndexer {
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
                 skippedForBattery: skippedForBattery,
-                deviceName: Host.current().localizedName
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -401,7 +404,7 @@ actor RewindIndexer {
                 extractedTasksJson: tasksJson,
                 adviceJson: adviceJson,
                 skippedForBattery: skippedForBattery,
-                deviceName: Host.current().localizedName
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -617,7 +620,8 @@ actor RewindIndexer {
                         ocrText: nil,
                         ocrDataJson: nil,
                         isIndexed: false,  // Will need re-OCR
-                        deviceName: Host.current().localizedName
+                        // Rebuild provenance is unknown for historical frames recovered from disk.
+                        deviceName: nil
                     )
 
                     try await RewindDatabase.shared.insertScreenshot(screenshot)

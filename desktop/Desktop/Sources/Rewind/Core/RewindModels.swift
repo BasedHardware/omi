@@ -47,7 +47,7 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     /// Whether OCR was skipped because the Mac was on battery (needs backfill when AC reconnects)
     var skippedForBattery: Bool
 
-    /// Machine hostname that captured this screenshot (for multi-device disambiguation)
+    /// Computer/device name that captured this screenshot (for multi-device disambiguation)
     var deviceName: String?
 
     static let databaseTableName = "screenshots"
