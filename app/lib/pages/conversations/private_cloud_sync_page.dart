@@ -110,6 +110,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
   }
 
   Future<void> _playConversationAudio(CloudAudioConversation conversation) async {
+    if (_isAudioLoading) {
+      return;
+    }
+
     if (_currentPlayingConversationId == conversation.id) {
       if (_audioPlayer.playing) {
         await _audioPlayer.pause();
@@ -139,10 +143,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
           _isAudioLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.preparingCloudAudioTryAgain),
-            backgroundColor: Colors.orange,
-          ),
+          SnackBar(content: Text(context.l10n.preparingCloudAudioTryAgain), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -170,9 +171,9 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         _currentPlayingConversationId = null;
         _isAudioLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToPlayCloudAudio), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToPlayCloudAudio), backgroundColor: Colors.red));
     }
   }
 
@@ -186,10 +187,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         await precacheConversationAudio(conversation.id);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.preparingCloudAudioTryAgain),
-            backgroundColor: Colors.orange,
-          ),
+          SnackBar(content: Text(context.l10n.preparingCloudAudioTryAgain), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -204,17 +202,16 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         throw Exception('No audio file available to share');
       }
 
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path, mimeType: 'audio/wav')]),
-      );
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: 'audio/wav')]));
       await service.cleanup();
     } catch (e) {
       Logger.debug('Error sharing cloud audio: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToShareCloudAudio), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToShareCloudAudio), backgroundColor: Colors.red));
     } finally {
+      await service?.cleanup();
       service?.dispose();
     }
   }
@@ -237,21 +234,21 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       setState(() => _isDeleting = false);
       if (success) {
         setState(() => _conversations = []);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.audioDeletedSuccessfully), backgroundColor: Colors.green),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.audioDeletedSuccessfully), backgroundColor: Colors.green));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToDeleteAudio), backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.failedToDeleteAudio), backgroundColor: Colors.red));
       }
     } catch (e) {
       Logger.debug('Error deleting all audio: $e');
       if (!mounted) return;
       setState(() => _isDeleting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToDeleteAudio), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToDeleteAudio), backgroundColor: Colors.red));
     }
   }
 
@@ -361,7 +358,8 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
   Widget _buildConversationTile(CloudAudioConversation conversation) {
     final isSelected = _currentPlayingConversationId == conversation.id;
     final isPlaying = isSelected && _audioPlayer.playing;
-    final isLoading = isSelected && _isAudioLoading;
+    final isLoading = _isAudioLoading;
+    final isSelectedLoading = isSelected && _isAudioLoading;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -383,7 +381,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                 shape: BoxShape.circle,
               ),
               child: Center(
-                child: isLoading
+                child: isSelectedLoading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -447,10 +445,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(20),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -468,10 +463,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                     TextButton.icon(
                       onPressed: _deleteAllAudio,
                       icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                      label: Text(
-                        context.l10n.deleteAllAudio,
-                        style: const TextStyle(color: Colors.red, fontSize: 13),
-                      ),
+                      label: Text(context.l10n.deleteAllAudio, style: const TextStyle(color: Colors.red, fontSize: 13)),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         minimumSize: Size.zero,
@@ -490,10 +482,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                         const CircularProgressIndicator(color: Colors.deepPurpleAccent),
                         if (_isDeleting) ...[
                           const SizedBox(height: 12),
-                          Text(
-                            context.l10n.deletingAudio,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                          ),
+                          Text(context.l10n.deletingAudio, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                         ],
                       ],
                     ),

@@ -134,6 +134,11 @@ class AudioDownloadService {
         _tempFiles.add(file);
       }
 
+      if (downloadedFiles.isEmpty) {
+        Logger.debug('No cloud audio files were downloaded');
+        return null;
+      }
+
       if (downloadedFiles.length == 1) {
         return downloadedFiles.first;
       }
