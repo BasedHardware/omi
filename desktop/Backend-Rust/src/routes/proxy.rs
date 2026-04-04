@@ -186,16 +186,23 @@ async fn gemini_stream_proxy(
         .unwrap())
 }
 
+/// Epoch seconds for Deepgram proxy deprecation: 2026-04-05 05:00:00 UTC.
+const DEEPGRAM_DEPRECATION_EPOCH: u64 = 1_775_365_200;
+
 /// Check if the Deepgram proxy deprecation period has passed.
 /// Returns true after 2026-04-05 05:00:00 UTC (~26h after PR #6287 merge, rounded up).
 fn is_deepgram_proxy_deprecated() -> bool {
     use std::time::{SystemTime, UNIX_EPOCH};
-    // 2026-04-05 05:00:00 UTC = 1,775,365,200 seconds since epoch
-    const DEPRECATION_TIMESTAMP: u64 = 1_775_365_200;
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() >= DEPRECATION_TIMESTAMP)
+        .map(|d| d.as_secs() >= DEEPGRAM_DEPRECATION_EPOCH)
         .unwrap_or(false)
+}
+
+/// Testable: returns true when `now_epoch` is at or after the deprecation cutoff.
+#[cfg(test)]
+fn is_deprecated_at(now_epoch: u64) -> bool {
+    now_epoch >= DEEPGRAM_DEPRECATION_EPOCH
 }
 
 /// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
@@ -619,6 +626,31 @@ mod tests {
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
+    }
+
+    // --- ProxyCloseOrigin ---
+
+    // --- Deepgram deprecation boundary ---
+
+    #[test]
+    fn deepgram_deprecation_timestamp_matches_target_date() {
+        // 2026-04-05 05:00:00 UTC
+        assert_eq!(DEEPGRAM_DEPRECATION_EPOCH, 1_775_365_200);
+    }
+
+    #[test]
+    fn deepgram_deprecation_before_cutoff() {
+        assert!(!is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH - 1));
+    }
+
+    #[test]
+    fn deepgram_deprecation_at_cutoff() {
+        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH));
+    }
+
+    #[test]
+    fn deepgram_deprecation_after_cutoff() {
+        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH + 1));
     }
 
     // --- ProxyCloseOrigin ---
