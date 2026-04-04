@@ -268,20 +268,37 @@ void main() {
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    test('drains all frames including tail buffer', () async {
-      // Add 200 frames (2 seconds at 100fps)
-      for (int i = 0; i < 200; i++) {
+    test('drains all frames including tail buffer when losses exceed threshold', () async {
+      // Need > 10 * framesPerSecond (1000) unsynced frames to trigger storage.
+      // Add 1100 frames (11 seconds at 100fps), all unsynced.
+      for (int i = 0; i < 1100; i++) {
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
       }
-      expect(sync.testFrames.length, 200);
+      expect(sync.testFrames.length, 1100);
 
       await sync.finalizeCurrentSession();
 
       // All frames should be drained
       expect(sync.testFrames, isEmpty);
-      // A WAL should have been created
+      // A WAL should have been created (losses >= threshold)
       expect(sync.testWals.length, 1);
       expect(sync.testWals[0].status, WalStatus.miss);
+      expect(sync.testWals[0].seconds, 11);
+    });
+
+    test('skips storage when all frames were synced via WebSocket', () async {
+      // Add 200 frames (2s), all synced — should NOT create a WAL
+      for (int i = 0; i < 200; i++) {
+        final key = FrameSyncKey([i & 0xFF]);
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
+        sync.markFrameSynced(key);
+      }
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testFrames, isEmpty);
+      // No WAL created because all frames were synced (shouldStored = false)
+      expect(sync.testWals, isEmpty);
     });
 
     test('no-op when no frames in memory', () async {
