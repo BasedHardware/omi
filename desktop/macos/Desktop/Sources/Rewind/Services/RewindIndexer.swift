@@ -6,6 +6,9 @@ import Foundation
 actor RewindIndexer {
     static let shared = RewindIndexer()
 
+    /// Capture-time computer name for new screenshots created by this app session.
+    private let currentComputerName = Host.current().localizedName
+
     private var isInitialized = false
     private var isInitializing = false
 
@@ -203,7 +206,8 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed
+                isIndexed: isIndexed,
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -279,7 +283,8 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed
+                isIndexed: isIndexed,
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -379,7 +384,8 @@ actor RewindIndexer {
                 isIndexed: isIndexed,
                 focusStatus: focusStatus,
                 extractedTasksJson: tasksJson,
-                adviceJson: adviceJson
+                adviceJson: adviceJson,
+                deviceName: currentComputerName
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -613,7 +619,9 @@ actor RewindIndexer {
                         frameOffset: frame.frameOffset,
                         ocrText: nil,
                         ocrDataJson: nil,
-                        isIndexed: false  // Will need re-OCR
+                        isIndexed: false,  // Will need re-OCR
+                        // Rebuild provenance is unknown for historical frames recovered from disk.
+                        deviceName: nil
                     )
 
                     try await RewindDatabase.shared.insertScreenshot(screenshot)
