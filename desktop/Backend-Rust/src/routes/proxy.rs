@@ -190,8 +190,8 @@ async fn gemini_stream_proxy(
 /// Returns true after 2026-04-05 05:00:00 UTC (24h after migration PR #6287 merge).
 fn is_deepgram_proxy_deprecated() -> bool {
     use std::time::{SystemTime, UNIX_EPOCH};
-    // 2026-04-05 05:00:00 UTC = 1775,541,600 seconds since epoch
-    const DEPRECATION_TIMESTAMP: u64 = 1_775_541_600;
+    // 2026-04-05 05:00:00 UTC = 1,775,365,200 seconds since epoch
+    const DEPRECATION_TIMESTAMP: u64 = 1_775_365_200;
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() >= DEPRECATION_TIMESTAMP)
