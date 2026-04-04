@@ -43,12 +43,12 @@ class TestStreamingModelDowngrade(unittest.TestCase):
         self.assertEqual(model, 'nova-2-general')
         self.assertEqual(lang, 'multi')
 
-    def test_throttle_nova3_only_language_falls_back(self):
-        """Languages only in nova-3 (e.g., Bulgarian) should fall back to nova-2 multi."""
+    def test_throttle_nova3_only_language_preserves_lang(self):
+        """Languages only in nova-3 (e.g., Bulgarian) keep their language code with nova-2."""
         _, lang, model = get_stt_service_for_language('bg', multi_lang_enabled=False, fair_use_stage='throttle')
         self.assertEqual(model, 'nova-2-general')
-        # Falls back to 'en' since bg is not in nova-2 and multi_lang is disabled
-        self.assertEqual(lang, 'en')
+        # Language passed through — Deepgram handles unsupported langs gracefully
+        self.assertEqual(lang, 'bg')
 
     def test_throttle_nova3_only_language_multi_enabled(self):
         """Nova-3-only language with multi-lang enabled should fall back to nova-2 multi."""
@@ -60,6 +60,12 @@ class TestStreamingModelDowngrade(unittest.TestCase):
         """Spanish (in nova-2 multi) should use nova-2 when restricted."""
         _, lang, model = get_stt_service_for_language('es', multi_lang_enabled=True, fair_use_stage='restrict')
         self.assertEqual(model, 'nova-2-general')
+
+    def test_throttle_french_single_lang_preserves_language(self):
+        """French single-language mode should preserve language code when throttled."""
+        _, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False, fair_use_stage='throttle')
+        self.assertEqual(model, 'nova-2-general')
+        self.assertEqual(lang, 'fr')
 
     def test_default_stage_is_none(self):
         """Default fair_use_stage should be 'none' (backward compatible)."""
@@ -97,10 +103,10 @@ class TestPreRecordedModelDowngrade(unittest.TestCase):
         self.assertEqual(model, 'nova-3')
 
     def test_throttle_nova3_only_language(self):
-        """Nova-3-only language should fall back to nova-2 multi when throttled."""
+        """Nova-3-only language preserves language code with nova-2 when throttled."""
         lang, model = get_deepgram_model_for_language('bg', fair_use_stage='throttle')
         self.assertEqual(model, 'nova-2-general')
-        self.assertEqual(lang, 'multi')
+        self.assertEqual(lang, 'bg')
 
     def test_default_stage_backward_compat(self):
         """Default should be 'none' for backward compatibility."""
