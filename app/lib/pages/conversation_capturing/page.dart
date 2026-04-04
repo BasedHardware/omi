@@ -296,7 +296,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           },
                                         ),
                             ),
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals),
+                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                           ],
                         ),
                         // Summary Tab
@@ -667,9 +667,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals) {
-    if (unsyncedWals.isEmpty) return const SizedBox.shrink();
-    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds);
+  Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
+    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
+    if (totalSeconds <= 0) return const SizedBox.shrink();
     final label = totalSeconds >= 60 ? '${totalSeconds ~/ 60}m ${totalSeconds % 60}s' : '${totalSeconds}s';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 6),
