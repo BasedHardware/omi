@@ -1951,6 +1951,46 @@ async def _stream_handler(
 
         except Exception as e:
             logger.error(f"Speaker ID: match error for speaker {speaker_id}: {e} {uid} {session_id}")
+    async def _match_speaker_name(segment: TranscriptSegment):
+        """Perform text-based speaker identification in the background."""
+        nonlocal speaker_to_person_map, segment_person_assignment_map, speaker_map_dirty, suggested_segments
+        try:
+            detected_name = await detect_speaker_from_text_async(segment.text)
+            if detected_name:
+                person = user_db.get_person_by_name(uid, detected_name)
+                if person:
+                    person_id = person['id']
+                else:
+                    # Backend creates person if missing
+                    import uuid
+                    person_id = str(uuid.uuid4())
+                    user_db.create_person(
+                        uid,
+                        {
+                            'id': person_id,
+                            'name': detected_name,
+                            'created_at': datetime.now(timezone.utc),
+                            'updated_at': datetime.now(timezone.utc),
+                        },
+                    )
+                _send_message_event(
+                    SpeakerLabelSuggestionEvent(
+                        speaker_id=segment.speaker_id,
+                        person_id=_person_id_for_client(person_id),
+                        person_name=detected_name,
+                        segment_id=segment.id,
+                    )
+                )
+                # Set maps for future segments, but only if diarization is active
+                # (speaker_id > 0 means diarization assigned a real speaker)
+                if should_update_speaker_to_person_map(segment.speaker_id):
+                    speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+                segment_person_assignment_map[segment.id] = person_id
+                suggested_segments.add(segment.id)
+                speaker_map_dirty = True
+        except Exception as e:
+            logger.error(f"Speaker ID: text-based detection error for segment {segment.id}: {e} {uid} {session_id}")
+
 
     # In-memory conversation cache to avoid Firestore re-reads every 0.6s
     _cached_conversation_data = None
@@ -2163,39 +2203,8 @@ async def _stream_handler(
                             except asyncio.QueueFull:
                                 pass  # Drop if queue is full
 
-                    # Text-based detection
-                    detected_name = await detect_speaker_from_text_async(segment.text)
-                    if detected_name:
-                        person = user_db.get_person_by_name(uid, detected_name)
-                        if person:
-                            person_id = person['id']
-                        else:
-                            # Backend creates person if missing
-                            person_id = str(uuid.uuid4())
-                            user_db.create_person(
-                                uid,
-                                {
-                                    'id': person_id,
-                                    'name': detected_name,
-                                    'created_at': datetime.now(timezone.utc),
-                                    'updated_at': datetime.now(timezone.utc),
-                                },
-                            )
-                        _send_message_event(
-                            SpeakerLabelSuggestionEvent(
-                                speaker_id=segment.speaker_id,
-                                person_id=_person_id_for_client(person_id),
-                                person_name=detected_name,
-                                segment_id=segment.id,
-                            )
-                        )
-                        # Set maps for future segments, but only if diarization is active
-                        # (speaker_id > 0 means diarization assigned a real speaker)
-                        # Set maps for future segments using helper function
-                        if should_update_speaker_to_person_map(segment.speaker_id):
-                            speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
-                        segment_person_assignment_map[segment.id] = person_id
-                        suggested_segments.add(segment.id)
+                    # Text-based detection (spawn in background)
+                    spawn(_match_speaker_name(segment))
 
         # Wait for speaker_identification_task to finish consuming its queue and spawning
         # all _match_speaker_embedding tasks, then drain those tasks so speaker maps are
