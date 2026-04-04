@@ -448,14 +448,6 @@ def is_hard_restricted(uid: str) -> bool:
     if stage != 'restrict':
         return False
 
-    # Defense-in-depth: paid users with free-exhausted restrictions should not be blocked.
-    # Primary clearing happens in payment webhooks via clear_fair_use_on_upgrade(),
-    # but this guard catches missed webhook edge cases.
-    if state.get('last_classifier_type') == 'free_exhausted':
-        subscription = users_db.get_user_valid_subscription(uid)
-        if subscription and is_paid_plan(subscription.plan):
-            return False
-
     # Check if restriction has expired
     restrict_until = state.get('restrict_until')
     if restrict_until and isinstance(restrict_until, datetime):
