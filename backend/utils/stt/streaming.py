@@ -361,6 +361,9 @@ def connect_to_deepgram(
 
         result = dg_connection.start(options)
         logger.info(f'Deepgram connection started: {result}')
+        if not result:
+            logger.error('Deepgram connection start() returned False — connection not established')
+            return None
         return dg_connection
     except websockets.exceptions.WebSocketException as e:
         raise Exception(f'Could not open socket: WebSocketException {e}')
