@@ -285,9 +285,16 @@ async def connect_to_deepgram_with_backoff(
             logger.warning("Session ended, aborting Deepgram retry")
             return None
         try:
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 connect_to_deepgram, on_message, on_error, language, sample_rate, channels, model, keywords
             )
+            if result is not None:
+                return result
+            # start() returned False — retry unless this is the last attempt
+            if attempt == retries - 1:
+                logger.error('Deepgram start() returned False on all %d attempts — giving up', retries)
+                return None
+            logger.warning('Deepgram start() returned False (attempt %d/%d), retrying...', attempt + 1, retries)
         except Exception as error:
             logger.error(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
