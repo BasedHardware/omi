@@ -2885,5 +2885,14 @@
     "fetchingStableFirmware": "Načítání nejnovějšího stabilního firmwaru...",
     "noStableFirmwareFound": "Nepodařilo se najít stabilní verzi firmwaru pro vaše zařízení.",
     "installStableFirmware": "Nainstalovat stabilní firmware",
-    "alreadyOnStableFirmware": "Již máte nejnovější stabilní verzi."
+    "alreadyOnStableFirmware": "Již máte nejnovější stabilní verzi.",
+    "audioSavedLocally": "{duration} zvuku uloženo lokálně",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synchronizuje se automaticky"
 }

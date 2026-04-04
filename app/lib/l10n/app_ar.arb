@@ -2883,5 +2883,14 @@
     "fetchingStableFirmware": "جارٍ جلب أحدث برنامج ثابت مستقر...",
     "noStableFirmwareFound": "تعذر العثور على إصدار مستقر من البرنامج الثابت لجهازك.",
     "installStableFirmware": "تثبيت البرنامج الثابت المستقر",
-    "alreadyOnStableFirmware": "أنت بالفعل على أحدث إصدار مستقر."
+    "alreadyOnStableFirmware": "أنت بالفعل على أحدث إصدار مستقر.",
+    "audioSavedLocally": "تم حفظ {duration} من الصوت محليًا",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "ستتم المزامنة تلقائيًا"
 }

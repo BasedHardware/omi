@@ -8983,4 +8983,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Ви вже використовуєте останню стабільну версію.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудіо збережено локально';
+  }
+
+  @override
+  String get willSyncAutomatically => 'буде синхронізовано автоматично';
 }

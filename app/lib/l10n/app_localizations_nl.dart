@@ -8998,4 +8998,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'U gebruikt al de laatste stabiele versie.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio lokaal opgeslagen';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wordt automatisch gesynchroniseerd';
 }

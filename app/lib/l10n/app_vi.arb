@@ -2921,5 +2921,14 @@
     "fetchingStableFirmware": "Đang tải firmware ổn định mới nhất...",
     "noStableFirmwareFound": "Không tìm thấy phiên bản firmware ổn định cho thiết bị của bạn.",
     "installStableFirmware": "Cài đặt firmware ổn định",
-    "alreadyOnStableFirmware": "Bạn đã sử dụng phiên bản ổn định mới nhất."
+    "alreadyOnStableFirmware": "Bạn đã sử dụng phiên bản ổn định mới nhất.",
+    "audioSavedLocally": "{duration} âm thanh đã lưu cục bộ",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sẽ tự động đồng bộ"
 }

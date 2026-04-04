@@ -8971,4 +8971,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Bạn đã sử dụng phiên bản ổn định mới nhất.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration âm thanh đã lưu cục bộ';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sẽ tự động đồng bộ';
 }

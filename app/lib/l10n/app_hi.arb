@@ -2917,5 +2917,14 @@
     "fetchingStableFirmware": "नवीनतम स्थिर फ़र्मवेयर प्राप्त किया जा रहा है...",
     "noStableFirmwareFound": "आपके डिवाइस के लिए स्थिर फ़र्मवेयर संस्करण नहीं मिला।",
     "installStableFirmware": "स्थिर फ़र्मवेयर इंस्टॉल करें",
-    "alreadyOnStableFirmware": "आप पहले से नवीनतम स्थिर संस्करण पर हैं।"
+    "alreadyOnStableFirmware": "आप पहले से नवीनतम स्थिर संस्करण पर हैं।",
+    "audioSavedLocally": "{duration} ऑडियो स्थानीय रूप से सहेजा गया",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा"
 }

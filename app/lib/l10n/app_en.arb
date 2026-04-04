@@ -10718,5 +10718,14 @@
     "alreadyOnStableFirmware": "You are already on the latest stable version.",
     "@alreadyOnStableFirmware": {
         "description": "Message when device is already on the latest stable firmware"
-    }
+    },
+    "audioSavedLocally": "{duration} audio saved locally",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "will sync automatically"
 }

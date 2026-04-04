@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Отримання останньої стабільної прошивки...",
     "noStableFirmwareFound": "Не вдалося знайти стабільну версію прошивки для вашого пристрою.",
     "installStableFirmware": "Встановити стабільну прошивку",
-    "alreadyOnStableFirmware": "Ви вже використовуєте останню стабільну версію."
+    "alreadyOnStableFirmware": "Ви вже використовуєте останню стабільну версію.",
+    "audioSavedLocally": "{duration} аудіо збережено локально",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "буде синхронізовано автоматично"
 }

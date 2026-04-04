@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Gaunama naujausia stabili programinė įranga...",
     "noStableFirmwareFound": "Nepavyko rasti stabilios programinės įrangos versijos jūsų įrenginiui.",
     "installStableFirmware": "Įdiegti stabilią programinę įrangą",
-    "alreadyOnStableFirmware": "Jau naudojate naujausią stabilią versiją."
+    "alreadyOnStableFirmware": "Jau naudojate naujausią stabilią versiją.",
+    "audioSavedLocally": "{duration} garso įrašyta vietoje",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "bus sinchronizuota automatiškai"
 }

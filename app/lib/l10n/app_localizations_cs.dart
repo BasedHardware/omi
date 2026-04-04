@@ -8966,4 +8966,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Již máte nejnovější stabilní verzi.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženo lokálně';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje se automaticky';
 }

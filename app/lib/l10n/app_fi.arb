@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Haetaan uusinta vakaata laiteohjelmistoa...",
     "noStableFirmwareFound": "Laitteellesi ei löytynyt vakaata laiteohjelmistoversiota.",
     "installStableFirmware": "Asenna vakaa laiteohjelmisto",
-    "alreadyOnStableFirmware": "Sinulla on jo uusin vakaa versio."
+    "alreadyOnStableFirmware": "Sinulla on jo uusin vakaa versio.",
+    "audioSavedLocally": "{duration} ääntä tallennettu paikallisesti",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkronoidaan automaattisesti"
 }

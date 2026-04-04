@@ -2917,5 +2917,14 @@
     "fetchingStableFirmware": "最新の安定版ファームウェアを取得中...",
     "noStableFirmwareFound": "お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。",
     "installStableFirmware": "安定版ファームウェアをインストール",
-    "alreadyOnStableFirmware": "すでに最新の安定版を使用しています。"
+    "alreadyOnStableFirmware": "すでに最新の安定版を使用しています。",
+    "audioSavedLocally": "{duration} の音声をローカルに保存しました",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "自動的に同期されます"
 }

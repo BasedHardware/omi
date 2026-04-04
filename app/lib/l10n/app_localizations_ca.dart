@@ -9021,4 +9021,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Ja esteu a la darrera versió estable.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration d\'àudio desat localment';
+  }
+
+  @override
+  String get willSyncAutomatically => 'es sincronitzarà automàticament';
 }

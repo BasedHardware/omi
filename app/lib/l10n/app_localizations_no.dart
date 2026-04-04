@@ -8965,4 +8965,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Du er allerede på den nyeste stabile versjonen.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration lyd lagret lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseres automatisk';
 }

@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Henter nyeste stabile firmware...",
     "noStableFirmwareFound": "Kunne ikke finne en stabil firmwareversjon for enheten din.",
     "installStableFirmware": "Installer stabil firmware",
-    "alreadyOnStableFirmware": "Du er allerede på den nyeste stabile versjonen."
+    "alreadyOnStableFirmware": "Du er allerede på den nyeste stabile versjonen.",
+    "audioSavedLocally": "{duration} lyd lagret lokalt",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkroniseres automatisk"
 }

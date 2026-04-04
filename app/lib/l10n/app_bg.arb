@@ -2885,5 +2885,14 @@
     "fetchingStableFirmware": "Извличане на последния стабилен фърмуер...",
     "noStableFirmwareFound": "Не може да се намери стабилна версия на фърмуера за вашето устройство.",
     "installStableFirmware": "Инсталиране на стабилен фърмуер",
-    "alreadyOnStableFirmware": "Вече сте на последната стабилна версия."
+    "alreadyOnStableFirmware": "Вече сте на последната стабилна версия.",
+    "audioSavedLocally": "{duration} аудио запазено локално",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "ще се синхронизира автоматично"
 }

@@ -8957,4 +8957,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Už máte najnovšiu stabilnú verziu.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženého lokálne';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje sa automaticky';
 }

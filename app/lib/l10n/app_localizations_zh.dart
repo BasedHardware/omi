@@ -8808,4 +8808,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => '您已在最新稳定版本上。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 音频已本地保存';
+  }
+
+  @override
+  String get willSyncAutomatically => '将自动同步';
 }

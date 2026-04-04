@@ -9005,4 +9005,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Вече сте на последната стабилна версия.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио запазено локално';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ще се синхронизира автоматично';
 }

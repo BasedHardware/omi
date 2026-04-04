@@ -8998,4 +8998,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Вы уже используете последнюю стабильную версию.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио сохранено локально';
+  }
+
+  @override
+  String get willSyncAutomatically => 'синхронизируется автоматически';
 }

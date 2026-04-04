@@ -9034,4 +9034,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ήχου αποθηκεύτηκε τοπικά';
+  }
+
+  @override
+  String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
 }

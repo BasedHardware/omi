@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Mendapatkan firmware stabil terkini...",
     "noStableFirmwareFound": "Tidak dapat mencari versi firmware stabil untuk peranti anda.",
     "installStableFirmware": "Pasang firmware stabil",
-    "alreadyOnStableFirmware": "Anda sudah menggunakan versi stabil terkini."
+    "alreadyOnStableFirmware": "Anda sudah menggunakan versi stabil terkini.",
+    "audioSavedLocally": "{duration} audio disimpan secara tempatan",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "akan disegerakkan secara automatik"
 }

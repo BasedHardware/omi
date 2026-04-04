@@ -2951,5 +2951,14 @@
     "fetchingStableFirmware": "En son kararlı yazılım alınıyor...",
     "noStableFirmwareFound": "Cihazınız için kararlı bir yazılım sürümü bulunamadı.",
     "installStableFirmware": "Kararlı yazılımı yükle",
-    "alreadyOnStableFirmware": "Zaten en son kararlı sürümdesiniz."
+    "alreadyOnStableFirmware": "Zaten en son kararlı sürümdesiniz.",
+    "audioSavedLocally": "{duration} ses yerel olarak kaydedildi",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
 }

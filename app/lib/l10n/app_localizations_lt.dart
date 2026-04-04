@@ -8977,4 +8977,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Jau naudojate naujausią stabilią versiją.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration garso įrašyta vietoje';
+  }
+
+  @override
+  String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
 }

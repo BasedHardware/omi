@@ -8988,4 +8988,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Masz już najnowszą stabilną wersję.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration dźwięku zapisano lokalnie';
+  }
+
+  @override
+  String get willSyncAutomatically => 'zsynchronizuje się automatycznie';
 }

@@ -8969,4 +8969,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Sinulla on jo uusin vakaa versio.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ääntä tallennettu paikallisesti';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkronoidaan automaattisesti';
 }

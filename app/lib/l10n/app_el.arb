@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Ανάκτηση τελευταίου σταθερού firmware...",
     "noStableFirmwareFound": "Δεν βρέθηκε σταθερή έκδοση firmware για τη συσκευή σας.",
     "installStableFirmware": "Εγκατάσταση σταθερού firmware",
-    "alreadyOnStableFirmware": "Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση."
+    "alreadyOnStableFirmware": "Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση.",
+    "audioSavedLocally": "{duration} ήχου αποθηκεύτηκε τοπικά",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
 }

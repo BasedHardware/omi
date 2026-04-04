@@ -8820,4 +8820,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'すでに最新の安定版を使用しています。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration の音声をローカルに保存しました';
+  }
+
+  @override
+  String get willSyncAutomatically => '自動的に同期されます';
 }

@@ -3012,5 +3012,14 @@
     "fetchingStableFirmware": "Legújabb stabil firmware lekérése...",
     "noStableFirmwareFound": "Nem található stabil firmware verzió az eszközéhez.",
     "installStableFirmware": "Stabil firmware telepítése",
-    "alreadyOnStableFirmware": "Már a legújabb stabil verzión van."
+    "alreadyOnStableFirmware": "Már a legújabb stabil verzión van.",
+    "audioSavedLocally": "{duration} hang helyben mentve",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "automatikusan szinkronizálódik"
 }

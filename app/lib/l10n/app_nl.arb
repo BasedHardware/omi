@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Laatste stabiele firmware ophalen...",
     "noStableFirmwareFound": "Kan geen stabiele firmwareversie vinden voor uw apparaat.",
     "installStableFirmware": "Stabiele firmware installeren",
-    "alreadyOnStableFirmware": "U gebruikt al de laatste stabiele versie."
+    "alreadyOnStableFirmware": "U gebruikt al de laatste stabiele versie.",
+    "audioSavedLocally": "{duration} audio lokaal opgeslagen",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
 }

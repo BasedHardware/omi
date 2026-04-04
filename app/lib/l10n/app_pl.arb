@@ -2951,5 +2951,14 @@
     "fetchingStableFirmware": "Pobieranie najnowszego stabilnego oprogramowania...",
     "noStableFirmwareFound": "Nie znaleziono stabilnej wersji oprogramowania dla Twojego urządzenia.",
     "installStableFirmware": "Zainstaluj stabilne oprogramowanie",
-    "alreadyOnStableFirmware": "Masz już najnowszą stabilną wersję."
+    "alreadyOnStableFirmware": "Masz już najnowszą stabilną wersję.",
+    "audioSavedLocally": "{duration} dźwięku zapisano lokalnie",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "zsynchronizuje się automatycznie"
 }

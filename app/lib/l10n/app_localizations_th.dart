@@ -8924,4 +8924,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'คุณใช้เวอร์ชันเสถียรล่าสุดอยู่แล้ว';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'บันทึกเสียง $duration ไว้ในเครื่อง';
+  }
+
+  @override
+  String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 }

@@ -9008,4 +9008,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Már a legújabb stabil verzión van.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration hang helyben mentve';
+  }
+
+  @override
+  String get willSyncAutomatically => 'automatikusan szinkronizálódik';
 }

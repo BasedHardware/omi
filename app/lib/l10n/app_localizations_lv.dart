@@ -8987,4 +8987,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Jums jau ir jaunākā stabilā versija.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saglabāts lokāli';
+  }
+
+  @override
+  String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
 }

@@ -9045,4 +9045,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Sie verwenden bereits die neueste stabile Version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration Audio lokal gespeichert';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wird automatisch synchronisiert';
 }

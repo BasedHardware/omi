@@ -2951,5 +2951,14 @@
     "fetchingStableFirmware": "Récupération du dernier firmware stable...",
     "noStableFirmwareFound": "Impossible de trouver une version stable du firmware pour votre appareil.",
     "installStableFirmware": "Installer le firmware stable",
-    "alreadyOnStableFirmware": "Vous êtes déjà sur la dernière version stable."
+    "alreadyOnStableFirmware": "Vous êtes déjà sur la dernière version stable.",
+    "audioSavedLocally": "{duration} d'audio enregistré localement",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sera synchronisé automatiquement"
 }

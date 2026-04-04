@@ -8951,4 +8951,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'आप पहले से नवीनतम स्थिर संस्करण पर हैं।';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ऑडियो स्थानीय रूप से सहेजा गया';
+  }
+
+  @override
+  String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
 }

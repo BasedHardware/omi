@@ -8983,4 +8983,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Zaten en son kararlı sürümdesiniz.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ses yerel olarak kaydedildi';
+  }
+
+  @override
+  String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
 }

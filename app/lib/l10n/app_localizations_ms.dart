@@ -8994,4 +8994,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terkini.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio disimpan secara tempatan';
+  }
+
+  @override
+  String get willSyncAutomatically => 'akan disegerakkan secara automatik';
 }

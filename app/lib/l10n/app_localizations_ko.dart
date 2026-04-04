@@ -8822,4 +8822,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => '이미 최신 안정 버전을 사용 중입니다.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 오디오가 로컬에 저장됨';
+  }
+
+  @override
+  String get willSyncAutomatically => '자동으로 동기화됩니다';
 }

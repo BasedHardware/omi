@@ -8967,4 +8967,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Teil on juba uusim stabiilne versioon.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration heli salvestatud kohapeal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
 }

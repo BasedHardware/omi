@@ -2921,5 +2921,14 @@
     "fetchingStableFirmware": "Načítava sa najnovší stabilný firmvér...",
     "noStableFirmwareFound": "Pre vaše zariadenie sa nepodarilo nájsť stabilnú verziu firmvéru.",
     "installStableFirmware": "Nainštalovať stabilný firmvér",
-    "alreadyOnStableFirmware": "Už máte najnovšiu stabilnú verziu."
+    "alreadyOnStableFirmware": "Už máte najnovšiu stabilnú verziu.",
+    "audioSavedLocally": "{duration} zvuku uloženého lokálne",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synchronizuje sa automaticky"
 }

@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Se obține cel mai recent firmware stabil...",
     "noStableFirmwareFound": "Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.",
     "installStableFirmware": "Instalare firmware stabil",
-    "alreadyOnStableFirmware": "Sunteți deja pe cea mai recentă versiune stabilă."
+    "alreadyOnStableFirmware": "Sunteți deja pe cea mai recentă versiune stabilă.",
+    "audioSavedLocally": "{duration} audio salvat local",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "se va sincroniza automat"
 }

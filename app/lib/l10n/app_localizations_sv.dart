@@ -8974,4 +8974,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Du har redan den senaste stabila versionen.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ljud sparat lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseras automatiskt';
 }

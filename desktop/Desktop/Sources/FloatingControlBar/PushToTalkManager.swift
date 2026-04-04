@@ -454,11 +454,12 @@ class PushToTalkManager: ObservableObject {
         transcriptionService = service
 
         service.start(
-          onTranscript: { [weak self] segment in
+          onSegments: { [weak self] segments in
             Task { @MainActor in
-              self?.handleTranscript(segment)
+              self?.handleTranscriptSegments(segments)
             }
           },
+          onEvent: { _ in },  // PTT doesn't use events
           onError: { [weak self] error in
             Task { @MainActor in
               logError("PushToTalkManager: transcription error", error: error)
@@ -467,7 +468,7 @@ class PushToTalkManager: ObservableObject {
           },
           onConnected: {
             Task { @MainActor in
-              log("PushToTalkManager: DeepGram connected")
+              log("PushToTalkManager: backend connected")
             }
           }
         )
@@ -516,25 +517,16 @@ class PushToTalkManager: ObservableObject {
     transcriptionService = nil
   }
 
-  private func handleTranscript(_ segment: TranscriptionService.TranscriptSegment) {
+  private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
     guard state == .listening || state == .lockedListening || state == .finalizing else { return }
 
-    if segment.speechFinal || segment.isFinal {
+    for segment in segments {
       transcriptSegments.append(segment.text)
-      lastInterimText = ""
-    } else {
-      // Track latest interim text as fallback
-      lastInterimText = segment.text
     }
+    lastInterimText = ""
 
     // Update live transcript in the bar
-    let liveText: String
-    if segment.speechFinal || segment.isFinal {
-      liveText = transcriptSegments.joined(separator: " ")
-    } else {
-      let committed = transcriptSegments.joined(separator: " ")
-      liveText = committed.isEmpty ? segment.text : committed + " " + segment.text
-    }
+    let liveText = transcriptSegments.joined(separator: " ")
     barState?.voiceTranscript = liveText
 
     // Also update follow-up transcript if in follow-up mode
@@ -542,9 +534,9 @@ class PushToTalkManager: ObservableObject {
       barState?.voiceFollowUpTranscript = liveText
     }
 
-    // In finalizing state, a final segment means Deepgram is done — send immediately
-    if state == .finalizing && (segment.speechFinal || segment.isFinal) {
-      log("PushToTalkManager: received final transcript during finalization — sending now")
+    // In finalizing state, segments mean backend is done — send immediately
+    if state == .finalizing {
+      log("PushToTalkManager: received transcript during finalization — sending now")
       liveFinalizationTimeout?.cancel()
       liveFinalizationTimeout = nil
       sendTranscript()

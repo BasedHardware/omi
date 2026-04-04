@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Uusima stabiilse püsivara toomine...",
     "noStableFirmwareFound": "Teie seadmele ei leitud stabiilset püsivara versiooni.",
     "installStableFirmware": "Paigalda stabiilne püsivara",
-    "alreadyOnStableFirmware": "Teil on juba uusim stabiilne versioon."
+    "alreadyOnStableFirmware": "Teil on juba uusim stabiilne versioon.",
+    "audioSavedLocally": "{duration} heli salvestatud kohapeal",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
 }

@@ -2916,5 +2916,14 @@
     "fetchingStableFirmware": "Tiek iegūta jaunākā stabilā programmaparatūra...",
     "noStableFirmwareFound": "Jūsu ierīcei nevarēja atrast stabilu programmaparatūras versiju.",
     "installStableFirmware": "Instalēt stabilo programmaparatūru",
-    "alreadyOnStableFirmware": "Jums jau ir jaunākā stabilā versija."
+    "alreadyOnStableFirmware": "Jums jau ir jaunākā stabilā versija.",
+    "audioSavedLocally": "{duration} audio saglabāts lokāli",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "tiks sinhronizēts automātiski"
 }

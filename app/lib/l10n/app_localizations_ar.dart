@@ -8909,4 +8909,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'أنت بالفعل على أحدث إصدار مستقر.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'تم حفظ $duration من الصوت محليًا';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
 }

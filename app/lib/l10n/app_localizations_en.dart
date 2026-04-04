@@ -8966,4 +8966,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'You are already on the latest stable version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saved locally';
+  }
+
+  @override
+  String get willSyncAutomatically => 'will sync automatically';
 }

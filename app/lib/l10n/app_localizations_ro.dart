@@ -9012,4 +9012,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get alreadyOnStableFirmware => 'Sunteți deja pe cea mai recentă versiune stabilă.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio salvat local';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se va sincroniza automat';
 }
