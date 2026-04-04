@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
@@ -115,8 +116,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
       PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
       PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
-      // PermissionStatus locationStatus = await Permission.location.request();
       updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
+      // Android 11 and below require location permission for BLE scanning
+      final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      if (deviceInfo.version.sdkInt <= 30) {
+        PermissionStatus locationStatus = await Permission.locationWhenInUse.request();
+        updateLocationPermission(locationStatus.isGranted);
+      }
     }
     notifyListeners();
   }
@@ -246,7 +252,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<void> scanDevices({required VoidCallback onShowDialog}) async {
+  Future<void> scanDevices({
+    required VoidCallback onShowDialog,
+    VoidCallback? onShowLocationDialog,
+  }) async {
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
@@ -257,6 +266,20 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await askForBluetoothPermissions();
       if (!hasBluetoothPermission) {
         onShowDialog();
+        return;
+      }
+    }
+
+    // Android 11 and below: location permission required for BLE scanning
+    if (Platform.isAndroid) {
+      final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      if (deviceInfo.version.sdkInt <= 30) {
+        final locationGranted = await Permission.locationWhenInUse.isGranted;
+        updateLocationPermission(locationGranted);
+        if (!locationGranted) {
+          onShowLocationDialog?.call();
+          return;
+        }
       }
     }
 
