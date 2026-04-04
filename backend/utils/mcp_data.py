@@ -61,4 +61,6 @@ def clean_screen_activity_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "app_name": row.get("appName"),
         "window_title": row.get("windowTitle"),
         "ocr_text": row.get("ocrText"),
+        "device_name": row.get("deviceName"),
+        "client_device_id": row.get("clientDeviceId"),
     }
