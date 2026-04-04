@@ -159,6 +159,8 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
+    // Recover orphaned WALs from previous sessions on startup
+    Future.microtask(() => recoverOrphanedWals());
   }
 
   void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
@@ -213,12 +215,21 @@ class CaptureProvider extends ChangeNotifier
   /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
   int _pendingAutoSyncSessionStart = 0;
 
+  /// Fallback timer that fires if ConversationEvent doesn't arrive within 30s.
+  Timer? _autoSyncFallbackTimer;
+
+  /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
+  String? _pendingAutoSyncConversationId;
+
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
   List<Wal> get unsyncedSessionWals {
     if (_sessionStartSeconds == 0) return [];
     return _wal.getSyncs().phone.getSessionUnsyncedWals(_sessionStartSeconds);
   }
+
+  /// Seconds of audio still in memory buffer (not yet chunked/flushed to disk).
+  int get inFlightAudioSeconds => _wal.getSyncs().phone.getInFlightSeconds();
 
   // Version counter for segments/photos content changes. Incremented on in-place mutations
   // (e.g., translation updates, photo description changes) to signal UI rebuilds when
@@ -869,6 +880,7 @@ class CaptureProvider extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _connectionStateListener?.cancel();
     _metricsTimer?.cancel();
+    _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
 
     super.dispose();
@@ -1108,7 +1120,26 @@ class CaptureProvider extends ChangeNotifier
     if (event is ConversationProcessingStartedEvent) {
       conversationProvider!.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
+      _pendingAutoSyncConversationId = event.memory.id;
+
+      // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
+      // Runs async but must complete before fallback timer matters (30s window).
+      _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
+
       _resetStateVariables();
+
+      // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
+      _autoSyncFallbackTimer?.cancel();
+      _autoSyncFallbackTimer = Timer(const Duration(seconds: 30), () {
+        if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
+          final sessionStart = _pendingAutoSyncSessionStart;
+          final convId = _pendingAutoSyncConversationId!;
+          _pendingAutoSyncSessionStart = 0;
+          _pendingAutoSyncConversationId = null;
+          Logger.debug('Auto-sync fallback timer fired — syncing WALs to conversation $convId');
+          _autoSyncSessionWals(sessionStart, convId);
+        }
+      });
       return;
     }
 
@@ -1116,9 +1147,11 @@ class CaptureProvider extends ChangeNotifier
       event.memory.isNew = true;
       conversationProvider!.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
+      _autoSyncFallbackTimer?.cancel();
       if (_pendingAutoSyncSessionStart > 0) {
         final sessionStart = _pendingAutoSyncSessionStart;
         _pendingAutoSyncSessionStart = 0;
+        _pendingAutoSyncConversationId = null;
         _autoSyncSessionWals(sessionStart, event.memory.id);
       }
       return;
@@ -1193,6 +1226,11 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
+
+    // Force-drain tail buffer before clearing state
+    final phoneSync = _wal.getSyncs().phone;
+    await phoneSync.finalizeCurrentSession();
+
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
       ServerConversation(
@@ -1202,7 +1240,7 @@ class CaptureProvider extends ChangeNotifier
         status: ConversationStatus.processing,
       ),
     );
-    processInProgressConversation().then((result) {
+    processInProgressConversation().then((result) async {
       if (result == null || result.conversation == null) {
         conversationProvider!.removeProcessingConversation('0');
         return;
@@ -1211,13 +1249,28 @@ class CaptureProvider extends ChangeNotifier
       result.conversation!.isNew = true;
       _processConversationCreated(result.conversation, result.messages);
 
-      // Auto-sync any missed WALs from this session to the new conversation
+      // Stamp WALs with conversation ID and auto-sync
       if (sessionStart > 0 && result.conversation != null) {
+        await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
         _autoSyncSessionWals(sessionStart, result.conversation!.id);
       }
     });
 
     return;
+  }
+
+  /// Force-drain tail buffer and stamp all session WALs with conversation ID.
+  /// Called from synchronous onMessageEventReceived — fire-and-forget async.
+  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+    try {
+      final phoneSync = _wal.getSyncs().phone;
+      await phoneSync.finalizeCurrentSession();
+      if (sessionStartSeconds > 0) {
+        await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
+      }
+    } catch (e) {
+      Logger.debug('_finalizeAndStampSession error: $e');
+    }
   }
 
   Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
@@ -1227,17 +1280,53 @@ class CaptureProvider extends ChangeNotifier
 
     Logger.debug('Auto-syncing ${unsyncedWals.length} session WALs to conversation $conversationId');
     for (final wal in unsyncedWals) {
-      if (wal.filePath == null) continue;
+      await _syncSingleWal(wal, conversationId, phoneSync);
+    }
+  }
+
+  /// Sync a single WAL to a conversation with retry and backoff.
+  /// Retries up to 3 times with exponential delays (5s, 10s, 20s).
+  Future<void> _syncSingleWal(Wal wal, String conversationId, dynamic phoneSync) async {
+    if (wal.filePath == null) return;
+    final fullPath = await Wal.getFilePath(wal.filePath);
+    if (fullPath == null) return;
+    final file = File(fullPath);
+    if (!file.existsSync()) return;
+
+    const maxRetries = 3;
+    const baseDelay = 5;
+
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        final fullPath = await Wal.getFilePath(wal.filePath);
-        if (fullPath == null) continue;
-        final file = File(fullPath);
-        if (!file.existsSync()) continue;
         await syncLocalFilesV2([file], conversationId: conversationId);
         await phoneSync.markWalSyncedAndPersist(wal);
+        return;
       } catch (e) {
-        Logger.debug('Auto-sync WAL ${wal.id} failed: $e');
+        wal.retryCount = attempt + 1;
+        wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        if (attempt < maxRetries - 1) {
+          final delay = baseDelay * (1 << attempt); // 5s, 10s, 20s
+          Logger.debug('Auto-sync WAL ${wal.id} attempt ${attempt + 1} failed, retrying in ${delay}s: $e');
+          await Future.delayed(Duration(seconds: delay));
+        } else {
+          Logger.debug('Auto-sync WAL ${wal.id} failed after $maxRetries attempts: $e');
+          // Persist retry metadata so startup recovery knows the attempt count
+          await phoneSync.persistRetryMetadata(wal);
+        }
       }
+    }
+  }
+
+  /// Recover orphaned WALs on startup. Called once after providers are initialized.
+  /// Finds WALs with conversationId set but status still miss, and syncs them.
+  Future<void> recoverOrphanedWals() async {
+    final phoneSync = _wal.getSyncs().phone;
+    final orphaned = phoneSync.getOrphanedWals();
+    if (orphaned.isEmpty) return;
+
+    Logger.debug('Startup recovery: found ${orphaned.length} orphaned WALs to sync');
+    for (final wal in orphaned) {
+      await _syncSingleWal(wal, wal.conversationId!, phoneSync);
     }
   }
 
