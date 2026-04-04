@@ -338,48 +338,58 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> finalizeCurrentSession() async {
     if (_frames.isEmpty) return;
 
-    // Drain ALL frames, not just up to the tail buffer pivot
     final high = _frames.length;
     if (high <= 0) return;
 
+    var lossesThreshold = 10 * _framesPerSecond;
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
 
-    int syncedOffset = 0;
-    for (var i = 0; i < high; i++) {
-      if (_frameSynced[i]) {
-        syncedOffset++;
-      } else {
-        break;
+    // Same shouldStored check as _chunk(): only store if unlimited storage enabled
+    // or if significant frame loss detected (meaning WebSocket didn't deliver them).
+    bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    if (!shouldStored) {
+      bool synced = true;
+      var losses = 0;
+      for (var i = 0; i < high; i++) {
+        if (!_frameSynced[i]) {
+          losses++;
+          if (losses >= lossesThreshold) {
+            synced = false;
+            break;
+          }
+        }
       }
+      shouldStored = !synced;
     }
 
-    var walIdx = _wals.indexWhere(
-      (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
-    );
-    if (walIdx < 0) {
-      var wal = Wal(
-        codec: _codec,
-        timerStart: timerStart,
-        data: chunk,
-        storage: WalStorage.mem,
-        status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-        device: _deviceId ?? "omi",
-        deviceModel: _deviceModel ?? "Omi",
-        seconds: chunkFrameCount ~/ _framesPerSecond,
-        totalFrames: chunkFrameCount,
-        syncedFrameOffset: syncedOffset,
-      );
-      _wals = List.from(_wals)..add(wal);
-    } else {
-      var wal = _wals[walIdx];
-      wal.data = List.from(wal.data)..addAll(chunk);
-      wal.totalFrames = chunkFrameCount;
-      wal.syncedFrameOffset = syncedOffset;
-      wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
-      _wals[walIdx] = wal;
+    if (shouldStored) {
+      int syncedOffset = 0;
+      for (var i = 0; i < high; i++) {
+        if (_frameSynced[i]) {
+          syncedOffset++;
+        } else {
+          break;
+        }
+      }
+
+      // Use a distinct timerStart so we don't collide with WALs from _chunk().
+      // This is the tail buffer that _chunk() left behind.
+      _wals = List.from(_wals)
+        ..add(Wal(
+          codec: _codec,
+          timerStart: timerStart,
+          data: chunk,
+          storage: WalStorage.mem,
+          status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+          device: _deviceId ?? "omi",
+          deviceModel: _deviceModel ?? "Omi",
+          seconds: chunkFrameCount ~/ _framesPerSecond,
+          totalFrames: chunkFrameCount,
+          syncedFrameOffset: syncedOffset,
+        ));
     }
 
     _frames = [];
@@ -388,7 +398,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     // Flush all in-memory WALs to disk immediately
     await _flush();
     listener.onWalUpdated();
-    Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames, flushed to disk');
+    Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames (stored=$shouldStored), flushed to disk');
   }
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
