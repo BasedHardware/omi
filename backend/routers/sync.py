@@ -921,6 +921,7 @@ def process_segment(
     transcription_prefs: dict = None,
     person_embeddings_cache: dict = None,
     target_conversation_id: str = None,
+    fair_use_stage: str = 'none',
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -939,9 +940,9 @@ def process_segment(
         single_language_mode = prefs.get('single_language_mode', False)
 
         if single_language_mode and user_language:
-            dg_language, dg_model = get_deepgram_model_for_language(user_language)
+            dg_language, dg_model = get_deepgram_model_for_language(user_language, fair_use_stage=fair_use_stage)
         else:
-            dg_language, dg_model = get_deepgram_model_for_language('multi')
+            dg_language, dg_model = get_deepgram_model_for_language('multi', fair_use_stage=fair_use_stage)
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
@@ -1163,14 +1164,14 @@ async def sync_local_files(
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        # DG budget gate: throttle cloud STT for restrict-stage users (#6083)
+        # DG budget gate: throttle cloud STT for throttle/restrict-stage users (#6083, #6314)
         # Check budget first; only record usage after successful processing.
         dg_budget_blocked = False
         fair_use_restrict_dg = False
         if FAIR_USE_ENABLED:
             try:
                 fair_use_stage = get_enforcement_stage(uid)
-                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                if fair_use_stage in ('throttle', 'restrict') and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     fair_use_restrict_dg = True
                     dg_budget_blocked = is_dg_budget_exhausted(uid)
             except Exception as e:
@@ -1202,6 +1203,14 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
+        # Get fair-use stage for STT model downgrade (#6314)
+        _fu_stage = 'none'
+        if FAIR_USE_ENABLED:
+            try:
+                _fu_stage = get_enforcement_stage(uid)
+            except Exception:
+                pass
+
         threads = [
             threading.Thread(
                 target=process_segment,
@@ -1216,6 +1225,7 @@ async def sync_local_files(
                     transcription_prefs,
                     person_embeddings_cache,
                     conversation_id,
+                    _fu_stage,
                 ),
             )
             for path in segmented_paths
@@ -1343,6 +1353,14 @@ def _process_segments_background(
                 except Exception:
                     pass  # Non-fatal: stale detection is a safety net, not a hard gate
 
+        # Get fair-use stage for STT model downgrade (#6314)
+        _fu_stage_v2 = 'none'
+        if FAIR_USE_ENABLED:
+            try:
+                _fu_stage_v2 = get_enforcement_stage(uid)
+            except Exception:
+                pass
+
         threads = [
             threading.Thread(
                 target=process_segment,
@@ -1357,6 +1375,7 @@ def _process_segments_background(
                     transcription_prefs,
                     person_embeddings_cache,
                     target_conversation_id,
+                    _fu_stage_v2,
                 ),
             )
             for path in segmented_paths
@@ -1487,12 +1506,12 @@ async def sync_local_files_v2(
                 logger.info(f'sync_v2: soft caps triggered for {uid}: {triggered_caps}')
                 asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
 
-        # DG budget gate
+        # DG budget gate (#6314: extended from restrict-only to throttle+restrict)
         fair_use_restrict_dg = False
         if FAIR_USE_ENABLED:
             try:
                 fair_use_stage = get_enforcement_stage(uid)
-                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                if fair_use_stage in ('throttle', 'restrict') and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     fair_use_restrict_dg = True
                     if is_dg_budget_exhausted(uid):
                         _cleanup_files(list(segmented_paths))
