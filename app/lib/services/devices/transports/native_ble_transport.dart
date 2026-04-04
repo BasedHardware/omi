@@ -182,7 +182,8 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     if (!_hasCharacteristic(serviceUuid, characteristicUuid)) {
-      throw Exception('Characteristic not available: $characteristicUuid');
+      Logger.debug('[NativeBleTransport] writeCharacteristic skipped: $characteristicUuid not available');
+      return;
     }
     try {
       await _hostApi.writeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid, Uint8List.fromList(data));
