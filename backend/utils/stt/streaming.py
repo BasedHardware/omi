@@ -123,7 +123,18 @@ deepgram_nova3_languages = {
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
-def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
+def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True, fair_use_stage: str = 'none'):
+    # Fair-use enforcement: throttle/restrict stages force nova-2 to reduce cost (#6314)
+    if fair_use_stage in ('throttle', 'restrict'):
+        if multi_lang_enabled and language in deepgram_nova2_multi_languages:
+            return STTService.deepgram, 'multi', 'nova-2-general'
+        if language in deepgram_nova2_languages:
+            return STTService.deepgram, language, 'nova-2-general'
+        # Language not in nova-2 — fall back to nova-2 English as base
+        if multi_lang_enabled:
+            return STTService.deepgram, 'multi', 'nova-2-general'
+        return STTService.deepgram, 'en', 'nova-2-general'
+
     for m in stt_service_models:
         # DeepGram Nova-3
         if m == 'dg-nova-3':
