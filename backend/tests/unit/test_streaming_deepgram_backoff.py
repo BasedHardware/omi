@@ -30,11 +30,14 @@ for mod_name in [
         _mock_modules[mod_name] = MagicMock()
         sys.modules[mod_name] = _mock_modules[mod_name]
 
-# Provide expected attributes for type-annotation imports
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+# Provide expected attributes only if this file owns the deepgram mock.
+# When another test file (e.g. test_dg_start_guard.py) imported streaming.py first,
+# overwriting LiveTranscriptionEvents would break event-identity assertions (#6302).
+if 'deepgram' in _mock_modules:
+    sys.modules['deepgram'].DeepgramClient = MagicMock
+    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
+    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
