@@ -332,6 +332,106 @@ class LocalWalSyncImpl implements LocalWalSync {
     listener.onWalUpdated();
   }
 
+  /// Force-drain all in-flight frames (including the tail buffer that _chunk() normally
+  /// keeps in memory) and flush everything to disk. Call this when a capture session ends
+  /// to ensure no audio is lost in memory.
+  Future<void> finalizeCurrentSession() async {
+    if (_frames.isEmpty) return;
+
+    // Drain ALL frames, not just up to the tail buffer pivot
+    final high = _frames.length;
+    if (high <= 0) return;
+
+    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
+    var timerStart = timerEnd - high ~/ _framesPerSecond;
+    var chunkFrameCount = high;
+
+    int syncedOffset = 0;
+    for (var i = 0; i < high; i++) {
+      if (_frameSynced[i]) {
+        syncedOffset++;
+      } else {
+        break;
+      }
+    }
+
+    var walIdx = _wals.indexWhere(
+      (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
+    );
+    if (walIdx < 0) {
+      var wal = Wal(
+        codec: _codec,
+        timerStart: timerStart,
+        data: chunk,
+        storage: WalStorage.mem,
+        status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+        device: _deviceId ?? "omi",
+        deviceModel: _deviceModel ?? "Omi",
+        seconds: chunkFrameCount ~/ _framesPerSecond,
+        totalFrames: chunkFrameCount,
+        syncedFrameOffset: syncedOffset,
+      );
+      _wals = List.from(_wals)..add(wal);
+    } else {
+      var wal = _wals[walIdx];
+      wal.data = List.from(wal.data)..addAll(chunk);
+      wal.totalFrames = chunkFrameCount;
+      wal.syncedFrameOffset = syncedOffset;
+      wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
+      _wals[walIdx] = wal;
+    }
+
+    _frames = [];
+    _frameSynced = [];
+
+    // Flush all in-memory WALs to disk immediately
+    await _flush();
+    listener.onWalUpdated();
+    Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames, flushed to disk');
+  }
+
+  /// Stamp all session WALs with the given conversationId and persist to disk.
+  /// This makes WAL→conversation linkage survive app kill.
+  Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    int stamped = 0;
+    for (final wal in _wals) {
+      if (wal.status == WalStatus.miss &&
+          wal.timerStart >= sessionStartSeconds &&
+          wal.timerStart <= now &&
+          wal.conversationId == null) {
+        wal.conversationId = conversationId;
+        stamped++;
+      }
+    }
+    if (stamped > 0) {
+      await _saveWalsToFile();
+      Logger.debug('stampConversationId: stamped $stamped WALs with conversation $conversationId');
+    }
+  }
+
+  /// Returns WALs that have a conversationId but haven't been synced yet.
+  /// Used for startup recovery after app kill.
+  List<Wal> getOrphanedWals() {
+    return _wals
+        .where((w) =>
+            w.status == WalStatus.miss && w.storage == WalStorage.disk && w.conversationId != null && w.retryCount < 3)
+        .toList();
+  }
+
+  /// Persist retry metadata (retryCount, lastRetryAt) for a WAL after failed sync attempts.
+  Future<void> persistRetryMetadata(Wal wal) async {
+    await _saveWalsToFile();
+  }
+
+  /// Returns the approximate duration (in seconds) of audio frames still in memory
+  /// that haven't been chunked/flushed to disk yet.
+  int getInFlightSeconds() {
+    if (_framesPerSecond <= 0) return 0;
+    return _frames.length ~/ _framesPerSecond;
+  }
+
   @override
   Future<List<Wal>> getAllWals() async {
     return List.from(_wals);
