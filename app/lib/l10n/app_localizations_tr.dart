@@ -8959,6 +8959,32 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => 'Kararlı yazılıma geri dön';
+
+  @override
+  String get rollbackConfirmTitle => 'Yazılım geri alınsın mı?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Bu, mevcut yazılımınızı en son kararlı sürümle ($version) değiştirecektir. Güncelleme sonrasında cihazınız yeniden başlatılacaktır.';
+  }
+
+  @override
+  String get stableFirmware => 'Kararlı yazılım';
+
+  @override
+  String get fetchingStableFirmware => 'En son kararlı yazılım alınıyor...';
+
+  @override
+  String get noStableFirmwareFound => 'Cihazınız için kararlı bir yazılım sürümü bulunamadı.';
+
+  @override
+  String get installStableFirmware => 'Kararlı yazılımı yükle';
+
+  @override
+  String get alreadyOnStableFirmware => 'Zaten en son kararlı sürümdesiniz.';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration ses yerel olarak kaydedildi';
   }

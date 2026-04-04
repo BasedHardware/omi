@@ -2914,6 +2914,14 @@
     "fair": "Uspokojivý",
     "weak": "Slabý",
     "gattError": "Chyba GATT ({code})",
+    "rollbackToStableFirmware": "Vrátiť sa na stabilný firmvér",
+    "rollbackConfirmTitle": "Vrátiť firmvér?",
+    "rollbackConfirmMessage": "Tým sa nahradí aktuálny firmvér najnovšou stabilnou verziou ({version}). Po aktualizácii sa zariadenie reštartuje.",
+    "stableFirmware": "Stabilný firmvér",
+    "fetchingStableFirmware": "Načítava sa najnovší stabilný firmvér...",
+    "noStableFirmwareFound": "Pre vaše zariadenie sa nepodarilo nájsť stabilnú verziu firmvéru.",
+    "installStableFirmware": "Nainštalovať stabilný firmvér",
+    "alreadyOnStableFirmware": "Už máte najnovšiu stabilnú verziu.",
     "audioSavedLocally": "{duration} zvuku uloženého lokálne",
     "@audioSavedLocally": {
         "placeholders": {

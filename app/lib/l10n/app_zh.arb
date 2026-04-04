@@ -2931,6 +2931,14 @@
     "fair": "一般",
     "weak": "弱",
     "gattError": "GATT错误 ({code})",
+    "rollbackToStableFirmware": "回滚到稳定固件",
+    "rollbackConfirmTitle": "回滚固件？",
+    "rollbackConfirmMessage": "这将用最新稳定版本（{version}）替换当前固件。更新后设备将重新启动。",
+    "stableFirmware": "稳定固件",
+    "fetchingStableFirmware": "正在获取最新稳定固件...",
+    "noStableFirmwareFound": "未找到适用于您设备的稳定固件版本。",
+    "installStableFirmware": "安装稳定固件",
+    "alreadyOnStableFirmware": "您已在最新稳定版本上。",
     "audioSavedLocally": "{duration} 音频已本地保存",
     "@audioSavedLocally": {
         "placeholders": {

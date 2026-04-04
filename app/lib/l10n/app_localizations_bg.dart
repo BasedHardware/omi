@@ -8981,6 +8981,32 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => 'Връщане към стабилен фърмуер';
+
+  @override
+  String get rollbackConfirmTitle => 'Връщане на фърмуера?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Това ще замени текущия фърмуер с последната стабилна версия ($version). Устройството ви ще се рестартира след актуализацията.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабилен фърмуер';
+
+  @override
+  String get fetchingStableFirmware => 'Извличане на последния стабилен фърмуер...';
+
+  @override
+  String get noStableFirmwareFound => 'Не може да се намери стабилна версия на фърмуера за вашето устройство.';
+
+  @override
+  String get installStableFirmware => 'Инсталиране на стабилен фърмуер';
+
+  @override
+  String get alreadyOnStableFirmware => 'Вече сте на последната стабилна версия.';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration аудио запазено локално';
   }

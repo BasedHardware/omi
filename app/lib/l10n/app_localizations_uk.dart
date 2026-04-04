@@ -8959,6 +8959,32 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => 'Повернутися до стабільної прошивки';
+
+  @override
+  String get rollbackConfirmTitle => 'Повернути прошивку?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Це замінить поточну прошивку на останню стабільну версію ($version). Ваш пристрій перезавантажиться після оновлення.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабільна прошивка';
+
+  @override
+  String get fetchingStableFirmware => 'Отримання останньої стабільної прошивки...';
+
+  @override
+  String get noStableFirmwareFound => 'Не вдалося знайти стабільну версію прошивки для вашого пристрою.';
+
+  @override
+  String get installStableFirmware => 'Встановити стабільну прошивку';
+
+  @override
+  String get alreadyOnStableFirmware => 'Ви вже використовуєте останню стабільну версію.';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration аудіо збережено локально';
   }

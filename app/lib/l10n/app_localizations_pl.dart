@@ -8964,6 +8964,32 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => 'Przywróć stabilne oprogramowanie';
+
+  @override
+  String get rollbackConfirmTitle => 'Przywrócić oprogramowanie?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Spowoduje to zastąpienie obecnego oprogramowania najnowszą stabilną wersją ($version). Urządzenie zostanie ponownie uruchomione po aktualizacji.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilne oprogramowanie';
+
+  @override
+  String get fetchingStableFirmware => 'Pobieranie najnowszego stabilnego oprogramowania...';
+
+  @override
+  String get noStableFirmwareFound => 'Nie znaleziono stabilnej wersji oprogramowania dla Twojego urządzenia.';
+
+  @override
+  String get installStableFirmware => 'Zainstaluj stabilne oprogramowanie';
+
+  @override
+  String get alreadyOnStableFirmware => 'Masz już najnowszą stabilną wersję.';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration dźwięku zapisano lokalnie';
   }

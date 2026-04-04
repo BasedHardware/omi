@@ -2951,6 +2951,14 @@
     "fair": "Cukup",
     "weak": "Lemah",
     "gattError": "Kesalahan GATT ({code})",
+    "rollbackToStableFirmware": "Kembali ke firmware stabil",
+    "rollbackConfirmTitle": "Kembalikan firmware?",
+    "rollbackConfirmMessage": "Ini akan mengganti firmware Anda saat ini dengan versi stabil terbaru ({version}). Perangkat Anda akan dimulai ulang setelah pembaruan.",
+    "stableFirmware": "Firmware Stabil",
+    "fetchingStableFirmware": "Mengambil firmware stabil terbaru...",
+    "noStableFirmwareFound": "Tidak dapat menemukan versi firmware stabil untuk perangkat Anda.",
+    "installStableFirmware": "Pasang firmware stabil",
+    "alreadyOnStableFirmware": "Anda sudah menggunakan versi stabil terbaru.",
     "audioSavedLocally": "{duration} audio disimpan secara lokal",
     "@audioSavedLocally": {
         "placeholders": {

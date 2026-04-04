@@ -8784,6 +8784,32 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => '回滚到稳定固件';
+
+  @override
+  String get rollbackConfirmTitle => '回滚固件？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '这将用最新稳定版本（$version）替换当前固件。更新后设备将重新启动。';
+  }
+
+  @override
+  String get stableFirmware => '稳定固件';
+
+  @override
+  String get fetchingStableFirmware => '正在获取最新稳定固件...';
+
+  @override
+  String get noStableFirmwareFound => '未找到适用于您设备的稳定固件版本。';
+
+  @override
+  String get installStableFirmware => '安装稳定固件';
+
+  @override
+  String get alreadyOnStableFirmware => '您已在最新稳定版本上。';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration 音频已本地保存';
   }

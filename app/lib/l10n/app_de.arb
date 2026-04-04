@@ -2877,6 +2877,14 @@
     "fair": "Befriedigend",
     "weak": "Schwach",
     "gattError": "GATT-Fehler ({code})",
+    "rollbackToStableFirmware": "Auf stabile Firmware zurücksetzen",
+    "rollbackConfirmTitle": "Firmware zurücksetzen?",
+    "rollbackConfirmMessage": "Dies ersetzt Ihre aktuelle Firmware durch die neueste stabile Version ({version}). Ihr Gerät wird nach dem Update neu gestartet.",
+    "stableFirmware": "Stabile Firmware",
+    "fetchingStableFirmware": "Neueste stabile Firmware wird abgerufen...",
+    "noStableFirmwareFound": "Es konnte keine stabile Firmware-Version für Ihr Gerät gefunden werden.",
+    "installStableFirmware": "Stabile Firmware installieren",
+    "alreadyOnStableFirmware": "Sie verwenden bereits die neueste stabile Version.",
     "audioSavedLocally": "{duration} Audio lokal gespeichert",
     "@audioSavedLocally": {
         "placeholders": {

@@ -2909,6 +2909,14 @@
     "fair": "Redelijk",
     "weak": "Zwak",
     "gattError": "GATT-fout ({code})",
+    "rollbackToStableFirmware": "Terugkeren naar stabiele firmware",
+    "rollbackConfirmTitle": "Firmware terugzetten?",
+    "rollbackConfirmMessage": "Dit vervangt uw huidige firmware door de laatste stabiele versie ({version}). Uw apparaat wordt opnieuw opgestart na de update.",
+    "stableFirmware": "Stabiele firmware",
+    "fetchingStableFirmware": "Laatste stabiele firmware ophalen...",
+    "noStableFirmwareFound": "Kan geen stabiele firmwareversie vinden voor uw apparaat.",
+    "installStableFirmware": "Stabiele firmware installeren",
+    "alreadyOnStableFirmware": "U gebruikt al de laatste stabiele versie.",
     "audioSavedLocally": "{duration} audio lokaal opgeslagen",
     "@audioSavedLocally": {
         "placeholders": {

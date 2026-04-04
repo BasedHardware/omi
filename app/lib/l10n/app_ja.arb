@@ -2910,6 +2910,14 @@
     "fair": "普通",
     "weak": "弱い",
     "gattError": "GATTエラー ({code})",
+    "rollbackToStableFirmware": "安定版ファームウェアに戻す",
+    "rollbackConfirmTitle": "ファームウェアを戻しますか？",
+    "rollbackConfirmMessage": "現在のファームウェアが最新の安定版（{version}）に置き換えられます。更新後、デバイスは再起動します。",
+    "stableFirmware": "安定版ファームウェア",
+    "fetchingStableFirmware": "最新の安定版ファームウェアを取得中...",
+    "noStableFirmwareFound": "お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。",
+    "installStableFirmware": "安定版ファームウェアをインストール",
+    "alreadyOnStableFirmware": "すでに最新の安定版を使用しています。",
     "audioSavedLocally": "{duration} の音声をローカルに保存しました",
     "@audioSavedLocally": {
         "placeholders": {

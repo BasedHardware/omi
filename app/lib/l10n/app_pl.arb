@@ -2944,6 +2944,14 @@
     "fair": "Dostateczny",
     "weak": "Słaby",
     "gattError": "Błąd GATT ({code})",
+    "rollbackToStableFirmware": "Przywróć stabilne oprogramowanie",
+    "rollbackConfirmTitle": "Przywrócić oprogramowanie?",
+    "rollbackConfirmMessage": "Spowoduje to zastąpienie obecnego oprogramowania najnowszą stabilną wersją ({version}). Urządzenie zostanie ponownie uruchomione po aktualizacji.",
+    "stableFirmware": "Stabilne oprogramowanie",
+    "fetchingStableFirmware": "Pobieranie najnowszego stabilnego oprogramowania...",
+    "noStableFirmwareFound": "Nie znaleziono stabilnej wersji oprogramowania dla Twojego urządzenia.",
+    "installStableFirmware": "Zainstaluj stabilne oprogramowanie",
+    "alreadyOnStableFirmware": "Masz już najnowszą stabilną wersję.",
     "audioSavedLocally": "{duration} dźwięku zapisano lokalnie",
     "@audioSavedLocally": {
         "placeholders": {

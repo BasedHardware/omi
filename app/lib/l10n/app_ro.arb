@@ -2909,6 +2909,14 @@
     "fair": "Acceptabil",
     "weak": "Slab",
     "gattError": "Eroare GATT ({code})",
+    "rollbackToStableFirmware": "Revenire la firmware-ul stabil",
+    "rollbackConfirmTitle": "Reveniți la firmware?",
+    "rollbackConfirmMessage": "Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ({version}). Dispozitivul se va reporni după actualizare.",
+    "stableFirmware": "Firmware stabil",
+    "fetchingStableFirmware": "Se obține cel mai recent firmware stabil...",
+    "noStableFirmwareFound": "Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.",
+    "installStableFirmware": "Instalare firmware stabil",
+    "alreadyOnStableFirmware": "Sunteți deja pe cea mai recentă versiune stabilă.",
     "audioSavedLocally": "{duration} audio salvat local",
     "@audioSavedLocally": {
         "placeholders": {

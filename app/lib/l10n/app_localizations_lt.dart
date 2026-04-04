@@ -8953,6 +8953,32 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get rollbackToStableFirmware => 'Grįžti prie stabilios programinės įrangos';
+
+  @override
+  String get rollbackConfirmTitle => 'Grąžinti programinę įrangą?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tai pakeis dabartinę programinę įrangą naujausia stabilia versija ($version). Jūsų įrenginys bus paleistas iš naujo po atnaujinimo.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabili programinė įranga';
+
+  @override
+  String get fetchingStableFirmware => 'Gaunama naujausia stabili programinė įranga...';
+
+  @override
+  String get noStableFirmwareFound => 'Nepavyko rasti stabilios programinės įrangos versijos jūsų įrenginiui.';
+
+  @override
+  String get installStableFirmware => 'Įdiegti stabilią programinę įrangą';
+
+  @override
+  String get alreadyOnStableFirmware => 'Jau naudojate naujausią stabilią versiją.';
+
+  @override
   String audioSavedLocally(String duration) {
     return '$duration garso įrašyta vietoje';
   }

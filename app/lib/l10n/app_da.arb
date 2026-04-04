@@ -2918,6 +2918,14 @@
     "fair": "Rimelig",
     "weak": "Svag",
     "gattError": "GATT-fejl ({code})",
+    "rollbackToStableFirmware": "Rul tilbage til stabil firmware",
+    "rollbackConfirmTitle": "Rul firmware tilbage?",
+    "rollbackConfirmMessage": "Dette vil erstatte din nuværende firmware med den seneste stabile version ({version}). Din enhed genstarter efter opdateringen.",
+    "stableFirmware": "Stabil firmware",
+    "fetchingStableFirmware": "Henter seneste stabile firmware...",
+    "noStableFirmwareFound": "Kunne ikke finde en stabil firmwareversion til din enhed.",
+    "installStableFirmware": "Installer stabil firmware",
+    "alreadyOnStableFirmware": "Du er allerede på den seneste stabile version.",
     "audioSavedLocally": "{duration} lyd gemt lokalt",
     "@audioSavedLocally": {
         "placeholders": {

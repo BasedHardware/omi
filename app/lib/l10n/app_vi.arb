@@ -2914,6 +2914,14 @@
     "fair": "Khá",
     "weak": "Yếu",
     "gattError": "Lỗi GATT ({code})",
+    "rollbackToStableFirmware": "Quay lại firmware ổn định",
+    "rollbackConfirmTitle": "Quay lại firmware?",
+    "rollbackConfirmMessage": "Thao tác này sẽ thay thế firmware hiện tại bằng phiên bản ổn định mới nhất ({version}). Thiết bị của bạn sẽ khởi động lại sau khi cập nhật.",
+    "stableFirmware": "Firmware ổn định",
+    "fetchingStableFirmware": "Đang tải firmware ổn định mới nhất...",
+    "noStableFirmwareFound": "Không tìm thấy phiên bản firmware ổn định cho thiết bị của bạn.",
+    "installStableFirmware": "Cài đặt firmware ổn định",
+    "alreadyOnStableFirmware": "Bạn đã sử dụng phiên bản ổn định mới nhất.",
     "audioSavedLocally": "{duration} âm thanh đã lưu cục bộ",
     "@audioSavedLocally": {
         "placeholders": {
