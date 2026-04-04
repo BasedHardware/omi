@@ -23,11 +23,11 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     private let audioEventQueue = DispatchQueue(label: "com.omi.phonecalls.audio", qos: .userInteractive)
 
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
-    private let callCoordinator: OmiCallCoordinatorProtocol
-    private var callUUID: UUID?
+    fileprivate let callCoordinator: OmiCallCoordinatorProtocol
+    fileprivate var callUUID: UUID?
 
     // Proximity sensor — screen off when phone held to ear
-    private let proximitySensor = OmiProximitySensor()
+    fileprivate let proximitySensor = OmiProximitySensor()
 
     override init() {
         // Phase 5: Select coordinator based on region
@@ -286,8 +286,6 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
                     routeType = name.contains("airpod") ? "airPods" : "bluetoothHeadset"
                 case .headphones, .headsetMic:
                     routeType = "headphones"
-                case .carPlay:
-                    routeType = "carPlay"
                 default:
                     continue
                 }
