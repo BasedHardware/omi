@@ -289,6 +289,67 @@ async def test_process_audio_dg_no_vad_wrap_on_none():
     assert result is None
 
 
+@pytest.mark.asyncio
+async def test_retries_on_none_then_succeeds():
+    """When connect_to_deepgram returns None (start()==False), backoff retries and succeeds on later attempt."""
+    mock_conn = MagicMock()
+    call_count = 0
+
+    def none_then_succeed(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            return None  # start() returned False
+        return mock_conn
+
+    sleep_calls = []
+
+    async def fake_sleep(duration):
+        sleep_calls.append(duration)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=none_then_succeed), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+            retries=3,
+        )
+
+    assert result is mock_conn
+    assert call_count == 3
+    assert len(sleep_calls) == 2  # slept between attempt 1->2 and 2->3
+
+
+@pytest.mark.asyncio
+async def test_returns_none_after_all_none_retries_exhausted():
+    """When connect_to_deepgram returns None on all attempts, backoff returns None (not raise)."""
+    sleep_calls = []
+
+    async def fake_sleep(duration):
+        sleep_calls.append(duration)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', return_value=None), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+            retries=3,
+        )
+
+    assert result is None
+    assert len(sleep_calls) == 2  # slept between retries
+
+
 def test_deepgram_options_no_keepalive():
     """SDK keepalive option must not be present — it spawns a dangerous background thread (#5870)."""
     for name, opts in [('deepgram_options', deepgram_options), ('deepgram_cloud_options', deepgram_cloud_options)]:
