@@ -1,12 +1,23 @@
 import Foundation
 
 /// Service for real-time speech-to-text transcription.
-/// Streaming (PTT live): Python backend `/v2/voice-message/transcribe-stream` WebSocket.
-/// Batch (PTT): Python backend `/v2/voice-message/transcribe` REST API.
+/// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
+/// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
+/// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
 /// Full stereo batch: Rust proxy Deepgram endpoint (unchanged).
 class TranscriptionService {
 
     // MARK: - Types
+
+    /// Streaming mode determines which backend endpoint and parameters are used.
+    enum StreamingMode {
+        /// Conversation capture via `/v4/listen` — full pipeline with speech profiles,
+        /// speaker assignment, memory creation events, and conversation lifecycle.
+        case conversation
+        /// PTT live transcription via `/v2/voice-message/transcribe-stream` — transcription only,
+        /// no conversation lifecycle. Supports "finalize" text message for flush.
+        case ptt
+    }
 
     /// Transcript segment from Python backend
     /// Matches `models.transcript_segment.TranscriptSegment` on the backend
@@ -98,6 +109,7 @@ class TranscriptionService {
     private let sampleRate = 16000
     private let encoding = "linear16"
     private let channels = 1  // Always mono for Python backend streaming
+    private let streamingMode: StreamingMode
 
     /// Python backend base URL for streaming transcription.
     /// Uses OMI_PYTHON_API_URL env var or falls back to https://api.omi.me/
@@ -143,13 +155,15 @@ class TranscriptionService {
 
     // MARK: - Initialization
 
-    /// Initialize the transcription service for streaming via Python backend `/v2/voice-message/transcribe-stream`
+    /// Initialize the transcription service for streaming.
     /// - Parameters:
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
-    init(language: String = "en") throws {
+    ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
+    init(language: String = "en", mode: StreamingMode = .conversation) throws {
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
-        log("TranscriptionService: Initialized for Python backend streaming, language=\(language), channels=\(channels)")
+        self.streamingMode = mode
+        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language)")
     }
 
     /// Initialize for batch (PTT) mode only — uses Python backend `/v2/voice-message/transcribe`
@@ -164,15 +178,16 @@ class TranscriptionService {
         // Batch mode uses Firebase auth + Python backend — no DG key needed
         self.apiKey = ""
         self.language = language
+        self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
         log("TranscriptionService: Initialized for batch (PTT) mode via Python backend")
     }
 
     // MARK: - Legacy Streaming API (PTT backward compatibility)
 
-    /// Legacy init with channels parameter — delegates to new streaming init.
-    /// PTT live mode on main branch uses `TranscriptionService(language:, channels:)`.
+    /// Legacy init with channels parameter — used by PushToTalkManager for PTT live mode.
+    /// Routes to `/v2/voice-message/transcribe-stream` (PTT-only transcription).
     convenience init(language: String = "en", channels: Int) throws {
-        try self.init(language: language)
+        try self.init(language: language, mode: .ptt)
     }
 
     /// Legacy start with `onTranscript:` callback — wraps the new `onSegments:` API.
@@ -205,14 +220,17 @@ class TranscriptionService {
         )
     }
 
-    /// Flush remaining audio and tell the backend to finalize transcription.
+    /// Flush remaining audio and (for PTT mode) tell the backend to finalize transcription.
     /// PTT live mode calls this to get the final transcript segment before closing.
-    /// Sends a "finalize" text message so the backend flushes any sub-threshold audio
-    /// to Deepgram and triggers its endpointing/finalization.
+    /// In PTT mode, sends a "finalize" text message so the backend flushes any sub-threshold
+    /// audio to Deepgram and triggers its endpointing/finalization.
+    /// In conversation mode, just flushes the local audio buffer (no "finalize" — `/v4/listen`
+    /// manages its own endpointing via the pusher pipeline).
     func finishStream() {
         flushAudioBuffer()
 
-        // Send "finalize" text message to backend to trigger server-side flush + Deepgram finalization
+        // Only PTT mode uses the "finalize" protocol — conversation mode (/v4/listen) doesn't support it
+        guard streamingMode == .ptt else { return }
         guard isConnected, let webSocketTask = webSocketTask else { return }
         let message = URLSessionWebSocketTask.Message.string("finalize")
         webSocketTask.send(message) { error in
@@ -224,7 +242,7 @@ class TranscriptionService {
 
     // MARK: - Public Methods (Streaming)
 
-    /// Start the streaming transcription service via Python backend `/v2/voice-message/transcribe-stream`
+    /// Start the streaming transcription service (endpoint selected by `streamingMode`)
     func start(
         onSegments: @escaping BackendSegmentsHandler,
         onEvent: @escaping ListenEventHandler,
@@ -323,24 +341,46 @@ class TranscriptionService {
     }
 
     private func connectToBackend(authHeader: String) {
-        // Build WebSocket URL for Python backend /v2/voice-message/transcribe-stream
         let base = Self.pythonBackendBaseURL
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
         let wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
 
-        guard var components = URLComponents(string: "\(wsBase)/v2/voice-message/transcribe-stream") else {
+        // Select endpoint and query params based on streaming mode
+        let path: String
+        let queryItems: [URLQueryItem]
+
+        switch streamingMode {
+        case .conversation:
+            // Full conversation pipeline with speech profiles, speaker assignment, memory events
+            path = "/v4/listen"
+            queryItems = [
+                URLQueryItem(name: "language", value: language),
+                URLQueryItem(name: "sample_rate", value: String(sampleRate)),
+                URLQueryItem(name: "codec", value: encoding),
+                URLQueryItem(name: "channels", value: String(channels)),
+                URLQueryItem(name: "include_speech_profile", value: "true"),
+                URLQueryItem(name: "source", value: "desktop"),
+                URLQueryItem(name: "speaker_auto_assign", value: "enabled"),
+            ]
+        case .ptt:
+            // PTT-only transcription — no conversation lifecycle
+            path = "/v2/voice-message/transcribe-stream"
+            queryItems = [
+                URLQueryItem(name: "language", value: language),
+                URLQueryItem(name: "sample_rate", value: String(sampleRate)),
+                URLQueryItem(name: "codec", value: encoding),
+                URLQueryItem(name: "channels", value: String(channels)),
+            ]
+        }
+
+        guard var components = URLComponents(string: "\(wsBase)\(path)") else {
             log("TranscriptionService: Invalid URL base: \(wsBase)")
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
             return
         }
 
-        components.queryItems = [
-            URLQueryItem(name: "language", value: language),
-            URLQueryItem(name: "sample_rate", value: String(sampleRate)),
-            URLQueryItem(name: "codec", value: encoding),
-            URLQueryItem(name: "channels", value: String(channels)),
-        ]
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
