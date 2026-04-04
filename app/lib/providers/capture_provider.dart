@@ -1329,14 +1329,14 @@ class CaptureProvider extends ChangeNotifier
       } catch (e) {
         wal.retryCount = attempt + 1;
         wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        // Persist retry metadata after every attempt so app-kill doesn't reset the budget
+        await phoneSync.persistRetryMetadata(wal);
         if (attempt < maxRetries - 1) {
           final delay = baseDelay * (1 << attempt); // 5s, 10s, 20s
           Logger.debug('Auto-sync WAL ${wal.id} attempt ${attempt + 1} failed, retrying in ${delay}s: $e');
           await Future.delayed(Duration(seconds: delay));
         } else {
           Logger.debug('Auto-sync WAL ${wal.id} failed after $maxRetries attempts: $e');
-          // Persist retry metadata so startup recovery knows the attempt count
-          await phoneSync.persistRetryMetadata(wal);
         }
       }
     }
@@ -1564,6 +1564,11 @@ class CaptureProvider extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
+    // When coming back online, retry orphan recovery if it was skipped due to being offline
+    if (isConnected && !_orphanRecoveryDone) {
+      _orphanRecoveryDone = true;
+      recoverOrphanedWals();
+    }
     notifyListeners();
   }
 
