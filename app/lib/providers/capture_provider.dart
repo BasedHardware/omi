@@ -206,6 +206,9 @@ class CaptureProvider extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
+  @visibleForTesting
+  set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
+
   /// Preserved session start for auto-sync after socket-driven conversation completion.
   /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
   int _pendingAutoSyncSessionStart = 0;
