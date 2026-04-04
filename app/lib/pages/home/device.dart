@@ -258,9 +258,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               icon: FontAwesomeIcons.rotateLeft,
               title: context.l10n.rollbackToStableFirmware,
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => FirmwareUpdate(device: provider.pairedDevice, isRollback: true),
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FirmwareUpdate(device: provider.pairedDevice, isRollback: true),
+                        ),
+                      );
+                    },
+                    context.l10n.rollbackConfirmTitle,
+                    context.l10n.rollbackConfirmMessage(provider.latestStableFirmwareVersion),
                   ),
                 );
               },
