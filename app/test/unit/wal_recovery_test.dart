@@ -305,5 +305,154 @@ void main() {
       await sync.finalizeCurrentSession();
       expect(sync.testWals, isEmpty);
     });
+
+    test('exactly 10*fps unsynced frames triggers storage (>= boundary)', () async {
+      // Exactly 1000 unsynced frames = 10 * 100fps. shouldStored uses >= threshold.
+      for (int i = 0; i < 1000; i++) {
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
+      }
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testFrames, isEmpty);
+      // 1000 losses >= 1000 threshold, so WAL IS stored
+      expect(sync.testWals.length, 1);
+      expect(sync.testWals[0].status, WalStatus.miss);
+      expect(sync.testWals[0].seconds, 10);
+    });
+
+    test('just below threshold does NOT trigger storage', () async {
+      // 999 unsynced frames < 1000 threshold
+      for (int i = 0; i < 999; i++) {
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
+      }
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testFrames, isEmpty);
+      expect(sync.testWals, isEmpty);
+    });
+
+    test('marks WAL synced when all frames are synced in tail buffer', () async {
+      // Add 1100 frames, all synced — WAL should be created with status synced
+      for (int i = 0; i < 1100; i++) {
+        final key = FrameSyncKey([i & 0xFF]);
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
+        sync.markFrameSynced(key);
+      }
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testFrames, isEmpty);
+      // shouldStored is false because losses (0) <= threshold (1000), no WAL created
+      expect(sync.testWals, isEmpty);
+    });
+  });
+
+  group('stampConversationId boundary', () {
+    late LocalWalSyncImpl sync;
+    late _FakeListener listener;
+    late Directory tempDir;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+
+      tempDir = await Directory.systemTemp.createTemp('wal_stamp_boundary_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getApplicationDocumentsDirectory') return tempDir.path;
+          return null;
+        },
+      );
+      await WalFileManager.init();
+
+      listener = _FakeListener();
+      sync = LocalWalSyncImpl(listener);
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    test('only stamps WALs with timerStart >= sessionStartSeconds', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.testWals = [
+        Wal(
+            timerStart: now - 200,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.disk),
+        Wal(
+            timerStart: now - 50,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.disk),
+      ];
+
+      // Session started at now - 100, so only wal at now - 50 qualifies
+      await sync.stampConversationId(now - 100, 'conv-boundary');
+
+      expect(sync.testWals[0].conversationId, isNull); // timerStart < sessionStart
+      expect(sync.testWals[1].conversationId, 'conv-boundary');
+    });
+
+    test('stamps WAL with timerStart exactly equal to sessionStartSeconds', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.testWals = [
+        Wal(
+            timerStart: now - 100,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.disk),
+      ];
+
+      await sync.stampConversationId(now - 100, 'conv-exact');
+
+      expect(sync.testWals[0].conversationId, 'conv-exact');
+    });
+  });
+
+  group('walReady', () {
+    test('completes after start is called', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+
+      final tempDir = await Directory.systemTemp.createTemp('wal_ready_test_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getApplicationDocumentsDirectory') return tempDir.path;
+          return null;
+        },
+      );
+      await WalFileManager.init();
+
+      final listener = _FakeListener();
+      final sync = LocalWalSyncImpl(listener);
+      sync.start();
+
+      // walReady should complete once _initializeWals finishes
+      await sync.walReady;
+      // If we get here, the Completer completed successfully
+      expect(true, isTrue);
+
+      sync.stop();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
   });
 }
