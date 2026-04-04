@@ -577,6 +577,12 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
+        # Already at terminal stage — no escalation possible, skip LLM call (#6316)
+        current_stage = get_enforcement_stage(uid)
+        if current_stage == 'restrict':
+            logger.info(f'fair_use: uid={uid} already at restrict stage, skipping classifier')
+            return
+
         # Free-exhausted users: synthetic score > 0.7, skip LLM classifier (#6083)
         if is_free_credits_exhausted(uid):
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
