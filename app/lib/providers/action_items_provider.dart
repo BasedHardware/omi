@@ -5,8 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
@@ -222,6 +225,7 @@ class ActionItemsProvider extends ChangeNotifier {
         if (newState == true) {
           await ActionItemNotificationHandler.cancelNotification(item.id);
         }
+        _pushUpdateToAppleReminder(item, completed: newState);
       }
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
@@ -246,6 +250,7 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[index] = updatedItem;
           notifyListeners();
         }
+        _pushUpdateToAppleReminder(item, title: newDescription);
       } else {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
@@ -293,6 +298,7 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[idx] = updatedItem;
           notifyListeners();
         }
+        _pushUpdateToAppleReminder(item, dueDate: dueDate);
       } else {
         // Revert on failure
         if (index != -1 && originalItem != null) {
@@ -368,6 +374,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
+    // Delete linked Apple Reminder if one exists
+    _deleteAppleReminderIfLinked(item);
+
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
@@ -418,6 +427,8 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[index] = newItem;
           notifyListeners();
         }
+        // Direct sync to Apple Reminders — no FCM roundtrip needed
+        _syncToAppleRemindersIfNeeded(newItem);
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -431,6 +442,58 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error creating action item: $e');
       return null;
     }
+  }
+
+  /// Directly create an Apple Reminder without waiting for FCM roundtrip.
+  /// Fire-and-forget — doesn't block the UI.
+  void _syncToAppleRemindersIfNeeded(ActionItemWithMetadata item) {
+    if (!PlatformService.isApple) return;
+
+    final service = AppleRemindersService();
+    if (!service.isAvailable) return;
+
+    () async {
+      try {
+        if (!await service.hasPermission()) return;
+
+        final calendarItemId = await service.addReminder(
+          title: item.description,
+          notes: 'From Omi',
+          dueDate: item.dueAt,
+          listName: 'Reminders',
+        );
+
+        if (calendarItemId != null) {
+          await api.updateActionItem(
+            item.id,
+            exported: true,
+            exportPlatform: 'apple_reminders',
+            appleReminderId: calendarItemId,
+          );
+          MixpanelManager().appleReminderDirectSync(actionItemId: item.id);
+        }
+      } catch (e) {
+        Logger.debug('Direct Apple Reminders sync failed: $e');
+      }
+    }();
+  }
+
+  /// Push a field update to the linked Apple Reminder immediately.
+  void _pushUpdateToAppleReminder(ActionItemWithMetadata item, {bool? completed, String? title, DateTime? dueDate}) {
+    if (!PlatformService.isApple) return;
+    if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
+
+    AppleRemindersService()
+        .updateReminderById(item.appleReminderId!, completed: completed, title: title, dueDate: dueDate);
+  }
+
+  /// Delete the linked Apple Reminder when action item is deleted.
+  void _deleteAppleReminderIfLinked(ActionItemWithMetadata item) {
+    if (!PlatformService.isApple) return;
+    if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
+
+    AppleRemindersService().deleteReminderById(item.appleReminderId!);
+    MixpanelManager().appleReminderDeleted(actionItemId: item.id);
   }
 
   // Sort order and indent level persistence

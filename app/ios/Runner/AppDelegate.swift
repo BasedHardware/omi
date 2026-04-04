@@ -231,15 +231,15 @@ extension FlutterError: Error {}
           return
       }
 
-      let exportedIds = appleRemindersService.syncBatchFromJSON(itemsJson)
+      let exportedMappings = appleRemindersService.syncBatchFromJSON(itemsJson)
 
-      if !exportedIds.isEmpty {
+      if !exportedMappings.isEmpty {
           DispatchQueue.main.async {
-              self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["action_item_ids": exportedIds])
+              self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["mappings": exportedMappings])
           }
       }
 
-      completionHandler(exportedIds.isEmpty ? .noData : .newData)
+      completionHandler(exportedMappings.isEmpty ? .noData : .newData)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
