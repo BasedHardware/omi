@@ -564,6 +564,15 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     Free-exhausted users (#6083) get a synthetic score of 1.0 instead of
     the LLM classifier, then follow the same graduated escalation pipeline.
     """
+    # Already at terminal stage — no escalation possible, skip LLM + lock (#6316)
+    try:
+        current_stage = get_enforcement_stage(uid)
+        if current_stage == 'restrict':
+            logger.info(f'fair_use: uid={uid} already at restrict stage, skipping classifier')
+            return
+    except Exception:
+        pass  # fail-open: proceed with classifier if stage check fails
+
     lock_key = _classifier_lock_key(uid)
     lock_token = str(uuid.uuid4())
 
@@ -577,12 +586,6 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
-        # Already at terminal stage — no escalation possible, skip LLM call (#6316)
-        current_stage = get_enforcement_stage(uid)
-        if current_stage == 'restrict':
-            logger.info(f'fair_use: uid={uid} already at restrict stage, skipping classifier')
-            return
-
         # Free-exhausted users: synthetic score > 0.7, skip LLM classifier (#6083)
         if is_free_credits_exhausted(uid):
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
