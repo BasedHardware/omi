@@ -2170,8 +2170,8 @@ workflows:
           # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
           echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # OMI_PYTHON_API_URL — Python backend for PTT transcription (/v2/voice-message/*)
-          # Must point to api.omi.me, NOT the Rust desktop-backend (which returns 404 for these routes)
+          # OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
+          # Must point to api.omi.me, NOT the Rust desktop-backend
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
