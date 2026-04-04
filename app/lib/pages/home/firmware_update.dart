@@ -293,7 +293,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Row(
               children: [
-                Text(context.l10n.yourDeviceIsUpToDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                Text(
+                  widget.isRollback ? context.l10n.alreadyOnStableFirmware : context.l10n.yourDeviceIsUpToDate,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                ),
                 const SizedBox(width: 8),
                 const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
               ],
