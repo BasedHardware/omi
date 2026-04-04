@@ -44,13 +44,10 @@ for _mod_name in [
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())
 
-# Provide expected attributes for type-annotation imports
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
-
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+# NOTE: Do NOT set sys.modules['deepgram'].LiveTranscriptionEvents here.
+# MagicMock auto-generates attributes on access, and overwriting would pollute
+# shared pytest state for test_streaming_deepgram_backoff.py's close/error handler tests.
 
 # Now import the real streaming module
 from utils.stt.streaming import connect_to_deepgram
