@@ -11,7 +11,6 @@ final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
 
     // Backend-provided keys (in-memory only, never persisted to disk)
-    @Published private(set) var deepgramApiKey: String?
     @Published private(set) var geminiApiKey: String?
     @Published private(set) var anthropicApiKey: String?
     @Published private(set) var elevenLabsApiKey: String?
@@ -37,11 +36,6 @@ final class APIKeyService: ObservableObject {
             fetchTask = Task { await fetchKeys() }
         }
         await fetchTask?.value
-    }
-
-    /// Effective key: developer override > backend-provided > nil
-    var effectiveDeepgramKey: String? {
-        nonEmpty(UserDefaults.standard.string(forKey: "dev_deepgram_api_key")) ?? deepgramApiKey
     }
 
     var effectiveGeminiKey: String? {
@@ -72,7 +66,6 @@ final class APIKeyService: ObservableObject {
         for attempt in 1...3 {
             do {
                 let keys = try await APIClient.shared.fetchApiKeys()
-                self.deepgramApiKey = keys.deepgramApiKey
                 self.geminiApiKey = keys.geminiApiKey
                 self.anthropicApiKey = keys.anthropicApiKey
                 self.elevenLabsApiKey = keys.elevenLabsApiKey
@@ -83,7 +76,7 @@ final class APIKeyService: ObservableObject {
                 // Set env vars so existing getenv() consumers keep working during transition
                 applyToEnvironment()
 
-                log("APIKeyService: Fetched keys from backend (deepgram=\(keys.deepgramApiKey != nil), gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil), elevenlabs=\(keys.elevenLabsApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))")
+                log("APIKeyService: Fetched keys from backend (gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil), elevenlabs=\(keys.elevenLabsApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))")
                 return
             } catch {
                 let delay = pow(2.0, Double(attempt - 1))
@@ -103,7 +96,6 @@ final class APIKeyService: ObservableObject {
 
     /// Clear all keys (e.g. on sign-out)
     func clear() {
-        deepgramApiKey = nil
         geminiApiKey = nil
         anthropicApiKey = nil
         elevenLabsApiKey = nil
@@ -112,7 +104,6 @@ final class APIKeyService: ObservableObject {
         isLoaded = false
         loadError = nil
 
-        unsetenv("DEEPGRAM_API_KEY")
         unsetenv("GEMINI_API_KEY")
         unsetenv("ANTHROPIC_API_KEY")
         unsetenv("ELEVENLABS_API_KEY")
@@ -123,9 +114,6 @@ final class APIKeyService: ObservableObject {
 
     /// Push effective keys into the process environment for backward compatibility.
     private func applyToEnvironment() {
-        if let key = effectiveDeepgramKey {
-            setenv("DEEPGRAM_API_KEY", key, 1)
-        }
         if let key = effectiveGeminiKey {
             setenv("GEMINI_API_KEY", key, 1)
         }
@@ -157,11 +145,6 @@ final class APIKeyService: ObservableObject {
             ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingUTF8: $0) })
     }
 
-    nonisolated static var currentDeepgramKey: String? {
-        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_deepgram_api_key"))
-            ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) })
-    }
-
     nonisolated static var currentAnthropicKey: String? {
         nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_anthropic_api_key"))
             ?? (getenv("ANTHROPIC_API_KEY").flatMap { String(validatingUTF8: $0) })
@@ -175,7 +158,7 @@ final class APIKeyService: ObservableObject {
     /// True when the app has enough configuration to start transcription and screen analysis.
     /// In proxy mode (OMI_API_URL set), no client-side Deepgram/Gemini keys are needed.
     nonisolated static var keysAvailable: Bool {
-        getenv("GEMINI_API_KEY") != nil || getenv("DEEPGRAM_API_KEY") != nil || getenv("OMI_API_URL") != nil
+        getenv("GEMINI_API_KEY") != nil || getenv("OMI_API_URL") != nil
     }
 
     private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
