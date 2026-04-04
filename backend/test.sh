@@ -66,6 +66,7 @@ pytest tests/unit/test_sync_pcm_decode.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_fair_use_upgrade.py -v
+pytest tests/unit/test_fair_use_enforce.py -v
 pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
