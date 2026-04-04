@@ -92,13 +92,9 @@ def get_deepgram_model_for_language(language: str, fair_use_stage: str = 'none')
         Tuple of (language_to_use, model_name)
     """
     # Fair-use enforcement: throttle/restrict stages force nova-2 to reduce cost (#6314)
+    # Pass requested language through — Deepgram handles unsupported langs gracefully.
     if fair_use_stage in ('throttle', 'restrict'):
-        if language == 'multi':
-            return 'multi', 'nova-2-general'
-        if language in _deepgram_nova2_only_languages:
-            return language, 'nova-2-general'
-        # For nova-3-only languages, fall back to nova-2 multi
-        return 'multi', 'nova-2-general'
+        return language, 'nova-2-general'
 
     # For multi-language mode
     if language == 'multi':
