@@ -8898,4 +8898,38 @@ class AppLocalizationsTh extends AppLocalizations {
   String gattError(String code) {
     return 'ข้อผิดพลาด GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'ย้อนกลับเป็นเฟิร์มแวร์เสถียร';
+
+  @override
+  String get rollbackConfirmTitle => 'ย้อนกลับเฟิร์มแวร์?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'การดำเนินการนี้จะแทนที่เฟิร์มแวร์ปัจจุบันด้วยเวอร์ชันเสถียรล่าสุด ($version) อุปกรณ์ของคุณจะรีสตาร์ทหลังจากอัปเดต';
+  }
+
+  @override
+  String get stableFirmware => 'เฟิร์มแวร์เสถียร';
+
+  @override
+  String get fetchingStableFirmware => 'กำลังดึงเฟิร์มแวร์เสถียรล่าสุด...';
+
+  @override
+  String get noStableFirmwareFound => 'ไม่พบเวอร์ชันเฟิร์มแวร์เสถียรสำหรับอุปกรณ์ของคุณ';
+
+  @override
+  String get installStableFirmware => 'ติดตั้งเฟิร์มแวร์เสถียร';
+
+  @override
+  String get alreadyOnStableFirmware => 'คุณใช้เวอร์ชันเสถียรล่าสุดอยู่แล้ว';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'บันทึกเสียง $duration ไว้ในเครื่อง';
+  }
+
+  @override
+  String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 }

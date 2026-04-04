@@ -8796,4 +8796,38 @@ class AppLocalizationsKo extends AppLocalizations {
   String gattError(String code) {
     return 'GATT 오류 ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => '안정 펌웨어로 롤백';
+
+  @override
+  String get rollbackConfirmTitle => '펌웨어를 롤백하시겠습니까?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '현재 펌웨어가 최신 안정 버전($version)으로 교체됩니다. 업데이트 후 기기가 재시작됩니다.';
+  }
+
+  @override
+  String get stableFirmware => '안정 펌웨어';
+
+  @override
+  String get fetchingStableFirmware => '최신 안정 펌웨어를 가져오는 중...';
+
+  @override
+  String get noStableFirmwareFound => '기기에 맞는 안정 펌웨어 버전을 찾을 수 없습니다.';
+
+  @override
+  String get installStableFirmware => '안정 펌웨어 설치';
+
+  @override
+  String get alreadyOnStableFirmware => '이미 최신 안정 버전을 사용 중입니다.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 오디오가 로컬에 저장됨';
+  }
+
+  @override
+  String get willSyncAutomatically => '자동으로 동기화됩니다';
 }

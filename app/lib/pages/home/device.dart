@@ -249,6 +249,36 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 : null,
             showChevron: provider.connectedDevice != null,
           ),
+          // Roll back to stable firmware (only when current firmware differs from latest stable)
+          if (provider.connectedDevice != null &&
+              provider.latestStableFirmwareVersion.isNotEmpty &&
+              provider.pairedDevice?.firmwareRevision != provider.latestStableFirmwareVersion) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.rotateLeft,
+              title: context.l10n.rollbackToStableFirmware,
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FirmwareUpdate(device: provider.pairedDevice, isRollback: true),
+                        ),
+                      );
+                    },
+                    context.l10n.rollbackConfirmTitle,
+                    context.l10n.rollbackConfirmMessage(provider.latestStableFirmwareVersion),
+                  ),
+                );
+              },
+              showChevron: true,
+            ),
+          ],
           // SD Card Sync
           if (provider.isDeviceStorageSupport) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),

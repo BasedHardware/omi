@@ -2908,5 +2908,22 @@
     "good": "Gerai",
     "fair": "Patenkinamai",
     "weak": "Silpnas",
-    "gattError": "GATT klaida ({code})"
+    "gattError": "GATT klaida ({code})",
+    "rollbackToStableFirmware": "Grįžti prie stabilios programinės įrangos",
+    "rollbackConfirmTitle": "Grąžinti programinę įrangą?",
+    "rollbackConfirmMessage": "Tai pakeis dabartinę programinę įrangą naujausia stabilia versija ({version}). Jūsų įrenginys bus paleistas iš naujo po atnaujinimo.",
+    "stableFirmware": "Stabili programinė įranga",
+    "fetchingStableFirmware": "Gaunama naujausia stabili programinė įranga...",
+    "noStableFirmwareFound": "Nepavyko rasti stabilios programinės įrangos versijos jūsų įrenginiui.",
+    "installStableFirmware": "Įdiegti stabilią programinę įrangą",
+    "alreadyOnStableFirmware": "Jau naudojate naujausią stabilią versiją.",
+    "audioSavedLocally": "{duration} garso įrašyta vietoje",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "bus sinchronizuota automatiškai"
 }

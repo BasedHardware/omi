@@ -201,6 +201,25 @@ class CaptureProvider extends ChangeNotifier
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
+
+  /// Unix timestamp (seconds) when the current capture session started.
+  /// Used to scope WAL queries to only this session's audio.
+  int _sessionStartSeconds = 0;
+
+  @visibleForTesting
+  set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
+
+  /// Preserved session start for auto-sync after socket-driven conversation completion.
+  /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
+  int _pendingAutoSyncSessionStart = 0;
+
+  /// Returns unsynced WALs belonging to the current capture session.
+  /// Empty when all frames have been streamed successfully (clean UI).
+  List<Wal> get unsyncedSessionWals {
+    if (_sessionStartSeconds == 0) return [];
+    return _wal.getSyncs().phone.getSessionUnsyncedWals(_sessionStartSeconds);
+  }
+
   // Version counter for segments/photos content changes. Incremented on in-place mutations
   // (e.g., translation updates, photo description changes) to signal UI rebuilds when
   // list length and last-text remain unchanged.
@@ -289,6 +308,7 @@ class CaptureProvider extends ChangeNotifier
     suggestionsBySegmentId = {};
     _conversation = null;
     taggingSegmentIds = [];
+    _sessionStartSeconds = 0;
     notifyListeners();
   }
 
@@ -357,9 +377,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -373,13 +392,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -387,6 +406,9 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    if (_sessionStartSeconds == 0) {
+      _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    }
 
     _loadInProgressConversation();
 
@@ -469,24 +491,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -574,8 +592,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -678,9 +696,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1090,6 +1107,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
       conversationProvider!.addProcessingConversation(event.memory);
+      _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _resetStateVariables();
       return;
     }
@@ -1098,6 +1116,11 @@ class CaptureProvider extends ChangeNotifier
       event.memory.isNew = true;
       conversationProvider!.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
+      if (_pendingAutoSyncSessionStart > 0) {
+        final sessionStart = _pendingAutoSyncSessionStart;
+        _pendingAutoSyncSessionStart = 0;
+        _autoSyncSessionWals(sessionStart, event.memory.id);
+      }
       return;
     }
 
@@ -1169,6 +1192,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> forceProcessingCurrentConversation() async {
+    final sessionStart = _sessionStartSeconds;
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
       ServerConversation(
@@ -1186,9 +1210,35 @@ class CaptureProvider extends ChangeNotifier
       conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
       _processConversationCreated(result.conversation, result.messages);
+
+      // Auto-sync any missed WALs from this session to the new conversation
+      if (sessionStart > 0 && result.conversation != null) {
+        _autoSyncSessionWals(sessionStart, result.conversation!.id);
+      }
     });
 
     return;
+  }
+
+  Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
+    final phoneSync = _wal.getSyncs().phone;
+    final unsyncedWals = phoneSync.getSessionUnsyncedWals(sessionStartSeconds);
+    if (unsyncedWals.isEmpty) return;
+
+    Logger.debug('Auto-syncing ${unsyncedWals.length} session WALs to conversation $conversationId');
+    for (final wal in unsyncedWals) {
+      if (wal.filePath == null) continue;
+      try {
+        final fullPath = await Wal.getFilePath(wal.filePath);
+        if (fullPath == null) continue;
+        final file = File(fullPath);
+        if (!file.existsSync()) continue;
+        await syncLocalFilesV2([file], conversationId: conversationId);
+        await phoneSync.markWalSyncedAndPersist(wal);
+      } catch (e) {
+        Logger.debug('Auto-sync WAL ${wal.id} failed: $e');
+      }
+    }
   }
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {

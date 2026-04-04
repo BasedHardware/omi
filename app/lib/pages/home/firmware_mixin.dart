@@ -227,6 +227,16 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
+  Future getStableVersion({required String deviceModelNumber}) async {
+    latestFirmwareDetails = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
+    if (latestFirmwareDetails['ota_update_steps'] != null) {
+      otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
+    }
+    if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
+      isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
+    }
+  }
+
   Future<(String, bool, String)> shouldUpdateFirmware({required String currentFirmware}) async {
     return DeviceUtils.shouldUpdateFirmware(
       currentFirmware: currentFirmware,

@@ -2908,5 +2908,22 @@
     "good": "Bra",
     "fair": "Godtagbar",
     "weak": "Svag",
-    "gattError": "GATT-fel ({code})"
+    "gattError": "GATT-fel ({code})",
+    "rollbackToStableFirmware": "Återgå till stabil firmware",
+    "rollbackConfirmTitle": "Återställ firmware?",
+    "rollbackConfirmMessage": "Detta ersätter din nuvarande firmware med den senaste stabila versionen ({version}). Din enhet startas om efter uppdateringen.",
+    "stableFirmware": "Stabil firmware",
+    "fetchingStableFirmware": "Hämtar senaste stabila firmware...",
+    "noStableFirmwareFound": "Kunde inte hitta en stabil firmwareversion för din enhet.",
+    "installStableFirmware": "Installera stabil firmware",
+    "alreadyOnStableFirmware": "Du har redan den senaste stabila versionen.",
+    "audioSavedLocally": "{duration} ljud sparat lokalt",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synkroniseras automatiskt"
 }

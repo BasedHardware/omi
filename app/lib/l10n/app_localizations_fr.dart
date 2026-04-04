@@ -9024,4 +9024,38 @@ class AppLocalizationsFr extends AppLocalizations {
   String gattError(String code) {
     return 'Erreur GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Revenir au firmware stable';
+
+  @override
+  String get rollbackConfirmTitle => 'Revenir au firmware ?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Cela remplacera votre firmware actuel par la dernière version stable ($version). Votre appareil redémarrera après la mise à jour.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware stable';
+
+  @override
+  String get fetchingStableFirmware => 'Récupération du dernier firmware stable...';
+
+  @override
+  String get noStableFirmwareFound => 'Impossible de trouver une version stable du firmware pour votre appareil.';
+
+  @override
+  String get installStableFirmware => 'Installer le firmware stable';
+
+  @override
+  String get alreadyOnStableFirmware => 'Vous êtes déjà sur la dernière version stable.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration d\'audio enregistré localement';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sera synchronisé automatiquement';
 }

@@ -50,6 +50,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   @visibleForTesting
   List<Wal> get testWals => _wals;
 
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
   @override
   void cancelSync() {
     _isCancelled = true;
@@ -307,6 +310,26 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   Future<List<Wal>> getMissingWals() async {
     return _wals.where((w) => w.status == WalStatus.miss).toList();
+  }
+
+  /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
+  /// Used by the live capture screen to show inline audio safety indicators.
+  List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return _wals
+        .where((w) =>
+            w.status == WalStatus.miss &&
+            w.storage == WalStorage.disk &&
+            w.timerStart >= sessionStartSeconds &&
+            w.timerStart <= now)
+        .toList();
+  }
+
+  /// Mark a WAL as synced and persist the change to disk.
+  Future<void> markWalSyncedAndPersist(Wal wal) async {
+    wal.status = WalStatus.synced;
+    await _saveWalsToFile();
+    listener.onWalUpdated();
   }
 
   @override

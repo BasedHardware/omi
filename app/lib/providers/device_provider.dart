@@ -52,6 +52,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   String _latestFirmwareVersion = '';
   String get latestFirmwareVersion => _latestFirmwareVersion;
 
+  // Latest stable firmware version (for rollback comparison)
+  String _latestStableFirmwareVersion = '';
+  String get latestStableFirmwareVersion => _latestStableFirmwareVersion;
+
   // OmiGlass firmware update details from GitHub releases
   Map<String, dynamic> _latestOmiGlassFirmwareDetails = {};
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
@@ -565,6 +569,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             'download_url': firmwareDetails['zip_url'] ?? '',
             'changelog': changelogStr,
           };
+        }
+
+        // Fetch latest stable version for rollback comparison
+        try {
+          var stableDetails = await getStableFirmwareVersion(
+            deviceModelNumber: pairedDevice?.modelNumber ?? '',
+          );
+          var stableVersion = stableDetails['version']?.toString() ?? '';
+          if (stableVersion.startsWith('v')) stableVersion = stableVersion.substring(1);
+          _latestStableFirmwareVersion = stableVersion;
+        } catch (e) {
+          Logger.debug('Error fetching stable firmware version: $e');
         }
 
         notifyListeners();

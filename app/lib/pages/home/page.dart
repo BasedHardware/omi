@@ -366,16 +366,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
+          // so the widget tree is fully settled — push directly.
           // If there's an auto-message (e.g., from daily reflection notification), send it
           final autoMessageToSend = widget.autoMessage;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
-              );
-            }
-          });
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
+            );
+          }
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
