@@ -111,10 +111,15 @@ class TranscriptionService {
     private let channels = 1  // Always mono for Python backend streaming
     private let streamingMode: StreamingMode
 
-    /// Python backend base URL for streaming transcription.
-    /// Uses OMI_PYTHON_API_URL env var or falls back to https://api.omi.me/
+    /// Python backend base URL for transcription endpoints.
+    /// Resolution order: OMI_PYTHON_API_URL → OMI_API_URL → https://api.omi.me/
+    /// OMI_API_URL fallback ensures dev builds (which wire OMI_API_URL via run.sh) route
+    /// PTT batch/streaming to the local backend instead of silently hitting production.
     private static let pythonBackendBaseURL: String = {
         if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         return "https://api.omi.me/"
