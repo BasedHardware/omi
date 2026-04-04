@@ -866,3 +866,155 @@ class TestTranscribeStreamWebSocket:
                         assert data[0]['text'] == 'Stereo'
         finally:
             _cleanup_chat_client(saved)
+
+    def test_ws_rejects_unsupported_codec(self):
+        """codec != linear16 should be rejected with WS close 1008."""
+        client, module, saved = _make_chat_client()
+        try:
+            with pytest.raises(Exception):
+                with client.websocket_connect('/v2/voice-message/transcribe-stream?codec=opus') as ws:
+                    ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_rejects_sample_rate_above_48000(self):
+        """sample_rate above 48000 should be rejected."""
+        client, module, saved = _make_chat_client()
+        try:
+            with pytest.raises(Exception):
+                with client.websocket_connect('/v2/voice-message/transcribe-stream?sample_rate=96000') as ws:
+                    ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_rejects_channels_above_2(self):
+        """channels > 2 should be rejected."""
+        client, module, saved = _make_chat_client()
+        try:
+            with pytest.raises(Exception):
+                with client.websocket_connect('/v2/voice-message/transcribe-stream?channels=3') as ws:
+                    ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_accepts_boundary_sample_rate_8000(self):
+        """sample_rate=8000 (lower bound) should be accepted."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                assert kwargs.get('sample_rate') == 8000
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                    with client.websocket_connect('/v2/voice-message/transcribe-stream?sample_rate=8000') as ws:
+                        # Connection accepted — just close gracefully
+                        pass
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_accepts_boundary_sample_rate_48000(self):
+        """sample_rate=48000 (upper bound) should be accepted."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                assert kwargs.get('sample_rate') == 48000
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                    with client.websocket_connect('/v2/voice-message/transcribe-stream?sample_rate=48000') as ws:
+                        pass
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestVoiceMessageTranscribeBoundary:
+    """Boundary tests for /v2/voice-message/transcribe REST endpoint."""
+
+    def test_octet_stream_sample_rate_above_48000_rejected(self):
+        """sample_rate > 48000 should return 422."""
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?sample_rate=96000',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 422
+            assert 'sample_rate' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_octet_stream_channels_above_2_rejected(self):
+        """channels > 2 should return 422."""
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?channels=3',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 422
+            assert 'channels' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_accepts_boundary_sample_rate_8000(self, mock_transcribe):
+        """sample_rate=8000 (lower bound) should be accepted."""
+        mock_transcribe.return_value = ('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?sample_rate=8000',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 200
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_accepts_boundary_sample_rate_48000(self, mock_transcribe):
+        """sample_rate=48000 (upper bound) should be accepted."""
+        mock_transcribe.return_value = ('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?sample_rate=48000',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 200
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_accepts_channels_2(self, mock_transcribe):
+        """channels=2 (upper bound) should be accepted."""
+        mock_transcribe.return_value = ('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?channels=2',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 200
+        finally:
+            _cleanup_chat_client(saved)
