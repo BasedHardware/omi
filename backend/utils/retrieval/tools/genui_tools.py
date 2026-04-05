@@ -100,7 +100,7 @@ def create_action_buttons_ui(
     if not buttons or len(buttons) == 0:
         return "Error: at least one button is required."
     if len(buttons) > 5:
-        buttons = buttons[:5]
+        buttons = [b.strip() for b in buttons if b.strip()][:5]
 
     block = {
         "type": "action_buttons",
