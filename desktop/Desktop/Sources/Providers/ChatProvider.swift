@@ -628,6 +628,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         await acpBridge.stop()
         acpBridgeStarted = false
 
+        // Clear auth state from previous mode to prevent stale auth prompts
+        isClaudeAuthRequired = false
+        claudeAuthUrl = nil
+        claudeAuthMethods = []
+
         // Switch mode and recreate bridge with appropriate passApiKey
         bridgeMode = mode.rawValue
         acpBridge = ACPBridge(passApiKey: mode == .omiAI)
