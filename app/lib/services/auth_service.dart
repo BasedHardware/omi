@@ -23,9 +23,16 @@ class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
 
+  static const _devAuthBypassEnabled = bool.fromEnvironment('DEV_AUTH_BYPASS_ENABLED');
+
   AuthService._internal();
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  bool isSignedIn() {
+    if (_devAuthBypassEnabled) {
+      return FirebaseAuth.instance.currentUser != null;
+    }
+    return FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  }
 
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
@@ -213,8 +220,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
@@ -500,15 +506,13 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user
-              .updateProfile(displayName: fullName)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  Logger.debug('updateProfile timed out on web platform');
-                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                },
-              );
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -554,8 +558,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
