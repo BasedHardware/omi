@@ -8971,51 +8971,51 @@ class AppLocalizationsDa extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
-  String get cloudAudioFiles => 'Cloud Audio Files';
+  String get cloudAudioFiles => 'Cloud-lydfiler';
 
   @override
-  String get noCloudAudioFiles => 'No cloud audio files yet';
+  String get noCloudAudioFiles => 'Ingen cloud-lydfiler endnu';
 
   @override
   String get noCloudAudioDescription =>
-      'Audio files will appear here once you record conversations with cloud sync enabled.';
+      'Lydfiler vises her, når du optager samtaler med cloud-synkronisering aktiveret.';
 
   @override
-  String get deleteAllAudio => 'Delete All Audio';
+  String get deleteAllAudio => 'Slet al lyd';
 
   @override
-  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+  String get deleteAllAudioTitle => 'Slet al cloud-lyd?';
 
   @override
   String get deleteAllAudioMessage =>
-      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+      'Dette sletter permanent alle dine cloud-synkroniserede lydfiler. Denne handling kan ikke fortrydes.\n\nBemærk: Data Training Program kræver cloud-synkroniseret lyd. Hvis du sletter disse filer, fjernes dit bidrag til programmet.';
 
   @override
-  String get deletingAudio => 'Deleting audio files...';
+  String get deletingAudio => 'Sletter lydfiler...';
 
   @override
-  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+  String get audioDeletedSuccessfully => 'Alle cloud-lydfiler blev slettet';
 
   @override
-  String get failedToDeleteAudio => 'Failed to delete audio files';
+  String get failedToDeleteAudio => 'Kunne ikke slette lydfiler';
 
   @override
   String nAudioFiles(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'files',
-      one: 'file',
+      other: 'lydfiler',
+      one: 'lydfil',
     );
-    return '$count audio $_temp0';
+    return '$count $_temp0';
   }
 
   @override
-  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+  String get preparingCloudAudioTryAgain => 'Lyden klargøres. Prøv igen om et øjeblik.';
 
   @override
-  String get failedToPlayCloudAudio => 'Failed to play audio';
+  String get failedToPlayCloudAudio => 'Kunne ikke afspille lyd';
 
   @override
-  String get failedToShareCloudAudio => 'Failed to share audio';
+  String get failedToShareCloudAudio => 'Kunne ikke dele lyd';
 }

@@ -2926,4 +2926,18 @@
         }
     },
     "willSyncAutomatically": "se va sincroniza automat"
+,
+    "cloudAudioFiles": "Fișiere audio în cloud",
+    "deleteAllAudioTitle": "Ștergeți tot audio-ul din cloud?",
+    "audioDeletedSuccessfully": "Toate fișierele audio din cloud au fost șterse",
+    "preparingCloudAudioTryAgain": "Se pregătește audio-ul. Încercați din nou peste câteva momente.",
+    "failedToPlayCloudAudio": "Redarea audio a eșuat",
+    "failedToShareCloudAudio": "Partajarea audio a eșuat",
+    "noCloudAudioFiles": "Încă nu există fișiere audio în cloud",
+    "noCloudAudioDescription": "Fișierele audio vor apărea aici după ce înregistrați conversații cu sincronizarea în cloud activată.",
+    "deleteAllAudio": "Ștergeți tot audio-ul",
+    "deleteAllAudioMessage": "Aceasta va șterge permanent toate fișierele audio sincronizate în cloud. Această acțiune nu poate fi anulată.\n\nNotă: Programul de Antrenare a Datelor necesită audio sincronizat în cloud. Ștergerea acestor fișiere va elimina contribuția dumneavoastră la program.",
+    "deletingAudio": "Se șterg fișierele audio...",
+    "failedToDeleteAudio": "Ștergerea fișierelor audio a eșuat",
+    "nAudioFiles": "{count} {count, plural, =1{fișier audio} other{fișiere audio}}"
 }

@@ -2931,4 +2931,18 @@
         }
     },
     "willSyncAutomatically": "synchronizuje sa automaticky"
+,
+    "cloudAudioFiles": "Cloudové zvukové súbory",
+    "deleteAllAudioTitle": "Odstrániť všetok cloudový zvuk?",
+    "audioDeletedSuccessfully": "Všetky cloudové zvukové súbory boli odstránené",
+    "preparingCloudAudioTryAgain": "Zvuk sa pripravuje. Skúste to prosím znova o chvíľu.",
+    "failedToPlayCloudAudio": "Nepodarilo sa prehrať zvuk",
+    "failedToShareCloudAudio": "Nepodarilo sa zdieľať zvuk",
+    "noCloudAudioFiles": "Zatiaľ žiadne cloudové zvukové súbory",
+    "noCloudAudioDescription": "Zvukové súbory sa tu zobrazia, keď nahráte konverzácie so zapnutou cloudovou synchronizáciou.",
+    "deleteAllAudio": "Odstrániť všetok zvuk",
+    "deleteAllAudioMessage": "Týmto natrvalo odstránite všetky zvukové súbory synchronizované do cloudu. Túto akciu nie je možné vrátiť späť.\n\nPoznámka: Program tréningu dát vyžaduje zvuk synchronizovaný do cloudu. Odstránením týchto súborov odstránite svoj príspevok do programu.",
+    "deletingAudio": "Odstraňujú sa zvukové súbory...",
+    "failedToDeleteAudio": "Nepodarilo sa odstrániť zvukové súbory",
+    "nAudioFiles": "{count} {count, plural, =1{zvukový súbor} other{zvukové súbory}}"
 }

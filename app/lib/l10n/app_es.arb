@@ -2927,4 +2927,18 @@
         }
     },
     "willSyncAutomatically": "se sincronizará automáticamente"
+,
+    "cloudAudioFiles": "Archivos de audio en la nube",
+    "deleteAllAudioTitle": "¿Eliminar todo el audio en la nube?",
+    "audioDeletedSuccessfully": "Se eliminaron todos los archivos de audio en la nube",
+    "preparingCloudAudioTryAgain": "Preparando audio. Vuelve a intentarlo en un momento.",
+    "failedToPlayCloudAudio": "No se pudo reproducir el audio",
+    "failedToShareCloudAudio": "No se pudo compartir el audio",
+    "noCloudAudioFiles": "Aún no hay archivos de audio en la nube",
+    "noCloudAudioDescription": "Los archivos de audio aparecerán aquí una vez que grabes conversaciones con la sincronización en la nube activada.",
+    "deleteAllAudio": "Eliminar todo el audio",
+    "deleteAllAudioMessage": "Esto eliminará permanentemente todos tus archivos de audio sincronizados en la nube. Esta acción no se puede deshacer.\n\nNota: El Programa de Entrenamiento de Datos requiere audio sincronizado en la nube. Eliminar estos archivos quitará tu contribución al programa.",
+    "deletingAudio": "Eliminando archivos de audio...",
+    "failedToDeleteAudio": "No se pudieron eliminar los archivos de audio",
+    "nAudioFiles": "{count} {count, plural, =1{archivo de audio} other{archivos de audio}}"
 }

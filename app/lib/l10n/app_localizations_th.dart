@@ -8940,51 +8940,50 @@ class AppLocalizationsTh extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
-  String get cloudAudioFiles => 'Cloud Audio Files';
+  String get cloudAudioFiles => 'ไฟล์เสียงบนคลาวด์';
 
   @override
-  String get noCloudAudioFiles => 'No cloud audio files yet';
+  String get noCloudAudioFiles => 'ยังไม่มีไฟล์เสียงบนคลาวด์';
 
   @override
-  String get noCloudAudioDescription =>
-      'Audio files will appear here once you record conversations with cloud sync enabled.';
+  String get noCloudAudioDescription => 'ไฟล์เสียงจะปรากฏที่นี่เมื่อคุณบันทึกการสนทนาโดยเปิดใช้การซิงก์บนคลาวด์';
 
   @override
-  String get deleteAllAudio => 'Delete All Audio';
+  String get deleteAllAudio => 'ลบเสียงทั้งหมด';
 
   @override
-  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+  String get deleteAllAudioTitle => 'ลบเสียงบนคลาวด์ทั้งหมดหรือไม่?';
 
   @override
   String get deleteAllAudioMessage =>
-      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+      'การดำเนินการนี้จะลบไฟล์เสียงที่ซิงก์กับคลาวด์ทั้งหมดอย่างถาวร การกระทำนี้ไม่สามารถย้อนกลับได้\n\nหมายเหตุ: โปรแกรมฝึกข้อมูลต้องใช้เสียงที่ซิงก์กับคลาวด์ การลบไฟล์เหล่านี้จะลบการมีส่วนร่วมของคุณออกจากโปรแกรม';
 
   @override
-  String get deletingAudio => 'Deleting audio files...';
+  String get deletingAudio => 'กำลังลบไฟล์เสียง...';
 
   @override
-  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+  String get audioDeletedSuccessfully => 'ลบไฟล์เสียงบนคลาวด์ทั้งหมดแล้ว';
 
   @override
-  String get failedToDeleteAudio => 'Failed to delete audio files';
+  String get failedToDeleteAudio => 'ลบไฟล์เสียงไม่สำเร็จ';
 
   @override
   String nAudioFiles(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'files',
-      one: 'file',
+      other: 'ไฟล์เสียง',
+      one: 'ไฟล์เสียง',
     );
-    return '$count audio $_temp0';
+    return '$count $_temp0';
   }
 
   @override
-  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+  String get preparingCloudAudioTryAgain => 'กำลังเตรียมเสียง โปรดลองอีกครั้งในอีกสักครู่';
 
   @override
-  String get failedToPlayCloudAudio => 'Failed to play audio';
+  String get failedToPlayCloudAudio => 'เล่นเสียงไม่สำเร็จ';
 
   @override
-  String get failedToShareCloudAudio => 'Failed to share audio';
+  String get failedToShareCloudAudio => 'แชร์เสียงไม่สำเร็จ';
 }

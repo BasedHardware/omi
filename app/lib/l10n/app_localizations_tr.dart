@@ -8999,51 +8999,51 @@ class AppLocalizationsTr extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
-  String get cloudAudioFiles => 'Cloud Audio Files';
+  String get cloudAudioFiles => 'Bulut ses dosyaları';
 
   @override
-  String get noCloudAudioFiles => 'No cloud audio files yet';
+  String get noCloudAudioFiles => 'Henüz bulut ses dosyası yok';
 
   @override
   String get noCloudAudioDescription =>
-      'Audio files will appear here once you record conversations with cloud sync enabled.';
+      'Bulut senkronizasyonu açıkken konuşmaları kaydettiğinizde ses dosyaları burada görünecek.';
 
   @override
-  String get deleteAllAudio => 'Delete All Audio';
+  String get deleteAllAudio => 'Tüm Sesleri Sil';
 
   @override
-  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+  String get deleteAllAudioTitle => 'Tüm bulut sesleri silinsin mi?';
 
   @override
   String get deleteAllAudioMessage =>
-      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+      'Bu işlem, bulutla senkronize edilmiş tüm ses dosyalarınızı kalıcı olarak silecektir. Bu işlem geri alınamaz.\n\nNot: Veri Eğitim Programı bulutla senkronize edilmiş ses gerektirir. Bu dosyaları silmek programa yaptığınız katkıyı kaldıracaktır.';
 
   @override
-  String get deletingAudio => 'Deleting audio files...';
+  String get deletingAudio => 'Ses dosyaları siliniyor...';
 
   @override
-  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+  String get audioDeletedSuccessfully => 'Tüm bulut ses dosyaları silindi';
 
   @override
-  String get failedToDeleteAudio => 'Failed to delete audio files';
+  String get failedToDeleteAudio => 'Ses dosyaları silinemedi';
 
   @override
   String nAudioFiles(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'files',
-      one: 'file',
+      other: 'ses dosyası',
+      one: 'ses dosyası',
     );
-    return '$count audio $_temp0';
+    return '$count $_temp0';
   }
 
   @override
-  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+  String get preparingCloudAudioTryAgain => 'Ses hazırlanıyor. Lütfen birazdan tekrar deneyin.';
 
   @override
-  String get failedToPlayCloudAudio => 'Failed to play audio';
+  String get failedToPlayCloudAudio => 'Ses oynatılamadı';
 
   @override
-  String get failedToShareCloudAudio => 'Failed to share audio';
+  String get failedToShareCloudAudio => 'Ses paylaşılamadı';
 }

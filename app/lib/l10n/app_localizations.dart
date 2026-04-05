@@ -15945,7 +15945,7 @@ abstract class AppLocalizations {
   /// **'Delete All Recordings'**
   String get deleteAllFiles;
 
-  /// Button text for delete all confirmation
+  /// Menu option to delete all recordings
   ///
   /// In en, this message translates to:
   /// **'Delete All'**

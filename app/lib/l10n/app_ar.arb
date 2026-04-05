@@ -2893,4 +2893,18 @@
         }
     },
     "willSyncAutomatically": "ستتم المزامنة تلقائيًا"
+,
+    "cloudAudioFiles": "ملفات الصوت السحابية",
+    "deleteAllAudioTitle": "حذف كل الصوت السحابي؟",
+    "audioDeletedSuccessfully": "تم حذف جميع ملفات الصوت السحابية",
+    "preparingCloudAudioTryAgain": "يتم تجهيز الصوت. يرجى المحاولة مرة أخرى بعد قليل.",
+    "failedToPlayCloudAudio": "تعذر تشغيل الصوت",
+    "failedToShareCloudAudio": "تعذر مشاركة الصوت",
+    "noCloudAudioFiles": "لا توجد ملفات صوت سحابية بعد",
+    "noCloudAudioDescription": "ستظهر ملفات الصوت هنا بمجرد تسجيل المحادثات مع تفعيل المزامنة السحابية.",
+    "deleteAllAudio": "حذف كل الصوت",
+    "deleteAllAudioMessage": "سيؤدي هذا إلى حذف جميع ملفات الصوت المتزامنة مع السحابة نهائيًا. لا يمكن التراجع عن هذا الإجراء.\n\nملاحظة: يتطلب برنامج تدريب البيانات الصوت المتزامن مع السحابة. سيؤدي حذف هذه الملفات إلى إزالة مساهمتك في البرنامج.",
+    "deletingAudio": "جارٍ حذف ملفات الصوت...",
+    "failedToDeleteAudio": "تعذر حذف ملفات الصوت",
+    "nAudioFiles": "{count} {count, plural, =1{ملف صوتي} other{ملفات صوتية}}"
 }

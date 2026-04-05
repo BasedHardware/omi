@@ -2926,4 +2926,18 @@
         }
     },
     "willSyncAutomatically": "sünkroniseeritakse automaatselt"
+,
+    "cloudAudioFiles": "Pilve helifailid",
+    "deleteAllAudioTitle": "Kas kustutada kogu pilveheli?",
+    "audioDeletedSuccessfully": "Kõik pilve helifailid on kustutatud",
+    "preparingCloudAudioTryAgain": "Heli valmistatakse ette. Proovi hetke pärast uuesti.",
+    "failedToPlayCloudAudio": "Heli esitamine ebaõnnestus",
+    "failedToShareCloudAudio": "Heli jagamine ebaõnnestus",
+    "noCloudAudioFiles": "Pilve helifaile pole veel",
+    "noCloudAudioDescription": "Helifailid ilmuvad siia siis, kui salvestate vestlusi pilvesünkroonimisega.",
+    "deleteAllAudio": "Kustuta kogu heli",
+    "deleteAllAudioMessage": "See kustutab jäädavalt kõik teie pilvega sünkroonitud helifailid. Seda toimingut ei saa tagasi võtta.\n\nMärkus: Andmetreeningu programm nõuab pilvega sünkroonitud heli. Nende failide kustutamine eemaldab teie panuse programmi.",
+    "deletingAudio": "Helifailide kustutamine...",
+    "failedToDeleteAudio": "Helifaile ei õnnestunud kustutada",
+    "nAudioFiles": "{count} {count, plural, =1{helifail} other{helifaili}}"
 }

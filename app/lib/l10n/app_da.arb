@@ -2935,4 +2935,18 @@
         }
     },
     "willSyncAutomatically": "synkroniseres automatisk"
+,
+    "cloudAudioFiles": "Cloud-lydfiler",
+    "deleteAllAudioTitle": "Slet al cloud-lyd?",
+    "audioDeletedSuccessfully": "Alle cloud-lydfiler blev slettet",
+    "preparingCloudAudioTryAgain": "Lyden klargøres. Prøv igen om et øjeblik.",
+    "failedToPlayCloudAudio": "Kunne ikke afspille lyd",
+    "failedToShareCloudAudio": "Kunne ikke dele lyd",
+    "noCloudAudioFiles": "Ingen cloud-lydfiler endnu",
+    "noCloudAudioDescription": "Lydfiler vises her, når du optager samtaler med cloud-synkronisering aktiveret.",
+    "deleteAllAudio": "Slet al lyd",
+    "deleteAllAudioMessage": "Dette sletter permanent alle dine cloud-synkroniserede lydfiler. Denne handling kan ikke fortrydes.\n\nBemærk: Data Training Program kræver cloud-synkroniseret lyd. Hvis du sletter disse filer, fjernes dit bidrag til programmet.",
+    "deletingAudio": "Sletter lydfiler...",
+    "failedToDeleteAudio": "Kunne ikke slette lydfiler",
+    "nAudioFiles": "{count} {count, plural, =1{lydfil} other{lydfiler}}"
 }

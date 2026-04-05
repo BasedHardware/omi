@@ -2894,4 +2894,18 @@
         }
     },
     "willSyncAutomatically": "wird automatisch synchronisiert"
+,
+    "cloudAudioFiles": "Cloud-Audiodateien",
+    "deleteAllAudioTitle": "Gesamtes Cloud-Audio löschen?",
+    "audioDeletedSuccessfully": "Alle Cloud-Audiodateien wurden gelöscht",
+    "preparingCloudAudioTryAgain": "Audio wird vorbereitet. Bitte versuche es gleich noch einmal.",
+    "failedToPlayCloudAudio": "Audio konnte nicht abgespielt werden",
+    "failedToShareCloudAudio": "Audio konnte nicht geteilt werden",
+    "noCloudAudioFiles": "Noch keine Cloud-Audiodateien",
+    "noCloudAudioDescription": "Audiodateien erscheinen hier, sobald du Gespräche mit aktivierter Cloud-Synchronisierung aufnimmst.",
+    "deleteAllAudio": "Gesamtes Audio löschen",
+    "deleteAllAudioMessage": "Dadurch werden alle deine mit der Cloud synchronisierten Audiodateien dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.\n\nHinweis: Das Daten-Trainingsprogramm erfordert mit der Cloud synchronisiertes Audio. Wenn du diese Dateien löschst, wird dein Beitrag zum Programm entfernt.",
+    "deletingAudio": "Audiodateien werden gelöscht...",
+    "failedToDeleteAudio": "Audiodateien konnten nicht gelöscht werden",
+    "nAudioFiles": "{count} {count, plural, =1{Audiodatei} other{Audiodateien}}"
 }

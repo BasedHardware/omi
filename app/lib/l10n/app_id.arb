@@ -2968,4 +2968,18 @@
         }
     },
     "willSyncAutomatically": "akan disinkronkan secara otomatis"
+,
+    "cloudAudioFiles": "File audio cloud",
+    "deleteAllAudioTitle": "Hapus semua audio cloud?",
+    "audioDeletedSuccessfully": "Semua file audio cloud telah dihapus",
+    "preparingCloudAudioTryAgain": "Audio sedang disiapkan. Coba lagi sebentar lagi.",
+    "failedToPlayCloudAudio": "Gagal memutar audio",
+    "failedToShareCloudAudio": "Gagal membagikan audio",
+    "noCloudAudioFiles": "Belum ada file audio cloud",
+    "noCloudAudioDescription": "File audio akan muncul di sini setelah Anda merekam percakapan dengan sinkronisasi cloud diaktifkan.",
+    "deleteAllAudio": "Hapus Semua Audio",
+    "deleteAllAudioMessage": "Ini akan menghapus semua file audio yang tersinkron ke cloud secara permanen. Tindakan ini tidak dapat dibatalkan.\n\nCatatan: Program Pelatihan Data memerlukan audio yang tersinkron ke cloud. Menghapus file-file ini akan menghapus kontribusi Anda ke program tersebut.",
+    "deletingAudio": "Menghapus file audio...",
+    "failedToDeleteAudio": "Gagal menghapus file audio",
+    "nAudioFiles": "{count} {count, plural, =1{file audio} other{file audio}}"
 }

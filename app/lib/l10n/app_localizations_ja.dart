@@ -8836,51 +8836,50 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
-  String get cloudAudioFiles => 'Cloud Audio Files';
+  String get cloudAudioFiles => 'クラウド音声ファイル';
 
   @override
-  String get noCloudAudioFiles => 'No cloud audio files yet';
+  String get noCloudAudioFiles => 'クラウド音声ファイルはまだありません';
 
   @override
-  String get noCloudAudioDescription =>
-      'Audio files will appear here once you record conversations with cloud sync enabled.';
+  String get noCloudAudioDescription => 'クラウド同期を有効にして会話を録音すると、音声ファイルがここに表示されます。';
 
   @override
-  String get deleteAllAudio => 'Delete All Audio';
+  String get deleteAllAudio => 'すべての音声を削除';
 
   @override
-  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+  String get deleteAllAudioTitle => 'すべてのクラウド音声を削除しますか？';
 
   @override
   String get deleteAllAudioMessage =>
-      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+      'これにより、クラウド同期されたすべての音声ファイルが完全に削除されます。この操作は元に戻せません。\n\n注: データトレーニングプログラムにはクラウド同期された音声が必要です。これらのファイルを削除すると、プログラムへのあなたの貢献も削除されます。';
 
   @override
-  String get deletingAudio => 'Deleting audio files...';
+  String get deletingAudio => '音声ファイルを削除しています...';
 
   @override
-  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+  String get audioDeletedSuccessfully => 'すべてのクラウド音声ファイルを削除しました';
 
   @override
-  String get failedToDeleteAudio => 'Failed to delete audio files';
+  String get failedToDeleteAudio => '音声ファイルの削除に失敗しました';
 
   @override
   String nAudioFiles(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'files',
-      one: 'file',
+      other: '件の音声ファイル',
+      one: '件の音声ファイル',
     );
-    return '$count audio $_temp0';
+    return '$count $_temp0';
   }
 
   @override
-  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+  String get preparingCloudAudioTryAgain => '音声を準備しています。しばらくしてからもう一度お試しください。';
 
   @override
-  String get failedToPlayCloudAudio => 'Failed to play audio';
+  String get failedToPlayCloudAudio => '音声の再生に失敗しました';
 
   @override
-  String get failedToShareCloudAudio => 'Failed to share audio';
+  String get failedToShareCloudAudio => '音声の共有に失敗しました';
 }

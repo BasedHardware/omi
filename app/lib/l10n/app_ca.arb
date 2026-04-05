@@ -2895,4 +2895,18 @@
         }
     },
     "willSyncAutomatically": "es sincronitzarà automàticament"
+,
+    "cloudAudioFiles": "Fitxers d'àudio al núvol",
+    "deleteAllAudioTitle": "Suprimeix tot l'àudio al núvol?",
+    "audioDeletedSuccessfully": "S'han suprimit tots els fitxers d'àudio al núvol",
+    "preparingCloudAudioTryAgain": "S'està preparant l'àudio. Torna-ho a provar d'aquí a un moment.",
+    "failedToPlayCloudAudio": "No s'ha pogut reproduir l'àudio",
+    "failedToShareCloudAudio": "No s'ha pogut compartir l'àudio",
+    "noCloudAudioFiles": "Encara no hi ha fitxers d'àudio al núvol",
+    "noCloudAudioDescription": "Els fitxers d'àudio apareixeran aquí quan enregistris converses amb la sincronització al núvol activada.",
+    "deleteAllAudio": "Suprimeix tot l'àudio",
+    "deleteAllAudioMessage": "Això suprimirà permanentment tots els teus fitxers d'àudio sincronitzats amb el núvol. Aquesta acció no es pot desfer.\n\nNota: El Programa d'Entrenament de Dades requereix àudio sincronitzat amb el núvol. Si suprimeixes aquests fitxers, eliminaràs la teva contribució al programa.",
+    "deletingAudio": "S'estan suprimint els fitxers d'àudio...",
+    "failedToDeleteAudio": "No s'han pogut suprimir els fitxers d'àudio",
+    "nAudioFiles": "{count} {count, plural, =1{fitxer d'àudio} other{fitxers d'àudio}}"
 }

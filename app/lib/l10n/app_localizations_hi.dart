@@ -8967,51 +8967,51 @@ class AppLocalizationsHi extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
-  String get cloudAudioFiles => 'Cloud Audio Files';
+  String get cloudAudioFiles => 'क्लाउड ऑडियो फ़ाइलें';
 
   @override
-  String get noCloudAudioFiles => 'No cloud audio files yet';
+  String get noCloudAudioFiles => 'अभी तक कोई क्लाउड ऑडियो फ़ाइल नहीं है';
 
   @override
   String get noCloudAudioDescription =>
-      'Audio files will appear here once you record conversations with cloud sync enabled.';
+      'क्लाउड सिंक सक्षम होने पर जैसे ही आप बातचीत रिकॉर्ड करेंगे, ऑडियो फ़ाइलें यहाँ दिखाई देंगी।';
 
   @override
-  String get deleteAllAudio => 'Delete All Audio';
+  String get deleteAllAudio => 'सभी ऑडियो हटाएँ';
 
   @override
-  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+  String get deleteAllAudioTitle => 'सभी क्लाउड ऑडियो हटाएँ?';
 
   @override
   String get deleteAllAudioMessage =>
-      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+      'यह आपकी सभी क्लाउड-सिंक की गई ऑडियो फ़ाइलों को स्थायी रूप से हटा देगा। इस कार्रवाई को वापस नहीं लिया जा सकता।\n\nनोट: डेटा प्रशिक्षण कार्यक्रम के लिए क्लाउड-सिंक किया गया ऑडियो आवश्यक है। इन फ़ाइलों को हटाने से कार्यक्रम में आपका योगदान हट जाएगा।';
 
   @override
-  String get deletingAudio => 'Deleting audio files...';
+  String get deletingAudio => 'ऑडियो फ़ाइलें हटाई जा रही हैं...';
 
   @override
-  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+  String get audioDeletedSuccessfully => 'सभी क्लाउड ऑडियो फ़ाइलें हटा दी गईं';
 
   @override
-  String get failedToDeleteAudio => 'Failed to delete audio files';
+  String get failedToDeleteAudio => 'ऑडियो फ़ाइलें हटाने में विफल';
 
   @override
   String nAudioFiles(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'files',
-      one: 'file',
+      other: 'ऑडियो फ़ाइलें',
+      one: 'ऑडियो फ़ाइल',
     );
-    return '$count audio $_temp0';
+    return '$count $_temp0';
   }
 
   @override
-  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+  String get preparingCloudAudioTryAgain => 'ऑडियो तैयार किया जा रहा है। कृपया थोड़ी देर में फिर प्रयास करें।';
 
   @override
-  String get failedToPlayCloudAudio => 'Failed to play audio';
+  String get failedToPlayCloudAudio => 'ऑडियो चलाने में विफल';
 
   @override
-  String get failedToShareCloudAudio => 'Failed to share audio';
+  String get failedToShareCloudAudio => 'ऑडियो साझा करने में विफल';
 }

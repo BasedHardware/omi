@@ -2961,4 +2961,18 @@
         }
     },
     "willSyncAutomatically": "sera synchronisé automatiquement"
+,
+    "cloudAudioFiles": "Fichiers audio dans le cloud",
+    "deleteAllAudioTitle": "Supprimer tout l'audio du cloud ?",
+    "audioDeletedSuccessfully": "Tous les fichiers audio du cloud ont été supprimés",
+    "preparingCloudAudioTryAgain": "Préparation de l'audio. Veuillez réessayer dans un instant.",
+    "failedToPlayCloudAudio": "Impossible de lire l'audio",
+    "failedToShareCloudAudio": "Impossible de partager l'audio",
+    "noCloudAudioFiles": "Aucun fichier audio dans le cloud pour le moment",
+    "noCloudAudioDescription": "Les fichiers audio apparaîtront ici une fois que vous aurez enregistré des conversations avec la synchronisation cloud activée.",
+    "deleteAllAudio": "Supprimer tout l'audio",
+    "deleteAllAudioMessage": "Cela supprimera définitivement tous vos fichiers audio synchronisés dans le cloud. Cette action est irréversible.\n\nRemarque : le programme d'entraînement des données nécessite un audio synchronisé dans le cloud. La suppression de ces fichiers retirera votre contribution au programme.",
+    "deletingAudio": "Suppression des fichiers audio...",
+    "failedToDeleteAudio": "Impossible de supprimer les fichiers audio",
+    "nAudioFiles": "{count} {count, plural, =1{fichier audio} other{fichiers audio}}"
 }
