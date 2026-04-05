@@ -11,21 +11,28 @@ class SpeakerName(BaseModel):
 
     @validator('name')
     def name_must_be_valid(cls, v):
-        # Basic noise filtering
+        # Noise word filtering (case-insensitive)
+        # Added common hallucinations and generic terms as requested by security audit
+        v_lower = v.lower().strip()
         noise_words = {
             'am', 'is', 'are', 'was', 'were', 'my', 'name', 'me', 'i', 'the', 'a', 'an',
-            'hello', 'hi', 'hey', 'okay', 'yes', 'no', 'thanks', 'thank', 'you',
-            'friend', 'someone', 'everyone', 'nobody', 'anyone', 'app', 'ai', 'bot'
+            'hello', 'hi', 'hey', 'okay', 'ok', 'yes', 'no', 'thanks', 'thank', 'you',
+            'friend', 'someone', 'everyone', 'nobody', 'anyone', 'app', 'ai', 'bot',
+            'the speaker', 'this speaker', 'speaker', 'user', 'none', 'unknown',
+            'somebody', 'person', 'male', 'female', 'voice'
         }
-        if v.lower() in noise_words:
+        if v_lower in noise_words:
             raise ValueError('Name is a common noise word or generic noun')
         
         # English: Must be alphabetic, start with uppercase, at least 2 chars
-        if re.match(r'^[a-zA-Z]+$', v):
-            if not re.match(r'^[A-Z][a-z]+$', v):
-                raise ValueError('English name must start with uppercase and be lowercase thereafter')
-            if len(v) < 2:
+        if re.match(r'^[a-zA-Z\s]+$', v):
+            # Ensure it's not just a single letter like 'A' (min_length covers this, but just in case)
+            if len(v.strip()) < 2:
                 raise ValueError('Name too short')
+            # For multi-word names, each should be capitalized
+            parts = v.strip().split()
+            if not all(p[0].isupper() for p in parts if p):
+                raise ValueError('Each part of English name must start with uppercase')
         # Chinese: 2-4 characters
         elif re.match(r'^[\u4e00-\u9fa5]+$', v):
             if len(v) < 2 or len(v) > 4:
@@ -35,7 +42,7 @@ class SpeakerName(BaseModel):
             if not re.match(r'^[A-Z\u0370-\u03ff\u1f00-\u1fff\u0400-\u04ff\u0900-\u097F\uac00-\ud7a3\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', v):
                 raise ValueError('Name must start with an uppercase letter or a valid language-specific character')
             
-        return v
+        return v.strip()
 
 # All language patterns moved here to centralize Stage 1 detection
 SPEAKER_PATTERNS = {
@@ -44,7 +51,7 @@ SPEAKER_PATTERNS = {
     'cs': [r"\b(?:Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b"],
     'da': [r"\b(?:Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+([A-Z][a-zA-Z]*)\b"],
     'de': [r"\b(?:ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+([A-Z][a-zA-Z]*)\b"],
-    'el': [r"\b(?:Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b"],
+    'el': [r"\b(?:Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|то όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b"],
     'en': [
         r"\b(?:[Ii]\s+am|[Ii]'m|[Mm]y\s+name\s+is)\s+([A-Z][a-z]+)\b",
         r"\b([A-Z][a-z]+)\s+is\s+my\s+name\b",
@@ -74,7 +81,7 @@ SPEAKER_PATTERNS = {
     'nl': [r"\b(?:Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+([A-Z][a-zA-Z]*)\b"],
     'no': [r"\b(?:Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+([A-Z][a-zA-Z]*)\b"],
     'pl': [r"\b(?:Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+([A-Z][a-zA-Z]*)\b"],
-    'pt': [r"\b(?:Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+([A-Z][a-zA-Z]*)\b"],
+    'pt': [r"\b(?:Eu sou|eu sou|Chamo-me|chamo-me|O meu nome е́|o meu nome е́)\s+([A-Z][a-zA-Z]*)\b"],
     'ro': [r"\b(?:Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+([A-Z][a-zA-Z]*)\b"],
     'ru': [r"\b(?:Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-Я][а-я]*)\b"],
     'sk': [r"\b(?:Som|som|Volám sa|volám sa)\s+([A-Z][a-zA-Z]*)\b"],
@@ -110,8 +117,8 @@ def _detect_from_regex(text: str, language: Optional[str] = None) -> Optional[st
                 try:
                     validated = SpeakerName(name=name)
                     # For English, ensure first char is upper, others lower
-                    if re.match(r'^[a-zA-Z]+$', validated.name):
-                        return validated.name.capitalize()
+                    if re.match(r'^[a-zA-Z\s]+$', validated.name):
+                        return " ".join([p.capitalize() for p in validated.name.split()])
                     return validated.name
                 except ValueError:
                     continue
@@ -121,10 +128,15 @@ async def _detect_from_ner(text: str, language: str = 'en') -> Optional[str]:
     """
     Stage 2: Named Entity Recognition (Lightweight LLM)
     """
-    # Only run LLM if there's a potential introduction signal to save tokens/costs
-    # This is a key requirement to prevent "am" from triggering the engine constantly.
-    signal_keywords = ['name', 'call me', 'here', '我是', '我叫', '名字', 'introducing']
-    if not any(keyword in text.lower() for keyword in signal_keywords):
+    # Only run LLM if there's a potential introduction signal to save tokens/costs.
+    # We strictly avoid common words like 'am' to prevent excessive triggering.
+    # Gate logic: must contain one of these specific intro signals.
+    signal_keywords = [
+        'my name is', "i'm", 'call me', 'here', '我是', '我叫', '名字', 
+        'introducing', 'this is', 'speaking', 'self-introduction'
+    ]
+    text_lower = text.lower()
+    if not any(keyword in text_lower for keyword in signal_keywords):
         return None
 
     prompt = f"Extract the name of the speaker who is introducing themselves in this transcript: \"{text}\". If no one is introducing themselves, respond with 'None'. Only provide the name."
@@ -157,6 +169,7 @@ async def detect_speaker_hybrid(text: str, language: str = 'en') -> Optional[str
         return name
 
     # 2. NER / LLM Fallback (Mostly for EN/ZH currently)
+    # We only enable LLM for high-signal languages to optimize ROI
     if language in ['en', 'zh', 'multi']:
         name = await _detect_from_ner(text, language)
         if name:

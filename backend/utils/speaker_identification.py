@@ -5,6 +5,7 @@ import wave
 from typing import List, Optional, Dict, Tuple
 import logging
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 import av
 import numpy as np
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 # Constants for speaker sample extraction
 SPEAKER_SAMPLE_MIN_SEGMENT_DURATION = 10.0
 SPEAKER_SAMPLE_WINDOW_HALF = SPEAKER_SAMPLE_MIN_SEGMENT_DURATION / 2
+
+# Shared executor for sync-to-async bridging to avoid overhead
+_executor = ThreadPoolExecutor(max_workers=4)
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
     wav_buffer = io.BytesIO()
@@ -68,20 +72,21 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     if not trimmed_samples: return b''
     return np.concatenate(trimmed_samples).astype(np.int16).tobytes()
 
-async def detect_speaker_from_text_async(text: str) -> Optional[str]:
+async def detect_speaker_from_text_async(text: str, language: str = 'en') -> Optional[str]:
     """
     Detect speaker name from text using the Hybrid Identification Engine (Async).
     Now fully delegates to the hybrid engine in speaker_identification_hybrid.
     """
-    return await detect_speaker_hybrid(text)
+    return await detect_speaker_hybrid(text, language)
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
+def detect_speaker_from_text(text: str, language: str = 'en') -> Optional[str]:
     """
     Synchronous wrapper for detect_speaker_from_text_async.
     Used for legacy compatibility in threads and tests.
+    Optimized to handle event loop bridging correctly.
     """
-    # Try Stage 1 (Regex) sync first for performance and to avoid event loop issues
-    name = _detect_from_regex(text)
+    # Try Stage 1 (Regex) sync first for performance and to avoid event loop overhead
+    name = _detect_from_regex(text, language)
     if name:
         return name
     
@@ -93,21 +98,18 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
             loop = None
             
         if loop and loop.is_running():
-            # Already in a loop - can't use asyncio.run. 
-            # In an async context, we should be using the async version of the function.
-            # However, since this is the sync wrapper, we attempt a bridge.
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor() as executor:
-                def _run_in_new_loop(coro):
-                    new_loop = asyncio.new_event_loop()
-                    try:
-                        return new_loop.run_until_complete(coro)
-                    finally:
-                        new_loop.close()
-                return executor.submit(_run_in_new_loop, detect_speaker_hybrid(text)).result()
+            # Already in a loop - bridging to a new loop in a background thread
+            # to avoid blocking the main event loop while waiting for LLM
+            def _run_in_new_loop():
+                new_loop = asyncio.new_event_loop()
+                try:
+                    return new_loop.run_until_complete(detect_speaker_hybrid(text, language))
+                finally:
+                    new_loop.close()
+            return _executor.submit(_run_in_new_loop).result()
         
-        # In a plain thread or startup script without a loop
-        return asyncio.run(detect_speaker_hybrid(text))
+        # In a plain thread (e.g. background script) without a running loop
+        return asyncio.run(detect_speaker_hybrid(text, language))
     except Exception as e:
         logger.debug(f"Hybrid speaker ID fallback failed: {e}")
         return None
