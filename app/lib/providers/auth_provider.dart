@@ -18,6 +18,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class AuthenticationProvider extends BaseProvider {
+  static const _devAuthBypassEnabled = bool.fromEnvironment('DEV_AUTH_BYPASS_ENABLED');
+  static const _devAuthBypassUid = String.fromEnvironment('DEV_AUTH_BYPASS_UID');
+
   FirebaseAuth get _auth => FirebaseAuth.instance;
 
   User? user;
@@ -28,6 +31,16 @@ class AuthenticationProvider extends BaseProvider {
 
   AuthenticationProvider() {
     _initializeAuthListeners();
+    if (_devAuthBypassEnabled) {
+      _initDevAuthBypass();
+    }
+  }
+
+  Future<void> _initDevAuthBypass() async {
+    if (_auth.currentUser == null) {
+      Logger.debug('DEV_AUTH_BYPASS: signing in anonymously as $_devAuthBypassUid');
+      await _auth.signInAnonymously();
+    }
   }
 
   void _initializeAuthListeners() {
@@ -74,6 +87,9 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
+    if (_devAuthBypassEnabled) {
+      return _auth.currentUser != null;
+    }
     return _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
   }
 
