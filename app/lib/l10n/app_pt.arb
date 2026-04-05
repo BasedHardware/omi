@@ -2961,5 +2961,9 @@
             }
         }
     },
-    "willSyncAutomatically": "será sincronizado automaticamente"
+    "willSyncAutomatically": "será sincronizado automaticamente",
+    "transcriptionConnecting": "Conectando transcrição...",
+    "transcriptionReconnecting": "Reconectando transcrição...",
+    "transcriptionUnavailable": "Transcrição indisponível",
+    "audioOutput": "Saída de áudio"
 }

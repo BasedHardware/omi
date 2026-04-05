@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα",
+    "transcriptionConnecting": "Σύνδεση μεταγραφής...",
+    "transcriptionReconnecting": "Επανασύνδεση μεταγραφής...",
+    "transcriptionUnavailable": "Η μεταγραφή δεν είναι διαθέσιμη",
+    "audioOutput": "Έξοδος ήχου"
 }

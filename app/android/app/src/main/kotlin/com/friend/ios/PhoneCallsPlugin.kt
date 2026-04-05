@@ -117,6 +117,25 @@ class PhoneCallsPlugin private constructor(
             "toggleMute" -> handleToggleMute(call, result)
             "toggleSpeaker" -> handleToggleSpeaker(call, result)
             "sendDtmf" -> handleSendDtmf(call, result)
+            "getAudioRoutes" -> {
+                // Basic routes for Android — Speaker and Phone
+                val routes = listOf(
+                    mapOf("id" to "phone", "name" to "Phone", "type" to "iPhone"),
+                    mapOf("id" to "speaker", "name" to "Speaker", "type" to "speaker")
+                )
+                result.success(routes)
+            }
+            "selectAudioRoute" -> {
+                val routeId = call.argument<String>("routeId")
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                if (routeId == "speaker") {
+                    audioManager.isSpeakerphoneOn = true
+                } else {
+                    audioManager.isSpeakerphoneOn = false
+                }
+                result.success(true)
+            }
+            "isCallKitAvailable" -> result.success(false) // CallKit is iOS-only
             else -> result.notImplemented()
         }
     }

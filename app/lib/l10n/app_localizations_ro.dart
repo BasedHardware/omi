@@ -9026,4 +9026,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Se conectează transcrierea...';
+
+  @override
+  String get transcriptionReconnecting => 'Se reconectează transcrierea...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcriere indisponibilă';
+
+  @override
+  String get audioOutput => 'Ieșire audio';
 }

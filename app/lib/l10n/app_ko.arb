@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "자동으로 동기화됩니다"
+    "willSyncAutomatically": "자동으로 동기화됩니다",
+    "transcriptionConnecting": "전사 연결 중...",
+    "transcriptionReconnecting": "전사 재연결 중...",
+    "transcriptionUnavailable": "전사를 사용할 수 없습니다",
+    "audioOutput": "오디오 출력"
 }

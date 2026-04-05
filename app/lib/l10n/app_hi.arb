@@ -2926,5 +2926,9 @@
             }
         }
     },
-    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा"
+    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा",
+    "transcriptionConnecting": "ट्रांसक्रिप्शन कनेक्ट हो रहा है...",
+    "transcriptionReconnecting": "ट्रांसक्रिप्शन फिर से कनेक्ट हो रहा है...",
+    "transcriptionUnavailable": "ट्रांसक्रिप्शन उपलब्ध नहीं है",
+    "audioOutput": "ऑडियो आउटपुट"
 }

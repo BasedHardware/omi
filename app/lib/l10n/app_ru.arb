@@ -2960,5 +2960,9 @@
             }
         }
     },
-    "willSyncAutomatically": "синхронизируется автоматически"
+    "willSyncAutomatically": "синхронизируется автоматически",
+    "transcriptionConnecting": "Подключение транскрипции...",
+    "transcriptionReconnecting": "Повторное подключение транскрипции...",
+    "transcriptionUnavailable": "Транскрипция недоступна",
+    "audioOutput": "Аудиовыход"
 }

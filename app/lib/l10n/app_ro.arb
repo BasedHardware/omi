@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "se va sincroniza automat"
+    "willSyncAutomatically": "se va sincroniza automat",
+    "transcriptionConnecting": "Se conectează transcrierea...",
+    "transcriptionReconnecting": "Se reconectează transcrierea...",
+    "transcriptionUnavailable": "Transcriere indisponibilă",
+    "audioOutput": "Ieșire audio"
 }
