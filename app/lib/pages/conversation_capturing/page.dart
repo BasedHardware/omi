@@ -670,33 +670,46 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 0) return const SizedBox.shrink();
-    final label = totalSeconds >= 60 ? '${totalSeconds ~/ 60}m ${totalSeconds % 60}s' : '${totalSeconds}s';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C24),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF3A3A4A), width: 0.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_outline, size: 14, color: Color(0xFF8B8B9E)),
-            const SizedBox(width: 6),
-            Text(
-              context.l10n.audioSavedLocally(label),
-              style: const TextStyle(color: Color(0xFF8B8B9E), fontSize: 12, height: 1.3),
-            ),
-            const SizedBox(width: 6),
-            const Text('·', style: TextStyle(color: Color(0xFF8B8B9E), fontSize: 12)),
-            const SizedBox(width: 6),
-            Text(
-              context.l10n.willSyncAutomatically,
-              style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.3),
-            ),
-          ],
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A24),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF2E2E3E), width: 0.5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF4CAF50),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                context.l10n.audioSavedLocally(label),
+                style: const TextStyle(color: Color(0xFFE0E0E8), fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.cloud_upload_outlined, size: 14, color: Color(0xFF6C6C80)),
+              const SizedBox(width: 4),
+              Text(
+                context.l10n.willSyncAutomatically,
+                style: const TextStyle(color: Color(0xFF6C6C80), fontSize: 11),
+              ),
+            ],
+          ),
         ),
       ),
     );
