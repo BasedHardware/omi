@@ -598,15 +598,15 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
     switch (status) {
       case TranscriptionStatus.connecting:
         dotColor = Colors.yellow;
-        label = 'Connecting transcription...';
+        label = context.l10n.transcriptionConnecting;
         break;
       case TranscriptionStatus.reconnecting:
         dotColor = Colors.orange;
-        label = 'Reconnecting transcription...';
+        label = context.l10n.transcriptionReconnecting;
         break;
       case TranscriptionStatus.failed:
         dotColor = Colors.red;
-        label = 'Transcription unavailable';
+        label = context.l10n.transcriptionUnavailable;
         break;
       default:
         return const SizedBox.shrink();
@@ -677,7 +677,8 @@ class _AudioRouteSheet extends StatelessWidget {
             decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(height: 16),
-          const Text('Audio Output', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
+          Text(context.l10n.audioOutput,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 12),
           ...routes.map((route) {
             bool isSelected = selectedRoute?.id == route.id;
