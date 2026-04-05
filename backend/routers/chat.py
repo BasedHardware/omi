@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_MAX_PCM_BODY_BYTES = 5 * 1024 * 1024  # 5 MB ≈ ~160 s of 16kHz mono 16-bit PCM
+_MAX_PCM_BODY_BYTES = 15 * 1024 * 1024  # 15 MB ≈ ~480 s (~8 min) of 16kHz mono 16-bit PCM
 
 
 def filter_messages(messages, app_id):
