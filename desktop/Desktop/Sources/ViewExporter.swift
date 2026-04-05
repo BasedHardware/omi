@@ -10,8 +10,10 @@ import SwiftUI
 // Modes:
 //   --export-views <dir>              Export all standalone page views
 //   --export-fullpages <dir>          Export full pages (sidebar + content)
+//   --export-onboarding <dir>         Export onboarding steps
 //   --export-single <index> <dir>     Export a single standalone view (subprocess)
 //   --export-fullpage-single <index> <dir>  Export a single full page (subprocess)
+//   --export-onboarding-single <index> <dir>  Export a single onboarding step (subprocess)
 
 @MainActor
 enum ViewExporter {
@@ -20,16 +22,17 @@ enum ViewExporter {
     let args = CommandLine.arguments
     return args.contains("--export-views") || args.contains("--export-single")
       || args.contains("--export-fullpages") || args.contains("--export-fullpage-single")
+      || args.contains("--export-onboarding") || args.contains("--export-onboarding-single")
   }
 
   static func outputDir() -> String {
     let args = CommandLine.arguments
-    for flag in ["--export-views", "--export-fullpages"] {
+    for flag in ["--export-views", "--export-fullpages", "--export-onboarding"] {
       if let idx = args.firstIndex(of: flag), idx + 1 < args.count {
         return args[idx + 1]
       }
     }
-    for flag in ["--export-single", "--export-fullpage-single"] {
+    for flag in ["--export-single", "--export-fullpage-single", "--export-onboarding-single"] {
       if let idx = args.firstIndex(of: flag), idx + 2 < args.count {
         return args[idx + 2]
       }
@@ -147,6 +150,43 @@ enum ViewExporter {
   }
 
   static var standaloneViewCount: Int { 15 }
+
+  private static let onboardingExportSteps: [(String, Int)] = [
+    ("01-name", 0),
+    ("02-language", 1),
+    ("03-howdidyouhear", 2),
+    ("04-trust", 3),
+    ("05-screen-recording", 4),
+    ("06-disk-access", 5),
+    ("07-file-scan", 6),
+    ("08-microphone", 7),
+    ("09-notifications", 8),
+    ("10-accessibility", 9),
+    ("11-automation", 10),
+    ("12-floating-bar-shortcut", 11),
+    ("13-floating-bar", 12),
+    ("14-voice-shortcut", 13),
+    ("15-voice-demo", 14),
+    ("16-research", 15),
+    ("17-goal", 16),
+    ("18-tasks", 17),
+  ]
+
+  static func onboardingViewAt(_ index: Int) -> (String, AnyView, CGSize)? {
+    guard index >= 0 && index < onboardingExportSteps.count else { return nil }
+    let step = onboardingExportSteps[index]
+    let appState = AppState()
+    appState.hasCompletedOnboarding = false
+    let view = OnboardingView(
+      appState: appState,
+      chatProvider: ChatProvider(),
+      exportStepOverride: step.1,
+      isExportPreview: true
+    )
+    return (step.0, AnyView(view), CGSize(width: 900, height: 600))
+  }
+
+  static var onboardingViewCount: Int { onboardingExportSteps.count }
 
   // MARK: - Full page registry (sidebar + content)
 
@@ -457,24 +497,70 @@ enum ViewExporter {
       exit(1)
     }
 
+    // Single onboarding step mode
+    if let idx = args.firstIndex(of: "--export-onboarding-single"),
+      idx + 1 < args.count,
+      let viewIndex = Int(args[idx + 1])
+    {
+      let dir = outputDir()
+      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+      if let (name, view, size) = onboardingViewAt(viewIndex) {
+        NSLog("ViewExporter: [onboarding-single] Rendering \(name)...")
+        let success = exportView(name: name, view: view, size: size, dir: dir)
+        exit(success ? 0 : 1)
+      }
+      exit(1)
+    }
+
     // Batch standalone views
     if args.contains("--export-views") {
       let dir = outputDir()
       try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-      runBatch(mode: "standalone", count: standaloneViewCount, flag: "--export-single", dir: dir)
+      runBatch(
+        mode: "standalone",
+        count: standaloneViewCount,
+        flag: "--export-single",
+        dir: dir,
+        viewNameAt: { standaloneViewAt($0)?.0 ?? "unknown-\($0)" }
+      )
     }
 
     // Batch full pages
     if args.contains("--export-fullpages") {
       let dir = outputDir()
       try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-      runBatch(mode: "fullpage", count: fullPageCount, flag: "--export-fullpage-single", dir: dir)
+      runBatch(
+        mode: "fullpage",
+        count: fullPageCount,
+        flag: "--export-fullpage-single",
+        dir: dir,
+        viewNameAt: { fullPageViewAt($0)?.0 ?? "unknown-\($0)" }
+      )
+    }
+
+    // Batch onboarding steps
+    if args.contains("--export-onboarding") {
+      let dir = outputDir()
+      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+      runBatch(
+        mode: "onboarding",
+        count: onboardingViewCount,
+        flag: "--export-onboarding-single",
+        dir: dir,
+        viewNameAt: { onboardingViewAt($0)?.0 ?? "unknown-\($0)" }
+      )
     }
 
     exit(0)
   }
 
-  private static func runBatch(mode: String, count: Int, flag: String, dir: String) {
+  private static func runBatch(
+    mode: String,
+    count: Int,
+    flag: String,
+    dir: String,
+    viewNameAt: (Int) -> String
+  ) {
     NSLog("ViewExporter: Exporting \(count) \(mode) views to \(dir)")
 
     let executablePath = CommandLine.arguments[0]
@@ -483,17 +569,13 @@ enum ViewExporter {
     var crashedViews: [String] = []
 
     for i in 0..<count {
-      let viewName: String
-      if flag == "--export-single" {
-        viewName = standaloneViewAt(i)?.0 ?? "unknown-\(i)"
-      } else {
-        viewName = fullPageViewAt(i)?.0 ?? "unknown-\(i)"
-      }
+      let viewName = viewNameAt(i)
       NSLog("ViewExporter: [\(i+1)/\(count)] Spawning subprocess for \(viewName)...")
 
       let process = Process()
       process.executableURL = URL(fileURLWithPath: executablePath)
       process.arguments = [flag, "\(i)", dir]
+      process.environment = ProcessInfo.processInfo.environment
       process.standardError = Pipe()
       process.standardOutput = FileHandle.nullDevice
 
