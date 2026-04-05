@@ -349,6 +349,10 @@ class PushToTalkManager: ObservableObject {
           }
         } catch {
           logError("PushToTalkManager: batch transcription failed", error: error)
+          let message = (error as? TranscriptionService.TranscriptionError)?.errorDescription ?? "Transcription failed"
+          barState?.voiceTranscript = "⚠️ \(message)"
+          try? await Task.sleep(nanoseconds: 3_000_000_000)
+          barState?.voiceTranscript = ""
         }
         self.sendTranscript()
       }

@@ -49,6 +49,7 @@ class TranscriptionService {
         case missingBackendURL
         case connectionFailed(Error)
         case invalidResponse
+        case payloadTooLarge
         case webSocketError(String)
 
         var errorDescription: String? {
@@ -59,6 +60,8 @@ class TranscriptionService {
                 return "Connection failed: \(error.localizedDescription)"
             case .invalidResponse:
                 return "Invalid response from backend"
+            case .payloadTooLarge:
+                return "Recording too long — keep it under 5 minutes"
             case .webSocketError(let message):
                 return "WebSocket error: \(message)"
             }
@@ -560,6 +563,9 @@ extension TranscriptionService {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "no body"
             logError("TranscriptionService: Batch transcription failed with status \(statusCode): \(body)", error: nil)
+            if statusCode == 413 {
+                throw TranscriptionError.payloadTooLarge
+            }
             throw TranscriptionError.invalidResponse
         }
 
