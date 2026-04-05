@@ -49,6 +49,9 @@ pusher
 agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
+proactive (proactive/main.py)
+  └── REST ──► Gemini API (generativelanguage.googleapis.com)
+
 notifications-job (modal/job.py)  [cron]
 ```
 
@@ -60,6 +63,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called by backend only (`HOSTED_VAD_API_URL`, `HOSTED_SPEECH_PROFILE_API_URL`).
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
+- **proactive** (`proactive/main.py`) — gRPC. Server-side Gemini tool loop for desktop proactive AI. Desktop streams screenshots via bidi gRPC; server calls Gemini, sends search tool requests back to desktop for local SQLite/FTS5 queries, and returns task extraction decisions. Port 50051 (`GRPC_PORT`). Requires `GEMINI_API_KEY`.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
