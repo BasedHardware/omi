@@ -82,6 +82,10 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
+
+  set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 

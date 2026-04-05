@@ -227,6 +227,7 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     return {
         'completed': state.get('completed', False),
         'acquisition_source': state.get('acquisition_source', ''),
+        'device_onboarding_completed': state.get('device_onboarding_completed', False),
     }
 
 
@@ -238,6 +239,8 @@ def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user
         current_state['completed'] = data['completed']
     if 'acquisition_source' in data:
         current_state['acquisition_source'] = data['acquisition_source']
+    if 'device_onboarding_completed' in data:
+        current_state['device_onboarding_completed'] = data['device_onboarding_completed']
     set_user_onboarding_state(uid, current_state)
     return {'status': 'ok'}
 

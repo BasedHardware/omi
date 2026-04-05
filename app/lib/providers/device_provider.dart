@@ -351,11 +351,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isConnected: false,
     );
 
+    // Notify interactive device onboarding of disconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+
     if (_manualDisconnect) {
       _manualDisconnect = false;
       _disconnectNotificationTimer?.cancel();
       return;
     }
+
+    // Suppress disconnect notification during interactive device onboarding
+    if (captureProvider?.deviceOnboardingProvider?.isOnboardingActive == true) return;
 
     // Show a notification if still disconnected after 30 seconds.
     _disconnectNotificationTimer?.cancel();
@@ -442,6 +448,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     onDeviceConnected?.call(device);
+
+    // Notify interactive device onboarding of reconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceReconnected();
   }
 
   /// Check firmware version to determine multi-file sync support.
