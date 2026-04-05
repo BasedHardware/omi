@@ -9,22 +9,59 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   static let devVoiceIDDefaultsKey = "dev_elevenlabs_voice_id"
 
   nonisolated private static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"  // Sloane
-  nonisolated private static let defaultModelID = "eleven_multilingual_v2"
-  nonisolated private static let minimumChunkLength = 85
-  nonisolated private static let preferredChunkLength = 220
-  nonisolated private static let emergencyChunkLength = 360
+  nonisolated private static let defaultModelID = "eleven_turbo_v2_5"
+  nonisolated private static let minimumChunkLength = 40
+  nonisolated private static let preferredChunkLength = 120
+  nonisolated private static let emergencyChunkLength = 200
+  nonisolated private static let playbackRate: Float = 1.2
+
+  nonisolated private static let fillerPhrases: [String] = [
+    "Let me check.",
+    "One moment.",
+    "Looking into it.",
+    "Let me see.",
+    "Checking now.",
+    "Hold on.",
+    "One sec.",
+    "Working on it.",
+  ]
 
   private var playbackTask: Task<Void, Never>?
+  private var fillerTask: Task<Void, Never>?
   private var currentMode: PlaybackMode?
   private var streamedText = ""
   private var bufferedText = ""
   private var synthesisQueue: [String] = []
   private var audioQueue: [Data] = []
   private var isSynthesizing = false
+  private var hasStartedRealPlayback = false
   private var audioPlayer: AVAudioPlayer?
   private let speechSynthesizer = AVSpeechSynthesizer()
 
   private override init() {}
+
+  func playFillerIfEnabled() {
+    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+
+    if currentMode == nil {
+      currentMode = resolvePlaybackMode()
+    }
+    guard let mode = currentMode, case .elevenLabs(let apiKey, let voiceID) = mode else { return }
+
+    hasStartedRealPlayback = false
+    let phrase = Self.fillerPhrases.randomElement()!
+    fillerTask = Task { [weak self] in
+      do {
+        let audioData = try await Self.synthesizeSpeech(
+          text: phrase, apiKey: apiKey, voiceID: voiceID)
+        try Task.checkCancellation()
+        await MainActor.run {
+          guard let self, !self.hasStartedRealPlayback else { return }
+          self.startPlayback(audioData)
+        }
+      } catch {}
+    }
+  }
 
   func playResponseIfEnabled(_ message: ChatMessage?) {
     guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
@@ -50,6 +87,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       bufferedText = ""
       synthesisQueue.removeAll()
       audioQueue.removeAll()
+    }
+
+    // Cancel filler and stop filler audio when first real chunk is ready
+    if !hasStartedRealPlayback && text.count > 0 {
+      hasStartedRealPlayback = true
+      fillerTask?.cancel()
+      fillerTask = nil
+      audioPlayer?.stop()
+      audioPlayer = nil
+      speechSynthesizer.stopSpeaking(at: .immediate)
     }
 
     if text.count > streamedText.count {
@@ -133,12 +180,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   func stop() {
     playbackTask?.cancel()
     playbackTask = nil
+    fillerTask?.cancel()
+    fillerTask = nil
     currentMode = nil
     streamedText = ""
     bufferedText = ""
     synthesisQueue.removeAll()
     audioQueue.removeAll()
     isSynthesizing = false
+    hasStartedRealPlayback = false
     audioPlayer?.stop()
     audioPlayer = nil
     speechSynthesizer.stopSpeaking(at: .immediate)
@@ -154,6 +204,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     do {
       let player = try AVAudioPlayer(data: data)
       player.delegate = self
+      player.enableRate = true
+      player.rate = Self.playbackRate
       player.prepareToPlay()
       player.play()
       audioPlayer = player
