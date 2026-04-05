@@ -38,6 +38,7 @@ from routers import (
     task_integrations,
     integrations,
     other,
+    health,
     developer,
     updates,
     calendar_meetings,
@@ -88,6 +89,7 @@ app.include_router(users.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
+app.include_router(health.router)
 
 app.include_router(firmware.router)
 app.include_router(updates.router)
