@@ -45,22 +45,14 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             print("OmiPhoneCallsPlugin: audio session activated, starting audio device")
             _ = self?.audioDevice.start()
         }
-        callCoordinator.onAudioSessionDeactivated = { [weak self] in
-            guard let self = self else { return }
-            // Only stop audio device if no active call — iOS may temporarily deactivate
-            // the session during screen lock and reactivate it. Stopping the device
-            // during an active call causes Twilio to disconnect.
-            if self.activeCall == nil {
-                print("OmiPhoneCallsPlugin: audio session deactivated, stopping audio device")
-                _ = self.audioDevice.stop()
-            } else {
-                print("OmiPhoneCallsPlugin: audio session deactivated, but call is active — keeping audio device running")
-            }
+        callCoordinator.onAudioSessionDeactivated = {
+            print("OmiPhoneCallsPlugin: audio session deactivated")
         }
         callCoordinator.onSystemEndCall = { [weak self] in
-            self?.activeCall?.disconnect()
-            self?.sendCallStateEvent("ended")
-            self?.cleanup()
+            guard let self = self, self.activeCall != nil else { return }
+            self.activeCall?.disconnect()
+            self.sendCallStateEvent("ended")
+            self.cleanup()
         }
         callCoordinator.onSystemToggleMute = { [weak self] muted in
             guard let self = self else { return }
@@ -70,9 +62,12 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             self.sendEvent(["type": "muteConfirmed", "muted": muted])
         }
         callCoordinator.onProviderReset = { [weak self] in
+            guard let self = self, self.activeCall != nil else { return }
             print("OmiPhoneCallsPlugin: provider reset, disconnecting active call")
-            self?.activeCall?.disconnect()
-            self?.cleanup()
+            self.activeCall?.disconnect()
+            self.sendCallStateEvent("failed")
+            self.sendErrorEvent(.callkitRejected("Call system was reset"))
+            self.cleanup()
         }
 
         // Wire up audio data callback to stream to Flutter

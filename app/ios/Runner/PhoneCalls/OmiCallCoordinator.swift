@@ -256,13 +256,11 @@ extension OmiCallCoordinator: CXProviderDelegate {
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-        print("OmiCallCoordinator: CXEndCallAction")
+        print("OmiCallCoordinator: CXEndCallAction — UUID: \(action.callUUID)")
 
-        // Resume the pending completion
         let completion = pendingEndCalls.removeValue(forKey: action.callUUID)
         completion?(.success(()))
 
-        // Notify plugin that system ended the call
         DispatchQueue.main.async { [weak self] in
             self?.onSystemEndCall?()
         }
