@@ -96,7 +96,7 @@ class OmiBleManager private constructor(private val application: Application) {
     private var isProcessingCommand = false
 
     private var rssiKeepAliveRunnable: Runnable? = null
-    private val rssiKeepAliveInterval = 500L // ms
+    private val rssiKeepAliveInterval = 3000L // ms
     @Volatile
     var isRssiStreamingEnabled = false
 
