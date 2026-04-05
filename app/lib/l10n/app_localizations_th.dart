@@ -8938,4 +8938,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'กำลังเชื่อมต่อการถอดเสียง...';
+
+  @override
+  String get transcriptionReconnecting => 'กำลังเชื่อมต่อการถอดเสียงใหม่...';
+
+  @override
+  String get transcriptionUnavailable => 'การถอดเสียงไม่พร้อมใช้งาน';
+
+  @override
+  String get audioOutput => 'เอาต์พุตเสียง';
 }

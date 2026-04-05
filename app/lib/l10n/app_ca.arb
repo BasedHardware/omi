@@ -2894,5 +2894,9 @@
             }
         }
     },
-    "willSyncAutomatically": "es sincronitzarà automàticament"
+    "willSyncAutomatically": "es sincronitzarà automàticament",
+    "transcriptionConnecting": "Connectant la transcripció...",
+    "transcriptionReconnecting": "Reconnectant la transcripció...",
+    "transcriptionUnavailable": "Transcripció no disponible",
+    "audioOutput": "Sortida d'àudio"
 }

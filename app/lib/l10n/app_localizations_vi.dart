@@ -8985,4 +8985,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Đang kết nối phiên âm...';
+
+  @override
+  String get transcriptionReconnecting => 'Đang kết nối lại phiên âm...';
+
+  @override
+  String get transcriptionUnavailable => 'Phiên âm không khả dụng';
+
+  @override
+  String get audioOutput => 'Đầu ra âm thanh';
 }

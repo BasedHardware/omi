@@ -2930,5 +2930,9 @@
             }
         }
     },
-    "willSyncAutomatically": "sẽ tự động đồng bộ"
+    "willSyncAutomatically": "sẽ tự động đồng bộ",
+    "transcriptionConnecting": "Đang kết nối phiên âm...",
+    "transcriptionReconnecting": "Đang kết nối lại phiên âm...",
+    "transcriptionUnavailable": "Phiên âm không khả dụng",
+    "audioOutput": "Đầu ra âm thanh"
 }

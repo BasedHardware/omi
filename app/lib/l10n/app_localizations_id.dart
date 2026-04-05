@@ -8994,4 +8994,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Menghubungkan transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menghubungkan ulang transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
 }

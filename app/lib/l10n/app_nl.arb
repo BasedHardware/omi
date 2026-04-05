@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
+    "transcriptionConnecting": "Transcriptie verbinden...",
+    "transcriptionReconnecting": "Transcriptie opnieuw verbinden...",
+    "transcriptionUnavailable": "Transcriptie niet beschikbaar",
+    "audioOutput": "Audio-uitvoer"
 }

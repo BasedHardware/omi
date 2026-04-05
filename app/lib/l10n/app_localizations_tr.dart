@@ -8997,4 +8997,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Transkripsiyon bağlanıyor...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkripsiyon yeniden bağlanıyor...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsiyon kullanılamıyor';
+
+  @override
+  String get audioOutput => 'Ses çıkışı';
 }

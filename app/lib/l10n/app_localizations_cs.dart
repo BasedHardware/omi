@@ -8980,4 +8980,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Připojování přepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opětovné připojování přepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Přepis není dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
 }

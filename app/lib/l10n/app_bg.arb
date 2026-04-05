@@ -2894,5 +2894,9 @@
             }
         }
     },
-    "willSyncAutomatically": "ще се синхронизира автоматично"
+    "willSyncAutomatically": "ще се синхронизира автоматично",
+    "transcriptionConnecting": "Свързване на транскрипция...",
+    "transcriptionReconnecting": "Повторно свързване на транскрипция...",
+    "transcriptionUnavailable": "Транскрипцията не е налична",
+    "audioOutput": "Аудио изход"
 }

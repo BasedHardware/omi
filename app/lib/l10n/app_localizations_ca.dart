@@ -9035,4 +9035,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Connectant la transcripció...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconnectant la transcripció...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcripció no disponible';
+
+  @override
+  String get audioOutput => 'Sortida d\'àudio';
 }

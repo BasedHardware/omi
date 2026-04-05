@@ -2930,5 +2930,9 @@
             }
         }
     },
-    "willSyncAutomatically": "synchronizuje sa automaticky"
+    "willSyncAutomatically": "synchronizuje sa automaticky",
+    "transcriptionConnecting": "Pripájanie prepisu...",
+    "transcriptionReconnecting": "Opätovné pripájanie prepisu...",
+    "transcriptionUnavailable": "Prepis nie je dostupný",
+    "audioOutput": "Zvukový výstup"
 }

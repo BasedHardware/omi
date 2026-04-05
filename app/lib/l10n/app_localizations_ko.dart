@@ -8836,4 +8836,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => '전사 연결 중...';
+
+  @override
+  String get transcriptionReconnecting => '전사 재연결 중...';
+
+  @override
+  String get transcriptionUnavailable => '전사를 사용할 수 없습니다';
+
+  @override
+  String get audioOutput => '오디오 출력';
 }

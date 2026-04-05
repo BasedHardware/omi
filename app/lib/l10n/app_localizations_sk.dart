@@ -8971,4 +8971,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Pripájanie prepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opätovné pripájanie prepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Prepis nie je dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
 }
