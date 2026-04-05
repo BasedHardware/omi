@@ -61,7 +61,7 @@ class TranscriptionService {
             case .invalidResponse:
                 return "Invalid response from backend"
             case .payloadTooLarge:
-                return "Recording too long — keep it under 2 minutes"
+                return "Recording too long — keep it under 5 minutes"
             case .webSocketError(let message):
                 return "WebSocket error: \(message)"
             }
