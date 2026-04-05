@@ -216,7 +216,7 @@ impl LlmClient {
         Self {
             client: Client::new(),
             api_key,
-            model: "gemini-3-pro-preview".to_string(),
+            model: "gemini-3-flash-preview".to_string(),
         }
     }
 
