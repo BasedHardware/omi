@@ -46,8 +46,16 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             _ = self?.audioDevice.start()
         }
         callCoordinator.onAudioSessionDeactivated = { [weak self] in
-            print("OmiPhoneCallsPlugin: audio session deactivated, stopping audio device")
-            _ = self?.audioDevice.stop()
+            guard let self = self else { return }
+            // Only stop audio device if no active call — iOS may temporarily deactivate
+            // the session during screen lock and reactivate it. Stopping the device
+            // during an active call causes Twilio to disconnect.
+            if self.activeCall == nil {
+                print("OmiPhoneCallsPlugin: audio session deactivated, stopping audio device")
+                _ = self.audioDevice.stop()
+            } else {
+                print("OmiPhoneCallsPlugin: audio session deactivated, but call is active — keeping audio device running")
+            }
         }
         callCoordinator.onSystemEndCall = { [weak self] in
             self?.activeCall?.disconnect()
