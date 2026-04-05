@@ -701,13 +701,17 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 context.l10n.audioSavedLocally(label),
                 style: const TextStyle(color: Color(0xFFE0E0E8), fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
-              const SizedBox(width: 8),
-              const Icon(Icons.cloud_upload_outlined, size: 14, color: Color(0xFF6C6C80)),
-              const SizedBox(width: 4),
-              Text(
-                context.l10n.willSyncAutomatically,
-                style: const TextStyle(color: Color(0xFF6C6C80), fontSize: 11),
-              ),
+              if (inFlightSeconds > 0) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Color(0xFF6C6C80),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
