@@ -1200,6 +1200,8 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
+        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+
         // Provider is already initialized by ViewModelContainer at app launch
 
         // Record message count before sending so we can detect the new AI response
