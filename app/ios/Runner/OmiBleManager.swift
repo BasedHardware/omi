@@ -219,7 +219,7 @@ final class OmiBleManager: NSObject {
 
     private func startRssiKeepAlive(for peripheral: CBPeripheral) {
         stopRssiKeepAlive()
-        rssiTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self, weak peripheral] _ in
+        rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
             guard let peripheral = peripheral, peripheral.state == .connected else {
                 self?.stopRssiKeepAlive()
                 return
