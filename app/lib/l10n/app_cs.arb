@@ -2894,8 +2894,7 @@
             }
         }
     },
-    "willSyncAutomatically": "synchronizuje se automaticky"
-,
+    "willSyncAutomatically": "synchronizuje se automaticky",
     "cloudAudioFiles": "Cloudové zvukové soubory",
     "deleteAllAudioTitle": "Smazat veškerý cloudový zvuk?",
     "audioDeletedSuccessfully": "Všechny cloudové zvukové soubory byly smazány",

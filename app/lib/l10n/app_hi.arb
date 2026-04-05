@@ -2926,8 +2926,7 @@
             }
         }
     },
-    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा"
-,
+    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा",
     "cloudAudioFiles": "क्लाउड ऑडियो फ़ाइलें",
     "deleteAllAudioTitle": "सभी क्लाउड ऑडियो हटाएँ?",
     "audioDeletedSuccessfully": "सभी क्लाउड ऑडियो फ़ाइलें हटा दी गईं",

@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseras automatiskt"
-,
+    "willSyncAutomatically": "synkroniseras automatiskt",
     "cloudAudioFiles": "Ljudfiler i molnet",
     "deleteAllAudioTitle": "Ta bort allt ljud i molnet?",
     "audioDeletedSuccessfully": "Alla ljudfiler i molnet har tagits bort",

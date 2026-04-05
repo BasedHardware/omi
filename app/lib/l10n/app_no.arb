@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
-,
+    "willSyncAutomatically": "synkroniseres automatisk",
     "cloudAudioFiles": "Skylydfiler",
     "deleteAllAudioTitle": "Slette all lyd i skyen?",
     "audioDeletedSuccessfully": "Alle skylydfiler er slettet",

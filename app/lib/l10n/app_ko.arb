@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "자동으로 동기화됩니다"
-,
+    "willSyncAutomatically": "자동으로 동기화됩니다",
     "cloudAudioFiles": "클라우드 오디오 파일",
     "deleteAllAudioTitle": "모든 클라우드 오디오를 삭제할까요?",
     "audioDeletedSuccessfully": "모든 클라우드 오디오 파일이 삭제되었습니다",

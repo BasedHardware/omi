@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "se va sincroniza automat"
-,
+    "willSyncAutomatically": "se va sincroniza automat",
     "cloudAudioFiles": "Fișiere audio în cloud",
     "deleteAllAudioTitle": "Ștergeți tot audio-ul din cloud?",
     "audioDeletedSuccessfully": "Toate fișierele audio din cloud au fost șterse",

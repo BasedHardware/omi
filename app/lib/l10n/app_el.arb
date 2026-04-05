@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
-,
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα",
     "cloudAudioFiles": "Αρχεία ήχου στο cloud",
     "deleteAllAudioTitle": "Διαγραφή όλου του ήχου στο cloud;",
     "audioDeletedSuccessfully": "Όλα τα αρχεία ήχου στο cloud διαγράφηκαν",

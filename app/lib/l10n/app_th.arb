@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ"
-,
+    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ",
     "cloudAudioFiles": "ไฟล์เสียงบนคลาวด์",
     "deleteAllAudioTitle": "ลบเสียงบนคลาวด์ทั้งหมดหรือไม่?",
     "audioDeletedSuccessfully": "ลบไฟล์เสียงบนคลาวด์ทั้งหมดแล้ว",

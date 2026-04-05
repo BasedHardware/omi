@@ -2967,8 +2967,7 @@
             }
         }
     },
-    "willSyncAutomatically": "akan disinkronkan secara otomatis"
-,
+    "willSyncAutomatically": "akan disinkronkan secara otomatis",
     "cloudAudioFiles": "File audio cloud",
     "deleteAllAudioTitle": "Hapus semua audio cloud?",
     "audioDeletedSuccessfully": "Semua file audio cloud telah dihapus",

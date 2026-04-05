@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "akan disegerakkan secara automatik"
-,
+    "willSyncAutomatically": "akan disegerakkan secara automatik",
     "cloudAudioFiles": "Fail audio awan",
     "deleteAllAudioTitle": "Padam semua audio awan?",
     "audioDeletedSuccessfully": "Semua fail audio awan telah dipadam",

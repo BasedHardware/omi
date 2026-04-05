@@ -2960,8 +2960,7 @@
             }
         }
     },
-    "willSyncAutomatically": "синхронизируется автоматически"
-,
+    "willSyncAutomatically": "синхронизируется автоматически",
     "cloudAudioFiles": "Аудиофайлы в облаке",
     "deleteAllAudioTitle": "Удалить все аудио из облака?",
     "audioDeletedSuccessfully": "Все облачные аудиофайлы удалены",

@@ -2947,8 +2947,7 @@
             }
         }
     },
-    "willSyncAutomatically": "将自动同步"
-,
+    "willSyncAutomatically": "将自动同步",
     "cloudAudioFiles": "云端音频文件",
     "deleteAllAudioTitle": "删除所有云端音频？",
     "audioDeletedSuccessfully": "所有云端音频文件已删除",

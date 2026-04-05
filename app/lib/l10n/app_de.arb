@@ -2893,8 +2893,7 @@
             }
         }
     },
-    "willSyncAutomatically": "wird automatisch synchronisiert"
-,
+    "willSyncAutomatically": "wird automatisch synchronisiert",
     "cloudAudioFiles": "Cloud-Audiodateien",
     "deleteAllAudioTitle": "Gesamtes Cloud-Audio löschen?",
     "audioDeletedSuccessfully": "Alle Cloud-Audiodateien wurden gelöscht",

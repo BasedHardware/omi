@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
-,
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt",
     "cloudAudioFiles": "Pilve helifailid",
     "deleteAllAudioTitle": "Kas kustutada kogu pilveheli?",
     "audioDeletedSuccessfully": "Kõik pilve helifailid on kustutatud",

@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "буде синхронізовано автоматично"
-,
+    "willSyncAutomatically": "буде синхронізовано автоматично",
     "cloudAudioFiles": "Аудіофайли в хмарі",
     "deleteAllAudioTitle": "Видалити все аудіо з хмари?",
     "audioDeletedSuccessfully": "Усі хмарні аудіофайли видалено",

@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "synkronoidaan automaattisesti"
-,
+    "willSyncAutomatically": "synkronoidaan automaattisesti",
     "cloudAudioFiles": "Pilviaudiotiedostot",
     "deleteAllAudioTitle": "Poistetaanko kaikki pilviaudio?",
     "audioDeletedSuccessfully": "Kaikki pilviaudiotiedostot poistettiin",

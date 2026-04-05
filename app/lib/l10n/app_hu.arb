@@ -3021,8 +3021,7 @@
             }
         }
     },
-    "willSyncAutomatically": "automatikusan szinkronizálódik"
-,
+    "willSyncAutomatically": "automatikusan szinkronizálódik",
     "cloudAudioFiles": "Felhőben tárolt hangfájlok",
     "deleteAllAudioTitle": "Törli az összes felhőben tárolt hangot?",
     "audioDeletedSuccessfully": "Az összes felhőben tárolt hangfájl törölve lett",

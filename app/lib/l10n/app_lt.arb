@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "bus sinchronizuota automatiškai"
-,
+    "willSyncAutomatically": "bus sinchronizuota automatiškai",
     "cloudAudioFiles": "Debesies garso failai",
     "deleteAllAudioTitle": "Ištrinti visą debesyje esantį garsą?",
     "audioDeletedSuccessfully": "Visi debesies garso failai ištrinti",

@@ -2960,8 +2960,7 @@
             }
         }
     },
-    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
-,
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek",
     "cloudAudioFiles": "Bulut ses dosyaları",
     "deleteAllAudioTitle": "Tüm bulut sesleri silinsin mi?",
     "audioDeletedSuccessfully": "Tüm bulut ses dosyaları silindi",

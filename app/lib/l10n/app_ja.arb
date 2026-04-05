@@ -2926,8 +2926,7 @@
             }
         }
     },
-    "willSyncAutomatically": "自動的に同期されます"
-,
+    "willSyncAutomatically": "自動的に同期されます",
     "cloudAudioFiles": "クラウド音声ファイル",
     "deleteAllAudioTitle": "すべてのクラウド音声を削除しますか？",
     "audioDeletedSuccessfully": "すべてのクラウド音声ファイルを削除しました",

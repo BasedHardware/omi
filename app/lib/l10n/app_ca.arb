@@ -2894,8 +2894,7 @@
             }
         }
     },
-    "willSyncAutomatically": "es sincronitzarà automàticament"
-,
+    "willSyncAutomatically": "es sincronitzarà automàticament",
     "cloudAudioFiles": "Fitxers d'àudio al núvol",
     "deleteAllAudioTitle": "Suprimeix tot l'àudio al núvol?",
     "audioDeletedSuccessfully": "S'han suprimit tots els fitxers d'àudio al núvol",

@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "tiks sinhronizēts automātiski"
-,
+    "willSyncAutomatically": "tiks sinhronizēts automātiski",
     "cloudAudioFiles": "Mākoņa audio faili",
     "deleteAllAudioTitle": "Dzēst visu mākoņa audio?",
     "audioDeletedSuccessfully": "Visi mākoņa audio faili ir dzēsti",

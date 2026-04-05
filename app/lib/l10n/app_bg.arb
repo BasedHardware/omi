@@ -2894,8 +2894,7 @@
             }
         }
     },
-    "willSyncAutomatically": "ще се синхронизира автоматично"
-,
+    "willSyncAutomatically": "ще се синхронизира автоматично",
     "cloudAudioFiles": "Файлове с аудио в облака",
     "deleteAllAudioTitle": "Изтриване на всички аудио файлове в облака?",
     "audioDeletedSuccessfully": "Всички аудио файлове в облака са изтрити",

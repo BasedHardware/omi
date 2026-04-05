@@ -2961,8 +2961,7 @@
             }
         }
     },
-    "willSyncAutomatically": "será sincronizado automaticamente"
-,
+    "willSyncAutomatically": "será sincronizado automaticamente",
     "cloudAudioFiles": "Arquivos de áudio na nuvem",
     "deleteAllAudioTitle": "Excluir todo o áudio na nuvem?",
     "audioDeletedSuccessfully": "Todos os arquivos de áudio na nuvem foram excluídos",

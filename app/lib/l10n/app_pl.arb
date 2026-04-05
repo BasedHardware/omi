@@ -2960,8 +2960,7 @@
             }
         }
     },
-    "willSyncAutomatically": "zsynchronizuje się automatycznie"
-,
+    "willSyncAutomatically": "zsynchronizuje się automatycznie",
     "cloudAudioFiles": "Pliki audio w chmurze",
     "deleteAllAudioTitle": "Usunąć wszystkie pliki audio w chmurze?",
     "audioDeletedSuccessfully": "Wszystkie pliki audio w chmurze zostały usunięte",

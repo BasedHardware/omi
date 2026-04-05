@@ -2930,8 +2930,7 @@
             }
         }
     },
-    "willSyncAutomatically": "sẽ tự động đồng bộ"
-,
+    "willSyncAutomatically": "sẽ tự động đồng bộ",
     "cloudAudioFiles": "Tệp âm thanh trên đám mây",
     "deleteAllAudioTitle": "Xóa toàn bộ âm thanh trên đám mây?",
     "audioDeletedSuccessfully": "Đã xóa tất cả tệp âm thanh trên đám mây",

@@ -2925,8 +2925,7 @@
             }
         }
     },
-    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
-,
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
     "cloudAudioFiles": "Cloud-audiobestanden",
     "deleteAllAudioTitle": "Alle cloudaudio verwijderen?",
     "audioDeletedSuccessfully": "Alle cloud-audiobestanden zijn verwijderd",
