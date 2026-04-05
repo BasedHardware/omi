@@ -9048,4 +9048,53 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Αρχεία ήχου στο cloud';
+
+  @override
+  String get noCloudAudioFiles => 'Δεν υπάρχουν ακόμη αρχεία ήχου στο cloud';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Τα αρχεία ήχου θα εμφανιστούν εδώ μόλις καταγράψετε συνομιλίες με ενεργοποιημένο τον συγχρονισμό cloud.';
+
+  @override
+  String get deleteAllAudio => 'Διαγραφή όλου του ήχου';
+
+  @override
+  String get deleteAllAudioTitle => 'Διαγραφή όλου του ήχου στο cloud;';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Αυτό θα διαγράψει οριστικά όλα τα αρχεία ήχου σας που έχουν συγχρονιστεί στο cloud. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.\n\nΣημείωση: Το Πρόγραμμα Εκπαίδευσης Δεδομένων απαιτεί ήχο συγχρονισμένο στο cloud. Η διαγραφή αυτών των αρχείων θα αφαιρέσει τη συνεισφορά σας στο πρόγραμμα.';
+
+  @override
+  String get deletingAudio => 'Διαγραφή αρχείων ήχου...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Όλα τα αρχεία ήχου στο cloud διαγράφηκαν';
+
+  @override
+  String get failedToDeleteAudio => 'Αποτυχία διαγραφής αρχείων ήχου';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'αρχεία ήχου',
+      one: 'αρχείο ήχου',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Προετοιμάζεται ο ήχος. Δοκιμάστε ξανά σε λίγο.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Αποτυχία αναπαραγωγής ήχου';
+
+  @override
+  String get failedToShareCloudAudio => 'Αποτυχία κοινής χρήσης ήχου';
 }

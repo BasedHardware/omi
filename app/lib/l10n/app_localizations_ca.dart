@@ -9035,4 +9035,53 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Fitxers d\'àudio al núvol';
+
+  @override
+  String get noCloudAudioFiles => 'Encara no hi ha fitxers d\'àudio al núvol';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Els fitxers d\'àudio apareixeran aquí quan enregistris converses amb la sincronització al núvol activada.';
+
+  @override
+  String get deleteAllAudio => 'Suprimeix tot l\'àudio';
+
+  @override
+  String get deleteAllAudioTitle => 'Suprimeix tot l\'àudio al núvol?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Això suprimirà permanentment tots els teus fitxers d\'àudio sincronitzats amb el núvol. Aquesta acció no es pot desfer.\n\nNota: El Programa d\'Entrenament de Dades requereix àudio sincronitzat amb el núvol. Si suprimeixes aquests fitxers, eliminaràs la teva contribució al programa.';
+
+  @override
+  String get deletingAudio => 'S\'estan suprimint els fitxers d\'àudio...';
+
+  @override
+  String get audioDeletedSuccessfully => 'S\'han suprimit tots els fitxers d\'àudio al núvol';
+
+  @override
+  String get failedToDeleteAudio => 'No s\'han pogut suprimir els fitxers d\'àudio';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'fitxers d\'àudio',
+      one: 'fitxer d\'àudio',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'S\'està preparant l\'àudio. Torna-ho a provar d\'aquí a un moment.';
+
+  @override
+  String get failedToPlayCloudAudio => 'No s\'ha pogut reproduir l\'àudio';
+
+  @override
+  String get failedToShareCloudAudio => 'No s\'ha pogut compartir l\'àudio';
 }

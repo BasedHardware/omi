@@ -8985,4 +8985,53 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Tệp âm thanh trên đám mây';
+
+  @override
+  String get noCloudAudioFiles => 'Chưa có tệp âm thanh trên đám mây';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Các tệp âm thanh sẽ xuất hiện ở đây sau khi bạn ghi cuộc trò chuyện với tính năng đồng bộ đám mây được bật.';
+
+  @override
+  String get deleteAllAudio => 'Xóa toàn bộ âm thanh';
+
+  @override
+  String get deleteAllAudioTitle => 'Xóa toàn bộ âm thanh trên đám mây?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Thao tác này sẽ xóa vĩnh viễn tất cả tệp âm thanh đã được đồng bộ lên đám mây của bạn. Hành động này không thể hoàn tác.\n\nLưu ý: Chương trình Huấn luyện Dữ liệu yêu cầu âm thanh được đồng bộ lên đám mây. Việc xóa các tệp này sẽ xóa đóng góp của bạn khỏi chương trình.';
+
+  @override
+  String get deletingAudio => 'Đang xóa các tệp âm thanh...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Đã xóa tất cả tệp âm thanh trên đám mây';
+
+  @override
+  String get failedToDeleteAudio => 'Không thể xóa các tệp âm thanh';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'tệp âm thanh',
+      one: 'tệp âm thanh',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Đang chuẩn bị âm thanh. Vui lòng thử lại sau ít phút.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Không thể phát âm thanh';
+
+  @override
+  String get failedToShareCloudAudio => 'Không thể chia sẻ âm thanh';
 }

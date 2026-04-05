@@ -10,6 +10,12 @@ import 'package:omi/utils/logger.dart';
 
 enum AudioDownloadStage { preparing, downloading, processing }
 
+class DownloadableCloudAudioFile {
+  final String url;
+
+  const DownloadableCloudAudioFile({required this.url});
+}
+
 class AudioDownloadService {
   final http.Client _client = http.Client();
   final List<File> _tempFiles = [];
@@ -90,6 +96,67 @@ class AudioDownloadService {
     }
   }
 
+  Future<File?> downloadAndCombineCloudAudio(
+    String conversationTitle,
+    List<DownloadableCloudAudioFile> audioFiles, {
+    void Function(double)? onProgress,
+    void Function(AudioDownloadStage)? onStageChange,
+  }) async {
+    try {
+      if (audioFiles.isEmpty) {
+        Logger.debug('No downloadable cloud audio files available');
+        return null;
+      }
+
+      onStageChange?.call(AudioDownloadStage.preparing);
+
+      final tempDir = await getTemporaryDirectory();
+      final downloadedFiles = <File>[];
+      var totalProgress = 0.0;
+
+      onStageChange?.call(AudioDownloadStage.downloading);
+
+      for (var i = 0; i < audioFiles.length; i++) {
+        final audioInfo = audioFiles[i];
+        final filename = 'cloud_audio_part_${i + 1}_${DateTime.now().millisecondsSinceEpoch}.wav';
+        final filePath = '${tempDir.path}/$filename';
+
+        final file = await _downloadFile(
+          audioInfo.url,
+          filePath,
+          onProgress: (progress) {
+            totalProgress = (i + progress) / audioFiles.length;
+            onProgress?.call(totalProgress);
+          },
+        );
+
+        downloadedFiles.add(file);
+        _tempFiles.add(file);
+      }
+
+      if (downloadedFiles.isEmpty) {
+        Logger.debug('No cloud audio files were downloaded');
+        return null;
+      }
+
+      if (downloadedFiles.length == 1) {
+        return downloadedFiles.first;
+      }
+
+      onStageChange?.call(AudioDownloadStage.processing);
+
+      final combinedFilename = _generateSafeFilenameFromTitle(conversationTitle);
+      final combinedPath = '${tempDir.path}/$combinedFilename';
+      final combinedFile = await WavCombiner.combineWavFiles(downloadedFiles, combinedPath);
+      _tempFiles.add(combinedFile);
+
+      return combinedFile;
+    } catch (e) {
+      Logger.debug('Error in downloadAndCombineCloudAudio: $e');
+      rethrow;
+    }
+  }
+
   Future<File> _downloadFile(String url, String path, {void Function(double)? onProgress}) async {
     final request = http.Request('GET', Uri.parse(url));
     final response = await _client.send(request);
@@ -122,10 +189,20 @@ class AudioDownloadService {
   }
 
   String _generateSafeFilename(ServerConversation conversation) {
+    return _generateSafeFilenameFromTitle(conversation.structured.title);
+  }
+
+  String _generateSafeFilenameFromTitle(String title) {
     final now = DateTime.now();
     final timestamp =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-    return 'omi_$timestamp.wav';
+    final sanitizedTitle = title
+        .trim()
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    final prefix = sanitizedTitle.isEmpty ? 'omi' : sanitizedTitle.toLowerCase();
+    return '${prefix}_$timestamp.wav';
   }
 
   Future<void> cleanup() async {

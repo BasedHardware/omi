@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
+    "willSyncAutomatically": "synkroniseres automatisk",
+    "cloudAudioFiles": "Skylydfiler",
+    "deleteAllAudioTitle": "Slette all lyd i skyen?",
+    "audioDeletedSuccessfully": "Alle skylydfiler er slettet",
+    "preparingCloudAudioTryAgain": "Lyden klargjøres. Prøv igjen om et øyeblikk.",
+    "failedToPlayCloudAudio": "Kunne ikke spille av lyd",
+    "failedToShareCloudAudio": "Kunne ikke dele lyd",
+    "noCloudAudioFiles": "Ingen skylydfiler ennå",
+    "noCloudAudioDescription": "Lydfiler vises her når du tar opp samtaler med skysynkronisering aktivert.",
+    "deleteAllAudio": "Slett all lyd",
+    "deleteAllAudioMessage": "Dette vil slette alle lydfilene dine som er synkronisert til skyen permanent. Denne handlingen kan ikke angres.\n\nMerk: Programmet for datatrening krever lyd som er synkronisert til skyen. Hvis du sletter disse filene, fjernes bidraget ditt til programmet.",
+    "deletingAudio": "Sletter lydfiler...",
+    "failedToDeleteAudio": "Kunne ikke slette lydfiler",
+    "nAudioFiles": "{count} {count, plural, =1{lydfil} other{lydfiler}}"
 }

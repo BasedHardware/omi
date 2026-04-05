@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα",
+    "cloudAudioFiles": "Αρχεία ήχου στο cloud",
+    "deleteAllAudioTitle": "Διαγραφή όλου του ήχου στο cloud;",
+    "audioDeletedSuccessfully": "Όλα τα αρχεία ήχου στο cloud διαγράφηκαν",
+    "preparingCloudAudioTryAgain": "Προετοιμάζεται ο ήχος. Δοκιμάστε ξανά σε λίγο.",
+    "failedToPlayCloudAudio": "Αποτυχία αναπαραγωγής ήχου",
+    "failedToShareCloudAudio": "Αποτυχία κοινής χρήσης ήχου",
+    "noCloudAudioFiles": "Δεν υπάρχουν ακόμη αρχεία ήχου στο cloud",
+    "noCloudAudioDescription": "Τα αρχεία ήχου θα εμφανιστούν εδώ μόλις καταγράψετε συνομιλίες με ενεργοποιημένο τον συγχρονισμό cloud.",
+    "deleteAllAudio": "Διαγραφή όλου του ήχου",
+    "deleteAllAudioMessage": "Αυτό θα διαγράψει οριστικά όλα τα αρχεία ήχου σας που έχουν συγχρονιστεί στο cloud. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.\n\nΣημείωση: Το Πρόγραμμα Εκπαίδευσης Δεδομένων απαιτεί ήχο συγχρονισμένο στο cloud. Η διαγραφή αυτών των αρχείων θα αφαιρέσει τη συνεισφορά σας στο πρόγραμμα.",
+    "deletingAudio": "Διαγραφή αρχείων ήχου...",
+    "failedToDeleteAudio": "Αποτυχία διαγραφής αρχείων ήχου",
+    "nAudioFiles": "{count} {count, plural, =1{αρχείο ήχου} other{αρχεία ήχου}}"
 }

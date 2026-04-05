@@ -2947,5 +2947,18 @@
             }
         }
     },
-    "willSyncAutomatically": "将自动同步"
+    "willSyncAutomatically": "将自动同步",
+    "cloudAudioFiles": "云端音频文件",
+    "deleteAllAudioTitle": "删除所有云端音频？",
+    "audioDeletedSuccessfully": "所有云端音频文件已删除",
+    "preparingCloudAudioTryAgain": "正在准备音频，请稍后重试。",
+    "failedToPlayCloudAudio": "无法播放音频",
+    "failedToShareCloudAudio": "无法分享音频",
+    "noCloudAudioFiles": "尚无云端音频文件",
+    "noCloudAudioDescription": "启用云同步录制对话后，音频文件将显示在这里。",
+    "deleteAllAudio": "删除所有音频",
+    "deleteAllAudioMessage": "这将永久删除你所有已同步到云端的音频文件。此操作无法撤销。\n\n注意：数据训练计划需要云同步音频。删除这些文件将移除你对该计划的贡献。",
+    "deletingAudio": "正在删除音频文件...",
+    "failedToDeleteAudio": "无法删除音频文件",
+    "nAudioFiles": "{count} {count, plural, =1{个音频文件} other{个音频文件}}"
 }

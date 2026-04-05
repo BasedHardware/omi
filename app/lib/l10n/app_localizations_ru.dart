@@ -9012,4 +9012,53 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Аудиофайлы в облаке';
+
+  @override
+  String get noCloudAudioFiles => 'Пока нет облачных аудиофайлов';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Аудиофайлы появятся здесь, как только вы начнёте записывать разговоры с включённой облачной синхронизацией.';
+
+  @override
+  String get deleteAllAudio => 'Удалить все аудио';
+
+  @override
+  String get deleteAllAudioTitle => 'Удалить все аудио из облака?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Это навсегда удалит все ваши аудиофайлы, синхронизированные с облаком. Это действие нельзя отменить.\n\nПримечание: программе обучения на данных требуется аудио, синхронизированное с облаком. Удаление этих файлов уберёт ваш вклад в программу.';
+
+  @override
+  String get deletingAudio => 'Удаление аудиофайлов...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Все облачные аудиофайлы удалены';
+
+  @override
+  String get failedToDeleteAudio => 'Не удалось удалить аудиофайлы';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'аудиофайлы',
+      one: 'аудиофайл',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Аудио подготавливается. Пожалуйста, повторите попытку чуть позже.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Не удалось воспроизвести аудио';
+
+  @override
+  String get failedToShareCloudAudio => 'Не удалось поделиться аудио';
 }

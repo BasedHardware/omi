@@ -8991,4 +8991,53 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Debesies garso failai';
+
+  @override
+  String get noCloudAudioFiles => 'Kol kas nėra debesies garso failų';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Garso failai čia pasirodys, kai įrašysite pokalbius įjungę debesies sinchronizavimą.';
+
+  @override
+  String get deleteAllAudio => 'Ištrinti visą garsą';
+
+  @override
+  String get deleteAllAudioTitle => 'Ištrinti visą debesyje esantį garsą?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Tai visam laikui ištrins visus jūsų į debesį sinchronizuotus garso failus. Šio veiksmo atšaukti negalima.\n\nPastaba: Duomenų mokymo programai reikia su debesimi sinchronizuoto garso. Ištrynus šiuos failus, jūsų indėlis į programą bus pašalintas.';
+
+  @override
+  String get deletingAudio => 'Trinami garso failai...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Visi debesies garso failai ištrinti';
+
+  @override
+  String get failedToDeleteAudio => 'Nepavyko ištrinti garso failų';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'garso failai',
+      one: 'garso failas',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Ruošiamas garsas. Po akimirkos bandykite dar kartą.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Nepavyko paleisti garso';
+
+  @override
+  String get failedToShareCloudAudio => 'Nepavyko bendrinti garso';
 }

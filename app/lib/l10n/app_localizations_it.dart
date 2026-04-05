@@ -9037,4 +9037,53 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'File audio nel cloud';
+
+  @override
+  String get noCloudAudioFiles => 'Nessun file audio nel cloud per ora';
+
+  @override
+  String get noCloudAudioDescription =>
+      'I file audio appariranno qui quando registrerai conversazioni con la sincronizzazione cloud attivata.';
+
+  @override
+  String get deleteAllAudio => 'Elimina tutto l\'audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Eliminare tutto l\'audio nel cloud?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Questo eliminerà definitivamente tutti i tuoi file audio sincronizzati nel cloud. Questa azione non può essere annullata.\n\nNota: il Programma di Addestramento Dati richiede audio sincronizzato nel cloud. Eliminando questi file rimuoverai il tuo contributo al programma.';
+
+  @override
+  String get deletingAudio => 'Eliminazione dei file audio...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Tutti i file audio nel cloud sono stati eliminati';
+
+  @override
+  String get failedToDeleteAudio => 'Impossibile eliminare i file audio';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'file audio',
+      one: 'file audio',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Preparazione dell\'audio in corso. Riprova tra un momento.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Riproduzione audio non riuscita';
+
+  @override
+  String get failedToShareCloudAudio => 'Condivisione audio non riuscita';
 }

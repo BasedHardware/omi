@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseras automatiskt"
+    "willSyncAutomatically": "synkroniseras automatiskt",
+    "cloudAudioFiles": "Ljudfiler i molnet",
+    "deleteAllAudioTitle": "Ta bort allt ljud i molnet?",
+    "audioDeletedSuccessfully": "Alla ljudfiler i molnet har tagits bort",
+    "preparingCloudAudioTryAgain": "Ljudet förbereds. Försök igen om en liten stund.",
+    "failedToPlayCloudAudio": "Det gick inte att spela upp ljudet",
+    "failedToShareCloudAudio": "Det gick inte att dela ljudet",
+    "noCloudAudioFiles": "Inga ljudfiler i molnet ännu",
+    "noCloudAudioDescription": "Ljudfiler visas här när du spelar in samtal med molnsynkronisering aktiverad.",
+    "deleteAllAudio": "Ta bort allt ljud",
+    "deleteAllAudioMessage": "Detta kommer att permanent ta bort alla dina ljudfiler som synkroniserats till molnet. Åtgärden kan inte ångras.\n\nObs: Data Training Program kräver ljud som synkroniserats till molnet. Om du tar bort dessa filer tas ditt bidrag till programmet bort.",
+    "deletingAudio": "Tar bort ljudfiler...",
+    "failedToDeleteAudio": "Det gick inte att ta bort ljudfilerna",
+    "nAudioFiles": "{count} {count, plural, =1{ljudfil} other{ljudfiler}}"
 }

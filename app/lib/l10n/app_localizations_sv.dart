@@ -8988,4 +8988,52 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Ljudfiler i molnet';
+
+  @override
+  String get noCloudAudioFiles => 'Inga ljudfiler i molnet ännu';
+
+  @override
+  String get noCloudAudioDescription => 'Ljudfiler visas här när du spelar in samtal med molnsynkronisering aktiverad.';
+
+  @override
+  String get deleteAllAudio => 'Ta bort allt ljud';
+
+  @override
+  String get deleteAllAudioTitle => 'Ta bort allt ljud i molnet?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Detta kommer att permanent ta bort alla dina ljudfiler som synkroniserats till molnet. Åtgärden kan inte ångras.\n\nObs: Data Training Program kräver ljud som synkroniserats till molnet. Om du tar bort dessa filer tas ditt bidrag till programmet bort.';
+
+  @override
+  String get deletingAudio => 'Tar bort ljudfiler...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Alla ljudfiler i molnet har tagits bort';
+
+  @override
+  String get failedToDeleteAudio => 'Det gick inte att ta bort ljudfilerna';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ljudfiler',
+      one: 'ljudfil',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Ljudet förbereds. Försök igen om en liten stund.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Det gick inte att spela upp ljudet';
+
+  @override
+  String get failedToShareCloudAudio => 'Det gick inte att dela ljudet';
 }

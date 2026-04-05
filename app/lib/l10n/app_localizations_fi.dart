@@ -8983,4 +8983,53 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Pilviaudiotiedostot';
+
+  @override
+  String get noCloudAudioFiles => 'Ei vielä pilviaudiotiedostoja';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Äänitiedostot näkyvät täällä, kun tallennat keskusteluja pilvisynkronoinnin ollessa käytössä.';
+
+  @override
+  String get deleteAllAudio => 'Poista kaikki audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Poistetaanko kaikki pilviaudio?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Tämä poistaa pysyvästi kaikki pilveen synkronoidut äänitiedostosi. Tätä toimintoa ei voi perua.\n\nHuomaa: Data Training Program edellyttää pilveen synkronoitua ääntä. Näiden tiedostojen poistaminen poistaa panoksesi ohjelmaan.';
+
+  @override
+  String get deletingAudio => 'Poistetaan äänitiedostoja...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Kaikki pilviaudiotiedostot poistettiin';
+
+  @override
+  String get failedToDeleteAudio => 'Äänitiedostojen poistaminen epäonnistui';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'äänitiedostoa',
+      one: 'äänitiedosto',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Ääntä valmistellaan. Yritä hetken kuluttua uudelleen.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Äänen toisto epäonnistui';
+
+  @override
+  String get failedToShareCloudAudio => 'Äänen jakaminen epäonnistui';
 }

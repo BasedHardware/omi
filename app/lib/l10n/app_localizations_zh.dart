@@ -8822,4 +8822,51 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => '云端音频文件';
+
+  @override
+  String get noCloudAudioFiles => '尚无云端音频文件';
+
+  @override
+  String get noCloudAudioDescription => '启用云同步录制对话后，音频文件将显示在这里。';
+
+  @override
+  String get deleteAllAudio => '删除所有音频';
+
+  @override
+  String get deleteAllAudioTitle => '删除所有云端音频？';
+
+  @override
+  String get deleteAllAudioMessage => '这将永久删除你所有已同步到云端的音频文件。此操作无法撤销。\n\n注意：数据训练计划需要云同步音频。删除这些文件将移除你对该计划的贡献。';
+
+  @override
+  String get deletingAudio => '正在删除音频文件...';
+
+  @override
+  String get audioDeletedSuccessfully => '所有云端音频文件已删除';
+
+  @override
+  String get failedToDeleteAudio => '无法删除音频文件';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '个音频文件',
+      one: '个音频文件',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => '正在准备音频，请稍后重试。';
+
+  @override
+  String get failedToPlayCloudAudio => '无法播放音频';
+
+  @override
+  String get failedToShareCloudAudio => '无法分享音频';
 }

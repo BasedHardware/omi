@@ -2930,5 +2930,18 @@
             }
         }
     },
-    "willSyncAutomatically": "sẽ tự động đồng bộ"
+    "willSyncAutomatically": "sẽ tự động đồng bộ",
+    "cloudAudioFiles": "Tệp âm thanh trên đám mây",
+    "deleteAllAudioTitle": "Xóa toàn bộ âm thanh trên đám mây?",
+    "audioDeletedSuccessfully": "Đã xóa tất cả tệp âm thanh trên đám mây",
+    "preparingCloudAudioTryAgain": "Đang chuẩn bị âm thanh. Vui lòng thử lại sau ít phút.",
+    "failedToPlayCloudAudio": "Không thể phát âm thanh",
+    "failedToShareCloudAudio": "Không thể chia sẻ âm thanh",
+    "noCloudAudioFiles": "Chưa có tệp âm thanh trên đám mây",
+    "noCloudAudioDescription": "Các tệp âm thanh sẽ xuất hiện ở đây sau khi bạn ghi cuộc trò chuyện với tính năng đồng bộ đám mây được bật.",
+    "deleteAllAudio": "Xóa toàn bộ âm thanh",
+    "deleteAllAudioMessage": "Thao tác này sẽ xóa vĩnh viễn tất cả tệp âm thanh đã được đồng bộ lên đám mây của bạn. Hành động này không thể hoàn tác.\n\nLưu ý: Chương trình Huấn luyện Dữ liệu yêu cầu âm thanh được đồng bộ lên đám mây. Việc xóa các tệp này sẽ xóa đóng góp của bạn khỏi chương trình.",
+    "deletingAudio": "Đang xóa các tệp âm thanh...",
+    "failedToDeleteAudio": "Không thể xóa các tệp âm thanh",
+    "nAudioFiles": "{count} {count, plural, =1{tệp âm thanh} other{tệp âm thanh}}"
 }

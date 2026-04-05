@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "bus sinchronizuota automatiškai"
+    "willSyncAutomatically": "bus sinchronizuota automatiškai",
+    "cloudAudioFiles": "Debesies garso failai",
+    "deleteAllAudioTitle": "Ištrinti visą debesyje esantį garsą?",
+    "audioDeletedSuccessfully": "Visi debesies garso failai ištrinti",
+    "preparingCloudAudioTryAgain": "Ruošiamas garsas. Po akimirkos bandykite dar kartą.",
+    "failedToPlayCloudAudio": "Nepavyko paleisti garso",
+    "failedToShareCloudAudio": "Nepavyko bendrinti garso",
+    "noCloudAudioFiles": "Kol kas nėra debesies garso failų",
+    "noCloudAudioDescription": "Garso failai čia pasirodys, kai įrašysite pokalbius įjungę debesies sinchronizavimą.",
+    "deleteAllAudio": "Ištrinti visą garsą",
+    "deleteAllAudioMessage": "Tai visam laikui ištrins visus jūsų į debesį sinchronizuotus garso failus. Šio veiksmo atšaukti negalima.\n\nPastaba: Duomenų mokymo programai reikia su debesimi sinchronizuoto garso. Ištrynus šiuos failus, jūsų indėlis į programą bus pašalintas.",
+    "deletingAudio": "Trinami garso failai...",
+    "failedToDeleteAudio": "Nepavyko ištrinti garso failų",
+    "nAudioFiles": "{count} {count, plural, =1{garso failas} other{garso failai}}"
 }

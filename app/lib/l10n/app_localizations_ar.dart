@@ -8923,4 +8923,52 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'ملفات الصوت السحابية';
+
+  @override
+  String get noCloudAudioFiles => 'لا توجد ملفات صوت سحابية بعد';
+
+  @override
+  String get noCloudAudioDescription => 'ستظهر ملفات الصوت هنا بمجرد تسجيل المحادثات مع تفعيل المزامنة السحابية.';
+
+  @override
+  String get deleteAllAudio => 'حذف كل الصوت';
+
+  @override
+  String get deleteAllAudioTitle => 'حذف كل الصوت السحابي؟';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'سيؤدي هذا إلى حذف جميع ملفات الصوت المتزامنة مع السحابة نهائيًا. لا يمكن التراجع عن هذا الإجراء.\n\nملاحظة: يتطلب برنامج تدريب البيانات الصوت المتزامن مع السحابة. سيؤدي حذف هذه الملفات إلى إزالة مساهمتك في البرنامج.';
+
+  @override
+  String get deletingAudio => 'جارٍ حذف ملفات الصوت...';
+
+  @override
+  String get audioDeletedSuccessfully => 'تم حذف جميع ملفات الصوت السحابية';
+
+  @override
+  String get failedToDeleteAudio => 'تعذر حذف ملفات الصوت';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ملفات صوتية',
+      one: 'ملف صوتي',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'يتم تجهيز الصوت. يرجى المحاولة مرة أخرى بعد قليل.';
+
+  @override
+  String get failedToPlayCloudAudio => 'تعذر تشغيل الصوت';
+
+  @override
+  String get failedToShareCloudAudio => 'تعذر مشاركة الصوت';
 }

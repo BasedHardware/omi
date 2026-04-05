@@ -9012,4 +9012,53 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Cloud-audiobestanden';
+
+  @override
+  String get noCloudAudioFiles => 'Nog geen cloud-audiobestanden';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Audiobestanden verschijnen hier zodra je gesprekken opneemt met cloudsynchronisatie ingeschakeld.';
+
+  @override
+  String get deleteAllAudio => 'Alle audio verwijderen';
+
+  @override
+  String get deleteAllAudioTitle => 'Alle cloudaudio verwijderen?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Hiermee worden al je met de cloud gesynchroniseerde audiobestanden permanent verwijderd. Deze actie kan niet ongedaan worden gemaakt.\n\nOpmerking: het Data Training Program vereist met de cloud gesynchroniseerde audio. Als je deze bestanden verwijdert, wordt je bijdrage aan het programma verwijderd.';
+
+  @override
+  String get deletingAudio => 'Audiobestanden verwijderen...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Alle cloud-audiobestanden zijn verwijderd';
+
+  @override
+  String get failedToDeleteAudio => 'Audiobestanden verwijderen mislukt';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'audiobestanden',
+      one: 'audiobestand',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Audio wordt voorbereid. Probeer het zo meteen opnieuw.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Audio afspelen mislukt';
+
+  @override
+  String get failedToShareCloudAudio => 'Audio delen mislukt';
 }

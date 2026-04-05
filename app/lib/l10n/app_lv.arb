@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "tiks sinhronizēts automātiski"
+    "willSyncAutomatically": "tiks sinhronizēts automātiski",
+    "cloudAudioFiles": "Mākoņa audio faili",
+    "deleteAllAudioTitle": "Dzēst visu mākoņa audio?",
+    "audioDeletedSuccessfully": "Visi mākoņa audio faili ir dzēsti",
+    "preparingCloudAudioTryAgain": "Audio tiek sagatavots. Lūdzu, mēģiniet vēlreiz pēc brīža.",
+    "failedToPlayCloudAudio": "Neizdevās atskaņot audio",
+    "failedToShareCloudAudio": "Neizdevās kopīgot audio",
+    "noCloudAudioFiles": "Pagaidām nav mākoņa audio failu",
+    "noCloudAudioDescription": "Audio faili šeit parādīsies, tiklīdz ierakstīsiet sarunas ar ieslēgtu mākoņa sinhronizāciju.",
+    "deleteAllAudio": "Dzēst visu audio",
+    "deleteAllAudioMessage": "Tādējādi tiks neatgriezeniski dzēsti visi jūsu ar mākoni sinhronizētie audio faili. Šo darbību nevar atsaukt.\n\nPiezīme: Datu apmācības programmai ir nepieciešams ar mākoni sinhronizēts audio. Dzēšot šos failus, jūsu ieguldījums programmā tiks noņemts.",
+    "deletingAudio": "Dzēš audio failus...",
+    "failedToDeleteAudio": "Neizdevās izdzēst audio failus",
+    "nAudioFiles": "{count} {count, plural, =1{audio fails} other{audio faili}}"
 }

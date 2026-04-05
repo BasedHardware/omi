@@ -8997,4 +8997,53 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Bulut ses dosyaları';
+
+  @override
+  String get noCloudAudioFiles => 'Henüz bulut ses dosyası yok';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Bulut senkronizasyonu açıkken konuşmaları kaydettiğinizde ses dosyaları burada görünecek.';
+
+  @override
+  String get deleteAllAudio => 'Tüm Sesleri Sil';
+
+  @override
+  String get deleteAllAudioTitle => 'Tüm bulut sesleri silinsin mi?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Bu işlem, bulutla senkronize edilmiş tüm ses dosyalarınızı kalıcı olarak silecektir. Bu işlem geri alınamaz.\n\nNot: Veri Eğitim Programı bulutla senkronize edilmiş ses gerektirir. Bu dosyaları silmek programa yaptığınız katkıyı kaldıracaktır.';
+
+  @override
+  String get deletingAudio => 'Ses dosyaları siliniyor...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Tüm bulut ses dosyaları silindi';
+
+  @override
+  String get failedToDeleteAudio => 'Ses dosyaları silinemedi';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ses dosyası',
+      one: 'ses dosyası',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Ses hazırlanıyor. Lütfen birazdan tekrar deneyin.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Ses oynatılamadı';
+
+  @override
+  String get failedToShareCloudAudio => 'Ses paylaşılamadı';
 }

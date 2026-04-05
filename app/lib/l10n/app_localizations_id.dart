@@ -8994,4 +8994,53 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'File audio cloud';
+
+  @override
+  String get noCloudAudioFiles => 'Belum ada file audio cloud';
+
+  @override
+  String get noCloudAudioDescription =>
+      'File audio akan muncul di sini setelah Anda merekam percakapan dengan sinkronisasi cloud diaktifkan.';
+
+  @override
+  String get deleteAllAudio => 'Hapus Semua Audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Hapus semua audio cloud?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Ini akan menghapus semua file audio yang tersinkron ke cloud secara permanen. Tindakan ini tidak dapat dibatalkan.\n\nCatatan: Program Pelatihan Data memerlukan audio yang tersinkron ke cloud. Menghapus file-file ini akan menghapus kontribusi Anda ke program tersebut.';
+
+  @override
+  String get deletingAudio => 'Menghapus file audio...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Semua file audio cloud telah dihapus';
+
+  @override
+  String get failedToDeleteAudio => 'Gagal menghapus file audio';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'file audio',
+      one: 'file audio',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Audio sedang disiapkan. Coba lagi sebentar lagi.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Gagal memutar audio';
+
+  @override
+  String get failedToShareCloudAudio => 'Gagal membagikan audio';
 }

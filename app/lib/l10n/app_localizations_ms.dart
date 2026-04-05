@@ -9008,4 +9008,53 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Fail audio awan';
+
+  @override
+  String get noCloudAudioFiles => 'Belum ada fail audio awan';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Fail audio akan muncul di sini sebaik sahaja anda merakam perbualan dengan penyegerakan awan diaktifkan.';
+
+  @override
+  String get deleteAllAudio => 'Padam Semua Audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Padam semua audio awan?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Ini akan memadam semua fail audio yang disegerakkan ke awan secara kekal. Tindakan ini tidak boleh dibatalkan.\n\nNota: Program Latihan Data memerlukan audio yang disegerakkan ke awan. Memadam fail-fail ini akan mengalih keluar sumbangan anda kepada program tersebut.';
+
+  @override
+  String get deletingAudio => 'Memadam fail audio...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Semua fail audio awan telah dipadam';
+
+  @override
+  String get failedToDeleteAudio => 'Gagal memadam fail audio';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'fail audio',
+      one: 'fail audio',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Audio sedang disediakan. Cuba lagi sebentar lagi.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Gagal memainkan audio';
+
+  @override
+  String get failedToShareCloudAudio => 'Gagal berkongsi audio';
 }

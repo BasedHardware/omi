@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "synkronoidaan automaattisesti"
+    "willSyncAutomatically": "synkronoidaan automaattisesti",
+    "cloudAudioFiles": "Pilviaudiotiedostot",
+    "deleteAllAudioTitle": "Poistetaanko kaikki pilviaudio?",
+    "audioDeletedSuccessfully": "Kaikki pilviaudiotiedostot poistettiin",
+    "preparingCloudAudioTryAgain": "Ääntä valmistellaan. Yritä hetken kuluttua uudelleen.",
+    "failedToPlayCloudAudio": "Äänen toisto epäonnistui",
+    "failedToShareCloudAudio": "Äänen jakaminen epäonnistui",
+    "noCloudAudioFiles": "Ei vielä pilviaudiotiedostoja",
+    "noCloudAudioDescription": "Äänitiedostot näkyvät täällä, kun tallennat keskusteluja pilvisynkronoinnin ollessa käytössä.",
+    "deleteAllAudio": "Poista kaikki audio",
+    "deleteAllAudioMessage": "Tämä poistaa pysyvästi kaikki pilveen synkronoidut äänitiedostosi. Tätä toimintoa ei voi perua.\n\nHuomaa: Data Training Program edellyttää pilveen synkronoitua ääntä. Näiden tiedostojen poistaminen poistaa panoksesi ohjelmaan.",
+    "deletingAudio": "Poistetaan äänitiedostoja...",
+    "failedToDeleteAudio": "Äänitiedostojen poistaminen epäonnistui",
+    "nAudioFiles": "{count} {count, plural, =1{äänitiedosto} other{äänitiedostoa}}"
 }

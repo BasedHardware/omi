@@ -2960,5 +2960,18 @@
             }
         }
     },
-    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek",
+    "cloudAudioFiles": "Bulut ses dosyaları",
+    "deleteAllAudioTitle": "Tüm bulut sesleri silinsin mi?",
+    "audioDeletedSuccessfully": "Tüm bulut ses dosyaları silindi",
+    "preparingCloudAudioTryAgain": "Ses hazırlanıyor. Lütfen birazdan tekrar deneyin.",
+    "failedToPlayCloudAudio": "Ses oynatılamadı",
+    "failedToShareCloudAudio": "Ses paylaşılamadı",
+    "noCloudAudioFiles": "Henüz bulut ses dosyası yok",
+    "noCloudAudioDescription": "Bulut senkronizasyonu açıkken konuşmaları kaydettiğinizde ses dosyaları burada görünecek.",
+    "deleteAllAudio": "Tüm Sesleri Sil",
+    "deleteAllAudioMessage": "Bu işlem, bulutla senkronize edilmiş tüm ses dosyalarınızı kalıcı olarak silecektir. Bu işlem geri alınamaz.\n\nNot: Veri Eğitim Programı bulutla senkronize edilmiş ses gerektirir. Bu dosyaları silmek programa yaptığınız katkıyı kaldıracaktır.",
+    "deletingAudio": "Ses dosyaları siliniyor...",
+    "failedToDeleteAudio": "Ses dosyaları silinemedi",
+    "nAudioFiles": "{count} {count, plural, =1{ses dosyası} other{ses dosyası}}"
 }

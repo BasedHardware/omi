@@ -8965,4 +8965,53 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'क्लाउड ऑडियो फ़ाइलें';
+
+  @override
+  String get noCloudAudioFiles => 'अभी तक कोई क्लाउड ऑडियो फ़ाइल नहीं है';
+
+  @override
+  String get noCloudAudioDescription =>
+      'क्लाउड सिंक सक्षम होने पर जैसे ही आप बातचीत रिकॉर्ड करेंगे, ऑडियो फ़ाइलें यहाँ दिखाई देंगी।';
+
+  @override
+  String get deleteAllAudio => 'सभी ऑडियो हटाएँ';
+
+  @override
+  String get deleteAllAudioTitle => 'सभी क्लाउड ऑडियो हटाएँ?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'यह आपकी सभी क्लाउड-सिंक की गई ऑडियो फ़ाइलों को स्थायी रूप से हटा देगा। इस कार्रवाई को वापस नहीं लिया जा सकता।\n\nनोट: डेटा प्रशिक्षण कार्यक्रम के लिए क्लाउड-सिंक किया गया ऑडियो आवश्यक है। इन फ़ाइलों को हटाने से कार्यक्रम में आपका योगदान हट जाएगा।';
+
+  @override
+  String get deletingAudio => 'ऑडियो फ़ाइलें हटाई जा रही हैं...';
+
+  @override
+  String get audioDeletedSuccessfully => 'सभी क्लाउड ऑडियो फ़ाइलें हटा दी गईं';
+
+  @override
+  String get failedToDeleteAudio => 'ऑडियो फ़ाइलें हटाने में विफल';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ऑडियो फ़ाइलें',
+      one: 'ऑडियो फ़ाइल',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'ऑडियो तैयार किया जा रहा है। कृपया थोड़ी देर में फिर प्रयास करें।';
+
+  @override
+  String get failedToPlayCloudAudio => 'ऑडियो चलाने में विफल';
+
+  @override
+  String get failedToShareCloudAudio => 'ऑडियो साझा करने में विफल';
 }

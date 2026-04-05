@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "자동으로 동기화됩니다"
+    "willSyncAutomatically": "자동으로 동기화됩니다",
+    "cloudAudioFiles": "클라우드 오디오 파일",
+    "deleteAllAudioTitle": "모든 클라우드 오디오를 삭제할까요?",
+    "audioDeletedSuccessfully": "모든 클라우드 오디오 파일이 삭제되었습니다",
+    "preparingCloudAudioTryAgain": "오디오를 준비하고 있습니다. 잠시 후 다시 시도해 주세요.",
+    "failedToPlayCloudAudio": "오디오 재생에 실패했습니다",
+    "failedToShareCloudAudio": "오디오 공유에 실패했습니다",
+    "noCloudAudioFiles": "아직 클라우드 오디오 파일이 없습니다",
+    "noCloudAudioDescription": "클라우드 동기화를 켠 상태로 대화를 녹음하면 오디오 파일이 여기에 표시됩니다.",
+    "deleteAllAudio": "모든 오디오 삭제",
+    "deleteAllAudioMessage": "이 작업을 수행하면 클라우드에 동기화된 모든 오디오 파일이 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.\n\n참고: 데이터 학습 프로그램에는 클라우드에 동기화된 오디오가 필요합니다. 이 파일을 삭제하면 프로그램에 대한 기여도 함께 제거됩니다.",
+    "deletingAudio": "오디오 파일을 삭제하는 중...",
+    "failedToDeleteAudio": "오디오 파일 삭제에 실패했습니다",
+    "nAudioFiles": "{count} {count, plural, =1{오디오 파일} other{오디오 파일}}"
 }

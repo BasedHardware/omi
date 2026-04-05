@@ -9022,4 +9022,53 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Felhőben tárolt hangfájlok';
+
+  @override
+  String get noCloudAudioFiles => 'Még nincsenek felhőben tárolt hangfájlok';
+
+  @override
+  String get noCloudAudioDescription =>
+      'A hangfájlok itt jelennek meg, amint felhőszinkronizálással rögzítesz beszélgetéseket.';
+
+  @override
+  String get deleteAllAudio => 'Összes hang törlése';
+
+  @override
+  String get deleteAllAudioTitle => 'Törli az összes felhőben tárolt hangot?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Ez véglegesen törli az összes felhőbe szinkronizált hangfájlt. Ez a művelet nem vonható vissza.\n\nMegjegyzés: Az adatbetanítási program felhőbe szinkronizált hangot igényel. Ezeknek a fájloknak a törlésével a programhoz való hozzájárulásod is megszűnik.';
+
+  @override
+  String get deletingAudio => 'Hangfájlok törlése...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Az összes felhőben tárolt hangfájl törölve lett';
+
+  @override
+  String get failedToDeleteAudio => 'Nem sikerült törölni a hangfájlokat';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'hangfájlok',
+      one: 'hangfájl',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'A hang előkészítése folyamatban van. Próbáld újra egy pillanat múlva.';
+
+  @override
+  String get failedToPlayCloudAudio => 'A hang lejátszása nem sikerült';
+
+  @override
+  String get failedToShareCloudAudio => 'A hang megosztása nem sikerült';
 }

@@ -3021,5 +3021,18 @@
             }
         }
     },
-    "willSyncAutomatically": "automatikusan szinkronizálódik"
+    "willSyncAutomatically": "automatikusan szinkronizálódik",
+    "cloudAudioFiles": "Felhőben tárolt hangfájlok",
+    "deleteAllAudioTitle": "Törli az összes felhőben tárolt hangot?",
+    "audioDeletedSuccessfully": "Az összes felhőben tárolt hangfájl törölve lett",
+    "preparingCloudAudioTryAgain": "A hang előkészítése folyamatban van. Próbáld újra egy pillanat múlva.",
+    "failedToPlayCloudAudio": "A hang lejátszása nem sikerült",
+    "failedToShareCloudAudio": "A hang megosztása nem sikerült",
+    "noCloudAudioFiles": "Még nincsenek felhőben tárolt hangfájlok",
+    "noCloudAudioDescription": "A hangfájlok itt jelennek meg, amint felhőszinkronizálással rögzítesz beszélgetéseket.",
+    "deleteAllAudio": "Összes hang törlése",
+    "deleteAllAudioMessage": "Ez véglegesen törli az összes felhőbe szinkronizált hangfájlt. Ez a művelet nem vonható vissza.\n\nMegjegyzés: Az adatbetanítási program felhőbe szinkronizált hangot igényel. Ezeknek a fájloknak a törlésével a programhoz való hozzájárulásod is megszűnik.",
+    "deletingAudio": "Hangfájlok törlése...",
+    "failedToDeleteAudio": "Nem sikerült törölni a hangfájlokat",
+    "nAudioFiles": "{count} {count, plural, =1{hangfájl} other{hangfájlok}}"
 }

@@ -2960,5 +2960,18 @@
             }
         }
     },
-    "willSyncAutomatically": "zsynchronizuje się automatycznie"
+    "willSyncAutomatically": "zsynchronizuje się automatycznie",
+    "cloudAudioFiles": "Pliki audio w chmurze",
+    "deleteAllAudioTitle": "Usunąć wszystkie pliki audio w chmurze?",
+    "audioDeletedSuccessfully": "Wszystkie pliki audio w chmurze zostały usunięte",
+    "preparingCloudAudioTryAgain": "Trwa przygotowywanie dźwięku. Spróbuj ponownie za chwilę.",
+    "failedToPlayCloudAudio": "Nie udało się odtworzyć dźwięku",
+    "failedToShareCloudAudio": "Nie udało się udostępnić dźwięku",
+    "noCloudAudioFiles": "Nie ma jeszcze plików audio w chmurze",
+    "noCloudAudioDescription": "Pliki audio pojawią się tutaj po nagraniu rozmów z włączoną synchronizacją z chmurą.",
+    "deleteAllAudio": "Usuń wszystkie pliki audio",
+    "deleteAllAudioMessage": "To trwale usunie wszystkie Twoje pliki audio zsynchronizowane z chmurą. Tego działania nie można cofnąć.\n\nUwaga: Program treningu danych wymaga dźwięku zsynchronizowanego z chmurą. Usunięcie tych plików usunie Twój wkład w program.",
+    "deletingAudio": "Usuwanie plików audio...",
+    "failedToDeleteAudio": "Nie udało się usunąć plików audio",
+    "nAudioFiles": "{count} {count, plural, =1{plik audio} other{pliki audio}}"
 }

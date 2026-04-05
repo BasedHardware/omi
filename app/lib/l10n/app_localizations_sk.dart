@@ -8971,4 +8971,53 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Cloudové zvukové súbory';
+
+  @override
+  String get noCloudAudioFiles => 'Zatiaľ žiadne cloudové zvukové súbory';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Zvukové súbory sa tu zobrazia, keď nahráte konverzácie so zapnutou cloudovou synchronizáciou.';
+
+  @override
+  String get deleteAllAudio => 'Odstrániť všetok zvuk';
+
+  @override
+  String get deleteAllAudioTitle => 'Odstrániť všetok cloudový zvuk?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Týmto natrvalo odstránite všetky zvukové súbory synchronizované do cloudu. Túto akciu nie je možné vrátiť späť.\n\nPoznámka: Program tréningu dát vyžaduje zvuk synchronizovaný do cloudu. Odstránením týchto súborov odstránite svoj príspevok do programu.';
+
+  @override
+  String get deletingAudio => 'Odstraňujú sa zvukové súbory...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Všetky cloudové zvukové súbory boli odstránené';
+
+  @override
+  String get failedToDeleteAudio => 'Nepodarilo sa odstrániť zvukové súbory';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'zvukové súbory',
+      one: 'zvukový súbor',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Zvuk sa pripravuje. Skúste to prosím znova o chvíľu.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Nepodarilo sa prehrať zvuk';
+
+  @override
+  String get failedToShareCloudAudio => 'Nepodarilo sa zdieľať zvuk';
 }

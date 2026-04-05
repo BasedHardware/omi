@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
+    "cloudAudioFiles": "Cloud-audiobestanden",
+    "deleteAllAudioTitle": "Alle cloudaudio verwijderen?",
+    "audioDeletedSuccessfully": "Alle cloud-audiobestanden zijn verwijderd",
+    "preparingCloudAudioTryAgain": "Audio wordt voorbereid. Probeer het zo meteen opnieuw.",
+    "failedToPlayCloudAudio": "Audio afspelen mislukt",
+    "failedToShareCloudAudio": "Audio delen mislukt",
+    "noCloudAudioFiles": "Nog geen cloud-audiobestanden",
+    "noCloudAudioDescription": "Audiobestanden verschijnen hier zodra je gesprekken opneemt met cloudsynchronisatie ingeschakeld.",
+    "deleteAllAudio": "Alle audio verwijderen",
+    "deleteAllAudioMessage": "Hiermee worden al je met de cloud gesynchroniseerde audiobestanden permanent verwijderd. Deze actie kan niet ongedaan worden gemaakt.\n\nOpmerking: het Data Training Program vereist met de cloud gesynchroniseerde audio. Als je deze bestanden verwijdert, wordt je bijdrage aan het programma verwijderd.",
+    "deletingAudio": "Audiobestanden verwijderen...",
+    "failedToDeleteAudio": "Audiobestanden verwijderen mislukt",
+    "nAudioFiles": "{count} {count, plural, =1{audiobestand} other{audiobestanden}}"
 }

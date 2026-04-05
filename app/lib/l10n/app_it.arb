@@ -2925,5 +2925,18 @@
             }
         }
     },
-    "willSyncAutomatically": "verrà sincronizzato automaticamente"
+    "willSyncAutomatically": "verrà sincronizzato automaticamente",
+    "cloudAudioFiles": "File audio nel cloud",
+    "deleteAllAudioTitle": "Eliminare tutto l'audio nel cloud?",
+    "audioDeletedSuccessfully": "Tutti i file audio nel cloud sono stati eliminati",
+    "preparingCloudAudioTryAgain": "Preparazione dell'audio in corso. Riprova tra un momento.",
+    "failedToPlayCloudAudio": "Riproduzione audio non riuscita",
+    "failedToShareCloudAudio": "Condivisione audio non riuscita",
+    "noCloudAudioFiles": "Nessun file audio nel cloud per ora",
+    "noCloudAudioDescription": "I file audio appariranno qui quando registrerai conversazioni con la sincronizzazione cloud attivata.",
+    "deleteAllAudio": "Elimina tutto l'audio",
+    "deleteAllAudioMessage": "Questo eliminerà definitivamente tutti i tuoi file audio sincronizzati nel cloud. Questa azione non può essere annullata.\n\nNota: il Programma di Addestramento Dati richiede audio sincronizzato nel cloud. Eliminando questi file rimuoverai il tuo contributo al programma.",
+    "deletingAudio": "Eliminazione dei file audio...",
+    "failedToDeleteAudio": "Impossibile eliminare i file audio",
+    "nAudioFiles": "{count} {count, plural, =1{file audio} other{file audio}}"
 }

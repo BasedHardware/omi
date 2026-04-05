@@ -8938,4 +8938,52 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'ไฟล์เสียงบนคลาวด์';
+
+  @override
+  String get noCloudAudioFiles => 'ยังไม่มีไฟล์เสียงบนคลาวด์';
+
+  @override
+  String get noCloudAudioDescription => 'ไฟล์เสียงจะปรากฏที่นี่เมื่อคุณบันทึกการสนทนาโดยเปิดใช้การซิงก์บนคลาวด์';
+
+  @override
+  String get deleteAllAudio => 'ลบเสียงทั้งหมด';
+
+  @override
+  String get deleteAllAudioTitle => 'ลบเสียงบนคลาวด์ทั้งหมดหรือไม่?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'การดำเนินการนี้จะลบไฟล์เสียงที่ซิงก์กับคลาวด์ทั้งหมดอย่างถาวร การกระทำนี้ไม่สามารถย้อนกลับได้\n\nหมายเหตุ: โปรแกรมฝึกข้อมูลต้องใช้เสียงที่ซิงก์กับคลาวด์ การลบไฟล์เหล่านี้จะลบการมีส่วนร่วมของคุณออกจากโปรแกรม';
+
+  @override
+  String get deletingAudio => 'กำลังลบไฟล์เสียง...';
+
+  @override
+  String get audioDeletedSuccessfully => 'ลบไฟล์เสียงบนคลาวด์ทั้งหมดแล้ว';
+
+  @override
+  String get failedToDeleteAudio => 'ลบไฟล์เสียงไม่สำเร็จ';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ไฟล์เสียง',
+      one: 'ไฟล์เสียง',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'กำลังเตรียมเสียง โปรดลองอีกครั้งในอีกสักครู่';
+
+  @override
+  String get failedToPlayCloudAudio => 'เล่นเสียงไม่สำเร็จ';
+
+  @override
+  String get failedToShareCloudAudio => 'แชร์เสียงไม่สำเร็จ';
 }

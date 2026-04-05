@@ -9026,4 +9026,53 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Fișiere audio în cloud';
+
+  @override
+  String get noCloudAudioFiles => 'Încă nu există fișiere audio în cloud';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Fișierele audio vor apărea aici după ce înregistrați conversații cu sincronizarea în cloud activată.';
+
+  @override
+  String get deleteAllAudio => 'Ștergeți tot audio-ul';
+
+  @override
+  String get deleteAllAudioTitle => 'Ștergeți tot audio-ul din cloud?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Aceasta va șterge permanent toate fișierele audio sincronizate în cloud. Această acțiune nu poate fi anulată.\n\nNotă: Programul de Antrenare a Datelor necesită audio sincronizat în cloud. Ștergerea acestor fișiere va elimina contribuția dumneavoastră la program.';
+
+  @override
+  String get deletingAudio => 'Se șterg fișierele audio...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Toate fișierele audio din cloud au fost șterse';
+
+  @override
+  String get failedToDeleteAudio => 'Ștergerea fișierelor audio a eșuat';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'fișiere audio',
+      one: 'fișier audio',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Se pregătește audio-ul. Încercați din nou peste câteva momente.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Redarea audio a eșuat';
+
+  @override
+  String get failedToShareCloudAudio => 'Partajarea audio a eșuat';
 }

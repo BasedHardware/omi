@@ -8981,4 +8981,52 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Pilve helifailid';
+
+  @override
+  String get noCloudAudioFiles => 'Pilve helifaile pole veel';
+
+  @override
+  String get noCloudAudioDescription => 'Helifailid ilmuvad siia siis, kui salvestate vestlusi pilvesünkroonimisega.';
+
+  @override
+  String get deleteAllAudio => 'Kustuta kogu heli';
+
+  @override
+  String get deleteAllAudioTitle => 'Kas kustutada kogu pilveheli?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'See kustutab jäädavalt kõik teie pilvega sünkroonitud helifailid. Seda toimingut ei saa tagasi võtta.\n\nMärkus: Andmetreeningu programm nõuab pilvega sünkroonitud heli. Nende failide kustutamine eemaldab teie panuse programmi.';
+
+  @override
+  String get deletingAudio => 'Helifailide kustutamine...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Kõik pilve helifailid on kustutatud';
+
+  @override
+  String get failedToDeleteAudio => 'Helifaile ei õnnestunud kustutada';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'helifaili',
+      one: 'helifail',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Heli valmistatakse ette. Proovi hetke pärast uuesti.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Heli esitamine ebaõnnestus';
+
+  @override
+  String get failedToShareCloudAudio => 'Heli jagamine ebaõnnestus';
 }

@@ -8969,4 +8969,53 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Cloud-lydfiler';
+
+  @override
+  String get noCloudAudioFiles => 'Ingen cloud-lydfiler endnu';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Lydfiler vises her, når du optager samtaler med cloud-synkronisering aktiveret.';
+
+  @override
+  String get deleteAllAudio => 'Slet al lyd';
+
+  @override
+  String get deleteAllAudioTitle => 'Slet al cloud-lyd?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Dette sletter permanent alle dine cloud-synkroniserede lydfiler. Denne handling kan ikke fortrydes.\n\nBemærk: Data Training Program kræver cloud-synkroniseret lyd. Hvis du sletter disse filer, fjernes dit bidrag til programmet.';
+
+  @override
+  String get deletingAudio => 'Sletter lydfiler...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Alle cloud-lydfiler blev slettet';
+
+  @override
+  String get failedToDeleteAudio => 'Kunne ikke slette lydfiler';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'lydfiler',
+      one: 'lydfil',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Lyden klargøres. Prøv igen om et øjeblik.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Kunne ikke afspille lyd';
+
+  @override
+  String get failedToShareCloudAudio => 'Kunne ikke dele lyd';
 }

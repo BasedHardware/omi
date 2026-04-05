@@ -2926,5 +2926,18 @@
             }
         }
     },
-    "willSyncAutomatically": "自動的に同期されます"
+    "willSyncAutomatically": "自動的に同期されます",
+    "cloudAudioFiles": "クラウド音声ファイル",
+    "deleteAllAudioTitle": "すべてのクラウド音声を削除しますか？",
+    "audioDeletedSuccessfully": "すべてのクラウド音声ファイルを削除しました",
+    "preparingCloudAudioTryAgain": "音声を準備しています。しばらくしてからもう一度お試しください。",
+    "failedToPlayCloudAudio": "音声の再生に失敗しました",
+    "failedToShareCloudAudio": "音声の共有に失敗しました",
+    "noCloudAudioFiles": "クラウド音声ファイルはまだありません",
+    "noCloudAudioDescription": "クラウド同期を有効にして会話を録音すると、音声ファイルがここに表示されます。",
+    "deleteAllAudio": "すべての音声を削除",
+    "deleteAllAudioMessage": "これにより、クラウド同期されたすべての音声ファイルが完全に削除されます。この操作は元に戻せません。\n\n注: データトレーニングプログラムにはクラウド同期された音声が必要です。これらのファイルを削除すると、プログラムへのあなたの貢献も削除されます。",
+    "deletingAudio": "音声ファイルを削除しています...",
+    "failedToDeleteAudio": "音声ファイルの削除に失敗しました",
+    "nAudioFiles": "{count} {count, plural, =1{件の音声ファイル} other{件の音声ファイル}}"
 }

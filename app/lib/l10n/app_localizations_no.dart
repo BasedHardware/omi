@@ -8979,4 +8979,52 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Skylydfiler';
+
+  @override
+  String get noCloudAudioFiles => 'Ingen skylydfiler ennå';
+
+  @override
+  String get noCloudAudioDescription => 'Lydfiler vises her når du tar opp samtaler med skysynkronisering aktivert.';
+
+  @override
+  String get deleteAllAudio => 'Slett all lyd';
+
+  @override
+  String get deleteAllAudioTitle => 'Slette all lyd i skyen?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Dette vil slette alle lydfilene dine som er synkronisert til skyen permanent. Denne handlingen kan ikke angres.\n\nMerk: Programmet for datatrening krever lyd som er synkronisert til skyen. Hvis du sletter disse filene, fjernes bidraget ditt til programmet.';
+
+  @override
+  String get deletingAudio => 'Sletter lydfiler...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Alle skylydfiler er slettet';
+
+  @override
+  String get failedToDeleteAudio => 'Kunne ikke slette lydfiler';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'lydfiler',
+      one: 'lydfil',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Lyden klargjøres. Prøv igjen om et øyeblikk.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Kunne ikke spille av lyd';
+
+  @override
+  String get failedToShareCloudAudio => 'Kunne ikke dele lyd';
 }

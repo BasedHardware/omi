@@ -9001,4 +9001,53 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Mākoņa audio faili';
+
+  @override
+  String get noCloudAudioFiles => 'Pagaidām nav mākoņa audio failu';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Audio faili šeit parādīsies, tiklīdz ierakstīsiet sarunas ar ieslēgtu mākoņa sinhronizāciju.';
+
+  @override
+  String get deleteAllAudio => 'Dzēst visu audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Dzēst visu mākoņa audio?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'Tādējādi tiks neatgriezeniski dzēsti visi jūsu ar mākoni sinhronizētie audio faili. Šo darbību nevar atsaukt.\n\nPiezīme: Datu apmācības programmai ir nepieciešams ar mākoni sinhronizēts audio. Dzēšot šos failus, jūsu ieguldījums programmā tiks noņemts.';
+
+  @override
+  String get deletingAudio => 'Dzēš audio failus...';
+
+  @override
+  String get audioDeletedSuccessfully => 'Visi mākoņa audio faili ir dzēsti';
+
+  @override
+  String get failedToDeleteAudio => 'Neizdevās izdzēst audio failus';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'audio faili',
+      one: 'audio fails',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Audio tiek sagatavots. Lūdzu, mēģiniet vēlreiz pēc brīža.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Neizdevās atskaņot audio';
+
+  @override
+  String get failedToShareCloudAudio => 'Neizdevās kopīgot audio';
 }
