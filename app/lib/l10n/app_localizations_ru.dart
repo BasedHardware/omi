@@ -9012,4 +9012,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
 }

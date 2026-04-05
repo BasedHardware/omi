@@ -32,6 +32,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
+import 'genui_widgets.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -59,8 +60,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app =
-      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -85,10 +85,10 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
           placeholder: (context, url) => SizedBox(
             width: size,
             height: size,
-            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
           ),
           errorWidget: (context, url, error) =>
-              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
         ),
       ),
     );
@@ -97,7 +97,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   // Fallback to generic icon if app not found
   return Opacity(
     opacity: opacity,
-    child: Icon(Icons.apps, size: size, color: Colors.white.withOpacity(opacity)),
+    child: Icon(Icons.apps, size: size, color: Colors.white.withValues(alpha: opacity)),
   );
 }
 
@@ -267,6 +267,7 @@ Widget buildMessageWidget(
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
       onAskOmi: onAskOmi,
+      sendMessage: sendMessage,
     );
   }
 }
@@ -402,6 +403,7 @@ class NormalMessageWidget extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
+  final Function(String)? sendMessage;
 
   const NormalMessageWidget({
     super.key,
@@ -413,6 +415,7 @@ class NormalMessageWidget extends StatefulWidget {
     this.showThinkingAfterText = false,
     this.thinkings = const [],
     this.onAskOmi,
+    this.sendMessage,
   });
 
   @override
@@ -452,6 +455,25 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         timeoutSeconds: 15,
         child: Container(
           height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 220,
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A20),
             borderRadius: BorderRadius.circular(16),
@@ -597,6 +619,15 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
           _buildChartShimmer(),
+        if (widget.message.uiBlocks.isNotEmpty)
+          GenUiBlocksWidget(
+            blocks: widget.message.uiBlocks,
+            sendMessage: widget.sendMessage ?? (_) {},
+          )
+        else if (widget.showTypingIndicator &&
+            widget.message.thinkings
+                .any((t) => t.toLowerCase().contains('map') || t.toLowerCase().contains('location')))
+          _buildMapShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -752,28 +783,28 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 ),
               )
             : widget.showTypingIndicator
-            ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-              )
-            : Builder(
-                builder: (context) {
-                  String? selectedText;
-                  return SelectionArea(
-                    onSelectionChanged: (SelectedContent? selectedContent) {
-                      selectedText = selectedContent?.plainText;
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+                  )
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                            widget.onAskOmi?.call(text);
+                          }, selectedText: selectedText);
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
                     },
-                    contextMenuBuilder: (context, selectableRegionState) {
-                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                        widget.onAskOmi?.call(text);
-                      }, selectedText: selectedText);
-                    },
-                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                  );
-                },
-              ),
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -811,7 +842,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     if (conversationDetailLoading[data.$1]) return;
                     setState(() => conversationDetailLoading[data.$1] = true);
                     ServerConversation? m = await getConversationById(data.$2.id);
-                    if (m == null) return;
+                    if (!context.mounted || m == null) return;
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     MixpanelManager().chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
@@ -819,6 +850,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     await Navigator.of(
                       context,
                     ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    if (!context.mounted) return;
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
                       widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
@@ -1014,7 +1046,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withOpacity(0.2) : const Color(0xFF2C2C2E),
+                      color: isSelected ? Colors.blue.withValues(alpha: 0.2) : const Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.circular(20),
                       border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
                     ),
@@ -1209,7 +1241,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             icon: FontAwesomeIcons.share,
             onTap: () async {
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await SharePlus.instance.share(ShareParams(text: widget.messageText));
               MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user shared the message (silent, no UI change)
@@ -1252,6 +1284,7 @@ class CopyButton extends StatelessWidget {
         highlightColor: Colors.transparent,
         onTap: () async {
           await Clipboard.setData(ClipboardData(text: messageText));
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(

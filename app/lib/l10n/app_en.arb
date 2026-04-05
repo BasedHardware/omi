@@ -10729,5 +10729,9 @@
     },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
-    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+    "tapToOpenInMaps": "Tap to open in Maps",
+    "@tapToOpenInMaps": {
+        "description": "Call-to-action text shown under map cards to open the location in Maps"
+    }
 }

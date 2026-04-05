@@ -16766,6 +16766,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Location permission is needed to find nearby Bluetooth devices.'**
   String get enableLocationDescription;
+
+  /// Call-to-action text shown under map cards to open the location in Maps
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to open in Maps'**
+  String get tapToOpenInMaps;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
