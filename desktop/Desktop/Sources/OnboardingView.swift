@@ -7,6 +7,8 @@ struct OnboardingView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
   var onComplete: (() -> Void)? = nil
+  var exportStepOverride: Int? = nil
+  var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
@@ -30,7 +32,7 @@ struct OnboardingView: View {
         .ignoresSafeArea()
 
       Group {
-        if appState.hasCompletedOnboarding {
+        if appState.hasCompletedOnboarding && !isExportPreview {
           Color.clear
             .onAppear {
               log("OnboardingView: hasCompletedOnboarding=true, starting monitoring")
@@ -52,17 +54,21 @@ struct OnboardingView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      currentStep = OnboardingFlow.migratedStep(
-        currentStep: currentStep,
-        hasMigratedVideoStep: hasMigratedOnboardingSteps,
-        hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
-        hasMergedVoiceInputStep: hasMergedVoiceInputStep,
-        hasRemovedNotificationStep: hasRemovedNotificationStep,
-        hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
-        hasMigratedPagedIntro: hasMigratedPagedIntro,
-        hasReorderedTrustStep: hasReorderedTrustStep,
-        hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep
-      )
+      if let exportStepOverride {
+        currentStep = exportStepOverride
+      } else {
+        currentStep = OnboardingFlow.migratedStep(
+          currentStep: currentStep,
+          hasMigratedVideoStep: hasMigratedOnboardingSteps,
+          hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
+          hasMergedVoiceInputStep: hasMergedVoiceInputStep,
+          hasRemovedNotificationStep: hasRemovedNotificationStep,
+          hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
+          hasMigratedPagedIntro: hasMigratedPagedIntro,
+          hasReorderedTrustStep: hasReorderedTrustStep,
+          hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep
+        )
+      }
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true
       hasInsertedVoiceShortcutStep = true
@@ -74,6 +80,7 @@ struct OnboardingView: View {
       introCoordinator.prepare(appState: appState)
     }
     .task {
+      guard !isExportPreview else { return }
       // Pre-warm the ACP bridge before the chat step starts.
       await chatProvider.warmupBridge()
       await graphViewModel.addGraphFromStorage()
