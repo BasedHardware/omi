@@ -117,13 +117,20 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
     }
 
-    /// Mark session as failed with error
+    /// Mark session as failed with error.
+    /// No-op if the session is already completed (prevents race with concurrent completion).
     func markSessionFailed(id: Int64, error: String) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
             guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
                 throw TranscriptionStorageError.sessionNotFound
+            }
+
+            // Don't regress a completed session back to failed
+            guard record.status != .completed else {
+                log("TranscriptionStorage: Skipping markSessionFailed for already-completed session \(id)")
+                return
             }
 
             record.status = .failed
@@ -135,13 +142,20 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Failed session \(id) (error: \(error))")
     }
 
-    /// Increment retry count for a session
+    /// Increment retry count for a session.
+    /// No-op if the session is already completed (prevents race with concurrent completion).
     func incrementRetryCount(id: Int64) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
             guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
                 throw TranscriptionStorageError.sessionNotFound
+            }
+
+            // Don't modify a completed session
+            guard record.status != .completed else {
+                log("TranscriptionStorage: Skipping incrementRetryCount for already-completed session \(id)")
+                return
             }
 
             record.retryCount += 1

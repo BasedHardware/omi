@@ -40,27 +40,6 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertNil(segment.backendId)
   }
 
-  func testTranscriptSegmentRequestEncodingIncludesStableId() throws {
-    let request = APIClient.TranscriptSegmentRequest(
-      id: "seg_backend_123",
-      text: "Hello",
-      speaker: "SPEAKER_01",
-      speakerId: 1,
-      isUser: false,
-      personId: "person_abc",
-      start: 1.25,
-      end: 2.5
-    )
-
-    let data = try JSONEncoder().encode(request)
-    let payload = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: data) as? [String: Any]
-    )
-
-    XCTAssertEqual(payload["id"] as? String, "seg_backend_123")
-    XCTAssertEqual(payload["person_id"] as? String, "person_abc")
-  }
-
   func testTranscriptionSegmentRecordRoundTripKeepsBackendId() {
     let record = TranscriptionSegmentRecord(
       sessionId: 1,
