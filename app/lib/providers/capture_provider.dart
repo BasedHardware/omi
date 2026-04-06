@@ -1041,6 +1041,7 @@ class CaptureProvider extends ChangeNotifier
       Logger.debug(
           'streamDeviceRecording: aborted after device-init await — system audio is active (state=$recordingState)');
       await _cleanupCurrentState();
+      await _socket?.stop(reason: 'desktop handoff — aborting device init');
       return;
     }
 
