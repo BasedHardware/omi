@@ -8437,6 +8437,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Ustawienia polaczen';
 
   @override
+  String get showPhoneCallButtonTitle => 'Pokaż przycisk połączenia';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Wyświetl przycisk połączenia telefonicznego na ekranie głównym';
+
+  @override
   String get yourVerifiedNumbers => 'Twoje zweryfikowane numery';
 
   @override

@@ -8268,6 +8268,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSettingsTitle => '通话设置';
 
   @override
+  String get showPhoneCallButtonTitle => '显示电话按钮';
+
+  @override
+  String get showPhoneCallButtonDesc => '在主屏幕上显示电话按钮';
+
+  @override
   String get yourVerifiedNumbers => '您已验证的号码';
 
   @override
@@ -8522,7 +8528,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 

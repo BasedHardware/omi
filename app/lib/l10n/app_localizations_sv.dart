@@ -1711,7 +1711,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -8415,6 +8420,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Samtalsinstellningar';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Visa samtalsknapp';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Visa telefonsamtalsknapp på startskärmen';
 
   @override
   String get yourVerifiedNumbers => 'Dina verifierade nummer';

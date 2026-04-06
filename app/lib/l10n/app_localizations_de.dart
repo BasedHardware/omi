@@ -1722,7 +1722,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'GERÄTE',
+      one: 'GERÄT',
+    );
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -8483,6 +8488,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Anrufeinstellungen';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Anruf-Schaltfläche anzeigen';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Anruf-Schaltfläche auf dem Startbildschirm anzeigen';
 
   @override
   String get yourVerifiedNumbers => 'Ihre verifizierten Nummern';

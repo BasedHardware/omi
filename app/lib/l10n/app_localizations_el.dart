@@ -1721,7 +1721,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ΣΥΣΚΕΥΕΣ',
+      one: 'ΣΥΣΚΕΥΗ',
+    );
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -8475,6 +8480,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Ρυθμίσεις κλήσεων';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Εμφάνιση κουμπιού κλήσης';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Εμφάνιση κουμπιού τηλεφωνικής κλήσης στην αρχική οθόνη';
 
   @override
   String get yourVerifiedNumbers => 'Οι επαληθευμένοι αριθμοί σας';

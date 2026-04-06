@@ -1711,7 +1711,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ПРИСТРОЇВ', one: 'ПРИСТРІЙ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ПРИСТРОЇВ',
+      one: 'ПРИСТРІЙ',
+    );
     return '$count $_temp0 ЗНАЙДЕНО ПОБЛИЗУ';
   }
 
@@ -8425,6 +8430,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Налаштування дзвінків';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Показати кнопку дзвінка';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Відображати кнопку телефонного дзвінка на головному екрані';
 
   @override
   String get yourVerifiedNumbers => 'Ваші підтверджені номери';

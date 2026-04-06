@@ -1719,7 +1719,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIUS',
+      one: 'DISPOSITIU',
+    );
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -8463,6 +8468,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Configuracio de trucades';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Mostra el botó de trucada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostra el botó de trucada telefònica a la pantalla d\'inici';
 
   @override
   String get yourVerifiedNumbers => 'Els teus numeros verificats';

@@ -1713,7 +1713,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -8447,6 +8452,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Показване на бутона за телефонно обаждане';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Показване на бутона за телефонно обаждане на началния екран';
 
   @override
   String get yourVerifiedNumbers => 'Вашите потвърдени номера';

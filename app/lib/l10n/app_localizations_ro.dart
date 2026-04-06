@@ -1718,7 +1718,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOZITIVE',
+      one: 'DISPOZITIV',
+    );
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -8454,6 +8459,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Setari apeluri';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Afișați butonul de apel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afișați butonul de apel telefonic pe ecranul de pornire';
 
   @override
   String get yourVerifiedNumbers => 'Numerele dvs. verificate';

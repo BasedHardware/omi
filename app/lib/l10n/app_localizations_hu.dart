@@ -1720,7 +1720,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ESZKÖZ',
+      one: 'ESZKÖZ',
+    );
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -8449,6 +8454,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Hivasbeallitasok';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Telefonhívás gomb megjelenítése';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Telefonhívás gomb megjelenítése a főképernyőn';
 
   @override
   String get yourVerifiedNumbers => 'Ellenorzott szamai';

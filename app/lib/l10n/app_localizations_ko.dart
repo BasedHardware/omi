@@ -8280,6 +8280,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSettingsTitle => '통화 설정';
 
   @override
+  String get showPhoneCallButtonTitle => '통화 버튼 표시';
+
+  @override
+  String get showPhoneCallButtonDesc => '홈 화면에 전화 통화 버튼 표시';
+
+  @override
   String get yourVerifiedNumbers => '인증된 번호';
 
   @override
@@ -8536,7 +8542,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
     return '$_temp0';
   }
 

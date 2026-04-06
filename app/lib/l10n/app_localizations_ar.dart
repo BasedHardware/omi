@@ -1696,7 +1696,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8354,6 +8359,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'إعدادات المكالمات الهاتفية';
+
+  @override
+  String get showPhoneCallButtonTitle => 'إظهار زر المكالمة الهاتفية';
+
+  @override
+  String get showPhoneCallButtonDesc => 'عرض زر المكالمة الهاتفية على الشاشة الرئيسية';
 
   @override
   String get yourVerifiedNumbers => 'أرقامك المتحقق منها';

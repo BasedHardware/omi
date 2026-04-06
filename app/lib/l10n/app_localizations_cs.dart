@@ -1710,7 +1710,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZAŘÍZENÍ',
+      one: 'ZAŘÍZENÍ',
+    );
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -8408,6 +8413,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Nastaveni hovoru';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Zobrazit tlačítko telefonního hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobrazit tlačítko telefonního hovoru na domovské obrazovce';
 
   @override
   String get yourVerifiedNumbers => 'Vase overena cisla';

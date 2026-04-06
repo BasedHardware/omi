@@ -1714,7 +1714,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8415,6 +8420,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Hiển thị nút gọi điện';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Hiển thị nút gọi điện trên màn hình chính';
 
   @override
   String get yourVerifiedNumbers => 'Số đã xác minh của bạn';

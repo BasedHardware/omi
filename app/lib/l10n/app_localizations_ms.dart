@@ -1715,7 +1715,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANTI',
+      one: 'PERANTI',
+    );
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -8436,6 +8441,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Tetapan panggilan';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Tunjuk Butang Panggilan';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Paparkan butang panggilan telefon pada skrin utama';
 
   @override
   String get yourVerifiedNumbers => 'Nombor anda yang disahkan';

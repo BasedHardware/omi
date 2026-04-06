@@ -8278,6 +8278,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8534,7 +8540,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 

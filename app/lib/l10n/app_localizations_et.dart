@@ -1708,7 +1708,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8409,6 +8414,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get phoneCallSettingsTitle => 'Kone seaded';
+
+  @override
+  String get showPhoneCallButtonTitle => 'Kuva kõnenuppu';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Kuva telefonikõne nupp avakuval';
 
   @override
   String get yourVerifiedNumbers => 'Teie kinnitatud numbrid';
