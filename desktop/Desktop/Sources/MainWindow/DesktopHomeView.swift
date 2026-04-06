@@ -762,7 +762,7 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider)
+        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
       case 9:
         SettingsPage(
           appState: appState,
