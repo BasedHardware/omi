@@ -559,3 +559,150 @@ class TestUserMatchEvent:
 
         assert segments[0].is_user is False
         assert segments[0].person_id == 'person-abc'
+
+
+# ─── Dimension Mismatch Guard (#6238) ─────────────────────────────────────────
+
+
+class TestDimensionMismatchGuard:
+    """Tests for dimension mismatch handling between v2 (512-dim) and v3 (256-dim) embeddings.
+
+    Root cause: v2→v3 migration can fail partially, leaving some contacts with
+    version=3 tag but 512-dim embeddings. When the user has a 256-dim v3 embedding,
+    scipy.cdist crashes on shape mismatch.
+    """
+
+    def test_compare_embeddings_same_dimension(self):
+        """Same-dimension embeddings should return valid cosine distance."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb1 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb2 = np.random.RandomState(2).randn(1, 256).astype(np.float32)
+        distance = compare_embeddings(emb1, emb2)
+        assert 0.0 <= distance <= 2.0
+
+    def test_compare_embeddings_dimension_mismatch_returns_max_distance(self):
+        """Mismatched dimensions (256 vs 512) should return 2.0 instead of crashing."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+
+        # Should NOT raise ValueError from scipy.cdist
+        distance = compare_embeddings(emb_256, emb_512)
+        assert distance == 2.0
+
+        # Reverse order should also work
+        distance = compare_embeddings(emb_512, emb_256)
+        assert distance == 2.0
+
+    def test_compare_embeddings_identical_returns_zero(self):
+        """Identical embeddings should return ~0.0 distance."""
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        emb = np.random.RandomState(42).randn(1, 512).astype(np.float32)
+        emb /= np.linalg.norm(emb)
+        distance = compare_embeddings(emb, emb)
+        assert distance < 0.001
+
+    def test_is_same_speaker_dimension_mismatch_returns_false(self):
+        """is_same_speaker should return (False, 2.0) on dimension mismatch."""
+        from utils.stt.speaker_embedding import is_same_speaker
+
+        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+
+        is_match, distance = is_same_speaker(emb_256, emb_512)
+        assert is_match is False
+        assert distance == 2.0
+
+    def test_find_best_match_skips_dimension_mismatch(self):
+        """find_best_match should not crash on mixed-dimension candidates."""
+        from utils.stt.speaker_embedding import find_best_match
+
+        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        # Mix of 256-dim (matching) and 512-dim (stale) candidates
+        candidates = [
+            np.random.RandomState(2).randn(1, 512).astype(np.float32),  # stale 512-dim
+            query.copy(),  # exact match, 256-dim
+            np.random.RandomState(3).randn(1, 512).astype(np.float32),  # stale 512-dim
+        ]
+
+        result = find_best_match(query, candidates)
+        assert result is not None
+        best_idx, best_distance = result
+        assert best_idx == 1  # should match the 256-dim copy
+        assert best_distance < 0.001
+
+    def test_find_best_match_all_mismatched_returns_none(self):
+        """find_best_match returns None when all candidates have wrong dimension."""
+        from utils.stt.speaker_embedding import find_best_match
+
+        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        candidates = [
+            np.random.RandomState(2).randn(1, 512).astype(np.float32),
+            np.random.RandomState(3).randn(1, 512).astype(np.float32),
+        ]
+
+        result = find_best_match(query, candidates)
+        assert result is None  # all return 2.0, above threshold
+
+    def test_mixed_dim_cache_loads_all_relies_on_compare_guard(self):
+        """Cache loads ALL embeddings regardless of dimension; compare_embeddings handles mismatches.
+
+        No cache-level filtering — avoids order-dependent behavior where a stale
+        first entry could poison the filter and drop valid embeddings.
+        """
+        from utils.stt.speaker_embedding import compare_embeddings, SPEAKER_MATCH_THRESHOLD
+
+        person_embeddings_cache = {}
+        # User has 256-dim (current v3 model)
+        user_embedding = np.random.RandomState(1).randn(1, 256).astype(np.float32)
+        person_embeddings_cache['user'] = {'embedding': user_embedding, 'name': 'User'}
+
+        # Load ALL persons into cache, including stale 512-dim
+        persons = [
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': list(np.random.randn(256))},
+            {'id': 'p2', 'name': 'Bob', 'speaker_embedding': list(np.random.randn(512))},  # stale
+            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': list(np.random.randn(256))},
+        ]
+        for person in persons:
+            emb = person.get('speaker_embedding')
+            if emb:
+                person_embeddings_cache[person['id']] = {
+                    'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                    'name': person['name'],
+                }
+
+        # All loaded — no filtering at cache level
+        assert len(person_embeddings_cache) == 4  # user + 3 persons
+
+        # compare_embeddings safely handles the 256 vs 512 mismatch
+        query = np.random.RandomState(42).randn(1, 256).astype(np.float32)
+        d_alice = compare_embeddings(query, person_embeddings_cache['p1']['embedding'])
+        d_bob = compare_embeddings(query, person_embeddings_cache['p2']['embedding'])
+        assert 0.0 <= d_alice <= 2.0  # same dim, real distance
+        assert d_bob == 2.0  # mismatch, max distance — never matches
+
+    def test_stale_user_embedding_does_not_poison_matching(self):
+        """Even if user has stale 512-dim embedding, valid 256-dim contacts still match each other.
+
+        Regression test for the Codex-flagged 'poisonous anchor' edge case:
+        a stale user embedding must not prevent valid person-to-person matching.
+        """
+        from utils.stt.speaker_embedding import compare_embeddings
+
+        person_embeddings_cache = {}
+        # Stale 512-dim user embedding (pre-v3 migration)
+        stale_user = np.random.RandomState(1).randn(1, 512).astype(np.float32)
+        person_embeddings_cache['user'] = {'embedding': stale_user, 'name': 'User'}
+
+        # Valid 256-dim person embeddings
+        alice_emb = np.random.RandomState(2).randn(1, 256).astype(np.float32)
+        person_embeddings_cache['alice'] = {'embedding': alice_emb, 'name': 'Alice'}
+
+        # Alice vs stale user → 2.0 (dimension mismatch, correctly no-match)
+        assert compare_embeddings(alice_emb, stale_user) == 2.0
+
+        # Alice vs herself → ~0.0 (correctly matches)
+        assert compare_embeddings(alice_emb, alice_emb) < 0.001

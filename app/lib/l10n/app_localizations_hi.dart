@@ -3254,7 +3254,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get aboutYou => 'आपके बारे में';
 
   @override
-  String get manual => 'मैनुअल';
+  String get manual => 'मैन्युअल';
 
   @override
   String get loadingYourMemories => 'आपकी यादें लोड हो रही हैं...';
@@ -8840,4 +8840,129 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'हम Omi को आपके लिए अधिक उपयोगी बनाना चाहते हैं।';
+
+  @override
+  String get deviceDiagnostics => 'डिवाइस डायग्नोस्टिक्स';
+
+  @override
+  String get signalStrength => 'सिग्नल की शक्ति';
+
+  @override
+  String get connectionUptime => 'अपटाइम';
+
+  @override
+  String get reconnections => 'पुनः कनेक्शन';
+
+  @override
+  String get disconnectHistory => 'डिस्कनेक्ट इतिहास';
+
+  @override
+  String get noDisconnectsRecorded => 'कोई डिस्कनेक्ट दर्ज नहीं';
+
+  @override
+  String get diagnostics => 'डायग्नोस्टिक्स';
+
+  @override
+  String get waitingForData => 'डेटा की प्रतीक्षा...';
+
+  @override
+  String get liveRssiOverTime => 'समय के साथ लाइव RSSI';
+
+  @override
+  String get noRssiDataYet => 'अभी तक कोई RSSI डेटा नहीं';
+
+  @override
+  String get collectingData => 'डेटा एकत्र हो रहा है...';
+
+  @override
+  String get cleanDisconnect => 'स्वच्छ डिस्कनेक्ट';
+
+  @override
+  String get connectionTimeout => 'कनेक्शन टाइमआउट';
+
+  @override
+  String get remoteDeviceTerminated => 'रिमोट डिवाइस ने कनेक्शन समाप्त किया';
+
+  @override
+  String get pairedToAnotherPhone => 'दूसरे फोन से जुड़ा';
+
+  @override
+  String get linkKeyMismatch => 'लिंक कुंजी मेल नहीं खाती';
+
+  @override
+  String get connectionFailed => 'कनेक्शन विफल';
+
+  @override
+  String get appClosed => 'ऐप बंद';
+
+  @override
+  String get manualDisconnect => 'मैन्युअल डिस्कनेक्ट';
+
+  @override
+  String lastNEvents(int count) {
+    return 'अंतिम $count इवेंट';
+  }
+
+  @override
+  String get signal => 'सिग्नल';
+
+  @override
+  String get battery => 'बैटरी';
+
+  @override
+  String get excellent => 'उत्कृष्ट';
+
+  @override
+  String get good => 'अच्छा';
+
+  @override
+  String get fair => 'ठीक';
+
+  @override
+  String get weak => 'कमज़ोर';
+
+  @override
+  String gattError(String code) {
+    return 'GATT त्रुटि ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'स्थिर फ़र्मवेयर पर वापस जाएँ';
+
+  @override
+  String get rollbackConfirmTitle => 'फ़र्मवेयर वापस लाएँ?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'यह आपके वर्तमान फ़र्मवेयर को नवीनतम स्थिर संस्करण ($version) से बदल देगा। अपडेट के बाद आपका डिवाइस पुनः आरंभ होगा।';
+  }
+
+  @override
+  String get stableFirmware => 'स्थिर फ़र्मवेयर';
+
+  @override
+  String get fetchingStableFirmware => 'नवीनतम स्थिर फ़र्मवेयर प्राप्त किया जा रहा है...';
+
+  @override
+  String get noStableFirmwareFound => 'आपके डिवाइस के लिए स्थिर फ़र्मवेयर संस्करण नहीं मिला।';
+
+  @override
+  String get installStableFirmware => 'स्थिर फ़र्मवेयर इंस्टॉल करें';
+
+  @override
+  String get alreadyOnStableFirmware => 'आप पहले से नवीनतम स्थिर संस्करण पर हैं।';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ऑडियो स्थानीय रूप से सहेजा गया';
+  }
+
+  @override
+  String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

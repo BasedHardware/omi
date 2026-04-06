@@ -14,8 +14,9 @@ import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
+  final bool isRollback;
 
-  const FirmwareUpdate({super.key, this.device});
+  const FirmwareUpdate({super.key, this.device, this.isRollback = false});
 
   @override
   State<FirmwareUpdate> createState() => _FirmwareUpdateState();
@@ -39,19 +40,30 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         isLoading = true;
       });
 
-      await getLatestVersion(
-        deviceModelNumber: device.modelNumber,
-        firmwareRevision: device.firmwareRevision,
-        hardwareRevision: device.hardwareRevision,
-        manufacturerName: device.manufacturerName,
-      );
-      var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
-      if (mounted) {
-        setState(() {
-          shouldUpdate = result.$2;
-          updateMessage = result.$1;
-          isLoading = false;
-        });
+      if (widget.isRollback) {
+        await getStableVersion(deviceModelNumber: device.modelNumber);
+        if (mounted) {
+          setState(() {
+            shouldUpdate = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
+            updateMessage = shouldUpdate ? '' : context.l10n.noStableFirmwareFound;
+            isLoading = false;
+          });
+        }
+      } else {
+        await getLatestVersion(
+          deviceModelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+        );
+        var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
+        if (mounted) {
+          setState(() {
+            shouldUpdate = result.$2;
+            updateMessage = result.$1;
+            isLoading = false;
+          });
+        }
       }
     });
     super.initState();
@@ -281,7 +293,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Row(
               children: [
-                Text(context.l10n.yourDeviceIsUpToDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                Text(
+                  widget.isRollback ? context.l10n.alreadyOnStableFirmware : context.l10n.yourDeviceIsUpToDate,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                ),
                 const SizedBox(width: 8),
                 const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
               ],
@@ -389,7 +404,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   const FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
                   const SizedBox(width: 10),
                   Text(
-                    otaUpdateSteps.isEmpty ? context.l10n.installUpdate : context.l10n.updateNow,
+                    widget.isRollback
+                        ? context.l10n.installStableFirmware
+                        : otaUpdateSteps.isEmpty
+                        ? context.l10n.installUpdate
+                        : context.l10n.updateNow,
                     style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -431,7 +450,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader(context.l10n.checkingForUpdates, subtitle: context.l10n.pleaseWait),
+        _buildSectionHeader(
+          widget.isRollback ? context.l10n.stableFirmware : context.l10n.checkingForUpdates,
+          subtitle: context.l10n.pleaseWait,
+        ),
         Container(
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
           child: Padding(
@@ -448,7 +470,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(context.l10n.checkingFirmwareVersion, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                  Text(
+                    widget.isRollback ? context.l10n.fetchingStableFirmware : context.l10n.checkingFirmwareVersion,
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                  ),
                 ],
               ),
             ),
@@ -474,7 +499,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
           title: Text(
-            context.l10n.firmwareUpdate,
+            widget.isRollback ? context.l10n.stableFirmware : context.l10n.firmwareUpdate,
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           centerTitle: true,

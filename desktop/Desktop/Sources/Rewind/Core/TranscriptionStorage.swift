@@ -403,7 +403,6 @@ actor TranscriptionStorage {
             }
         }
     }
-
     /// Get all segments for a session ordered by segmentOrder
     func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
         let db = try await ensureInitialized()

@@ -2881,5 +2881,49 @@
     "ifYouCancel": "Als je annuleert:",
     "justAMoment": "Een moment, alsjeblieft",
     "tellUsMore": "Vertel ons meer (optioneel)",
-    "whyAreYouCanceling": "Waarom annuleer je?"
+    "whyAreYouCanceling": "Waarom annuleer je?",
+    "deviceDiagnostics": "Apparaatdiagnostiek",
+    "signalStrength": "Signaalsterkte",
+    "connectionUptime": "Uptime",
+    "reconnections": "Herverbindingen",
+    "disconnectHistory": "Ontkoppelingsgeschiedenis",
+    "noDisconnectsRecorded": "Geen ontkoppelingen geregistreerd",
+    "diagnostics": "Diagnostiek",
+    "waitingForData": "Wachten op gegevens...",
+    "liveRssiOverTime": "Live RSSI in de tijd",
+    "noRssiDataYet": "Nog geen RSSI-gegevens",
+    "collectingData": "Gegevens verzamelen...",
+    "cleanDisconnect": "Schone ontkoppeling",
+    "connectionTimeout": "Verbindingstime-out",
+    "remoteDeviceTerminated": "Extern apparaat heeft de verbinding verbroken",
+    "pairedToAnotherPhone": "Gekoppeld aan een andere telefoon",
+    "linkKeyMismatch": "Koppelingssleutel komt niet overeen",
+    "connectionFailed": "Verbinding mislukt",
+    "appClosed": "App gesloten",
+    "manualDisconnect": "Handmatige ontkoppeling",
+    "lastNEvents": "Laatste {count} gebeurtenissen",
+    "signal": "Signaal",
+    "battery": "Batterij",
+    "excellent": "Uitstekend",
+    "good": "Goed",
+    "fair": "Redelijk",
+    "weak": "Zwak",
+    "gattError": "GATT-fout ({code})",
+    "rollbackToStableFirmware": "Terugkeren naar stabiele firmware",
+    "rollbackConfirmTitle": "Firmware terugzetten?",
+    "rollbackConfirmMessage": "Dit vervangt uw huidige firmware door de laatste stabiele versie ({version}). Uw apparaat wordt opnieuw opgestart na de update.",
+    "stableFirmware": "Stabiele firmware",
+    "fetchingStableFirmware": "Laatste stabiele firmware ophalen...",
+    "noStableFirmwareFound": "Kan geen stabiele firmwareversie vinden voor uw apparaat.",
+    "installStableFirmware": "Stabiele firmware installeren",
+    "alreadyOnStableFirmware": "U gebruikt al de laatste stabiele versie.",
+    "audioSavedLocally": "{duration} audio lokaal opgeslagen",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
 }

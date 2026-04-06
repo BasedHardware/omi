@@ -1718,12 +1718,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -8901,4 +8896,129 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnosticarea dispozitivului';
+
+  @override
+  String get signalStrength => 'Puterea semnalului';
+
+  @override
+  String get connectionUptime => 'Timp de funcționare';
+
+  @override
+  String get reconnections => 'Reconectări';
+
+  @override
+  String get disconnectHistory => 'Istoric deconectări';
+
+  @override
+  String get noDisconnectsRecorded => 'Nicio deconectare înregistrată';
+
+  @override
+  String get diagnostics => 'Diagnosticare';
+
+  @override
+  String get waitingForData => 'Se așteaptă date...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI în timp real';
+
+  @override
+  String get noRssiDataYet => 'Încă nu există date RSSI';
+
+  @override
+  String get collectingData => 'Se colectează date...';
+
+  @override
+  String get cleanDisconnect => 'Deconectare curată';
+
+  @override
+  String get connectionTimeout => 'Expirarea timpului de conectare';
+
+  @override
+  String get remoteDeviceTerminated => 'Dispozitivul la distanță a încheiat conexiunea';
+
+  @override
+  String get pairedToAnotherPhone => 'Asociat cu alt telefon';
+
+  @override
+  String get linkKeyMismatch => 'Nepotrivire cheie de legătură';
+
+  @override
+  String get connectionFailed => 'Conectare eșuată';
+
+  @override
+  String get appClosed => 'Aplicație închisă';
+
+  @override
+  String get manualDisconnect => 'Deconectare manuală';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ultimele $count evenimente';
+  }
+
+  @override
+  String get signal => 'Semnal';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Excelent';
+
+  @override
+  String get good => 'Bun';
+
+  @override
+  String get fair => 'Acceptabil';
+
+  @override
+  String get weak => 'Slab';
+
+  @override
+  String gattError(String code) {
+    return 'Eroare GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Revenire la firmware-ul stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Reveniți la firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ($version). Dispozitivul se va reporni după actualizare.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Se obține cel mai recent firmware stabil...';
+
+  @override
+  String get noStableFirmwareFound => 'Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.';
+
+  @override
+  String get installStableFirmware => 'Instalare firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sunteți deja pe cea mai recentă versiune stabilă.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio salvat local';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se va sincroniza automat';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

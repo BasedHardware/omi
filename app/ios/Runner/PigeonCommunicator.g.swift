@@ -202,6 +202,80 @@ struct BleService: Hashable {
   }
 }
 
+/// A single disconnect event stored in native preferences.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct BleDisconnectEvent: Hashable {
+  var timestamp: Int64
+  var reason: String
+  var reasonCode: Int64
+  var isManual: Bool
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> BleDisconnectEvent? {
+    let timestamp = pigeonVar_list[0] as! Int64
+    let reason = pigeonVar_list[1] as! String
+    let reasonCode = pigeonVar_list[2] as! Int64
+    let isManual = pigeonVar_list[3] as! Bool
+
+    return BleDisconnectEvent(
+      timestamp: timestamp,
+      reason: reason,
+      reasonCode: reasonCode,
+      isManual: isManual
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      timestamp,
+      reason,
+      reasonCode,
+      isManual,
+    ]
+  }
+  static func == (lhs: BleDisconnectEvent, rhs: BleDisconnectEvent) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
+/// Diagnostics data read from native preferences on demand.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct BleDeviceDiagnostics: Hashable {
+  var disconnectHistory: [BleDisconnectEvent]
+  var reconnectionCount: Int64
+  var connectedAt: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> BleDeviceDiagnostics? {
+    let disconnectHistory = pigeonVar_list[0] as! [BleDisconnectEvent]
+    let reconnectionCount = pigeonVar_list[1] as! Int64
+    let connectedAt = pigeonVar_list[2] as! Int64
+
+    return BleDeviceDiagnostics(
+      disconnectHistory: disconnectHistory,
+      reconnectionCount: reconnectionCount,
+      connectedAt: connectedAt
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      disconnectHistory,
+      reconnectionCount,
+      connectedAt,
+    ]
+  }
+  static func == (lhs: BleDeviceDiagnostics, rhs: BleDeviceDiagnostics) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
 private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -209,6 +283,10 @@ private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
       return BlePeripheral.fromList(self.readValue() as! [Any?])
     case 130:
       return BleService.fromList(self.readValue() as! [Any?])
+    case 131:
+      return BleDisconnectEvent.fromList(self.readValue() as! [Any?])
+    case 132:
+      return BleDeviceDiagnostics.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -222,6 +300,12 @@ private class PigeonCommunicatorPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? BleService {
       super.writeByte(130)
+      super.writeValue(value.toList())
+    } else if let value = value as? BleDisconnectEvent {
+      super.writeByte(131)
+      super.writeValue(value.toList())
+    } else if let value = value as? BleDeviceDiagnostics {
+      super.writeByte(132)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -654,6 +738,9 @@ protocol BleHostApi {
   func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws
   func getBluetoothState() throws -> String
   func isPeripheralConnected(uuid: String) throws -> Bool
+  func startRssiStreaming(uuid: String) throws
+  func stopRssiStreaming(uuid: String) throws
+  func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void)
   /// (Android only) Check if any CompanionDeviceManager association exists.
   func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
@@ -844,6 +931,53 @@ class BleHostApiSetup {
     } else {
       isPeripheralConnectedChannel.setMessageHandler(nil)
     }
+    let startRssiStreamingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.startRssiStreaming\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      startRssiStreamingChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        do {
+          try api.startRssiStreaming(uuid: uuidArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      startRssiStreamingChannel.setMessageHandler(nil)
+    }
+    let stopRssiStreamingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.stopRssiStreaming\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      stopRssiStreamingChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        do {
+          try api.stopRssiStreaming(uuid: uuidArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      stopRssiStreamingChannel.setMessageHandler(nil)
+    }
+    let getDeviceDiagnosticsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getDeviceDiagnostics\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getDeviceDiagnosticsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        api.getDeviceDiagnostics(uuid: uuidArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      getDeviceDiagnosticsChannel.setMessageHandler(nil)
+    }
     /// (Android only) Check if any CompanionDeviceManager association exists.
     let hasCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
@@ -885,6 +1019,7 @@ protocol BleFlutterApiProtocol {
   func onDeviceReady(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onRssiUpdate(peripheralUuid peripheralUuidArg: String, rssi rssiArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class BleFlutterApi: BleFlutterApiProtocol {
@@ -973,6 +1108,24 @@ class BleFlutterApi: BleFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralUuidArg, serviceUuidArg, characteristicUuidArg, valueArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onRssiUpdate(peripheralUuid peripheralUuidArg: String, rssi rssiArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([peripheralUuidArg, rssiArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

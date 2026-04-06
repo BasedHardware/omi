@@ -30,7 +30,7 @@ struct ScoreWidget: View {
             let lineWidth = max(gaugeWidth * 0.085, 8)
             let fontSize = max(gaugeWidth * 0.2, 18)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 // Semicircle gauge
                 ZStack {
                     // Background arc
@@ -79,17 +79,10 @@ struct ScoreWidget: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(20)
+            .padding(22)
         }
         .frame(minHeight: 200)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
-                )
-        )
+        .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }
 
@@ -170,15 +163,8 @@ struct DailyScoreWidget: View {
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
-                )
-        )
+        .padding(22)
+        .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }
 

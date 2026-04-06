@@ -2923,5 +2923,49 @@
     "ifYouCancel": "Jika Anda membatalkan:",
     "justAMoment": "Sebentar, silakan",
     "tellUsMore": "Ceritakan lebih lanjut (opsional)",
-    "whyAreYouCanceling": "Mengapa Anda membatalkan?"
+    "whyAreYouCanceling": "Mengapa Anda membatalkan?",
+    "deviceDiagnostics": "Diagnostik Perangkat",
+    "signalStrength": "Kekuatan Sinyal",
+    "connectionUptime": "Waktu Aktif",
+    "reconnections": "Koneksi Ulang",
+    "disconnectHistory": "Riwayat Pemutusan",
+    "noDisconnectsRecorded": "Tidak ada pemutusan yang tercatat",
+    "diagnostics": "Diagnostik",
+    "waitingForData": "Menunggu data...",
+    "liveRssiOverTime": "RSSI langsung seiring waktu",
+    "noRssiDataYet": "Belum ada data RSSI",
+    "collectingData": "Mengumpulkan data...",
+    "cleanDisconnect": "Pemutusan bersih",
+    "connectionTimeout": "Waktu koneksi habis",
+    "remoteDeviceTerminated": "Perangkat jarak jauh memutuskan koneksi",
+    "pairedToAnotherPhone": "Dipasangkan dengan ponsel lain",
+    "linkKeyMismatch": "Ketidakcocokan kunci tautan",
+    "connectionFailed": "Koneksi gagal",
+    "appClosed": "Aplikasi ditutup",
+    "manualDisconnect": "Pemutusan manual",
+    "lastNEvents": "{count} peristiwa terakhir",
+    "signal": "Sinyal",
+    "battery": "Baterai",
+    "excellent": "Sangat Baik",
+    "good": "Baik",
+    "fair": "Cukup",
+    "weak": "Lemah",
+    "gattError": "Kesalahan GATT ({code})",
+    "rollbackToStableFirmware": "Kembali ke firmware stabil",
+    "rollbackConfirmTitle": "Kembalikan firmware?",
+    "rollbackConfirmMessage": "Ini akan mengganti firmware Anda saat ini dengan versi stabil terbaru ({version}). Perangkat Anda akan dimulai ulang setelah pembaruan.",
+    "stableFirmware": "Firmware Stabil",
+    "fetchingStableFirmware": "Mengambil firmware stabil terbaru...",
+    "noStableFirmwareFound": "Tidak dapat menemukan versi firmware stabil untuk perangkat Anda.",
+    "installStableFirmware": "Pasang firmware stabil",
+    "alreadyOnStableFirmware": "Anda sudah menggunakan versi stabil terbaru.",
+    "audioSavedLocally": "{duration} audio disimpan secara lokal",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "akan disinkronkan secara otomatis"
 }

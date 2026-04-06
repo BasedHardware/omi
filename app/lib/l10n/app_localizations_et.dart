@@ -1708,12 +1708,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8856,4 +8851,129 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
+
+  @override
+  String get deviceDiagnostics => 'Seadme diagnostika';
+
+  @override
+  String get signalStrength => 'Signaali tugevus';
+
+  @override
+  String get connectionUptime => 'Tööaeg';
+
+  @override
+  String get reconnections => 'Taasühendused';
+
+  @override
+  String get disconnectHistory => 'Katkestuste ajalugu';
+
+  @override
+  String get noDisconnectsRecorded => 'Katkestusi pole registreeritud';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Andmete ootel...';
+
+  @override
+  String get liveRssiOverTime => 'Reaalajas RSSI ajas';
+
+  @override
+  String get noRssiDataYet => 'RSSI andmeid veel pole';
+
+  @override
+  String get collectingData => 'Andmete kogumine...';
+
+  @override
+  String get cleanDisconnect => 'Puhas katkestus';
+
+  @override
+  String get connectionTimeout => 'Ühenduse ajalõpp';
+
+  @override
+  String get remoteDeviceTerminated => 'Kaugseade katkestas ühenduse';
+
+  @override
+  String get pairedToAnotherPhone => 'Seotud teise telefoniga';
+
+  @override
+  String get linkKeyMismatch => 'Lingivõtme mittevastavus';
+
+  @override
+  String get connectionFailed => 'Ühendamine ebaõnnestus';
+
+  @override
+  String get appClosed => 'Rakendus suletud';
+
+  @override
+  String get manualDisconnect => 'Käsitsi katkestus';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Viimased $count sündmust';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Aku';
+
+  @override
+  String get excellent => 'Suurepärane';
+
+  @override
+  String get good => 'Hea';
+
+  @override
+  String get fair => 'Rahuldav';
+
+  @override
+  String get weak => 'Nõrk';
+
+  @override
+  String gattError(String code) {
+    return 'GATT viga ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Tagasi stabiilsele püsivarale';
+
+  @override
+  String get rollbackConfirmTitle => 'Taastada püsivara?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'See asendab teie praeguse püsivara uusima stabiilse versiooniga ($version). Teie seade taaskäivitub pärast värskendust.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiilne püsivara';
+
+  @override
+  String get fetchingStableFirmware => 'Uusima stabiilse püsivara toomine...';
+
+  @override
+  String get noStableFirmwareFound => 'Teie seadmele ei leitud stabiilset püsivara versiooni.';
+
+  @override
+  String get installStableFirmware => 'Paigalda stabiilne püsivara';
+
+  @override
+  String get alreadyOnStableFirmware => 'Teil on juba uusim stabiilne versioon.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration heli salvestatud kohapeal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

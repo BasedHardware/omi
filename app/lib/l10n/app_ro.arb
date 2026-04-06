@@ -2881,5 +2881,49 @@
     "ifYouCancel": "Dacă anulezi:",
     "justAMoment": "O clipă, te rog",
     "tellUsMore": "Spune-ne mai multe (opțional)",
-    "whyAreYouCanceling": "De ce anulezi?"
+    "whyAreYouCanceling": "De ce anulezi?",
+    "deviceDiagnostics": "Diagnosticarea dispozitivului",
+    "signalStrength": "Puterea semnalului",
+    "connectionUptime": "Timp de funcționare",
+    "reconnections": "Reconectări",
+    "disconnectHistory": "Istoric deconectări",
+    "noDisconnectsRecorded": "Nicio deconectare înregistrată",
+    "diagnostics": "Diagnosticare",
+    "waitingForData": "Se așteaptă date...",
+    "liveRssiOverTime": "RSSI în timp real",
+    "noRssiDataYet": "Încă nu există date RSSI",
+    "collectingData": "Se colectează date...",
+    "cleanDisconnect": "Deconectare curată",
+    "connectionTimeout": "Expirarea timpului de conectare",
+    "remoteDeviceTerminated": "Dispozitivul la distanță a încheiat conexiunea",
+    "pairedToAnotherPhone": "Asociat cu alt telefon",
+    "linkKeyMismatch": "Nepotrivire cheie de legătură",
+    "connectionFailed": "Conectare eșuată",
+    "appClosed": "Aplicație închisă",
+    "manualDisconnect": "Deconectare manuală",
+    "lastNEvents": "Ultimele {count} evenimente",
+    "signal": "Semnal",
+    "battery": "Baterie",
+    "excellent": "Excelent",
+    "good": "Bun",
+    "fair": "Acceptabil",
+    "weak": "Slab",
+    "gattError": "Eroare GATT ({code})",
+    "rollbackToStableFirmware": "Revenire la firmware-ul stabil",
+    "rollbackConfirmTitle": "Reveniți la firmware?",
+    "rollbackConfirmMessage": "Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ({version}). Dispozitivul se va reporni după actualizare.",
+    "stableFirmware": "Firmware stabil",
+    "fetchingStableFirmware": "Se obține cel mai recent firmware stabil...",
+    "noStableFirmwareFound": "Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.",
+    "installStableFirmware": "Instalare firmware stabil",
+    "alreadyOnStableFirmware": "Sunteți deja pe cea mai recentă versiune stabilă.",
+    "audioSavedLocally": "{duration} audio salvat local",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "se va sincroniza automat"
 }

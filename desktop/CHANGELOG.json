@@ -2,6 +2,160 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.230",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.229",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.228",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.227",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.226",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.225",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.224",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.223",
+      "date": "2026-04-04",
+      "changes": [
+        "Fixed speaker diarization in Take Note by migrating live transcription to production backend"
+      ]
+    },
+    {
+      "version": "0.11.222",
+      "date": "2026-04-03",
+      "changes": [
+        "Fixed floating bar screenshots not capturing screen content when screen recording permission was revoked after app update"
+      ]
+    },
+    {
+      "version": "0.11.221",
+      "date": "2026-04-02",
+      "changes": [
+        "Fixed speaker diarization in Take Note by migrating live transcription to production backend"
+      ]
+    },
+    {
+      "version": "0.11.220",
+      "date": "2026-04-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.219",
+      "date": "2026-04-02",
+      "changes": [
+        "Fixed WebSocket transcription disconnects: proper handshake detection, unlimited retry with backoff, and thread-safe connection state"
+      ]
+    },
+    {
+      "version": "0.11.218",
+      "date": "2026-04-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.217",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.215",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.214",
+      "date": "2026-04-01",
+      "changes": [
+        "Fixed 2s+ UI freezes caused by dock tile updates during chat polling"
+      ]
+    },
+    {
+      "version": "0.11.213",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.212",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.210",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.209",
+      "date": "2026-04-01",
+      "changes": [
+        "Added copy and share buttons to floating bar AI responses for quick Q&A sharing"
+      ]
+    },
+    {
+      "version": "0.11.208",
+      "date": "2026-04-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.207",
+      "date": "2026-04-01",
+      "changes": [
+        "Added \"How did you hear about us?\" onboarding step for K-factor tracking"
+      ]
+    },
+    {
       "version": "0.11.206",
       "date": "2026-04-01",
       "changes": [
@@ -33,7 +187,7 @@
       "version": "0.11.202",
       "date": "2026-03-31",
       "changes": [
-        "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state",
+        "Fixed WebSocket transcription disconnects: proper handshake detection, unlimited retry with backoff, and thread-safe connection state",
         "Fixed UI freezes caused by dock tile updates when receiving support messages"
       ]
     },

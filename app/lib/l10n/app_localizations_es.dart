@@ -1705,12 +1705,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIVOS',
-      one: 'DISPOSITIVO',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVOS', one: 'DISPOSITIVO');
     return '$count $_temp0 ENCONTRADOS CERCA';
   }
 
@@ -8877,4 +8872,129 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Queremos hacer Omi más útil para ti.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnósticos del dispositivo';
+
+  @override
+  String get signalStrength => 'Intensidad de señal';
+
+  @override
+  String get connectionUptime => 'Tiempo de actividad';
+
+  @override
+  String get reconnections => 'Reconexiones';
+
+  @override
+  String get disconnectHistory => 'Historial de desconexiones';
+
+  @override
+  String get noDisconnectsRecorded => 'No se registraron desconexiones';
+
+  @override
+  String get diagnostics => 'Diagnósticos';
+
+  @override
+  String get waitingForData => 'Esperando datos...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI en tiempo real';
+
+  @override
+  String get noRssiDataYet => 'Aún no hay datos RSSI';
+
+  @override
+  String get collectingData => 'Recopilando datos...';
+
+  @override
+  String get cleanDisconnect => 'Desconexión limpia';
+
+  @override
+  String get connectionTimeout => 'Tiempo de conexión agotado';
+
+  @override
+  String get remoteDeviceTerminated => 'El dispositivo remoto terminó la conexión';
+
+  @override
+  String get pairedToAnotherPhone => 'Emparejado con otro teléfono';
+
+  @override
+  String get linkKeyMismatch => 'Clave de enlace no coincide';
+
+  @override
+  String get connectionFailed => 'Conexión fallida';
+
+  @override
+  String get appClosed => 'Aplicación cerrada';
+
+  @override
+  String get manualDisconnect => 'Desconexión manual';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Últimos $count eventos';
+  }
+
+  @override
+  String get signal => 'Señal';
+
+  @override
+  String get battery => 'Batería';
+
+  @override
+  String get excellent => 'Excelente';
+
+  @override
+  String get good => 'Bueno';
+
+  @override
+  String get fair => 'Aceptable';
+
+  @override
+  String get weak => 'Débil';
+
+  @override
+  String gattError(String code) {
+    return 'Error GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Volver al firmware estable';
+
+  @override
+  String get rollbackConfirmTitle => '¿Volver al firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Esto reemplazará tu firmware actual con la última versión estable ($version). Tu dispositivo se reiniciará después de la actualización.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware estable';
+
+  @override
+  String get fetchingStableFirmware => 'Obteniendo el último firmware estable...';
+
+  @override
+  String get noStableFirmwareFound => 'No se pudo encontrar una versión estable del firmware para tu dispositivo.';
+
+  @override
+  String get installStableFirmware => 'Instalar firmware estable';
+
+  @override
+  String get alreadyOnStableFirmware => 'Ya estás en la última versión estable.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration de audio guardado localmente';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se sincronizará automáticamente';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

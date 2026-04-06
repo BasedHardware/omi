@@ -1711,12 +1711,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -8863,4 +8858,129 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vi vill göra Omi mer användbar för dig.';
+
+  @override
+  String get deviceDiagnostics => 'Enhetsdiagnostik';
+
+  @override
+  String get signalStrength => 'Signalstyrka';
+
+  @override
+  String get connectionUptime => 'Drifttid';
+
+  @override
+  String get reconnections => 'Återanslutningar';
+
+  @override
+  String get disconnectHistory => 'Frånkopplingshistorik';
+
+  @override
+  String get noDisconnectsRecorded => 'Inga frånkopplingar registrerade';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Väntar på data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI i realtid över tid';
+
+  @override
+  String get noRssiDataYet => 'Ingen RSSI-data ännu';
+
+  @override
+  String get collectingData => 'Samlar in data...';
+
+  @override
+  String get cleanDisconnect => 'Ren frånkoppling';
+
+  @override
+  String get connectionTimeout => 'Anslutningstidsgräns';
+
+  @override
+  String get remoteDeviceTerminated => 'Fjärrenheten avslutade anslutningen';
+
+  @override
+  String get pairedToAnotherPhone => 'Ihopparad med en annan telefon';
+
+  @override
+  String get linkKeyMismatch => 'Länknyckel stämmer inte';
+
+  @override
+  String get connectionFailed => 'Anslutning misslyckades';
+
+  @override
+  String get appClosed => 'Appen stängd';
+
+  @override
+  String get manualDisconnect => 'Manuell frånkoppling';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Senaste $count händelser';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Batteri';
+
+  @override
+  String get excellent => 'Utmärkt';
+
+  @override
+  String get good => 'Bra';
+
+  @override
+  String get fair => 'Godtagbar';
+
+  @override
+  String get weak => 'Svag';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fel ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Återgå till stabil firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Återställ firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Detta ersätter din nuvarande firmware med den senaste stabila versionen ($version). Din enhet startas om efter uppdateringen.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Hämtar senaste stabila firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Kunde inte hitta en stabil firmwareversion för din enhet.';
+
+  @override
+  String get installStableFirmware => 'Installera stabil firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Du har redan den senaste stabila versionen.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ljud sparat lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseras automatiskt';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

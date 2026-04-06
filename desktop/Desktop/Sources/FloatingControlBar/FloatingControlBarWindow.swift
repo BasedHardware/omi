@@ -983,6 +983,7 @@ class FloatingControlBarManager {
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.stop()
     }
 
     /// Toggle visibility.
@@ -1180,6 +1181,8 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        FloatingBarVoicePlaybackService.shared.stop()
+
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
         // and avoid promoting the main Omi window while capturing a clean screenshot.
         let previousAlpha = barWindow.alphaValue
@@ -1196,6 +1199,8 @@ class FloatingControlBarManager {
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+
+        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -1218,6 +1223,10 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
+                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                    aiMessage,
+                    isFinal: !aiMessage.isStreaming
+                )
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1235,7 +1244,15 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "main", imageData: screenshotData)
+        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6"
+            : ShortcutSettings.shared.selectedModel
+        await provider.sendMessage(message, model: floatingModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+
+        // Cancel the messages subscription now that streaming is done.
+        // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
+        chatCancellable?.cancel()
+        chatCancellable = nil
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
@@ -1261,6 +1278,11 @@ class FloatingControlBarManager {
             }
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
+
+        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+            barWindow.state.currentAIMessage,
+            isFinal: true
+        )
     }
 }
 

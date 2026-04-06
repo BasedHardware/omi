@@ -1,0 +1,40 @@
+name: Sync macOS onboarding to Figma source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: onboarding-figma-sync
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/export_onboarding_sync_bundle.sh scripts/prepare_onboarding_sync_bundle.sh scripts/publish_onboarding_sync_branch.sh
+
+      - name: Export onboarding sync bundle
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: scripts/export_onboarding_sync_bundle.sh "$RUNNER_TEMP/onboarding-sync-bundle" "$SOURCE_COMMIT" "$SOURCE_BRANCH"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: onboarding-sync-bundle
+          path: ${{ runner.temp }}/onboarding-sync-bundle
+
+      - name: Publish bundle branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/publish_onboarding_sync_branch.sh "$RUNNER_TEMP/onboarding-sync-bundle"

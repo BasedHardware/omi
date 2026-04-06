@@ -2916,5 +2916,49 @@
     "ifYouCancel": "İptal ederseniz:",
     "justAMoment": "Bir dakika, lütfen",
     "tellUsMore": "Daha fazla anlatın (isteğe bağlı)",
-    "whyAreYouCanceling": "Neden iptal ediyorsunuz?"
+    "whyAreYouCanceling": "Neden iptal ediyorsunuz?",
+    "deviceDiagnostics": "Cihaz Tanılama",
+    "signalStrength": "Sinyal Gücü",
+    "connectionUptime": "Çalışma Süresi",
+    "reconnections": "Yeniden Bağlantılar",
+    "disconnectHistory": "Bağlantı Kesme Geçmişi",
+    "noDisconnectsRecorded": "Bağlantı kesilmesi kaydedilmedi",
+    "diagnostics": "Tanılama",
+    "waitingForData": "Veri bekleniyor...",
+    "liveRssiOverTime": "Zaman içinde canlı RSSI",
+    "noRssiDataYet": "Henüz RSSI verisi yok",
+    "collectingData": "Veri toplanıyor...",
+    "cleanDisconnect": "Temiz bağlantı kesme",
+    "connectionTimeout": "Bağlantı zaman aşımı",
+    "remoteDeviceTerminated": "Uzak cihaz bağlantıyı sonlandırdı",
+    "pairedToAnotherPhone": "Başka bir telefona eşleştirildi",
+    "linkKeyMismatch": "Bağlantı anahtarı uyuşmazlığı",
+    "connectionFailed": "Bağlantı başarısız",
+    "appClosed": "Uygulama kapatıldı",
+    "manualDisconnect": "Manuel bağlantı kesme",
+    "lastNEvents": "Son {count} olay",
+    "signal": "Sinyal",
+    "battery": "Pil",
+    "excellent": "Mükemmel",
+    "good": "İyi",
+    "fair": "Orta",
+    "weak": "Zayıf",
+    "gattError": "GATT hatası ({code})",
+    "rollbackToStableFirmware": "Kararlı yazılıma geri dön",
+    "rollbackConfirmTitle": "Yazılım geri alınsın mı?",
+    "rollbackConfirmMessage": "Bu, mevcut yazılımınızı en son kararlı sürümle ({version}) değiştirecektir. Güncelleme sonrasında cihazınız yeniden başlatılacaktır.",
+    "stableFirmware": "Kararlı yazılım",
+    "fetchingStableFirmware": "En son kararlı yazılım alınıyor...",
+    "noStableFirmwareFound": "Cihazınız için kararlı bir yazılım sürümü bulunamadı.",
+    "installStableFirmware": "Kararlı yazılımı yükle",
+    "alreadyOnStableFirmware": "Zaten en son kararlı sürümdesiniz.",
+    "audioSavedLocally": "{duration} ses yerel olarak kaydedildi",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
 }

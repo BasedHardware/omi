@@ -26,9 +26,10 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshedToken = await AuthService.instance.getIdToken();
@@ -318,30 +319,27 @@ Stream<String> makeStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: buffer partial data across TCP reads and only
+    // emit complete events delimited by \n\n.  The previous 1024-byte
+    // heuristic failed when TCP segments split an SSE line at arbitrary
+    // byte boundaries (see issue #6284).
+    var remainder = '';
     await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      // Last element is either empty (if data ended with \n\n) or
+      // an incomplete fragment — keep it in the remainder.
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    // Flush any trailing data that wasn't terminated by \n\n
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
@@ -411,30 +409,21 @@ Stream<String> makeMultipartStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
+    var remainder = '';
     await for (var data in response.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');

@@ -8844,4 +8844,129 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Vi vil gøre Omi mere nyttig for dig.';
+
+  @override
+  String get deviceDiagnostics => 'Enhedsdiagnostik';
+
+  @override
+  String get signalStrength => 'Signalstyrke';
+
+  @override
+  String get connectionUptime => 'Oppetid';
+
+  @override
+  String get reconnections => 'Genforbindelser';
+
+  @override
+  String get disconnectHistory => 'Afbrydelseshistorik';
+
+  @override
+  String get noDisconnectsRecorded => 'Ingen afbrydelser registreret';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Venter på data...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI over tid';
+
+  @override
+  String get noRssiDataYet => 'Ingen RSSI-data endnu';
+
+  @override
+  String get collectingData => 'Indsamler data...';
+
+  @override
+  String get cleanDisconnect => 'Ren afbrydelse';
+
+  @override
+  String get connectionTimeout => 'Forbindelsestimeout';
+
+  @override
+  String get remoteDeviceTerminated => 'Fjernenheden afbrød forbindelsen';
+
+  @override
+  String get pairedToAnotherPhone => 'Parret med en anden telefon';
+
+  @override
+  String get linkKeyMismatch => 'Uoverensstemmelse i forbindelsesnøgle';
+
+  @override
+  String get connectionFailed => 'Forbindelse mislykkedes';
+
+  @override
+  String get appClosed => 'App lukket';
+
+  @override
+  String get manualDisconnect => 'Manuel afbrydelse';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Sidste $count begivenheder';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Batteri';
+
+  @override
+  String get excellent => 'Fremragende';
+
+  @override
+  String get good => 'God';
+
+  @override
+  String get fair => 'Rimelig';
+
+  @override
+  String get weak => 'Svag';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fejl ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Rul tilbage til stabil firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Rul firmware tilbage?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dette vil erstatte din nuværende firmware med den seneste stabile version ($version). Din enhed genstarter efter opdateringen.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Henter seneste stabile firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Kunne ikke finde en stabil firmwareversion til din enhed.';
+
+  @override
+  String get installStableFirmware => 'Installer stabil firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Du er allerede på den seneste stabile version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration lyd gemt lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseres automatisk';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

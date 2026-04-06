@@ -842,13 +842,15 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       );
     }
 
-    // Add to Apple Reminders
-    final success = await service.addReminder(
+    // Add to Apple Reminders — now returns calendarItemIdentifier
+    final calendarItemId = await service.addReminder(
       title: widget.actionItem.description,
       notes: 'From Omi',
       dueDate: widget.actionItem.dueAt,
       listName: 'Reminders',
     );
+
+    final success = calendarItemId != null;
 
     if (context.mounted) {
       // Clear the loading snackbar
@@ -873,7 +875,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the action item with export metadata
+      // If successful, update the action item with export metadata + apple_reminder_id
       if (success) {
         final exportTime = DateTime.now();
         await updateActionItem(
@@ -881,6 +883,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exported: true,
           exportDate: exportTime,
           exportPlatform: 'apple_reminders',
+          appleReminderId: calendarItemId,
         );
 
         // Track action item export

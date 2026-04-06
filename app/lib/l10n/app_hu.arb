@@ -2977,5 +2977,49 @@
     "ifYouCancel": "Ha lemondod:",
     "justAMoment": "Egy pillanat, kérlek",
     "tellUsMore": "Mondj el többet (opcionális)",
-    "whyAreYouCanceling": "Miért mondod le?"
+    "whyAreYouCanceling": "Miért mondod le?",
+    "deviceDiagnostics": "Eszközdiagnosztika",
+    "signalStrength": "Jelerősség",
+    "connectionUptime": "Üzemidő",
+    "reconnections": "Újracsatlakozások",
+    "disconnectHistory": "Lecsatlakozási előzmények",
+    "noDisconnectsRecorded": "Nincs rögzített lecsatlakozás",
+    "diagnostics": "Diagnosztika",
+    "waitingForData": "Adatokra várakozás...",
+    "liveRssiOverTime": "Élő RSSI az idő függvényében",
+    "noRssiDataYet": "Még nincs RSSI adat",
+    "collectingData": "Adatgyűjtés...",
+    "cleanDisconnect": "Tiszta lecsatlakozás",
+    "connectionTimeout": "Kapcsolat időtúllépés",
+    "remoteDeviceTerminated": "A távoli eszköz megszakította a kapcsolatot",
+    "pairedToAnotherPhone": "Másik telefonhoz párosítva",
+    "linkKeyMismatch": "Kapcsolati kulcs eltérés",
+    "connectionFailed": "Sikertelen kapcsolódás",
+    "appClosed": "Alkalmazás bezárva",
+    "manualDisconnect": "Kézi lecsatlakozás",
+    "lastNEvents": "Utolsó {count} esemény",
+    "signal": "Jel",
+    "battery": "Akkumulátor",
+    "excellent": "Kiváló",
+    "good": "Jó",
+    "fair": "Elfogadható",
+    "weak": "Gyenge",
+    "gattError": "GATT hiba ({code})",
+    "rollbackToStableFirmware": "Visszaállítás stabil firmware-re",
+    "rollbackConfirmTitle": "Firmware visszaállítása?",
+    "rollbackConfirmMessage": "Ez lecseréli a jelenlegi firmware-t a legújabb stabil verzióra ({version}). Az eszköz a frissítés után újraindul.",
+    "stableFirmware": "Stabil firmware",
+    "fetchingStableFirmware": "Legújabb stabil firmware lekérése...",
+    "noStableFirmwareFound": "Nem található stabil firmware verzió az eszközéhez.",
+    "installStableFirmware": "Stabil firmware telepítése",
+    "alreadyOnStableFirmware": "Már a legújabb stabil verzión van.",
+    "audioSavedLocally": "{duration} hang helyben mentve",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "automatikusan szinkronizálódik"
 }

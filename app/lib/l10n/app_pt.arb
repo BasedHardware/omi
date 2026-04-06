@@ -2917,5 +2917,49 @@
     "ifYouCancel": "Se cancelar:",
     "justAMoment": "Um momento, por favor",
     "tellUsMore": "Conte-nos mais (opcional)",
-    "whyAreYouCanceling": "Por que está cancelando?"
+    "whyAreYouCanceling": "Por que está cancelando?",
+    "deviceDiagnostics": "Diagnósticos do dispositivo",
+    "signalStrength": "Intensidade do sinal",
+    "connectionUptime": "Tempo de atividade",
+    "reconnections": "Reconexões",
+    "disconnectHistory": "Histórico de desconexões",
+    "noDisconnectsRecorded": "Nenhuma desconexão registrada",
+    "diagnostics": "Diagnósticos",
+    "waitingForData": "Aguardando dados...",
+    "liveRssiOverTime": "RSSI ao vivo ao longo do tempo",
+    "noRssiDataYet": "Sem dados RSSI ainda",
+    "collectingData": "Coletando dados...",
+    "cleanDisconnect": "Desconexão limpa",
+    "connectionTimeout": "Tempo de conexão esgotado",
+    "remoteDeviceTerminated": "O dispositivo remoto encerrou a conexão",
+    "pairedToAnotherPhone": "Pareado com outro telefone",
+    "linkKeyMismatch": "Chave de link não corresponde",
+    "connectionFailed": "Falha na conexão",
+    "appClosed": "Aplicativo fechado",
+    "manualDisconnect": "Desconexão manual",
+    "lastNEvents": "Últimos {count} eventos",
+    "signal": "Sinal",
+    "battery": "Bateria",
+    "excellent": "Excelente",
+    "good": "Bom",
+    "fair": "Razoável",
+    "weak": "Fraco",
+    "gattError": "Erro GATT ({code})",
+    "rollbackToStableFirmware": "Voltar ao firmware estável",
+    "rollbackConfirmTitle": "Reverter firmware?",
+    "rollbackConfirmMessage": "Isso substituirá seu firmware atual pela última versão estável ({version}). Seu dispositivo será reiniciado após a atualização.",
+    "stableFirmware": "Firmware estável",
+    "fetchingStableFirmware": "Obtendo o último firmware estável...",
+    "noStableFirmwareFound": "Não foi possível encontrar uma versão estável do firmware para o seu dispositivo.",
+    "installStableFirmware": "Instalar firmware estável",
+    "alreadyOnStableFirmware": "Você já está na última versão estável.",
+    "audioSavedLocally": "{duration} de áudio salvo localmente",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "será sincronizado automaticamente"
 }

@@ -419,3 +419,92 @@ def test_non_latin_text_merges_same_speaker():
     assert a.id not in removed_ids
     assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
+
+
+# ---- Non-English sentence boundary tests (issue #6189) ----
+
+
+def test_cjk_sentence_ender_splits_segments():
+    """Chinese 。 should be recognized as sentence boundary, preventing merge across speakers."""
+    a = _segment("你好世界。这是第一句话。", speaker="SPEAKER_00", start=0.0, end=3.0)
+    b = _segment("我是另一个人。", speaker="SPEAKER_01", start=3.0, end=5.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+    assert segments[0].speaker == "SPEAKER_00"
+    assert segments[1].speaker == "SPEAKER_01"
+
+
+def test_cjk_question_mark_recognized():
+    """Chinese ？ should be recognized as sentence-ending punctuation."""
+    a = _segment("你好吗？", speaker="SPEAKER_00", start=0.0, end=2.0)
+    b = _segment("是的。", speaker="SPEAKER_01", start=2.0, end=4.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+
+
+def test_cjk_exclamation_mark_recognized():
+    """Chinese ！ should be recognized as sentence-ending punctuation."""
+    a = _segment("太好了！", speaker="SPEAKER_00", start=0.0, end=2.0)
+    b = _segment("谢谢。", speaker="SPEAKER_01", start=2.0, end=4.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+
+
+def test_hindi_danda_splits_segments():
+    """Hindi danda (।) should be recognized as sentence boundary."""
+    a = _segment("नमस्ते दुनिया।", speaker="SPEAKER_00", start=0.0, end=3.0)
+    b = _segment("मैं ठीक हूँ।", speaker="SPEAKER_01", start=3.0, end=5.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+
+
+def test_arabic_question_mark_splits_segments():
+    """Arabic question mark (؟) should be recognized as sentence boundary."""
+    a = _segment("كيف حالك؟", speaker="SPEAKER_00", start=0.0, end=3.0)
+    b = _segment("أنا بخير.", speaker="SPEAKER_01", start=3.0, end=5.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+
+
+def test_cjk_no_merge_long_text_ending_with_period():
+    """Long CJK text ending with 。 should not merge with next segment (same speaker, >125 chars)."""
+    long_text = "これは非常に長いテキストです。" * 10  # > 125 chars
+    a = _segment(long_text, speaker="SPEAKER_00", start=0.0, end=10.0)
+    b = _segment("次の文。", speaker="SPEAKER_00", start=10.1, end=12.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+
+
+def test_cjk_text_is_not_treated_as_lowercase_continuation():
+    """CJK text should not be merged as 'lowercase continuation' since CJK has no case."""
+    a = _segment("Hello there", speaker="SPEAKER_00", start=0.0, end=2.0)
+    b = _segment("こんにちは", speaker="SPEAKER_00", start=2.1, end=4.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    # Should still merge (same speaker, small gap, no sentence ender on a)
+    assert len(segments) == 1
+
+
+def test_mixed_english_cjk_sentence_splitting():
+    """Mixed text with both English and CJK sentence enders should split correctly."""
+    a = _segment("Hello world. 你好世界。", speaker="SPEAKER_00", start=0.0, end=3.0)
+    b = _segment("Next part.", speaker="SPEAKER_01", start=3.0, end=5.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+    assert segments[0].text.endswith("。")
+    assert segments[1].text == "Next part."

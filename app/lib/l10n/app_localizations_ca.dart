@@ -1719,12 +1719,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -8910,4 +8905,129 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Volem fer Omi més útil per a tu.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnòstics del dispositiu';
+
+  @override
+  String get signalStrength => 'Intensitat del senyal';
+
+  @override
+  String get connectionUptime => 'Temps d\'activitat';
+
+  @override
+  String get reconnections => 'Reconnexions';
+
+  @override
+  String get disconnectHistory => 'Historial de desconnexions';
+
+  @override
+  String get noDisconnectsRecorded => 'No s\'han registrat desconnexions';
+
+  @override
+  String get diagnostics => 'Diagnòstics';
+
+  @override
+  String get waitingForData => 'Esperant dades...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI en temps real';
+
+  @override
+  String get noRssiDataYet => 'Encara no hi ha dades RSSI';
+
+  @override
+  String get collectingData => 'Recollint dades...';
+
+  @override
+  String get cleanDisconnect => 'Desconnexió neta';
+
+  @override
+  String get connectionTimeout => 'Temps d\'espera de connexió esgotat';
+
+  @override
+  String get remoteDeviceTerminated => 'El dispositiu remot ha finalitzat';
+
+  @override
+  String get pairedToAnotherPhone => 'Vinculat a un altre telèfon';
+
+  @override
+  String get linkKeyMismatch => 'Clau d\'enllaç no coincident';
+
+  @override
+  String get connectionFailed => 'Connexió fallida';
+
+  @override
+  String get appClosed => 'Aplicació tancada';
+
+  @override
+  String get manualDisconnect => 'Desconnexió manual';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Últims $count esdeveniments';
+  }
+
+  @override
+  String get signal => 'Senyal';
+
+  @override
+  String get battery => 'Bateria';
+
+  @override
+  String get excellent => 'Excel·lent';
+
+  @override
+  String get good => 'Bo';
+
+  @override
+  String get fair => 'Acceptable';
+
+  @override
+  String get weak => 'Feble';
+
+  @override
+  String gattError(String code) {
+    return 'Error GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Tornar al firmware estable';
+
+  @override
+  String get rollbackConfirmTitle => 'Tornar al firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Això substituirà el firmware actual amb la darrera versió estable ($version). El dispositiu es reiniciarà després de l\'actualització.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware estable';
+
+  @override
+  String get fetchingStableFirmware => 'Obtenint el darrer firmware estable...';
+
+  @override
+  String get noStableFirmwareFound => 'No s\'ha pogut trobar una versió estable del firmware per al vostre dispositiu.';
+
+  @override
+  String get installStableFirmware => 'Instal·lar firmware estable';
+
+  @override
+  String get alreadyOnStableFirmware => 'Ja esteu a la darrera versió estable.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration d\'àudio desat localment';
+  }
+
+  @override
+  String get willSyncAutomatically => 'es sincronitzarà automàticament';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

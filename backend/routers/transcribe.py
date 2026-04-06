@@ -1761,7 +1761,9 @@ async def _stream_handler(
                     continue
 
                 emb = person.get('speaker_embedding')
-                if emb:
+                # Only load embedding if person has speech samples — contacts without
+                # samples may have stale embeddings from a pre-v3 model (#6238)
+                if emb and person.get('speech_samples'):
                     person_embeddings_cache[person['id']] = {
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],

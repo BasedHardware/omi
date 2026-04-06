@@ -1715,12 +1715,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANTI',
-      one: 'PERANTI',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -8883,4 +8878,129 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Kami mahu menjadikan Omi lebih berguna untuk anda.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostik Peranti';
+
+  @override
+  String get signalStrength => 'Kekuatan Isyarat';
+
+  @override
+  String get connectionUptime => 'Masa Aktif';
+
+  @override
+  String get reconnections => 'Sambungan Semula';
+
+  @override
+  String get disconnectHistory => 'Sejarah Pemutusan';
+
+  @override
+  String get noDisconnectsRecorded => 'Tiada pemutusan direkodkan';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Menunggu data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI langsung dari semasa ke semasa';
+
+  @override
+  String get noRssiDataYet => 'Belum ada data RSSI';
+
+  @override
+  String get collectingData => 'Mengumpul data...';
+
+  @override
+  String get cleanDisconnect => 'Pemutusan bersih';
+
+  @override
+  String get connectionTimeout => 'Masa sambungan tamat';
+
+  @override
+  String get remoteDeviceTerminated => 'Peranti jauh menamatkan sambungan';
+
+  @override
+  String get pairedToAnotherPhone => 'Dipasangkan dengan telefon lain';
+
+  @override
+  String get linkKeyMismatch => 'Kunci pautan tidak sepadan';
+
+  @override
+  String get connectionFailed => 'Sambungan gagal';
+
+  @override
+  String get appClosed => 'Aplikasi ditutup';
+
+  @override
+  String get manualDisconnect => 'Pemutusan manual';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count peristiwa terakhir';
+  }
+
+  @override
+  String get signal => 'Isyarat';
+
+  @override
+  String get battery => 'Bateri';
+
+  @override
+  String get excellent => 'Cemerlang';
+
+  @override
+  String get good => 'Baik';
+
+  @override
+  String get fair => 'Sederhana';
+
+  @override
+  String get weak => 'Lemah';
+
+  @override
+  String gattError(String code) {
+    return 'Ralat GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Kembali ke firmware stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Kembalikan firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ini akan menggantikan firmware semasa anda dengan versi stabil terkini ($version). Peranti anda akan dimulakan semula selepas kemas kini.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware Stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Mendapatkan firmware stabil terkini...';
+
+  @override
+  String get noStableFirmwareFound => 'Tidak dapat mencari versi firmware stabil untuk peranti anda.';
+
+  @override
+  String get installStableFirmware => 'Pasang firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terkini.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio disimpan secara tempatan';
+  }
+
+  @override
+  String get willSyncAutomatically => 'akan disegerakkan secara automatik';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

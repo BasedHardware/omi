@@ -1713,12 +1713,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -3283,7 +3278,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get aboutYou => 'O vás';
 
   @override
-  String get manual => 'Manuálne';
+  String get manual => 'Ručné';
 
   @override
   String get loadingYourMemories => 'Načítavanie vašich spomienok...';
@@ -8846,4 +8841,129 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Chceme, aby bol Omi pre vás užitočnejší.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostika zariadenia';
+
+  @override
+  String get signalStrength => 'Sila signálu';
+
+  @override
+  String get connectionUptime => 'Doba prevádzky';
+
+  @override
+  String get reconnections => 'Opätovné pripojenia';
+
+  @override
+  String get disconnectHistory => 'História odpojení';
+
+  @override
+  String get noDisconnectsRecorded => 'Žiadne odpojenia neboli zaznamenané';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Čakanie na dáta...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI v reálnom čase';
+
+  @override
+  String get noRssiDataYet => 'Zatiaľ žiadne dáta RSSI';
+
+  @override
+  String get collectingData => 'Zber dát...';
+
+  @override
+  String get cleanDisconnect => 'Čisté odpojenie';
+
+  @override
+  String get connectionTimeout => 'Vypršal časový limit pripojenia';
+
+  @override
+  String get remoteDeviceTerminated => 'Vzdialené zariadenie ukončilo spojenie';
+
+  @override
+  String get pairedToAnotherPhone => 'Spárované s iným telefónom';
+
+  @override
+  String get linkKeyMismatch => 'Nezhoda kľúča prepojenia';
+
+  @override
+  String get connectionFailed => 'Pripojenie zlyhalo';
+
+  @override
+  String get appClosed => 'Aplikácia zatvorená';
+
+  @override
+  String get manualDisconnect => 'Ručné odpojenie';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Posledných $count udalostí';
+  }
+
+  @override
+  String get signal => 'Signál';
+
+  @override
+  String get battery => 'Batéria';
+
+  @override
+  String get excellent => 'Vynikajúci';
+
+  @override
+  String get good => 'Dobrý';
+
+  @override
+  String get fair => 'Uspokojivý';
+
+  @override
+  String get weak => 'Slabý';
+
+  @override
+  String gattError(String code) {
+    return 'Chyba GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Vrátiť sa na stabilný firmvér';
+
+  @override
+  String get rollbackConfirmTitle => 'Vrátiť firmvér?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tým sa nahradí aktuálny firmvér najnovšou stabilnou verziou ($version). Po aktualizácii sa zariadenie reštartuje.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilný firmvér';
+
+  @override
+  String get fetchingStableFirmware => 'Načítava sa najnovší stabilný firmvér...';
+
+  @override
+  String get noStableFirmwareFound => 'Pre vaše zariadenie sa nepodarilo nájsť stabilnú verziu firmvéru.';
+
+  @override
+  String get installStableFirmware => 'Nainštalovať stabilný firmvér';
+
+  @override
+  String get alreadyOnStableFirmware => 'Už máte najnovšiu stabilnú verziu.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženého lokálne';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje sa automaticky';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

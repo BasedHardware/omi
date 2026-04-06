@@ -185,7 +185,6 @@ struct ConversationsPage: View {
       }
     }
   }
-
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {

@@ -8522,12 +8522,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -8697,4 +8692,129 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => '我们想让 Omi 对您更有用。';
+
+  @override
+  String get deviceDiagnostics => '设备诊断';
+
+  @override
+  String get signalStrength => '信号强度';
+
+  @override
+  String get connectionUptime => '运行时间';
+
+  @override
+  String get reconnections => '重新连接';
+
+  @override
+  String get disconnectHistory => '断开连接记录';
+
+  @override
+  String get noDisconnectsRecorded => '没有记录到断开连接';
+
+  @override
+  String get diagnostics => '诊断';
+
+  @override
+  String get waitingForData => '等待数据...';
+
+  @override
+  String get liveRssiOverTime => '实时RSSI变化';
+
+  @override
+  String get noRssiDataYet => '暂无RSSI数据';
+
+  @override
+  String get collectingData => '正在收集数据...';
+
+  @override
+  String get cleanDisconnect => '正常断开';
+
+  @override
+  String get connectionTimeout => '连接超时';
+
+  @override
+  String get remoteDeviceTerminated => '远程设备终止了连接';
+
+  @override
+  String get pairedToAnotherPhone => '已配对到其他手机';
+
+  @override
+  String get linkKeyMismatch => '链接密钥不匹配';
+
+  @override
+  String get connectionFailed => '连接失败';
+
+  @override
+  String get appClosed => '应用已关闭';
+
+  @override
+  String get manualDisconnect => '手动断开连接';
+
+  @override
+  String lastNEvents(int count) {
+    return '最近$count个事件';
+  }
+
+  @override
+  String get signal => '信号';
+
+  @override
+  String get battery => '电池';
+
+  @override
+  String get excellent => '优秀';
+
+  @override
+  String get good => '良好';
+
+  @override
+  String get fair => '一般';
+
+  @override
+  String get weak => '弱';
+
+  @override
+  String gattError(String code) {
+    return 'GATT错误 ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => '回滚到稳定固件';
+
+  @override
+  String get rollbackConfirmTitle => '回滚固件？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '这将用最新稳定版本（$version）替换当前固件。更新后设备将重新启动。';
+  }
+
+  @override
+  String get stableFirmware => '稳定固件';
+
+  @override
+  String get fetchingStableFirmware => '正在获取最新稳定固件...';
+
+  @override
+  String get noStableFirmwareFound => '未找到适用于您设备的稳定固件版本。';
+
+  @override
+  String get installStableFirmware => '安装稳定固件';
+
+  @override
+  String get alreadyOnStableFirmware => '您已在最新稳定版本上。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 音频已本地保存';
+  }
+
+  @override
+  String get willSyncAutomatically => '将自动同步';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

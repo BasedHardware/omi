@@ -12,6 +12,7 @@ from enum import Enum
 import logging
 
 from database.redis_db import r
+from models.transcript_segment import SENTENCE_FINDALL_RE
 
 logger = logging.getLogger(__name__)
 
@@ -338,16 +339,19 @@ def classify_translation_need(text: str, target_language: str, is_stable: bool =
 
 
 def split_into_sentences(text: str) -> List[str]:
-    """Splits text into sentences based on sentence-ending punctuation (.?!) and newlines."""
+    """Splits text into sentences based on sentence-ending punctuation and newlines.
+
+    Recognizes Unicode sentence enders for CJK, Arabic, Hindi, and other non-English languages.
+    """
     if not text:
         return []
-    # Split on newlines first, then split each line on sentence-ending punctuation
+
     result = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
             continue
-        sentences = re.findall(r'[^.?!]+(?:[.?!]\s*|\s*$)', line)
+        sentences = SENTENCE_FINDALL_RE.findall(line)
         result.extend(s.strip() for s in sentences if s.strip())
     return result
 

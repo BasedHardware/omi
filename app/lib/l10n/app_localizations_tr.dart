@@ -1714,12 +1714,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'CİHAZ',
-      one: 'CİHAZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -8872,4 +8867,129 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omi\'yi sizin için daha yararlı hale getirmek istiyoruz.';
+
+  @override
+  String get deviceDiagnostics => 'Cihaz Tanılama';
+
+  @override
+  String get signalStrength => 'Sinyal Gücü';
+
+  @override
+  String get connectionUptime => 'Çalışma Süresi';
+
+  @override
+  String get reconnections => 'Yeniden Bağlantılar';
+
+  @override
+  String get disconnectHistory => 'Bağlantı Kesme Geçmişi';
+
+  @override
+  String get noDisconnectsRecorded => 'Bağlantı kesilmesi kaydedilmedi';
+
+  @override
+  String get diagnostics => 'Tanılama';
+
+  @override
+  String get waitingForData => 'Veri bekleniyor...';
+
+  @override
+  String get liveRssiOverTime => 'Zaman içinde canlı RSSI';
+
+  @override
+  String get noRssiDataYet => 'Henüz RSSI verisi yok';
+
+  @override
+  String get collectingData => 'Veri toplanıyor...';
+
+  @override
+  String get cleanDisconnect => 'Temiz bağlantı kesme';
+
+  @override
+  String get connectionTimeout => 'Bağlantı zaman aşımı';
+
+  @override
+  String get remoteDeviceTerminated => 'Uzak cihaz bağlantıyı sonlandırdı';
+
+  @override
+  String get pairedToAnotherPhone => 'Başka bir telefona eşleştirildi';
+
+  @override
+  String get linkKeyMismatch => 'Bağlantı anahtarı uyuşmazlığı';
+
+  @override
+  String get connectionFailed => 'Bağlantı başarısız';
+
+  @override
+  String get appClosed => 'Uygulama kapatıldı';
+
+  @override
+  String get manualDisconnect => 'Manuel bağlantı kesme';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Son $count olay';
+  }
+
+  @override
+  String get signal => 'Sinyal';
+
+  @override
+  String get battery => 'Pil';
+
+  @override
+  String get excellent => 'Mükemmel';
+
+  @override
+  String get good => 'İyi';
+
+  @override
+  String get fair => 'Orta';
+
+  @override
+  String get weak => 'Zayıf';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hatası ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Kararlı yazılıma geri dön';
+
+  @override
+  String get rollbackConfirmTitle => 'Yazılım geri alınsın mı?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Bu, mevcut yazılımınızı en son kararlı sürümle ($version) değiştirecektir. Güncelleme sonrasında cihazınız yeniden başlatılacaktır.';
+  }
+
+  @override
+  String get stableFirmware => 'Kararlı yazılım';
+
+  @override
+  String get fetchingStableFirmware => 'En son kararlı yazılım alınıyor...';
+
+  @override
+  String get noStableFirmwareFound => 'Cihazınız için kararlı bir yazılım sürümü bulunamadı.';
+
+  @override
+  String get installStableFirmware => 'Kararlı yazılımı yükle';
+
+  @override
+  String get alreadyOnStableFirmware => 'Zaten en son kararlı sürümdesiniz.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ses yerel olarak kaydedildi';
+  }
+
+  @override
+  String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

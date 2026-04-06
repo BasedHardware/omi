@@ -1713,12 +1713,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPARATEN',
-      one: 'APPARAAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -8887,4 +8882,129 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'We willen Omi nuttiger maken voor je.';
+
+  @override
+  String get deviceDiagnostics => 'Apparaatdiagnostiek';
+
+  @override
+  String get signalStrength => 'Signaalsterkte';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Herverbindingen';
+
+  @override
+  String get disconnectHistory => 'Ontkoppelingsgeschiedenis';
+
+  @override
+  String get noDisconnectsRecorded => 'Geen ontkoppelingen geregistreerd';
+
+  @override
+  String get diagnostics => 'Diagnostiek';
+
+  @override
+  String get waitingForData => 'Wachten op gegevens...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI in de tijd';
+
+  @override
+  String get noRssiDataYet => 'Nog geen RSSI-gegevens';
+
+  @override
+  String get collectingData => 'Gegevens verzamelen...';
+
+  @override
+  String get cleanDisconnect => 'Schone ontkoppeling';
+
+  @override
+  String get connectionTimeout => 'Verbindingstime-out';
+
+  @override
+  String get remoteDeviceTerminated => 'Extern apparaat heeft de verbinding verbroken';
+
+  @override
+  String get pairedToAnotherPhone => 'Gekoppeld aan een andere telefoon';
+
+  @override
+  String get linkKeyMismatch => 'Koppelingssleutel komt niet overeen';
+
+  @override
+  String get connectionFailed => 'Verbinding mislukt';
+
+  @override
+  String get appClosed => 'App gesloten';
+
+  @override
+  String get manualDisconnect => 'Handmatige ontkoppeling';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Laatste $count gebeurtenissen';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Batterij';
+
+  @override
+  String get excellent => 'Uitstekend';
+
+  @override
+  String get good => 'Goed';
+
+  @override
+  String get fair => 'Redelijk';
+
+  @override
+  String get weak => 'Zwak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fout ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Terugkeren naar stabiele firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware terugzetten?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dit vervangt uw huidige firmware door de laatste stabiele versie ($version). Uw apparaat wordt opnieuw opgestart na de update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiele firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Laatste stabiele firmware ophalen...';
+
+  @override
+  String get noStableFirmwareFound => 'Kan geen stabiele firmwareversie vinden voor uw apparaat.';
+
+  @override
+  String get installStableFirmware => 'Stabiele firmware installeren';
+
+  @override
+  String get alreadyOnStableFirmware => 'U gebruikt al de laatste stabiele versie.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio lokaal opgeslagen';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wordt automatisch gesynchroniseerd';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

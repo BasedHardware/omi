@@ -2849,5 +2849,49 @@
     "ifYouCancel": "Wenn du kündigst:",
     "justAMoment": "Einen Moment bitte",
     "tellUsMore": "Erzähl uns mehr (optional)",
-    "whyAreYouCanceling": "Warum kündigst du?"
+    "whyAreYouCanceling": "Warum kündigst du?",
+    "deviceDiagnostics": "Gerätediagnose",
+    "signalStrength": "Signalstärke",
+    "connectionUptime": "Betriebszeit",
+    "reconnections": "Neuverbindungen",
+    "disconnectHistory": "Trennungsverlauf",
+    "noDisconnectsRecorded": "Keine Trennungen aufgezeichnet",
+    "diagnostics": "Diagnose",
+    "waitingForData": "Warte auf Daten...",
+    "liveRssiOverTime": "Live-RSSI im Zeitverlauf",
+    "noRssiDataYet": "Noch keine RSSI-Daten",
+    "collectingData": "Daten werden gesammelt...",
+    "cleanDisconnect": "Saubere Trennung",
+    "connectionTimeout": "Verbindungszeitüberschreitung",
+    "remoteDeviceTerminated": "Entferntes Gerät hat die Verbindung beendet",
+    "pairedToAnotherPhone": "Mit einem anderen Telefon gekoppelt",
+    "linkKeyMismatch": "Verbindungsschlüssel stimmt nicht überein",
+    "connectionFailed": "Verbindung fehlgeschlagen",
+    "appClosed": "App geschlossen",
+    "manualDisconnect": "Manuelle Trennung",
+    "lastNEvents": "Letzte {count} Ereignisse",
+    "signal": "Signal",
+    "battery": "Batterie",
+    "excellent": "Ausgezeichnet",
+    "good": "Gut",
+    "fair": "Befriedigend",
+    "weak": "Schwach",
+    "gattError": "GATT-Fehler ({code})",
+    "rollbackToStableFirmware": "Auf stabile Firmware zurücksetzen",
+    "rollbackConfirmTitle": "Firmware zurücksetzen?",
+    "rollbackConfirmMessage": "Dies ersetzt Ihre aktuelle Firmware durch die neueste stabile Version ({version}). Ihr Gerät wird nach dem Update neu gestartet.",
+    "stableFirmware": "Stabile Firmware",
+    "fetchingStableFirmware": "Neueste stabile Firmware wird abgerufen...",
+    "noStableFirmwareFound": "Es konnte keine stabile Firmware-Version für Ihr Gerät gefunden werden.",
+    "installStableFirmware": "Stabile Firmware installieren",
+    "alreadyOnStableFirmware": "Sie verwenden bereits die neueste stabile Version.",
+    "audioSavedLocally": "{duration} Audio lokal gespeichert",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "wird automatisch synchronisiert"
 }

@@ -1712,12 +1712,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'IERĪCES',
-      one: 'IERĪCE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -3286,7 +3281,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get aboutYou => 'Par jums';
 
   @override
-  String get manual => 'Manuāls';
+  String get manual => 'Manuāli';
 
   @override
   String get loadingYourMemories => 'Ielādē jūsu atmiņas...';
@@ -8876,4 +8871,129 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Mēs vēlamies padarīt Omi noderīgāku jums.';
+
+  @override
+  String get deviceDiagnostics => 'Ierīces diagnostika';
+
+  @override
+  String get signalStrength => 'Signāla stiprums';
+
+  @override
+  String get connectionUptime => 'Darbības laiks';
+
+  @override
+  String get reconnections => 'Atkārtoti savienojumi';
+
+  @override
+  String get disconnectHistory => 'Atvienošanas vēsture';
+
+  @override
+  String get noDisconnectsRecorded => 'Nav reģistrētu atvienošanu';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Gaida datus...';
+
+  @override
+  String get liveRssiOverTime => 'Reāllaika RSSI laika gaitā';
+
+  @override
+  String get noRssiDataYet => 'Vēl nav RSSI datu';
+
+  @override
+  String get collectingData => 'Datu vākšana...';
+
+  @override
+  String get cleanDisconnect => 'Tīra atvienošana';
+
+  @override
+  String get connectionTimeout => 'Savienojuma taimauts';
+
+  @override
+  String get remoteDeviceTerminated => 'Attālā ierīce pārtrauca savienojumu';
+
+  @override
+  String get pairedToAnotherPhone => 'Savienots pārī ar citu tālruni';
+
+  @override
+  String get linkKeyMismatch => 'Saites atslēgas neatbilstība';
+
+  @override
+  String get connectionFailed => 'Savienojums neizdevās';
+
+  @override
+  String get appClosed => 'Lietotne aizvērta';
+
+  @override
+  String get manualDisconnect => 'Manuāla atvienošana';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Pēdējie $count notikumi';
+  }
+
+  @override
+  String get signal => 'Signāls';
+
+  @override
+  String get battery => 'Akumulators';
+
+  @override
+  String get excellent => 'Izcili';
+
+  @override
+  String get good => 'Labi';
+
+  @override
+  String get fair => 'Apmierinošs';
+
+  @override
+  String get weak => 'Vājš';
+
+  @override
+  String gattError(String code) {
+    return 'GATT kļūda ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Atgriezties uz stabilo programmaparatūru';
+
+  @override
+  String get rollbackConfirmTitle => 'Atgriezt programmaparatūru?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tas aizstās jūsu pašreizējo programmaparatūru ar jaunāko stabilo versiju ($version). Jūsu ierīce tiks restartēta pēc atjaunināšanas.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabila programmaparatūra';
+
+  @override
+  String get fetchingStableFirmware => 'Tiek iegūta jaunākā stabilā programmaparatūra...';
+
+  @override
+  String get noStableFirmwareFound => 'Jūsu ierīcei nevarēja atrast stabilu programmaparatūras versiju.';
+
+  @override
+  String get installStableFirmware => 'Instalēt stabilo programmaparatūru';
+
+  @override
+  String get alreadyOnStableFirmware => 'Jums jau ir jaunākā stabilā versija.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saglabāts lokāli';
+  }
+
+  @override
+  String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

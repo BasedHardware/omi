@@ -2916,5 +2916,49 @@
     "ifYouCancel": "Jeśli anulujesz:",
     "justAMoment": "Chwileczkę",
     "tellUsMore": "Powiedz nam więcej (opcjonalnie)",
-    "whyAreYouCanceling": "Dlaczego anulujesz?"
+    "whyAreYouCanceling": "Dlaczego anulujesz?",
+    "deviceDiagnostics": "Diagnostyka urządzenia",
+    "signalStrength": "Siła sygnału",
+    "connectionUptime": "Czas działania",
+    "reconnections": "Ponowne połączenia",
+    "disconnectHistory": "Historia rozłączeń",
+    "noDisconnectsRecorded": "Nie zarejestrowano rozłączeń",
+    "diagnostics": "Diagnostyka",
+    "waitingForData": "Oczekiwanie na dane...",
+    "liveRssiOverTime": "RSSI na żywo w czasie",
+    "noRssiDataYet": "Brak danych RSSI",
+    "collectingData": "Zbieranie danych...",
+    "cleanDisconnect": "Czyste rozłączenie",
+    "connectionTimeout": "Przekroczono limit czasu połączenia",
+    "remoteDeviceTerminated": "Urządzenie zdalne zakończyło połączenie",
+    "pairedToAnotherPhone": "Sparowane z innym telefonem",
+    "linkKeyMismatch": "Niezgodność klucza łącza",
+    "connectionFailed": "Połączenie nieudane",
+    "appClosed": "Aplikacja zamknięta",
+    "manualDisconnect": "Ręczne rozłączenie",
+    "lastNEvents": "Ostatnie {count} zdarzeń",
+    "signal": "Sygnał",
+    "battery": "Bateria",
+    "excellent": "Doskonały",
+    "good": "Dobry",
+    "fair": "Dostateczny",
+    "weak": "Słaby",
+    "gattError": "Błąd GATT ({code})",
+    "rollbackToStableFirmware": "Przywróć stabilne oprogramowanie",
+    "rollbackConfirmTitle": "Przywrócić oprogramowanie?",
+    "rollbackConfirmMessage": "Spowoduje to zastąpienie obecnego oprogramowania najnowszą stabilną wersją ({version}). Urządzenie zostanie ponownie uruchomione po aktualizacji.",
+    "stableFirmware": "Stabilne oprogramowanie",
+    "fetchingStableFirmware": "Pobieranie najnowszego stabilnego oprogramowania...",
+    "noStableFirmwareFound": "Nie znaleziono stabilnej wersji oprogramowania dla Twojego urządzenia.",
+    "installStableFirmware": "Zainstaluj stabilne oprogramowanie",
+    "alreadyOnStableFirmware": "Masz już najnowszą stabilną wersję.",
+    "audioSavedLocally": "{duration} dźwięku zapisano lokalnie",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "zsynchronizuje się automatycznie"
 }

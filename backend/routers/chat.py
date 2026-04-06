@@ -1,3 +1,5 @@
+import asyncio
+import json
 import uuid
 import re
 import base64
@@ -6,7 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -31,11 +33,14 @@ from utils.chat import (
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
+    transcribe_pcm_bytes,
 )
+from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
-from database.redis_db import try_acquire_goal_extraction_lock
+from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit
+from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
@@ -45,6 +50,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_MAX_PCM_BODY_BYTES = 15 * 1024 * 1024  # 15 MB ≈ ~480 s (~8 min) of 16kHz mono 16-bit PCM
 
 
 def filter_messages(messages, app_id):
@@ -357,19 +364,73 @@ async def create_voice_message_stream(
 
 @router.post("/v2/voice-message/transcribe")
 async def transcribe_voice_message(
-    files: List[UploadFile] = File(...),
-    language: Optional[str] = Form(None),
+    request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
 ):
-    # Check if files are empty
-    if not files or len(files) == 0:
+    """Transcribe audio and return the transcript text.
+
+    Accepts two content types:
+    - multipart/form-data: file upload with optional 'language' form field (mobile)
+    - application/octet-stream: raw PCM bytes with query params (desktop PTT)
+
+    Returns {"transcript": "...", "language": "..."}.
+    """
+    content_type = request.headers.get("content-type", "")
+
+    if "application/octet-stream" in content_type:
+        audio_bytes = await request.body()
+        if not audio_bytes or len(audio_bytes) == 0:
+            raise HTTPException(status_code=400, detail='No audio data provided')
+        if len(audio_bytes) > _MAX_PCM_BODY_BYTES:
+            raise HTTPException(status_code=413, detail='Audio payload too large')
+
+        language = request.query_params.get("language")
+        encoding = request.query_params.get("encoding", "linear16")
+        try:
+            sample_rate = int(request.query_params.get("sample_rate", "16000"))
+            channels = int(request.query_params.get("channels", "1"))
+        except ValueError:
+            raise HTTPException(status_code=422, detail='sample_rate and channels must be integers')
+
+        if sample_rate < 8000 or sample_rate > 48000:
+            raise HTTPException(status_code=422, detail='sample_rate must be between 8000 and 48000')
+        if channels < 1 or channels > 2:
+            raise HTTPException(status_code=422, detail='channels must be 1 or 2')
+
+        resolved_language = resolve_voice_message_language(uid, language)
+        try:
+            transcript, detected_language = transcribe_pcm_bytes(
+                audio_bytes,
+                uid,
+                language=resolved_language,
+                encoding=encoding,
+                sample_rate=sample_rate,
+                channels=channels,
+            )
+        except RuntimeError as e:
+            logger.error(f'PCM transcription failed: {e}')
+            raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
+        finally:
+            del audio_bytes
+
+        response = {"transcript": transcript or ""}
+        if detected_language:
+            response["language"] = detected_language
+        return response
+
+    # Multipart file upload mode (original behavior)
+    form = await request.form()
+    files = form.getlist("files")
+    language = form.get("language")
+    upload_files = [f for f in files if hasattr(f, 'file')]
+    if not upload_files:
         raise HTTPException(status_code=400, detail='No files provided')
 
     wav_paths = []
     other_file_paths = []
 
     # Process all files in a single loop
-    for file in files:
+    for file in upload_files:
         if file.filename.lower().endswith('.wav'):
             # For WAV files, save directly to a temporary path
             temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
@@ -448,6 +509,204 @@ async def transcribe_voice_message(
     wav_paths.clear()
     other_file_paths.clear()
     return response
+
+
+@router.websocket("/v2/voice-message/transcribe-stream")
+async def transcribe_voice_message_stream(
+    websocket: WebSocket,
+    uid: str = Depends(auth.get_current_user_uid_ws_listen),
+    language: str = 'en',
+    sample_rate: int = 16000,
+    codec: str = 'linear16',
+    channels: int = 1,
+):
+    """WebSocket endpoint for PTT live mode transcription-only streaming.
+
+    Receives binary PCM audio chunks, streams them to Deepgram, and returns
+    transcript segments in real-time. No conversation lifecycle, no memory
+    extraction, no pusher — just audio in, transcript out.
+
+    Query params:
+        language: Language code (default 'en')
+        sample_rate: Audio sample rate in Hz (default 16000)
+        codec: Audio codec, must be 'linear16' (default 'linear16')
+        channels: Number of audio channels (default 1)
+
+    Client sends:
+        - binary frames: audio data (PCM 16-bit)
+        - text "finalize": flush remaining audio + trigger Deepgram finalization
+    Server sends: JSON arrays of transcript segments
+        [{"speaker": "SPEAKER_00", "start": 0.0, "end": 1.5, "text": "Hello world",
+          "is_user": false, "person_id": null}]
+    """
+    await websocket.accept()
+
+    if codec != 'linear16':
+        await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
+        return
+
+    if sample_rate < 8000 or sample_rate > 48000:
+        await websocket.close(code=1008, reason='sample_rate must be between 8000 and 48000')
+        return
+
+    if channels < 1 or channels > 2:
+        await websocket.close(code=1008, reason='channels must be 1 or 2')
+        return
+
+    # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
+    try:
+        max_requests, window = get_effective_limit('voice:transcribe_stream')
+        allowed, remaining, retry_after = check_rate_limit(uid, 'voice:transcribe_stream', max_requests, window)
+        if not allowed:
+            if not RATE_LIMIT_SHADOW:
+                await websocket.close(code=1008, reason=f'Rate limit exceeded. Retry in {retry_after}s.')
+                return
+            logger.warning(f'[shadow] rate_limit_exceeded policy=voice:transcribe_stream uid={uid}')
+    except Exception:
+        pass  # Fail-open, consistent with Redis rate limiting elsewhere
+
+    websocket_active = True
+    dg_socket = None
+    sender_task = None
+    stt_audio_buffer = bytearray()
+    # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
+    stt_buffer_flush_size = int(sample_rate * channels * 2 * 0.03)
+
+    # PTT transcribe-stream always uses Deepgram (lightweight, no conversation lifecycle).
+    # get_stt_service_for_language resolves the language/model for the DG call.
+    _, stt_language, stt_model = get_stt_service_for_language(language)
+
+    loop = asyncio.get_running_loop()
+
+    # Deepgram's on_message callback runs in a thread — bridge to async via
+    # loop.call_soon_threadsafe so asyncio.Queue wakeups are reliable.
+    _SENTINEL = object()
+    segment_queue = asyncio.Queue()
+
+    def stream_transcript(segments):
+        loop.call_soon_threadsafe(segment_queue.put_nowait, segments)
+
+    async def segment_sender():
+        """Forward segments from the thread-safe queue to the WebSocket."""
+        nonlocal websocket_active
+        while websocket_active:
+            try:
+                segments = await asyncio.wait_for(segment_queue.get(), timeout=0.5)
+                if segments is _SENTINEL:
+                    break
+                await websocket.send_json(segments)
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
+                websocket_active = False
+                break
+
+    try:
+        dg_socket = await process_audio_dg(
+            stream_transcript,
+            language=stt_language,
+            sample_rate=sample_rate,
+            channels=channels,
+            model=stt_model,
+            is_active=lambda: websocket_active,
+        )
+
+        if dg_socket is None:
+            logger.error(f'transcribe-stream: failed to connect to Deepgram uid={uid}')
+            await websocket.close(code=1011, reason='Transcription service unavailable')
+            return
+
+        # Start segment sender task
+        sender_task = asyncio.create_task(segment_sender())
+
+        # Audio receive loop
+        while websocket_active:
+            try:
+                message = await websocket.receive()
+            except WebSocketDisconnect:
+                break
+
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            # Handle text "finalize" message: flush remaining audio, finalize Deepgram,
+            # wait for final transcript, then continue receiving (client closes when ready).
+            text_data = message.get("text")
+            if text_data and text_data.strip() == "finalize":
+                if dg_socket and not dg_socket.is_connection_dead:
+                    if len(stt_audio_buffer) > 0:
+                        dg_socket.send(bytes(stt_audio_buffer))
+                        stt_audio_buffer.clear()
+                    try:
+                        dg_socket.finalize()
+                        await asyncio.sleep(0.3)
+                    except Exception:
+                        pass
+                continue
+
+            data = message.get("bytes")
+            if data is None:
+                continue
+
+            # Guard against oversized frames (5 MB matches REST endpoint limit)
+            if len(data) > 5 * 1024 * 1024:
+                logger.warning(f'transcribe-stream: oversized frame uid={uid} size={len(data)}')
+                continue
+
+            stt_audio_buffer.extend(data)
+
+            # Flush to Deepgram in 30ms chunks
+            while len(stt_audio_buffer) >= stt_buffer_flush_size:
+                chunk = bytes(stt_audio_buffer[:stt_buffer_flush_size])
+                del stt_audio_buffer[:stt_buffer_flush_size]
+
+                if dg_socket.is_connection_dead:
+                    logger.error(f'transcribe-stream: DG connection died uid={uid} reason={dg_socket.death_reason}')
+                    websocket_active = False
+                    break
+
+                dg_socket.send(chunk)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f'transcribe-stream: error uid={uid}: {e}')
+    finally:
+        websocket_active = False
+
+        # Flush remaining audio buffer
+        if dg_socket and not dg_socket.is_connection_dead and len(stt_audio_buffer) > 0:
+            dg_socket.send(bytes(stt_audio_buffer))
+            stt_audio_buffer.clear()
+
+        # Finalize to get last transcript segment, then close DG.
+        # Wrap each in try/except so finish() always runs even if finalize() fails.
+        if dg_socket:
+            try:
+                dg_socket.finalize()
+                # Brief wait for final transcript callback
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+            try:
+                dg_socket.finish()
+            except Exception:
+                pass
+
+        # Signal sender task to drain and stop, then wait for it
+        loop.call_soon_threadsafe(segment_queue.put_nowait, _SENTINEL)
+        if sender_task is not None:
+            try:
+                await asyncio.wait_for(sender_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                sender_task.cancel()
+                try:
+                    await sender_task
+                except asyncio.CancelledError:
+                    pass
+
+        del stt_audio_buffer
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])

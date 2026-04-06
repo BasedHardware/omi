@@ -8536,12 +8536,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개 생성됨',
-      one: '대화 1개 생성됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
     return '$_temp0';
   }
 
@@ -8711,4 +8706,129 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omi를 더 유용하게 만들고 싶습니다.';
+
+  @override
+  String get deviceDiagnostics => '기기 진단';
+
+  @override
+  String get signalStrength => '신호 강도';
+
+  @override
+  String get connectionUptime => '가동 시간';
+
+  @override
+  String get reconnections => '재연결';
+
+  @override
+  String get disconnectHistory => '연결 해제 기록';
+
+  @override
+  String get noDisconnectsRecorded => '기록된 연결 해제 없음';
+
+  @override
+  String get diagnostics => '진단';
+
+  @override
+  String get waitingForData => '데이터 대기 중...';
+
+  @override
+  String get liveRssiOverTime => '실시간 RSSI 추이';
+
+  @override
+  String get noRssiDataYet => '아직 RSSI 데이터 없음';
+
+  @override
+  String get collectingData => '데이터 수집 중...';
+
+  @override
+  String get cleanDisconnect => '정상 연결 해제';
+
+  @override
+  String get connectionTimeout => '연결 시간 초과';
+
+  @override
+  String get remoteDeviceTerminated => '원격 기기가 연결을 종료함';
+
+  @override
+  String get pairedToAnotherPhone => '다른 휴대폰에 페어링됨';
+
+  @override
+  String get linkKeyMismatch => '링크 키 불일치';
+
+  @override
+  String get connectionFailed => '연결 실패';
+
+  @override
+  String get appClosed => '앱 종료됨';
+
+  @override
+  String get manualDisconnect => '수동 연결 해제';
+
+  @override
+  String lastNEvents(int count) {
+    return '최근 $count개 이벤트';
+  }
+
+  @override
+  String get signal => '신호';
+
+  @override
+  String get battery => '배터리';
+
+  @override
+  String get excellent => '우수';
+
+  @override
+  String get good => '양호';
+
+  @override
+  String get fair => '보통';
+
+  @override
+  String get weak => '약함';
+
+  @override
+  String gattError(String code) {
+    return 'GATT 오류 ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => '안정 펌웨어로 롤백';
+
+  @override
+  String get rollbackConfirmTitle => '펌웨어를 롤백하시겠습니까?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '현재 펌웨어가 최신 안정 버전($version)으로 교체됩니다. 업데이트 후 기기가 재시작됩니다.';
+  }
+
+  @override
+  String get stableFirmware => '안정 펌웨어';
+
+  @override
+  String get fetchingStableFirmware => '최신 안정 펌웨어를 가져오는 중...';
+
+  @override
+  String get noStableFirmwareFound => '기기에 맞는 안정 펌웨어 버전을 찾을 수 없습니다.';
+
+  @override
+  String get installStableFirmware => '안정 펌웨어 설치';
+
+  @override
+  String get alreadyOnStableFirmware => '이미 최신 안정 버전을 사용 중입니다.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 오디오가 로컬에 저장됨';
+  }
+
+  @override
+  String get willSyncAutomatically => '자동으로 동기화됩니다';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

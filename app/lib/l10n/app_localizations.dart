@@ -156,7 +156,7 @@ abstract class AppLocalizations {
     Locale('tr'),
     Locale('uk'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -16532,6 +16532,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'We want to make Omi more useful for you.'**
   String get feedbackSubtitleNotUsing;
+
+  /// No description provided for @deviceDiagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Device Diagnostics'**
+  String get deviceDiagnostics;
+
+  /// No description provided for @signalStrength.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal Strength'**
+  String get signalStrength;
+
+  /// No description provided for @connectionUptime.
+  ///
+  /// In en, this message translates to:
+  /// **'Uptime'**
+  String get connectionUptime;
+
+  /// No description provided for @reconnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnections'**
+  String get reconnections;
+
+  /// No description provided for @disconnectHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect History'**
+  String get disconnectHistory;
+
+  /// No description provided for @noDisconnectsRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'No disconnects recorded'**
+  String get noDisconnectsRecorded;
+
+  /// No description provided for @diagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get diagnostics;
+
+  /// No description provided for @waitingForData.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for data...'**
+  String get waitingForData;
+
+  /// No description provided for @liveRssiOverTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Live RSSI over time'**
+  String get liveRssiOverTime;
+
+  /// No description provided for @noRssiDataYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No RSSI data yet'**
+  String get noRssiDataYet;
+
+  /// No description provided for @collectingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting data...'**
+  String get collectingData;
+
+  /// No description provided for @cleanDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean disconnect'**
+  String get cleanDisconnect;
+
+  /// No description provided for @connectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timeout'**
+  String get connectionTimeout;
+
+  /// No description provided for @remoteDeviceTerminated.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote device terminated'**
+  String get remoteDeviceTerminated;
+
+  /// No description provided for @pairedToAnotherPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired to another phone'**
+  String get pairedToAnotherPhone;
+
+  /// No description provided for @linkKeyMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Link key mismatch'**
+  String get linkKeyMismatch;
+
+  /// No description provided for @connectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed'**
+  String get connectionFailed;
+
+  /// No description provided for @appClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'App closed'**
+  String get appClosed;
+
+  /// No description provided for @manualDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual disconnect'**
+  String get manualDisconnect;
+
+  /// No description provided for @lastNEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Last {count} events'**
+  String lastNEvents(int count);
+
+  /// No description provided for @signal.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal'**
+  String get signal;
+
+  /// No description provided for @battery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get battery;
+
+  /// No description provided for @excellent.
+  ///
+  /// In en, this message translates to:
+  /// **'Excellent'**
+  String get excellent;
+
+  /// No description provided for @good.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get good;
+
+  /// No description provided for @fair.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair'**
+  String get fair;
+
+  /// No description provided for @weak.
+  ///
+  /// In en, this message translates to:
+  /// **'Weak'**
+  String get weak;
+
+  /// No description provided for @gattError.
+  ///
+  /// In en, this message translates to:
+  /// **'GATT error ({code})'**
+  String gattError(String code);
+
+  /// Action item title for rolling back to the latest stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back to Stable Firmware'**
+  String get rollbackToStableFirmware;
+
+  /// Confirmation dialog title for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back Firmware?'**
+  String get rollbackConfirmTitle;
+
+  /// Confirmation dialog message for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.'**
+  String rollbackConfirmMessage(String version);
+
+  /// Title for the stable firmware rollback page
+  ///
+  /// In en, this message translates to:
+  /// **'Stable Firmware'**
+  String get stableFirmware;
+
+  /// Loading text while fetching stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching latest stable firmware...'**
+  String get fetchingStableFirmware;
+
+  /// Error message when no stable firmware is available
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find a stable firmware version for your device.'**
+  String get noStableFirmwareFound;
+
+  /// Button text to install the stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Install Stable Firmware'**
+  String get installStableFirmware;
+
+  /// Message when device is already on the latest stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'You are already on the latest stable version.'**
+  String get alreadyOnStableFirmware;
+
+  /// No description provided for @audioSavedLocally.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} audio saved locally'**
+  String audioSavedLocally(String duration);
+
+  /// No description provided for @willSyncAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'will sync automatically'**
+  String get willSyncAutomatically;
+
+  /// No description provided for @enableLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Location'**
+  String get enableLocationTitle;
+
+  /// No description provided for @enableLocationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission is needed to find nearby Bluetooth devices.'**
+  String get enableLocationDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16544,41 +16778,41 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'bg',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fi',
-        'fr',
-        'hi',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'ko',
-        'lt',
-        'lv',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sv',
-        'th',
-        'tr',
-        'uk',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'bg',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fi',
+    'fr',
+    'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'ko',
+    'lt',
+    'lv',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sv',
+    'th',
+    'tr',
+    'uk',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16657,8 +16891,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

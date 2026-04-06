@@ -1,19 +1,19 @@
 import 'package:pigeon/pigeon.dart';
 
-@ConfigurePigeon(PigeonOptions(
-  dartOut: 'lib/gen/pigeon_communicator.g.dart',
-  dartOptions: DartOptions(),
-  swiftOut: 'ios/Runner/PigeonCommunicator.g.swift',
-  swiftOptions: SwiftOptions(),
-  kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt',
-  kotlinOptions: KotlinOptions(package: 'com.friend.ios'),
-  dartPackageName: 'omi_pigeon',
-))
-
+@ConfigurePigeon(
+  PigeonOptions(
+    dartOut: 'lib/gen/pigeon_communicator.g.dart',
+    dartOptions: DartOptions(),
+    swiftOut: 'ios/Runner/PigeonCommunicator.g.swift',
+    swiftOptions: SwiftOptions(),
+    kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt',
+    kotlinOptions: KotlinOptions(package: 'com.friend.ios'),
+    dartPackageName: 'omi_pigeon',
+  ),
+)
 // =============================================================================
 // Watch Recorder APIs
 // =============================================================================
-
 @HostApi()
 abstract class WatchRecorderHostAPI {
   @SwiftFunction('startRecording()')
@@ -71,12 +71,7 @@ class BlePeripheral {
   final int rssi;
   final List<String> serviceUuids;
 
-  BlePeripheral({
-    required this.uuid,
-    required this.name,
-    required this.rssi,
-    required this.serviceUuids,
-  });
+  BlePeripheral({required this.uuid, required this.name, required this.rssi, required this.serviceUuids});
 }
 
 /// Discovered BLE service with its characteristic UUIDs.
@@ -85,6 +80,25 @@ class BleService {
   final List<String> characteristicUuids;
 
   BleService({required this.uuid, required this.characteristicUuids});
+}
+
+/// A single disconnect event stored in native preferences.
+class BleDisconnectEvent {
+  final int timestamp;
+  final String reason;
+  final int reasonCode;
+  final bool isManual;
+
+  BleDisconnectEvent({required this.timestamp, required this.reason, required this.reasonCode, required this.isManual});
+}
+
+/// Diagnostics data read from native preferences on demand.
+class BleDeviceDiagnostics {
+  final List<BleDisconnectEvent> disconnectHistory;
+  final int reconnectionCount;
+  final int connectedAt;
+
+  BleDeviceDiagnostics({required this.disconnectHistory, required this.reconnectionCount, required this.connectedAt});
 }
 
 /// Dart → Native: commands sent from Flutter to the native BLE module.
@@ -128,6 +142,17 @@ abstract class BleHostApi {
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
 
+  // Diagnostics
+  @SwiftFunction('startRssiStreaming(uuid:)')
+  void startRssiStreaming(String uuid);
+
+  @SwiftFunction('stopRssiStreaming(uuid:)')
+  void stopRssiStreaming(String uuid);
+
+  @async
+  @SwiftFunction('getDeviceDiagnostics(uuid:)')
+  BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
+
   /// (Android only) Check if any CompanionDeviceManager association exists.
   @SwiftFunction('hasCompanionDeviceAssociation()')
   bool hasCompanionDeviceAssociation();
@@ -154,6 +179,8 @@ abstract class BleFlutterApi {
     String characteristicUuid,
     Uint8List value,
   );
+
+  void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
 }

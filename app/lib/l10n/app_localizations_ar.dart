@@ -1696,12 +1696,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'أجهزة',
-      one: 'جهاز',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8798,4 +8793,129 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'نريد جعل Omi أكثر فائدة لك.';
+
+  @override
+  String get deviceDiagnostics => 'تشخيصات الجهاز';
+
+  @override
+  String get signalStrength => 'قوة الإشارة';
+
+  @override
+  String get connectionUptime => 'وقت التشغيل';
+
+  @override
+  String get reconnections => 'إعادة الاتصال';
+
+  @override
+  String get disconnectHistory => 'سجل قطع الاتصال';
+
+  @override
+  String get noDisconnectsRecorded => 'لم يتم تسجيل أي انقطاعات';
+
+  @override
+  String get diagnostics => 'التشخيصات';
+
+  @override
+  String get waitingForData => 'في انتظار البيانات...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI المباشر عبر الوقت';
+
+  @override
+  String get noRssiDataYet => 'لا توجد بيانات RSSI بعد';
+
+  @override
+  String get collectingData => 'جارٍ جمع البيانات...';
+
+  @override
+  String get cleanDisconnect => 'قطع اتصال نظيف';
+
+  @override
+  String get connectionTimeout => 'انتهت مهلة الاتصال';
+
+  @override
+  String get remoteDeviceTerminated => 'أنهى الجهاز البعيد الاتصال';
+
+  @override
+  String get pairedToAnotherPhone => 'مقترن بهاتف آخر';
+
+  @override
+  String get linkKeyMismatch => 'عدم تطابق مفتاح الارتباط';
+
+  @override
+  String get connectionFailed => 'فشل الاتصال';
+
+  @override
+  String get appClosed => 'تم إغلاق التطبيق';
+
+  @override
+  String get manualDisconnect => 'قطع اتصال يدوي';
+
+  @override
+  String lastNEvents(int count) {
+    return 'آخر $count أحداث';
+  }
+
+  @override
+  String get signal => 'إشارة';
+
+  @override
+  String get battery => 'بطارية';
+
+  @override
+  String get excellent => 'ممتاز';
+
+  @override
+  String get good => 'جيد';
+
+  @override
+  String get fair => 'مقبول';
+
+  @override
+  String get weak => 'ضعيف';
+
+  @override
+  String gattError(String code) {
+    return 'خطأ GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'الرجوع إلى البرنامج الثابت المستقر';
+
+  @override
+  String get rollbackConfirmTitle => 'الرجوع إلى البرنامج الثابت؟';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'سيتم استبدال البرنامج الثابت الحالي بأحدث إصدار مستقر ($version). سيتم إعادة تشغيل جهازك بعد التحديث.';
+  }
+
+  @override
+  String get stableFirmware => 'البرنامج الثابت المستقر';
+
+  @override
+  String get fetchingStableFirmware => 'جارٍ جلب أحدث برنامج ثابت مستقر...';
+
+  @override
+  String get noStableFirmwareFound => 'تعذر العثور على إصدار مستقر من البرنامج الثابت لجهازك.';
+
+  @override
+  String get installStableFirmware => 'تثبيت البرنامج الثابت المستقر';
+
+  @override
+  String get alreadyOnStableFirmware => 'أنت بالفعل على أحدث إصدار مستقر.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'تم حفظ $duration من الصوت محليًا';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

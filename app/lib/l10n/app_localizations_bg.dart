@@ -1713,12 +1713,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'УСТРОЙСТВА',
-      one: 'УСТРОЙСТВО',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -3286,7 +3281,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get aboutYou => 'За теб';
 
   @override
-  String get manual => 'Ръчни';
+  String get manual => 'Ръчно';
 
   @override
   String get loadingYourMemories => 'Зареждане на вашите спомени...';
@@ -8894,4 +8889,129 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Искаме да направим Omi по-полезен за вас.';
+
+  @override
+  String get deviceDiagnostics => 'Диагностика на устройството';
+
+  @override
+  String get signalStrength => 'Сила на сигнала';
+
+  @override
+  String get connectionUptime => 'Време на работа';
+
+  @override
+  String get reconnections => 'Повторни свързвания';
+
+  @override
+  String get disconnectHistory => 'История на прекъсванията';
+
+  @override
+  String get noDisconnectsRecorded => 'Няма записани прекъсвания';
+
+  @override
+  String get diagnostics => 'Диагностика';
+
+  @override
+  String get waitingForData => 'Изчакване на данни...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI в реално време';
+
+  @override
+  String get noRssiDataYet => 'Все още няма RSSI данни';
+
+  @override
+  String get collectingData => 'Събиране на данни...';
+
+  @override
+  String get cleanDisconnect => 'Чисто прекъсване';
+
+  @override
+  String get connectionTimeout => 'Изтекло време за свързване';
+
+  @override
+  String get remoteDeviceTerminated => 'Отдалеченото устройство прекъсна';
+
+  @override
+  String get pairedToAnotherPhone => 'Свързано с друг телефон';
+
+  @override
+  String get linkKeyMismatch => 'Несъответствие на ключа за връзка';
+
+  @override
+  String get connectionFailed => 'Неуспешно свързване';
+
+  @override
+  String get appClosed => 'Приложението е затворено';
+
+  @override
+  String get manualDisconnect => 'Ръчно прекъсване';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Последни $count събития';
+  }
+
+  @override
+  String get signal => 'Сигнал';
+
+  @override
+  String get battery => 'Батерия';
+
+  @override
+  String get excellent => 'Отлично';
+
+  @override
+  String get good => 'Добро';
+
+  @override
+  String get fair => 'Задоволително';
+
+  @override
+  String get weak => 'Слабо';
+
+  @override
+  String gattError(String code) {
+    return 'GATT грешка ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Връщане към стабилен фърмуер';
+
+  @override
+  String get rollbackConfirmTitle => 'Връщане на фърмуера?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Това ще замени текущия фърмуер с последната стабилна версия ($version). Устройството ви ще се рестартира след актуализацията.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабилен фърмуер';
+
+  @override
+  String get fetchingStableFirmware => 'Извличане на последния стабилен фърмуер...';
+
+  @override
+  String get noStableFirmwareFound => 'Не може да се намери стабилна версия на фърмуера за вашето устройство.';
+
+  @override
+  String get installStableFirmware => 'Инсталиране на стабилен фърмуер';
+
+  @override
+  String get alreadyOnStableFirmware => 'Вече сте на последната стабилна версия.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио запазено локално';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ще се синхронизира автоматично';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

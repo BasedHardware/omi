@@ -8534,12 +8534,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の会話を作成',
-      one: '1件の会話を作成',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
     return '$_temp0';
   }
 
@@ -8709,4 +8704,129 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get feedbackSubtitleNotUsing => 'Omiをもっと便利にしたいです。';
+
+  @override
+  String get deviceDiagnostics => 'デバイス診断';
+
+  @override
+  String get signalStrength => '信号強度';
+
+  @override
+  String get connectionUptime => '稼働時間';
+
+  @override
+  String get reconnections => '再接続';
+
+  @override
+  String get disconnectHistory => '切断履歴';
+
+  @override
+  String get noDisconnectsRecorded => '切断は記録されていません';
+
+  @override
+  String get diagnostics => '診断';
+
+  @override
+  String get waitingForData => 'データを待っています...';
+
+  @override
+  String get liveRssiOverTime => 'リアルタイムRSSI推移';
+
+  @override
+  String get noRssiDataYet => 'RSSIデータはまだありません';
+
+  @override
+  String get collectingData => 'データ収集中...';
+
+  @override
+  String get cleanDisconnect => '正常切断';
+
+  @override
+  String get connectionTimeout => '接続タイムアウト';
+
+  @override
+  String get remoteDeviceTerminated => 'リモートデバイスが接続を終了しました';
+
+  @override
+  String get pairedToAnotherPhone => '別の電話にペアリング済み';
+
+  @override
+  String get linkKeyMismatch => 'リンクキーの不一致';
+
+  @override
+  String get connectionFailed => '接続失敗';
+
+  @override
+  String get appClosed => 'アプリが閉じられました';
+
+  @override
+  String get manualDisconnect => '手動切断';
+
+  @override
+  String lastNEvents(int count) {
+    return '最新の$count件のイベント';
+  }
+
+  @override
+  String get signal => '信号';
+
+  @override
+  String get battery => 'バッテリー';
+
+  @override
+  String get excellent => '優秀';
+
+  @override
+  String get good => '良好';
+
+  @override
+  String get fair => '普通';
+
+  @override
+  String get weak => '弱い';
+
+  @override
+  String gattError(String code) {
+    return 'GATTエラー ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => '安定版ファームウェアに戻す';
+
+  @override
+  String get rollbackConfirmTitle => 'ファームウェアを戻しますか？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '現在のファームウェアが最新の安定版（$version）に置き換えられます。更新後、デバイスは再起動します。';
+  }
+
+  @override
+  String get stableFirmware => '安定版ファームウェア';
+
+  @override
+  String get fetchingStableFirmware => '最新の安定版ファームウェアを取得中...';
+
+  @override
+  String get noStableFirmwareFound => 'お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。';
+
+  @override
+  String get installStableFirmware => '安定版ファームウェアをインストール';
+
+  @override
+  String get alreadyOnStableFirmware => 'すでに最新の安定版を使用しています。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration の音声をローカルに保存しました';
+  }
+
+  @override
+  String get willSyncAutomatically => '自動的に同期されます';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }
