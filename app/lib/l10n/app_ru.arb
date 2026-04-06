@@ -2728,6 +2728,8 @@
     "onTheCallEnterThisCode": "Во время звонка введите этот код",
     "phoneAllow": "Разрешить",
     "phoneCallSettingsTitle": "Настройки звонков",
+    "showPhoneCallButtonTitle": "Показать кнопку звонка",
+    "showPhoneCallButtonDesc": "Отображать кнопку телефонного звонка на главном экране",
     "phoneCallsSubtitle": "Звоните с транскрипцией в реальном времени",
     "phoneCallsWithOmi": "Звонки с Omi",
     "phoneContactsTab": "Контакты",

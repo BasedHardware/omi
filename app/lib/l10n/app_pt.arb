@@ -2729,6 +2729,8 @@
     "onTheCallEnterThisCode": "Durante a chamada, digite este codigo",
     "phoneAllow": "Permitir",
     "phoneCallSettingsTitle": "Configuracoes de chamada",
+    "showPhoneCallButtonTitle": "Mostrar botão de chamada",
+    "showPhoneCallButtonDesc": "Exibir botão de chamada telefônica na tela inicial",
     "phoneCallsSubtitle": "Faca chamadas com transcricao em tempo real",
     "phoneCallsWithOmi": "Chamadas com Omi",
     "phoneContactsTab": "Contatos",

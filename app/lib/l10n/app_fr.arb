@@ -2728,6 +2728,8 @@
     "onTheCallEnterThisCode": "Pendant l'appel, entrez ce code",
     "phoneAllow": "Autoriser",
     "phoneCallSettingsTitle": "Parametres d'appel",
+    "showPhoneCallButtonTitle": "Afficher le bouton d'appel",
+    "showPhoneCallButtonDesc": "Afficher le bouton d'appel téléphonique sur l'écran d'accueil",
     "phoneCallsSubtitle": "Passez des appels avec transcription en temps reel",
     "phoneCallsWithOmi": "Appels avec Omi",
     "phoneContactsTab": "Contacts",

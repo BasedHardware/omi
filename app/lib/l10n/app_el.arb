@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Στην κλήση, εισάγετε αυτόν τον κωδικό",
     "phoneAllow": "Επιτρέπω",
     "phoneCallSettingsTitle": "Ρυθμίσεις κλήσεων",
+    "showPhoneCallButtonTitle": "Εμφάνιση κουμπιού κλήσης",
+    "showPhoneCallButtonDesc": "Εμφάνιση κουμπιού τηλεφωνικής κλήσης στην αρχική οθόνη",
     "phoneCallsSubtitle": "Κάντε κλήσεις με μεταγραφή σε πραγματικό χρόνο",
     "phoneCallsWithOmi": "Κλήσεις με Omi",
     "phoneContactsTab": "Επαφές",

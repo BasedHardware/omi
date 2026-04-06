@@ -2686,6 +2686,8 @@
     "phoneSpeaker": "Високоговорител",
     "phoneEndCall": "Край",
     "phoneCallSettingsTitle": "Настройки на телефонните обаждания",
+    "showPhoneCallButtonTitle": "Показване на бутона за телефонно обаждане",
+    "showPhoneCallButtonDesc": "Показване на бутона за телефонно обаждане на началния екран",
     "yourVerifiedNumbers": "Вашите потвърдени номера",
     "verifiedNumbersDescription": "Когато се обадите на някого, той ще види този номер на телефона си",
     "noVerifiedNumbers": "Няма потвърдени номера",

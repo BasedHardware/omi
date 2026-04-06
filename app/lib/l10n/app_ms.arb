@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Semasa panggilan, masukkan kod ini",
     "phoneAllow": "Benarkan",
     "phoneCallSettingsTitle": "Tetapan panggilan",
+    "showPhoneCallButtonTitle": "Tunjuk Butang Panggilan",
+    "showPhoneCallButtonDesc": "Paparkan butang panggilan telefon pada skrin utama",
     "phoneCallsSubtitle": "Buat panggilan dengan transkripsi masa nyata",
     "phoneCallsWithOmi": "Panggilan dengan Omi",
     "phoneContactsTab": "Kenalan",

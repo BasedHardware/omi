@@ -2728,6 +2728,8 @@
     "onTheCallEnterThisCode": "Podczas rozmowy wpisz ten kod",
     "phoneAllow": "Zezwol",
     "phoneCallSettingsTitle": "Ustawienia polaczen",
+    "showPhoneCallButtonTitle": "Pokaż przycisk połączenia",
+    "showPhoneCallButtonDesc": "Wyświetl przycisk połączenia telefonicznego na ekranie głównym",
     "phoneCallsSubtitle": "Dzwon z transkrypcja w czasie rzeczywistym",
     "phoneCallsWithOmi": "Polaczenia z Omi",
     "phoneContactsTab": "Kontakty",

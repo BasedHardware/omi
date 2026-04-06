@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Під час дзвінка введіть цей код",
     "phoneAllow": "Дозволити",
     "phoneCallSettingsTitle": "Налаштування дзвінків",
+    "showPhoneCallButtonTitle": "Показати кнопку дзвінка",
+    "showPhoneCallButtonDesc": "Відображати кнопку телефонного дзвінка на головному екрані",
     "phoneCallsSubtitle": "Дзвоніть з транскрипцією в реальному часі",
     "phoneCallsWithOmi": "Дзвінки з Omi",
     "phoneContactsTab": "Контакти",

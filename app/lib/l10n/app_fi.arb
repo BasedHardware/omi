@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Syota tama koodi puhelun aikana",
     "phoneAllow": "Salli",
     "phoneCallSettingsTitle": "Puheluasetukset",
+    "showPhoneCallButtonTitle": "Näytä puhelupainike",
+    "showPhoneCallButtonDesc": "Näytä puhelupainike aloitusnäytöllä",
     "phoneCallsSubtitle": "Soita reaaliaikaisella litteroinnilla",
     "phoneCallsWithOmi": "Puhelut Omin kanssa",
     "phoneContactsTab": "Yhteystiedot",

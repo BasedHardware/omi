@@ -2715,6 +2715,8 @@
     "onTheCallEnterThisCode": "通话中输入此代码",
     "phoneAllow": "允许",
     "phoneCallSettingsTitle": "通话设置",
+    "showPhoneCallButtonTitle": "显示电话按钮",
+    "showPhoneCallButtonDesc": "在主屏幕上显示电话按钮",
     "phoneCallsSubtitle": "实时转录通话",
     "phoneCallsWithOmi": "使用 Omi 通话",
     "phoneContactsTab": "通讯录",

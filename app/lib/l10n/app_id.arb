@@ -2735,6 +2735,8 @@
     "onTheCallEnterThisCode": "Saat panggilan, masukkan kode ini",
     "phoneAllow": "Izinkan",
     "phoneCallSettingsTitle": "Pengaturan panggilan",
+    "showPhoneCallButtonTitle": "Tampilkan Tombol Panggilan",
+    "showPhoneCallButtonDesc": "Tampilkan tombol panggilan telepon di layar utama",
     "phoneCallsSubtitle": "Telepon dengan transkripsi real-time",
     "phoneCallsWithOmi": "Panggilan dengan Omi",
     "phoneContactsTab": "Kontak",

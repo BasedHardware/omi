@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "통화 중 이 코드를 입력하세요",
     "phoneAllow": "허용",
     "phoneCallSettingsTitle": "통화 설정",
+    "showPhoneCallButtonTitle": "통화 버튼 표시",
+    "showPhoneCallButtonDesc": "홈 화면에 전화 통화 버튼 표시",
     "phoneCallsSubtitle": "실시간 전사와 함께 전화하기",
     "phoneCallsWithOmi": "Omi로 통화",
     "phoneContactsTab": "연락처",

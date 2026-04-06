@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Zvana laika ievadiet šo kodu",
     "phoneAllow": "Atliaut",
     "phoneCallSettingsTitle": "Zvanu iestatijumi",
+    "showPhoneCallButtonTitle": "Rādīt zvana pogu",
+    "showPhoneCallButtonDesc": "Rādīt tālruņa zvana pogu sākuma ekrānā",
     "phoneCallsSubtitle": "Zvaniet ar realaika transkripciju",
     "phoneCallsWithOmi": "Zvani ar Omi",
     "phoneContactsTab": "Kontakti",

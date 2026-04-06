@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Under samtalet, ange denna kod",
     "phoneAllow": "Tillat",
     "phoneCallSettingsTitle": "Samtalsinstellningar",
+    "showPhoneCallButtonTitle": "Visa samtalsknapp",
+    "showPhoneCallButtonDesc": "Visa telefonsamtalsknapp på startskärmen",
     "phoneCallsSubtitle": "Ring med realtidstranskription",
     "phoneCallsWithOmi": "Samtal med Omi",
     "phoneContactsTab": "Kontakter",

@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Durante la chiamata, inserisci questo codice",
     "phoneAllow": "Consenti",
     "phoneCallSettingsTitle": "Impostazioni chiamate",
+    "showPhoneCallButtonTitle": "Mostra pulsante chiamata",
+    "showPhoneCallButtonDesc": "Mostra il pulsante di chiamata telefonica nella schermata principale",
     "phoneCallsSubtitle": "Chiama con trascrizione in tempo reale",
     "phoneCallsWithOmi": "Chiamate con Omi",
     "phoneContactsTab": "Contatti",

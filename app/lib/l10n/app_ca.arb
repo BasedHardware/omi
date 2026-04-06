@@ -2662,6 +2662,8 @@
     "onTheCallEnterThisCode": "A la trucada, introdueix aquest codi",
     "phoneAllow": "Permetre",
     "phoneCallSettingsTitle": "Configuracio de trucades",
+    "showPhoneCallButtonTitle": "Mostra el botó de trucada",
+    "showPhoneCallButtonDesc": "Mostra el botó de trucada telefònica a la pantalla d'inici",
     "phoneCallsSubtitle": "Fes trucades amb transcripcio en temps real",
     "phoneCallsWithOmi": "Trucades amb Omi",
     "phoneContactsTab": "Contactes",

@@ -2693,6 +2693,8 @@
     "onTheCallEnterThisCode": "Skambuchio metu iveskite si koda",
     "phoneAllow": "Leisti",
     "phoneCallSettingsTitle": "Skambuciu nustatymai",
+    "showPhoneCallButtonTitle": "Rodyti skambučio mygtuką",
+    "showPhoneCallButtonDesc": "Rodyti telefono skambučio mygtuką pradiniame ekrane",
     "phoneCallsSubtitle": "Skambinkite su transkripcija realiu laiku",
     "phoneCallsWithOmi": "Skambuciai su Omi",
     "phoneContactsTab": "Kontaktai",

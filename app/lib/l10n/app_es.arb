@@ -2694,6 +2694,8 @@
     "onTheCallEnterThisCode": "En la llamada, ingresa este codigo",
     "phoneAllow": "Permitir",
     "phoneCallSettingsTitle": "Configuracion de llamadas",
+    "showPhoneCallButtonTitle": "Mostrar botón de llamada",
+    "showPhoneCallButtonDesc": "Mostrar el botón de llamada telefónica en la pantalla de inicio",
     "phoneCallsSubtitle": "Haz llamadas con transcripcion en tiempo real",
     "phoneCallsWithOmi": "Llamadas con Omi",
     "phoneContactsTab": "Contactos",

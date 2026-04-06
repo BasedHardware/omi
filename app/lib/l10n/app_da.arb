@@ -2702,6 +2702,8 @@
     "onTheCallEnterThisCode": "Indtast denne kode under opkaldet",
     "phoneAllow": "Tillad",
     "phoneCallSettingsTitle": "Opkaldsindstillinger",
+    "showPhoneCallButtonTitle": "Vis telefonopkaldsknap",
+    "showPhoneCallButtonDesc": "Vis knap til telefonopkald på startskærmen",
     "phoneCallsSubtitle": "Foretag opkald med realtidstranskription",
     "phoneCallsWithOmi": "Opkald med Omi",
     "phoneContactsTab": "Kontakter",
