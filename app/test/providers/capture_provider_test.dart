@@ -422,6 +422,67 @@ void main() {
     });
   });
 
+  group('double-recording guard (issue #3244)', () {
+    // These tests verify the mutex that prevents a BLE device WebSocket from
+    // opening when system audio is already active (or still initialising).
+
+    test('streamDeviceRecording returns early when systemAudioRecord is active', () async {
+      final provider = CaptureProvider();
+      // Put provider into systemAudioRecord state (simulating system audio running).
+      provider.updateRecordingState(RecordingState.systemAudioRecord);
+
+      // Track whether notifyListeners is called in a way that would indicate
+      // _resetStateVariables() ran (it calls notifyListeners and sets segments=[]).
+      // We prime segments with a sentinel value.
+      provider.segments = [_segment('sentinel', 'should stay')];
+
+      // On macOS (where the test runner executes), PlatformService.isDesktop == true,
+      // so the guard fires and streamDeviceRecording returns without touching state.
+      await provider.streamDeviceRecording();
+
+      // State must still be systemAudioRecord — guard prevented any transition.
+      expect(provider.recordingState, RecordingState.systemAudioRecord);
+      // _resetStateVariables() must not have run (segments untouched).
+      expect(provider.segments.isNotEmpty, true);
+      expect(provider.segments.first.id, 'sentinel');
+
+      provider.dispose();
+    });
+
+    test('streamDeviceRecording returns early when initialising is active', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingState(RecordingState.initialising);
+      provider.segments = [_segment('sentinel', 'should stay')];
+
+      await provider.streamDeviceRecording();
+
+      expect(provider.recordingState, RecordingState.initialising);
+      expect(provider.segments.first.id, 'sentinel');
+
+      provider.dispose();
+    });
+
+    test('streamSystemAudioRecording sets state to initialising synchronously', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingState(RecordingState.stop);
+
+      // Call without awaiting — Dart runs async functions synchronously up to
+      // the first actual await suspension point.  The state assignment
+      // updateRecordingState(RecordingState.initialising) happens before the
+      // first await in streamSystemAudioRecording(), so it is observable here.
+      final future = provider.streamSystemAudioRecording();
+
+      // Immediately after the call (same microtask), state must be initialising.
+      expect(provider.recordingState, RecordingState.initialising);
+
+      // Let the rest of the future complete (or fail gracefully) before the test
+      // harness tears down the provider.  The _initiateWebsocket call will fail
+      // because ServiceManager has no real socket in tests, but that is expected.
+      future.catchError((_) {});
+      provider.dispose();
+    });
+  });
+
   group('onClosed warning snackbar', () {
     Future<void> _pumpAppWithScaffold(WidgetTester tester) async {
       await tester.pumpWidget(

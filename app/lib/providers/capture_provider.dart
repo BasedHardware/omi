@@ -42,6 +42,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -1002,7 +1003,19 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+
+    // Hoist device update before any guard so _recordingDevice is always current.
     if (device != null) _updateRecordingDevice(device);
+
+    // On desktop, refuse to open a device stream while system audio is active or
+    // while the system-audio path is still initialising.  Both states are set
+    // synchronously by streamSystemAudioRecording() before its first await, so
+    // this check is race-free under the single-threaded Dart event loop.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug('streamDeviceRecording: skipped — system audio is active (state=$recordingState)');
+      return;
+    }
 
     bool wasPaused = _isPaused;
 
@@ -1024,6 +1037,50 @@ class CaptureProvider extends ChangeNotifier
     }
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream device recording');
+  }
+
+  /// Start streaming system audio on desktop.
+  ///
+  /// Sets [RecordingState.initialising] SYNCHRONOUSLY before the first await —
+  /// this acts as a mutex that prevents [streamDeviceRecording] and the keep-alive
+  /// timer from opening a competing WebSocket while the system-audio path is
+  /// being set up or already running.
+  ///
+  /// Device cleanup is done inline (not via [stopStreamDeviceRecording]) to
+  /// avoid an extra async hop that would widen the race window.
+  Future<void> streamSystemAudioRecording() async {
+    if (!PlatformService.isDesktop) return;
+
+    // --- SYNCHRONOUS state lock — this must come before any await ---
+    // Any concurrent call to streamDeviceRecording() or the keep-alive timer
+    // will see RecordingState.initialising and return early.
+    updateRecordingState(RecordingState.initialising);
+
+    // Inline BLE cleanup: if a device recording was active, tear it down now
+    // without calling stopStreamDeviceRecording() (async, would widen the race).
+    if (_recordingDevice != null) {
+      await _cleanupCurrentState();
+      await _socket?.stop(reason: 'system audio recording started');
+    }
+
+    await _resetStateVariables();
+
+    await _initiateWebsocket(
+      audioCodec: BleAudioCodec.pcm16,
+      sampleRate: 16000,
+      channels: 1,
+      source: ConversationSource.desktop.name,
+    );
+
+    updateRecordingState(RecordingState.systemAudioRecord);
+  }
+
+  /// Stop system audio recording and reset state.
+  Future<void> stopSystemAudioRecording() async {
+    if (!PlatformService.isDesktop) return;
+    await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop system audio recording');
   }
 
   @override
@@ -1066,6 +1123,18 @@ class CaptureProvider extends ChangeNotifier
 
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
+        t.cancel();
+        return;
+      }
+
+      // Do not attempt a BLE or phone-mic WebSocket reconnect while system audio
+      // is streaming or while the system-audio path is still initialising.
+      // recordingDeviceServiceReady returns true for systemAudioRecord, so without
+      // this guard the timer would open a competing device WebSocket alongside the
+      // active system-audio one — the root cause of issue #3244.
+      if (PlatformService.isDesktop &&
+          (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+        Logger.debug('[Provider] keep alive - system audio active, skipping device reconnect');
         t.cancel();
         return;
       }
