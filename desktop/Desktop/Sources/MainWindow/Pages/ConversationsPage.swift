@@ -127,6 +127,10 @@ struct ConversationsPage: View {
         }
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) {
+      notification in
+      handleAutomationOpenConversation(notification)
+    }
     .dismissableSheet(isPresented: $showCreateFolderSheet) {
       FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
         .environmentObject(appState)
@@ -144,6 +148,43 @@ struct ConversationsPage: View {
     }
   }
 
+  private func handleAutomationOpenConversation(_ notification: Notification) {
+    guard let conversationId = notification.userInfo?["conversationId"] as? String else { return }
+    let showTranscript = notification.userInfo?["showTranscript"] as? Bool ?? false
+
+    func present(_ conversation: ServerConversation) {
+      selectedConversation = conversation
+      guard showTranscript else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        NotificationCenter.default.post(
+          name: .desktopAutomationShowConversationTranscriptRequested,
+          object: nil,
+          userInfo: ["conversationId": conversation.id]
+        )
+      }
+    }
+
+    if let conversation = appState.conversations.first(where: { $0.id == conversationId }) {
+      present(conversation)
+      return
+    }
+
+    if let conversation = searchResults.first(where: { $0.id == conversationId }) {
+      present(conversation)
+      return
+    }
+
+    Task {
+      await appState.refreshConversations()
+      await MainActor.run {
+        guard let conversation = appState.conversations.first(where: { $0.id == conversationId }) else {
+          log("Desktop automation: conversation \(conversationId) not found")
+          return
+        }
+        present(conversation)
+      }
+    }
+  }
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {

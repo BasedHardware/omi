@@ -83,7 +83,7 @@ class AppleRemindersSyncService {
       'completionsPushed': 0,
       'titleDuePulled': 0,
       'titleDuePushed': 0,
-      'unlinked': 0
+      'unlinked': 0,
     };
     if (syncedItems.isEmpty) return stats;
 

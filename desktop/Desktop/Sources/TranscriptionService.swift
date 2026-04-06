@@ -583,4 +583,3 @@ private struct PythonTranscribeResponse: Decodable {
     let transcript: String
     let language: String?
 }
-

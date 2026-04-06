@@ -483,8 +483,12 @@ class ActionItemsProvider extends ChangeNotifier {
     if (!PlatformService.isApple) return;
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
-    AppleRemindersService()
-        .updateReminderById(item.appleReminderId!, completed: completed, title: title, dueDate: dueDate);
+    AppleRemindersService().updateReminderById(
+      item.appleReminderId!,
+      completed: completed,
+      title: title,
+      dueDate: dueDate,
+    );
   }
 
   /// Delete the linked Apple Reminder when action item is deleted.

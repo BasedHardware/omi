@@ -4248,6 +4248,9 @@ impl FirestoreService {
                                             .iter()
                                             .filter_map(|seg| {
                                                 Some(TranscriptSegment {
+                                                    id: seg.get("id")
+                                                        .and_then(|s| s.as_str())
+                                                        .map(|s| s.to_string()),
                                                     text: seg.get("text")?.as_str()?.to_string(),
                                                     speaker: seg.get("speaker")
                                                         .and_then(|s| s.as_str())
@@ -4293,6 +4296,9 @@ impl FirestoreService {
                                     .iter()
                                     .filter_map(|seg| {
                                         Some(TranscriptSegment {
+                                            id: seg.get("id")
+                                                .and_then(|s| s.as_str())
+                                                .map(|s| s.to_string()),
                                             text: seg.get("text")?.as_str()?.to_string(),
                                             speaker: seg.get("speaker")
                                                 .and_then(|s| s.as_str())
@@ -4366,6 +4372,7 @@ impl FirestoreService {
                 .filter_map(|seg| {
                     let seg_fields = seg.get("mapValue")?.get("fields")?;
                     Some(TranscriptSegment {
+                        id: self.parse_string(seg_fields, "id"),
                         text: self.parse_string(seg_fields, "text").unwrap_or_default(),
                         speaker: self.parse_string(seg_fields, "speaker").unwrap_or_else(|| "SPEAKER_00".to_string()),
                         speaker_id: self.parse_int(seg_fields, "speaker_id").unwrap_or(0),
@@ -4408,6 +4415,9 @@ impl FirestoreService {
             .iter()
             .filter_map(|seg| {
                 Some(TranscriptSegment {
+                    id: seg.get("id")
+                        .and_then(|s| s.as_str())
+                        .map(|s| s.to_string()),
                     text: seg.get("text")?.as_str()?.to_string(),
                     speaker: seg
                         .get("speaker")
@@ -4553,14 +4563,21 @@ impl FirestoreService {
 
             // Step 1: Serialize segments to JSON array (matching Python's json.dumps format)
             let segments_json: Vec<serde_json::Value> = conv.transcript_segments.iter().map(|seg| {
-                json!({
+                let mut segment = json!({
                     "text": seg.text,
                     "speaker": seg.speaker,
                     "speaker_id": seg.speaker_id,
                     "is_user": seg.is_user,
                     "start": seg.start,
                     "end": seg.end
-                })
+                });
+                if let Some(id) = &seg.id {
+                    segment["id"] = json!(id);
+                }
+                if let Some(person_id) = &seg.person_id {
+                    segment["person_id"] = json!(person_id);
+                }
+                segment
             }).collect();
             let json_str = serde_json::to_string(&segments_json).unwrap_or_else(|_| "[]".to_string());
 
@@ -9126,15 +9143,16 @@ impl FirestoreService {
             .ok_or("Conversation not found")?;
         let mut segments = conv.transcript_segments;
 
-        // Build a set of target segment IDs for fast lookup
-        let target_ids: std::collections::HashSet<&str> =
-            segment_ids.iter().map(|s| s.as_str()).collect();
+        // Update matching segments by stable segment id first, then fall back to explicit index targets.
+        for target in segment_ids {
+            let matched_segment = if let Some(index) = target.strip_prefix("#index:")
+                .and_then(|value| value.parse::<usize>().ok()) {
+                segments.get_mut(index)
+            } else {
+                segments.iter_mut().find(|seg| seg.id.as_deref() == Some(target.as_str()))
+            };
 
-        // Update matching segments
-        for (idx, seg) in segments.iter_mut().enumerate() {
-            // Segments may not have explicit IDs in Firestore — match by index as string
-            let seg_id = idx.to_string();
-            if target_ids.contains(seg_id.as_str()) {
+            if let Some(seg) = matched_segment {
                 match assign_type {
                     "is_user" => {
                         seg.is_user = value.map(|v| v == "true").unwrap_or(false);
@@ -9163,6 +9181,9 @@ impl FirestoreService {
                     "start": {"doubleValue": seg.start},
                     "end": {"doubleValue": seg.end}
                 });
+                if let Some(ref id) = seg.id {
+                    fields["id"] = json!({"stringValue": id});
+                }
                 if let Some(ref pid) = seg.person_id {
                     fields["person_id"] = json!({"stringValue": pid});
                 }

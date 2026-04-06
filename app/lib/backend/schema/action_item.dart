@@ -118,8 +118,9 @@ class ActionItemsResponse {
 
   factory ActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return ActionItemsResponse(
-      actionItems:
-          (json['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      actionItems: (json['action_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
       hasMore: json['has_more'],
     );
   }
@@ -133,10 +134,12 @@ class PendingSyncResponse {
 
   factory PendingSyncResponse.fromJson(Map<String, dynamic> json) {
     return PendingSyncResponse(
-      pendingExport:
-          (json['pending_export'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
-      syncedItems:
-          (json['synced_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      pendingExport: (json['pending_export'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
+      syncedItems: (json['synced_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
     );
   }
 }

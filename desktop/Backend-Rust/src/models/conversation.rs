@@ -9,6 +9,8 @@ use super::category::Category;
 /// Copied from Python TranscriptSegment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptSegment {
+    #[serde(default)]
+    pub id: Option<String>,
     pub text: String,
     #[serde(default = "default_speaker")]
     pub speaker: String,

@@ -255,10 +255,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<void> scanDevices({
-    required VoidCallback onShowDialog,
-    VoidCallback? onShowLocationDialog,
-  }) async {
+  Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();

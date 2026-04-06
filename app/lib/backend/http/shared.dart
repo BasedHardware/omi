@@ -26,9 +26,10 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshedToken = await AuthService.instance.getIdToken();

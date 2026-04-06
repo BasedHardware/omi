@@ -83,10 +83,7 @@ void main() {
     });
 
     test('two events plus partial third', () async {
-      final stream = Stream.fromIterable([
-        'data: a\n\ndata: b\n\ndata: part',
-        'ial\n\n',
-      ]);
+      final stream = Stream.fromIterable(['data: a\n\ndata: b\n\ndata: part', 'ial\n\n']);
       final events = await parseSseStream(stream).toList();
       expect(events, ['data: a', 'data: b', 'data: partial']);
     });
@@ -118,10 +115,7 @@ void main() {
       final b64 = base64Encode(utf8.encode('{"id":"msg-1","text":"hello world"}'));
       final full = 'done: $b64\n\n';
       final mid = full.length ~/ 2;
-      final stream = Stream.fromIterable([
-        full.substring(0, mid),
-        full.substring(mid),
-      ]);
+      final stream = Stream.fromIterable([full.substring(0, mid), full.substring(mid)]);
       final events = await parseSseStream(stream).toList();
       expect(events, ['done: $b64']);
     });
@@ -153,9 +147,7 @@ void main() {
     });
 
     test('mixed event types', () async {
-      final stream = Stream.fromIterable([
-        'think: step1\n\ndata: result\n\ndone: abc\n\n',
-      ]);
+      final stream = Stream.fromIterable(['think: step1\n\ndata: result\n\ndone: abc\n\n']);
       final events = await parseSseStream(stream).toList();
       expect(events, ['think: step1', 'data: result', 'done: abc']);
     });

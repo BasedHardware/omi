@@ -1856,25 +1856,33 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
-                if isPresented {
-                    // Dimmed background that dismisses on tap
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            log("DISMISSABLE_SHEET: Background tapped, dismissing")
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                isPresented = false
+                ZStack {
+                    if isPresented {
+                        // Dimmed background that dismisses on tap.
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                log("DISMISSABLE_SHEET: Background tapped, dismissing")
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    isPresented = false
+                                }
                             }
-                        }
-                        .transition(.opacity)
+                            .transition(.opacity)
+                            .zIndex(0)
 
-                    // Sheet content centered
-                    sheetContent()
-                        .background(OmiColors.backgroundPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                        // Force the sheet into a centered full-size overlay so it
+                        // does not end up clipped or visually hidden behind the scrim.
+                        sheetContent()
+                            .background(OmiColors.backgroundPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                            .transition(.scale(scale: 0.95).combined(with: .opacity))
+                            .zIndex(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .animation(.easeOut(duration: 0.2), value: isPresented)
     }
@@ -1906,25 +1914,33 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
     func body(content: Content) -> some View {
         content
             .overlay {
-                if let presentedItem = item {
-                    // Dimmed background that dismisses on tap
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            log("DISMISSABLE_SHEET: Background tapped, dismissing item")
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                item = nil
+                ZStack {
+                    if let presentedItem = item {
+                        // Dimmed background that dismisses on tap.
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                log("DISMISSABLE_SHEET: Background tapped, dismissing item")
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    item = nil
+                                }
                             }
-                        }
-                        .transition(.opacity)
+                            .transition(.opacity)
+                            .zIndex(0)
 
-                    // Sheet content centered
-                    sheetContent(presentedItem)
-                        .background(OmiColors.backgroundPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                        // Force the sheet into a centered full-size overlay so it
+                        // does not end up clipped or visually hidden behind the scrim.
+                        sheetContent(presentedItem)
+                            .background(OmiColors.backgroundPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                            .transition(.scale(scale: 0.95).combined(with: .opacity))
+                            .zIndex(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .animation(.easeOut(duration: 0.2), value: item?.id != nil)
     }

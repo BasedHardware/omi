@@ -247,6 +247,7 @@ class TranscriptionRetryService {
             // Convert segments to API format
             let apiSegments = sessionWithSegments.segments.map { segment in
                 APIClient.TranscriptSegmentRequest(
+                    id: segment.segmentId,
                     text: segment.text,
                     speaker: "SPEAKER_\(String(format: "%02d", segment.speaker))",
                     speakerId: segment.speaker,

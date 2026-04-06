@@ -2162,14 +2162,14 @@ class AppState: ObservableObject {
   /// Assigns segments to a person or user via bulk API
   func assignSpeakerToSegments(
     conversationId: String,
-    segmentIds: [Int],
+    segmentIds: [String],
     personId: String?,
     isUser: Bool
   ) async -> Bool {
     do {
       try await APIClient.shared.assignSegmentsBulk(
         conversationId: conversationId,
-        segmentIds: segmentIds.map(String.init),
+        segmentIds: segmentIds,
         isUser: isUser,
         personId: personId
       )
@@ -2876,6 +2876,12 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
+  /// Posted by the local desktop automation bridge to open a specific conversation detail.
+  static let desktopAutomationOpenConversationRequested = Notification.Name(
+    "desktopAutomationOpenConversationRequested")
+  /// Posted by the local desktop automation bridge to expand the transcript drawer.
+  static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
+    "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

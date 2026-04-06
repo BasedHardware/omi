@@ -402,6 +402,6 @@ private enum FloatingBarVoicePlaybackError: LocalizedError {
       return "Invalid ElevenLabs response"
     case .requestFailed(let statusCode, let body):
       return "ElevenLabs request failed (\(statusCode)): \(body)"
-    }
   }
+}
 }
