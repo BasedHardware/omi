@@ -1,3 +1,5 @@
+import AppKit
+import CoreServices
 import Foundation
 import GRDB
 import SwiftUI
@@ -9,6 +11,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let projectNames: [String]
     let applications: [String]
     let technologies: [String]
+    let folders: [String]
     let recentFiles: [String]
   }
 
@@ -31,6 +34,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let goals: [String]
   }
 
+  private struct MemoryDraft: Hashable {
+    let content: String
+    let tags: [String]
+    let source: String
+    let headline: String
+  }
+
   @Published var preferredName: String
   @Published var draftName: String
   @Published var selectedLanguageCode: String
@@ -39,8 +49,16 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var scanState: ScanState = .idle
   @Published var scanStatusText: String = "Ready to scan your files."
   @Published var scanSnapshot: ScanSnapshot?
+  @Published var localFileMemoriesSaved: Int = 0
   @Published var emailSummary: String = ""
+  @Published var gmailInsightCount: Int = 0
+  @Published var gmailMemoriesSaved: Int = 0
   @Published var calendarSummary: String = ""
+  @Published var calendarInsightCount: Int = 0
+  @Published var calendarMemoriesSaved: Int = 0
+  @Published var appleNotesSummary: String = ""
+  @Published var appleNotesInsightCount: Int = 0
+  @Published var appleNotesMemoriesSaved: Int = 0
   @Published var webResearchSummary: String = ""
   @Published var isLoadingInsights = false
   @Published var insightStatusText: String = ""
@@ -50,13 +68,27 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var goalSaved = OnboardingChatPersistence.isGoalCompleted
   @Published var isSavingGoal = false
   @Published var lastActionError: String?
+  @Published var chatGPTImportedMemoriesCount: Int
+  @Published var claudeImportedMemoriesCount: Int
+  @Published var chatGPTImportSummary: String
+  @Published var claudeImportSummary: String
+  @Published var importingMemoryLogSource: OnboardingMemoryLogSource?
+  @Published var isSyncingAppleNotes = false
 
   private var insightsStarted = false
   private var gmailInsightsFinished = false
   private var calendarInsightsFinished = false
+  private var appleNotesInsightsFinished = false
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
+  private var appleNotesTask: Task<Void, Never>?
   private var webResearchTask: Task<Void, Never>?
+  private var localFileMemoryImportTask: Task<Int, Never>?
+
+  private let chatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
+  private let chatGPTImportSummaryKey = "onboardingChatGPTImportSummary"
+  private let claudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
+  private let claudeImportSummaryKey = "onboardingClaudeImportSummary"
 
   init() {
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -69,11 +101,18 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let languageCode = AssistantSettings.shared.transcriptionLanguage
     selectedLanguageCode = languageCode
     selectedLanguageLabel = Self.displayName(forLanguageCode: languageCode)
+
+    let defaults = UserDefaults.standard
+    chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
+    claudeImportedMemoriesCount = defaults.integer(forKey: claudeImportedMemoriesKey)
+    chatGPTImportSummary = defaults.string(forKey: chatGPTImportSummaryKey) ?? ""
+    claudeImportSummary = defaults.string(forKey: claudeImportSummaryKey) ?? ""
   }
 
   deinit {
     gmailTask?.cancel()
     calendarTask?.cancel()
+    appleNotesTask?.cancel()
     webResearchTask?.cancel()
   }
 
@@ -104,6 +143,182 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   func userEmail() -> String? {
     AuthState.shared.userEmail
+  }
+
+  var connectedContextSummary: String {
+    var sentences: [String] = []
+
+    if let snapshot = scanSnapshot, snapshot.fileCount > 0 {
+      if !snapshot.projectNames.isEmpty {
+        let featuredProjects = snapshot.projectNames.prefix(2).joined(separator: " and ")
+        sentences.append(
+          "Your local files center around \(featuredProjects), with \(snapshot.fileCount.formatted()) files mapped and \(localFileMemoriesSaved.formatted()) memories extracted."
+        )
+      } else {
+        sentences.append(
+          "Omi has already mapped \(snapshot.fileCount.formatted()) local files from your workspace and extracted \(localFileMemoriesSaved.formatted()) memories."
+        )
+      }
+    }
+
+    if gmailInsightCount > 0 || calendarInsightCount > 0 {
+      let emailText =
+        gmailInsightCount > 0
+        ? "\(gmailInsightCount.formatted()) emails" : nil
+      let calendarText =
+        calendarInsightCount > 0
+        ? "\(calendarInsightCount.formatted()) calendar events" : nil
+      let joined = [emailText, calendarText].compactMap { $0 }.joined(separator: " and ")
+      sentences.append("Your recent communication history adds \(joined) to the picture.")
+    }
+
+    if appleNotesInsightCount > 0 {
+      sentences.append(
+        "Apple Notes contributes \(appleNotesInsightCount.formatted()) notes and \(appleNotesMemoriesSaved.formatted()) extracted memories."
+      )
+    }
+
+    let importedMemories = chatGPTImportedMemoriesCount + claudeImportedMemoriesCount
+    if importedMemories > 0 {
+      sentences.append(
+        "Imported memory logs add \(importedMemories.formatted()) durable memories from ChatGPT and Claude."
+      )
+    }
+
+    if sentences.isEmpty {
+      return "Omi is still gathering signal from your connected sources."
+    }
+
+    return sentences.prefix(3).joined(separator: " ")
+  }
+
+  func importedMemoryCount(for source: OnboardingMemoryLogSource) -> Int {
+    switch source {
+    case .chatgpt:
+      chatGPTImportedMemoriesCount
+    case .claude:
+      claudeImportedMemoriesCount
+    }
+  }
+
+  func isImportingMemoryLog(for source: OnboardingMemoryLogSource) -> Bool {
+    importingMemoryLogSource == source
+  }
+
+  func copyPromptAndOpenMemoryLogSource(_ source: OnboardingMemoryLogSource) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(source.prompt, forType: .string)
+    openURLInDefaultBrowser(source.prefilledBrowserURL)
+  }
+
+  func importMemoryLog(_ rawText: String, source: OnboardingMemoryLogSource) async {
+    lastActionError = nil
+    importingMemoryLogSource = source
+    defer { importingMemoryLogSource = nil }
+
+    let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
+      rawText, source: source)
+    guard result.memories > 0 else {
+      lastActionError =
+        "Couldn’t extract durable memories from the pasted \(source.displayName) log."
+      return
+    }
+
+    let defaults = UserDefaults.standard
+    switch source {
+    case .chatgpt:
+      chatGPTImportedMemoriesCount = result.memories
+      chatGPTImportSummary = result.profileSummary
+      defaults.set(result.memories, forKey: chatGPTImportedMemoriesKey)
+      defaults.set(result.profileSummary, forKey: chatGPTImportSummaryKey)
+    case .claude:
+      claudeImportedMemoriesCount = result.memories
+      claudeImportSummary = result.profileSummary
+      defaults.set(result.memories, forKey: claudeImportedMemoriesKey)
+      defaults.set(result.profileSummary, forKey: claudeImportSummaryKey)
+    }
+
+    await saveGraph(
+      nodes: [
+        [
+          "id": "integration_\(source.rawValue)", "label": source.displayName, "node_type": "thing",
+          "aliases": [],
+        ]
+      ],
+      edges: [
+        [
+          "source_id": "user", "target_id": "integration_\(source.rawValue)",
+          "label": "shared_context_from",
+        ]
+      ]
+    )
+  }
+
+  func selectAppleNotesFolderAndSync() async {
+    lastActionError = nil
+
+    let panel = NSOpenPanel()
+    panel.title = "Select your Apple Notes data folder"
+    panel.message = "Choose the Apple Notes group container so Omi can sync your notes."
+    panel.prompt = "Select Folder"
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let suggestedURL = home.appendingPathComponent("Library/Group Containers/group.com.apple.notes")
+    if FileManager.default.fileExists(atPath: suggestedURL.path) {
+      panel.directoryURL = suggestedURL
+    }
+
+    guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
+
+    await AppleNotesReaderService.shared.rememberSelectedFolder(path: selectedURL.path)
+    await refreshAppleNotesInsights()
+  }
+
+  func refreshAppleNotesInsights() async {
+    lastActionError = nil
+    isSyncingAppleNotes = true
+    defer { isSyncingAppleNotes = false }
+
+    do {
+      let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+      if notes.isEmpty {
+        appleNotesInsightCount = 0
+        appleNotesSummary = ""
+        appleNotesMemoriesSaved = 0
+        return
+      }
+
+      let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
+      let result = await AppleNotesReaderService.shared.synthesizeFromNotes(
+        notes: Array(notes.prefix(120))
+      )
+      appleNotesInsightCount = notes.count
+      appleNotesMemoriesSaved = rawImport.saved + result.memories
+      appleNotesSummary =
+        result.profileSummary.isEmpty
+        ? "Your notes already reflect active ideas, plans, and recurring interests."
+        : result.profileSummary
+
+      if appleNotesMemoriesSaved > 0 {
+        await saveGraph(
+          nodes: [
+            [
+              "id": "integration_apple_notes", "label": "Apple Notes", "node_type": "thing",
+              "aliases": [],
+            ]
+          ],
+          edges: [
+            ["source_id": "user", "target_id": "integration_apple_notes", "label": "captures_in"]
+          ]
+        )
+      }
+    } catch {
+      lastActionError = error.localizedDescription
+    }
   }
 
   func confirmPreferredName() async {
@@ -181,6 +396,29 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         ["source_id": "user", "target_id": "language_\(code)", "label": "prefers"]
       ]
     )
+  }
+
+  private func openURLInDefaultBrowser(_ url: URL) {
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+
+    if let browserBundleId = LSCopyDefaultHandlerForURLScheme("https" as CFString)?
+      .takeRetainedValue() as String?,
+      let browserURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browserBundleId)
+    {
+      NSWorkspace.shared.open([url], withApplicationAt: browserURL, configuration: configuration) {
+        _, error in
+        if let error {
+          log(
+            "OnboardingPagedIntroCoordinator: Failed opening browser URL \(url.absoluteString): \(error.localizedDescription)"
+          )
+          NSWorkspace.shared.open(url)
+        }
+      }
+      return
+    }
+
+    NSWorkspace.shared.open(url)
   }
 
   func requestPermission(_ type: String, appState: AppState) async -> Bool {
@@ -265,9 +503,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           sql: """
               SELECT filename
               FROM indexed_files
-              WHERE folder = '/Applications' AND fileExtension = 'app'
+              WHERE folder = 'Applications' AND fileExtension = 'app'
               ORDER BY filename
-              LIMIT 8
+              LIMIT 12
             """)
 
         let recentFiles = try Row.fetchAll(
@@ -275,8 +513,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           sql: """
               SELECT filename
               FROM indexed_files
+              WHERE filename NOT LIKE 'CleanShot %'
+                AND filename NOT LIKE '.DS_Store'
               ORDER BY modifiedAt DESC
-              LIMIT 6
+              LIMIT 10
             """)
 
         let extensions = try Row.fetchAll(
@@ -287,15 +527,62 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
               WHERE fileExtension IS NOT NULL AND fileExtension != ''
               GROUP BY fileExtension
               ORDER BY count DESC
-              LIMIT 12
+              LIMIT 16
             """)
 
-        let projects = projectIndicators.compactMap { row -> String? in
+        let folderCounts = try Row.fetchAll(
+          db,
+          sql: """
+              SELECT folder, COUNT(*) as count
+              FROM indexed_files
+              GROUP BY folder
+              ORDER BY count DESC
+              LIMIT 8
+            """)
+
+        let projectCandidates = try Row.fetchAll(
+          db,
+          sql: """
+              SELECT path, folder
+              FROM indexed_files
+              WHERE folder IN ('Projects', 'Documents')
+                AND path NOT LIKE '%/node_modules/%'
+                AND path NOT LIKE '%/.git/%'
+                AND path NOT LIKE '%/.build/%'
+                AND path NOT LIKE '%/build/%'
+                AND path NOT LIKE '%/DerivedData/%'
+                AND path NOT LIKE '%/Pods/%'
+              LIMIT 6000
+            """)
+
+        let indicatorProjects = projectIndicators.compactMap { row -> String? in
           guard let path = row["path"] as? String else { return nil }
           let directory = (path as NSString).deletingLastPathComponent
           let projectName = (directory as NSString).lastPathComponent
           return projectName.isEmpty ? nil : projectName
         }
+
+        var projectScores: [String: Int] = [:]
+        for project in indicatorProjects {
+          projectScores[project, default: 0] += 500
+        }
+        for row in projectCandidates {
+          guard
+            let path = row["path"] as? String,
+            let folder = row["folder"] as? String,
+            let project = Self.projectLabel(from: path, folder: folder)
+          else { continue }
+          projectScores[project, default: 0] += 1
+        }
+
+        let projects = projectScores
+          .sorted {
+            if $0.value == $1.value {
+              return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
+            }
+            return $0.value > $1.value
+          }
+          .map(\.key)
 
         let technologies =
           extensions
@@ -304,13 +591,21 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
             return Self.technologyName(forFileExtension: raw)
           }
 
+        let folders =
+          folderCounts
+          .compactMap { row -> String? in
+            guard let folder = row["folder"] as? String else { return nil }
+            return Self.displayFolderName(folder)
+          }
+
         return ScanSnapshot(
           fileCount: total,
-          projectNames: Array(Set(projects)).sorted().prefix(6).map(\.self),
+          projectNames: Array(projects.prefix(12)),
           applications: apps.compactMap {
             ($0["filename"] as? String)?.replacingOccurrences(of: ".app", with: "")
           },
-          technologies: Array(Set(technologies)).sorted().prefix(6).map(\.self),
+          technologies: Array(Set(technologies)).sorted().prefix(10).map(\.self),
+          folders: Array(folders.prefix(5)),
           recentFiles: recentFiles.compactMap { $0["filename"] as? String }
         )
       }
@@ -322,27 +617,35 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       var nodes: [[String: Any]] = []
       var edges: [[String: Any]] = []
 
-      for project in snapshot.projectNames.prefix(4) {
+      for project in snapshot.projectNames.prefix(10) {
         let id = "project_\(slug(project))"
         nodes.append(["id": id, "label": project, "node_type": "thing", "aliases": []])
         edges.append(["source_id": "user", "target_id": id, "label": "works_on"])
       }
 
-      for tech in snapshot.technologies.prefix(4) {
+      for tech in snapshot.technologies.prefix(8) {
         let id = "tech_\(slug(tech))"
         nodes.append(["id": id, "label": tech, "node_type": "thing", "aliases": []])
         edges.append(["source_id": "user", "target_id": id, "label": "uses"])
       }
 
-      for application in snapshot.applications.prefix(3) {
+      for application in snapshot.applications.prefix(6) {
         let id = "app_\(slug(application))"
         nodes.append(["id": id, "label": application, "node_type": "thing", "aliases": []])
         edges.append(["source_id": "user", "target_id": id, "label": "opens"])
       }
 
+      for folder in snapshot.folders.prefix(4) {
+        let id = "folder_\(slug(folder))"
+        nodes.append(["id": id, "label": folder, "node_type": "thing", "aliases": []])
+        edges.append(["source_id": "user", "target_id": id, "label": "stores_work_in"])
+      }
+
       if !nodes.isEmpty {
         await saveGraph(nodes: nodes, edges: edges)
       }
+
+      localFileMemoriesSaved = await importLocalFileMemories(from: snapshot)
     } catch {
       logError("OnboardingPagedIntroCoordinator: Failed to load scan snapshot", error: error)
     }
@@ -353,29 +656,35 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     insightsStarted = true
     isLoadingInsights = true
     isResearchComplete = false
-    insightStatusText = "Reading Gmail and calendar..."
+    insightStatusText = "Reading Gmail, calendar, and Apple Notes..."
     gmailInsightsFinished = false
     calendarInsightsFinished = false
+    appleNotesInsightsFinished = false
     webResearchSummary = ""
 
     gmailTask = Task {
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
-          maxResults: 50,
-          query: "newer_than:30d"
+          maxResults: 300,
+          query: "newer_than:365d"
         )
         guard !Task.isCancelled else { return }
 
         if emails.isEmpty {
           await MainActor.run {
             self.emailSummary = ""
+            self.gmailInsightCount = 0
+            self.gmailMemoriesSaved = 0
             ChatToolExecutor.emailInsightsText = nil
           }
           await self.markInsightFinished(.gmail)
           return
         }
 
-        let result = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
+        let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        let result = await GmailReaderService.shared.synthesizeFromEmails(
+          emails: Array(emails.prefix(120))
+        )
         guard !Task.isCancelled else { return }
 
         let summary =
@@ -393,6 +702,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         )
 
         await MainActor.run {
+          self.gmailInsightCount = emails.count
+          self.gmailMemoriesSaved = rawImport.saved + result.memories
           self.emailSummary = summary
           ChatToolExecutor.emailInsightsText = summary
           self.suggestedGoals = self.buildSuggestedGoals(
@@ -410,22 +721,30 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     calendarTask = Task {
       do {
         let events = try await CalendarReaderService.shared.readEvents(
-          daysBack: 90,
-          daysForward: 14,
-          maxResults: 200
+          daysBack: 365,
+          daysForward: 90,
+          maxResults: 1000
         )
         guard !Task.isCancelled else { return }
 
         if events.isEmpty {
           await MainActor.run {
             self.calendarSummary = ""
+            self.calendarInsightCount = 0
+            self.calendarMemoriesSaved = 0
             ChatToolExecutor.calendarInsightsText = nil
           }
           await self.markInsightFinished(.calendar)
           return
         }
 
-        let result = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+        let rawImport = await CalendarReaderService.shared.saveAsMemories(
+          events: events,
+          limit: 500
+        )
+        let result = await CalendarReaderService.shared.synthesizeFromEvents(
+          events: Array(events.prefix(150))
+        )
         guard !Task.isCancelled else { return }
 
         let summary =
@@ -446,6 +765,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         )
 
         await MainActor.run {
+          self.calendarInsightCount = events.count
+          self.calendarMemoriesSaved = rawImport.saved + result.memories
           self.calendarSummary = summary
           ChatToolExecutor.calendarInsightsText = summary
           self.suggestedGoals = self.buildSuggestedGoals(
@@ -459,11 +780,84 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         await self.markInsightFinished(.calendar)
       }
     }
+
+    appleNotesTask = Task {
+      await MainActor.run {
+        self.isSyncingAppleNotes = true
+      }
+
+      defer {
+        Task { @MainActor in
+          self.isSyncingAppleNotes = false
+        }
+      }
+
+      do {
+        let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+        guard !Task.isCancelled else { return }
+
+        if notes.isEmpty {
+          await MainActor.run {
+            self.appleNotesInsightCount = 0
+            self.appleNotesSummary = ""
+            self.appleNotesMemoriesSaved = 0
+          }
+          await self.markInsightFinished(.appleNotes)
+          return
+        }
+
+        let rawImport = await AppleNotesReaderService.shared.saveAsMemories(
+          notes: notes,
+          limit: 200
+        )
+        let result = await AppleNotesReaderService.shared.synthesizeFromNotes(
+          notes: Array(notes.prefix(120))
+        )
+        guard !Task.isCancelled else { return }
+
+        if rawImport.saved + result.memories > 0 {
+          await self.saveGraph(
+            nodes: [
+              [
+                "id": "integration_apple_notes", "label": "Apple Notes", "node_type": "thing",
+                "aliases": [],
+              ]
+            ],
+            edges: [
+              ["source_id": "user", "target_id": "integration_apple_notes", "label": "captures_in"]
+            ]
+          )
+        }
+
+        let summary =
+          result.profileSummary.isEmpty
+          ? "Your notes already reflect active ideas, plans, and recurring interests."
+          : result.profileSummary
+
+        await MainActor.run {
+          self.appleNotesInsightCount = notes.count
+          self.appleNotesMemoriesSaved = rawImport.saved + result.memories
+          self.appleNotesSummary = summary
+        }
+        await self.markInsightFinished(.appleNotes)
+      } catch {
+        log(
+          "OnboardingPagedIntroCoordinator: Apple Notes insights unavailable: \(error.localizedDescription)"
+        )
+        await MainActor.run {
+          self.appleNotesInsightCount = 0
+          self.appleNotesSummary = ""
+          self.appleNotesMemoriesSaved = 0
+        }
+        await self.markInsightFinished(.appleNotes)
+      }
+    }
   }
 
   private enum InsightSource {
     case gmail
     case calendar
+    case appleNotes
   }
 
   private func markInsightFinished(_ source: InsightSource) async {
@@ -472,13 +866,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       gmailInsightsFinished = true
     case .calendar:
       calendarInsightsFinished = true
+    case .appleNotes:
+      appleNotesInsightsFinished = true
     }
 
     await maybeStartWebResearch()
   }
 
   private func maybeStartWebResearch() async {
-    guard gmailInsightsFinished && calendarInsightsFinished else { return }
+    guard gmailInsightsFinished && calendarInsightsFinished && appleNotesInsightsFinished else {
+      return
+    }
     guard webResearchTask == nil && !isResearchComplete else { return }
 
     insightStatusText = "Searching the web..."
@@ -513,7 +911,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         webResearchSummary = analysis.summary
       }
 
-      log("OnboardingPagedIntroCoordinator: Enrichment goals: \(analysis.goals), summary: \(analysis.summary.prefix(100))")
+      log(
+        "OnboardingPagedIntroCoordinator: Enrichment goals: \(analysis.goals), summary: \(analysis.summary.prefix(100))"
+      )
 
       if !analysis.goals.isEmpty {
         suggestedGoals = Array(
@@ -541,6 +941,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           "Projects: \(snapshot.projectNames.joined(separator: ", "))",
           "Applications: \(snapshot.applications.joined(separator: ", "))",
           "Technologies: \(snapshot.technologies.joined(separator: ", "))",
+          "Folders: \(snapshot.folders.joined(separator: ", "))",
+          "Recent files: \(snapshot.recentFiles.joined(separator: ", "))",
         ]
         .filter { !$0.hasSuffix(": ") }
         .joined(separator: "\n")
@@ -585,11 +987,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
       RULES:
       - Use only facts grounded in the provided context
-      - entities: at most 6
+      - entities: at most 12
       - node_type must be one of: person, organization, place, thing, concept
       - relation must connect the user to the entity, like works_on, uses, works_with, follows, plans_with, researches
-      - goals: at most 4, concrete and specific, not generic
-      - Prefer project names, organizations, tools, and recurring commitments
+      - goals: at most 6, concrete and specific, not generic
+      - Prefer project names, organizations, tools, products, repositories, and recurring commitments
+      - Favor labels that will make a graph visually informative, not generic filler
       """
 
     do {
@@ -651,11 +1054,19 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       let projectQuery =
         searchableOrganizationHint().map { "\($0) \(project)" } ?? "\(preferredName) \(project)"
       queries.append(projectQuery)
+    }
+
+    if let secondProject = scanSnapshot?.projectNames.dropFirst().first, !secondProject.isEmpty {
+      queries.append("\(preferredName) \(secondProject)")
     } else if let technology = scanSnapshot?.technologies.first, !technology.isEmpty {
       queries.append("\(preferredName) \(technology)")
     }
 
-    return Array(NSOrderedSet(array: queries).array as? [String] ?? queries).prefix(2).map(\.self)
+    if let technology = scanSnapshot?.technologies.first, !technology.isEmpty {
+      queries.append("\(preferredName) \(technology)")
+    }
+
+    return Array(NSOrderedSet(array: queries).array as? [String] ?? queries).prefix(4).map(\.self)
   }
 
   private func searchableOrganizationHint() -> String? {
@@ -836,6 +1247,183 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     )
   }
 
+  private func importLocalFileMemories(from snapshot: ScanSnapshot) async -> Int {
+    if localFileMemoriesSaved > 0 {
+      return localFileMemoriesSaved
+    }
+
+    if let existingTask = localFileMemoryImportTask {
+      return await existingTask.value
+    }
+
+    let task = Task<Int, Never> {
+      let drafts = await buildLocalFileMemoryDrafts(from: snapshot)
+      guard !drafts.isEmpty else { return 0 }
+
+      let concurrency = min(12, drafts.count)
+      var nextIndex = 0
+
+      let saved = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
+        func enqueueNext() {
+          guard nextIndex < drafts.count else { return }
+          let draft = drafts[nextIndex]
+          nextIndex += 1
+          group.addTask {
+            do {
+              _ = try await APIClient.shared.createMemory(
+                content: draft.content,
+                visibility: "private",
+                tags: draft.tags,
+                source: draft.source,
+                headline: draft.headline
+              )
+              return true
+            } catch {
+              log("OnboardingPagedIntroCoordinator: Failed to save local file memory: \(error)")
+              return false
+            }
+          }
+        }
+
+        for _ in 0..<concurrency {
+          enqueueNext()
+        }
+
+        var savedCount = 0
+        while let success = await group.next() {
+          if success {
+            savedCount += 1
+          }
+          enqueueNext()
+        }
+        return savedCount
+      }
+
+      log("OnboardingPagedIntroCoordinator: Saved \(saved) local file memories")
+      return saved
+    }
+
+    localFileMemoryImportTask = task
+    let saved = await task.value
+    localFileMemoryImportTask = nil
+    return saved
+  }
+
+  private func buildLocalFileMemoryDrafts(from snapshot: ScanSnapshot) async -> [MemoryDraft] {
+    var drafts: [MemoryDraft] = [
+      MemoryDraft(
+        content: "The user has \(snapshot.fileCount.formatted()) local files indexed across their machine.",
+        tags: ["local_files", "onboarding", "profile"],
+        source: "local_files",
+        headline: "Local Files Overview"
+      )
+    ]
+
+    for project in snapshot.projectNames.prefix(12) {
+      drafts.append(
+        MemoryDraft(
+          content: "The user works on a local project named \(project).",
+          tags: ["local_files", "onboarding", "project"],
+          source: "local_files",
+          headline: project
+        )
+      )
+    }
+
+    for technology in snapshot.technologies.prefix(8) {
+      drafts.append(
+        MemoryDraft(
+          content: "The user's local files show active work in \(technology).",
+          tags: ["local_files", "onboarding", "technology"],
+          source: "local_files",
+          headline: technology
+        )
+      )
+    }
+
+    for fileName in snapshot.recentFiles.prefix(8) {
+      drafts.append(
+        MemoryDraft(
+          content: "A recently modified local file is named \(fileName).",
+          tags: ["local_files", "onboarding", "recent_file"],
+          source: "local_files",
+          headline: fileName
+        )
+      )
+    }
+
+    if let dbQueue = await RewindDatabase.shared.getDatabaseQueue() {
+      do {
+        let projectDrafts = try await dbQueue.read { db -> [MemoryDraft] in
+          let sql = """
+            SELECT path, filename, fileExtension, folder
+            FROM indexed_files
+            WHERE folder IN ('Projects', 'Documents', 'Downloads')
+              AND filename NOT LIKE 'CleanShot %'
+              AND filename NOT LIKE '.DS_Store'
+              AND path NOT LIKE '%/node_modules/%'
+              AND path NOT LIKE '%/.git/%'
+              AND path NOT LIKE '%/.build/%'
+              AND path NOT LIKE '%/build/%'
+              AND path NOT LIKE '%/DerivedData/%'
+              AND path NOT LIKE '%/Pods/%'
+              AND (
+                fileExtension IN ('swift','dart','py','ts','tsx','js','jsx','md','mdx','json',
+                                  'yaml','yml','toml','sh','txt','html','css','scss','sql',
+                                  'go','rs','kt','java','cpp','c','h','hpp','ipynb','pdf')
+                OR fileExtension IS NULL
+              )
+            ORDER BY modifiedAt DESC
+            LIMIT 2800
+            """
+
+          let rows = try Row.fetchAll(db, sql: sql)
+          return rows.compactMap { row in
+            guard let path: String = row["path"], let filename: String = row["filename"] else {
+              return nil
+            }
+
+            let folder: String = row["folder"] ?? "Files"
+            let fileExtension: String = row["fileExtension"] ?? ""
+            let normalizedPath = Self.normalizedLocalFilePath(path)
+            let extensionSuffix = fileExtension.isEmpty ? "" : " (\(fileExtension))"
+
+            return MemoryDraft(
+              content:
+                "The user's local \(folder.lowercased()) include \(normalizedPath)\(extensionSuffix).",
+              tags: [
+                "local_files", "onboarding", folder.lowercased(), Self.sanitizedTag(fileExtension),
+              ],
+              source: "local_files",
+              headline: filename
+            )
+          }
+        }
+        drafts.append(contentsOf: projectDrafts)
+      } catch {
+        log("OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
+      }
+    }
+
+    var seen = Set<MemoryDraft>()
+    return drafts.filter { seen.insert($0).inserted }
+  }
+
+  nonisolated private static func normalizedLocalFilePath(_ path: String) -> String {
+    if path.hasPrefix("~/") { return path }
+
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    if path.hasPrefix(home + "/") {
+      return "~/" + path.dropFirst(home.count + 1)
+    }
+    return path
+  }
+
+  nonisolated private static func sanitizedTag(_ tag: String) -> String {
+    let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return trimmed.isEmpty ? "unknown" : trimmed.replacingOccurrences(of: " ", with: "_")
+  }
+
   private func heuristicGoalTitle(_ text: String) -> String {
     var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "\n", with: " ")
@@ -909,6 +1497,55 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     case "mdx": return "Mintlify"
     default: return nil
     }
+  }
+
+  nonisolated private static func displayFolderName(_ raw: String) -> String? {
+    switch raw {
+    case "Projects":
+      return "Projects"
+    case "Documents":
+      return "Documents"
+    case "Downloads":
+      return "Downloads"
+    case "Desktop":
+      return "Desktop"
+    case "Applications":
+      return "Apps"
+    case "group.com.apple.notes":
+      return "Apple Notes Store"
+    default:
+      return nil
+    }
+  }
+
+  nonisolated private static func projectLabel(from path: String, folder: String) -> String? {
+    let normalized = normalizedLocalFilePath(path)
+    let components = normalized.split(separator: "/").map(String.init)
+
+    func component(after name: String) -> String? {
+      guard let index = components.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }),
+        index + 1 < components.count
+      else {
+        return nil
+      }
+      return components[index + 1]
+    }
+
+    let candidate: String?
+    switch folder {
+    case "Projects":
+      candidate = component(after: "projects")
+    case "Documents":
+      candidate = component(after: "Documents")
+    default:
+      candidate = nil
+    }
+
+    guard let candidate else { return nil }
+    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+    let banned = Set(["Users", "nik", "Documents", "Projects", "Downloads", "Desktop", "Library"])
+    guard !trimmed.isEmpty, !banned.contains(trimmed) else { return nil }
+    return trimmed
   }
 
   private func slug(_ value: String) -> String {

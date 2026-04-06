@@ -19,7 +19,11 @@ struct OnboardingView: View {
   @AppStorage("onboardingFloatingBarShortcutStepInserted") private
     var hasInsertedFloatingBarShortcutStep = false
   @AppStorage("onboardingTrustStepReordered") private var hasReorderedTrustStep = false
-  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep = false
+  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep =
+    false
+  @AppStorage("onboardingDataSourcesStepInserted") private var hasInsertedDataSourcesStep = false
+  @AppStorage("onboardingSecondBrainStepInserted") private var hasInsertedSecondBrainStep = false
+  @AppStorage("onboardingResearchStepRemoved") private var hasRemovedResearchStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -66,7 +70,10 @@ struct OnboardingView: View {
           hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
           hasMigratedPagedIntro: hasMigratedPagedIntro,
           hasReorderedTrustStep: hasReorderedTrustStep,
-          hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep
+          hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep,
+          hasInsertedDataSourcesStep: hasInsertedDataSourcesStep,
+          hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
+          hasRemovedResearchStep: hasRemovedResearchStep
         )
       }
       hasMigratedPagedIntro = true
@@ -77,6 +84,9 @@ struct OnboardingView: View {
       hasInsertedFloatingBarShortcutStep = true
       hasReorderedTrustStep = true
       hasInsertedHowDidYouHearStep = true
+      hasInsertedDataSourcesStep = true
+      hasInsertedSecondBrainStep = false
+      hasRemovedResearchStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
@@ -316,7 +326,8 @@ struct OnboardingView: View {
             currentStep = 11
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Automation_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 10, stepName: "Automation_Skipped")
             currentStep = 11
           },
           onForceComplete: handleOnboardingComplete
@@ -383,13 +394,13 @@ struct OnboardingView: View {
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 15 {
-        OnboardingResearchStepView(
+        OnboardingDataSourcesStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 15,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Research")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources")
             currentStep = 16
           },
           onForceComplete: handleOnboardingComplete
@@ -437,7 +448,8 @@ struct OnboardingView: View {
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-    PostOnboardingPromptSuggestions.save(OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
+    PostOnboardingPromptSuggestions.save(
+      OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false
