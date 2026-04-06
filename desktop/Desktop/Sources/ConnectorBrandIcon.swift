@@ -53,6 +53,32 @@ enum ConnectorBrand: String, Sendable {
 
 private enum ConnectorBrandImageLoader {
   private static var cache: [ConnectorBrand: NSImage] = [:]
+  private static var resourceBundle: Bundle? = {
+    let candidates = Bundle.allBundles + Bundle.allFrameworks + [Bundle.main]
+
+    for bundle in candidates {
+      if bundle.url(forResource: "gmail_logo", withExtension: "png") != nil {
+        return bundle
+      }
+    }
+
+    if let resourcesURL = Bundle.main.resourceURL,
+      let bundleURLs = try? FileManager.default.contentsOfDirectory(
+        at: resourcesURL,
+        includingPropertiesForKeys: nil
+      )
+    {
+      for url in bundleURLs where url.pathExtension == "bundle" {
+        if let bundle = Bundle(url: url),
+          bundle.url(forResource: "gmail_logo", withExtension: "png") != nil
+        {
+          return bundle
+        }
+      }
+    }
+
+    return nil
+  }()
 
   static func image(for brand: ConnectorBrand) -> NSImage? {
     if let cached = cache[brand] {
@@ -81,7 +107,8 @@ private enum ConnectorBrandImageLoader {
 
   private static func bundledImage(for brand: ConnectorBrand) -> NSImage? {
     guard let resourceName = brand.bundledResourceName,
-      let url = Bundle.module.url(forResource: resourceName, withExtension: "png")
+      let bundle = resourceBundle,
+      let url = bundle.url(forResource: resourceName, withExtension: "png")
     else {
       return nil
     }
