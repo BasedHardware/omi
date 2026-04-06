@@ -157,14 +157,34 @@ async fn get_conversations_count(
 }
 
 /// POST /v1/conversations/from-segments - Create conversation from transcript
-/// Copied from Python create_conversation_from_segments
+/// DEPRECATED: Desktop now uses Python POST /v1/conversations (force-process) instead.
+/// This endpoint will return 410 Gone after 24 hours from deploy.
+/// See: https://github.com/BasedHardware/omi/issues/6355
 async fn create_conversation_from_segments(
     State(state): State<AppState>,
     user: AuthUser,
     Json(request): Json<CreateConversationRequest>,
 ) -> Result<Json<CreateConversationResponse>, (StatusCode, String)> {
-    tracing::info!(
-        "Creating conversation for user {} from {} segments",
+    // Deprecation: return 410 Gone after 24h from deploy
+    if let Ok(ts) = std::env::var("DEPRECATION_TIMESTAMP") {
+        if let Ok(deploy_time) = ts.parse::<i64>() {
+            let now = chrono::Utc::now().timestamp();
+            if now - deploy_time > 86400 {
+                tracing::warn!(
+                    "from-segments endpoint expired for user {} (deprecated since {})",
+                    user.uid,
+                    deploy_time
+                );
+                return Err((
+                    StatusCode::GONE,
+                    "This endpoint is deprecated. Desktop app now uses Python POST /v1/conversations.".to_string(),
+                ));
+            }
+        }
+    }
+
+    tracing::warn!(
+        "DEPRECATED: Creating conversation for user {} from {} segments — use Python POST /v1/conversations instead",
         user.uid,
         request.transcript_segments.len()
     );
