@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-04-06T01:03:53.693738+00:00",
+  "sourceCommit": "b1e3ea4490122b8a41eebcf13ef153ad4d9471b0",
+  "sourceBranch": "fix/voice-speed-filler",
+  "assetCount": 18,
+  "assets": [
+    {
+      "name": "01-name",
+      "png": "01-name.png",
+      "pdf": "01-name.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "02-language",
+      "png": "02-language.png",
+      "pdf": "02-language.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "03-howdidyouhear",
+      "png": "03-howdidyouhear.png",
+      "pdf": "03-howdidyouhear.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "04-trust",
+      "png": "04-trust.png",
+      "pdf": "04-trust.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "05-screen-recording",
+      "png": "05-screen-recording.png",
+      "pdf": "05-screen-recording.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "06-disk-access",
+      "png": "06-disk-access.png",
+      "pdf": "06-disk-access.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "07-file-scan",
+      "png": "07-file-scan.png",
+      "pdf": "07-file-scan.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "08-microphone",
+      "png": "08-microphone.png",
+      "pdf": "08-microphone.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "09-notifications",
+      "png": "09-notifications.png",
+      "pdf": "09-notifications.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "10-accessibility",
+      "png": "10-accessibility.png",
+      "pdf": "10-accessibility.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "11-automation",
+      "png": "11-automation.png",
+      "pdf": "11-automation.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "12-floating-bar-shortcut",
+      "png": "12-floating-bar-shortcut.png",
+      "pdf": "12-floating-bar-shortcut.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "13-floating-bar",
+      "png": "13-floating-bar.png",
+      "pdf": "13-floating-bar.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "14-voice-shortcut",
+      "png": "14-voice-shortcut.png",
+      "pdf": "14-voice-shortcut.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "15-voice-demo",
+      "png": "15-voice-demo.png",
+      "pdf": "15-voice-demo.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "16-research",
+      "png": "16-research.png",
+      "pdf": "16-research.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "17-goal",
+      "png": "17-goal.png",
+      "pdf": "17-goal.pdf",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "name": "18-tasks",
+      "png": "18-tasks.png",
+      "pdf": "18-tasks.pdf",
+      "width": 900,
+      "height": 600
+    }
+  ]
+}
