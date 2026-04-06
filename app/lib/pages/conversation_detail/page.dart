@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -87,6 +88,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
+  Map<String, String> _sharedProfileNamesByPersonId = {};
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -151,6 +153,37 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     return _currentSearchIndex - 1;
   }
 
+  bool _isSharedPersonId(String? personId) => personId?.startsWith('shared:') ?? false;
+
+  Future<void> _loadSharedProfileNames(List<TranscriptSegment> segments) async {
+    final sharedPersonIds =
+        segments.map((segment) => segment.personId).whereType<String>().where(_isSharedPersonId).toSet();
+    if (sharedPersonIds.isEmpty) return;
+
+    final sharedProfiles = await getProfilesSharedWithMe();
+    final sharedNamesByUid = {
+      for (final profile in sharedProfiles)
+        if (profile.uid.isNotEmpty) profile.uid: profile.displayName,
+    };
+    final resolvedNames = <String, String>{};
+
+    for (final personId in sharedPersonIds) {
+      final ownerUid = personId.substring('shared:'.length);
+      final sharedName = sharedNamesByUid[ownerUid];
+      if (sharedName != null && sharedName.isNotEmpty) {
+        resolvedNames[personId] = sharedName;
+      }
+    }
+
+    if (!mounted || resolvedNames.isEmpty) return;
+    setState(() {
+      _sharedProfileNamesByPersonId = {
+        ..._sharedProfileNamesByPersonId,
+        ...resolvedNames,
+      };
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -207,6 +240,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       }
 
       await provider.initConversation();
+      await _loadSharedProfileNames(provider.conversation.transcriptSegments);
       if (provider.conversation.appResults.isEmpty) {
         final date = provider.selectedDate;
         final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
@@ -913,6 +947,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 TranscriptWidgets(
                                   searchQuery: _searchQuery,
                                   currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                  sharedProfileNamesByPersonId: _sharedProfileNamesByPersonId,
                                   onTapWhenSearchEmpty: () {
                                     if (_isSearching && _searchQuery.isEmpty) {
                                       setState(() {
@@ -1330,6 +1365,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
 class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
+  final Map<String, String> sharedProfileNamesByPersonId;
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
 
@@ -1337,6 +1373,7 @@ class TranscriptWidgets extends StatefulWidget {
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
+    this.sharedProfileNamesByPersonId = const {},
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
   });
@@ -1348,6 +1385,32 @@ class TranscriptWidgets extends StatefulWidget {
 class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  bool _isSharedPersonId(String? personId) => personId?.startsWith('shared:') ?? false;
+
+  Map<int, String> _getSharedSpeakerNames(List<TranscriptSegment> segments) {
+    final sharedSpeakerNames = <int, String>{};
+    for (final segment in segments) {
+      final personId = segment.personId;
+      if (!_isSharedPersonId(personId)) continue;
+
+      final sharedName = widget.sharedProfileNamesByPersonId[personId!];
+      if (sharedName != null && sharedName.isNotEmpty) {
+        sharedSpeakerNames[segment.speakerId] = sharedName;
+      }
+    }
+    return sharedSpeakerNames;
+  }
+
+  String _getSegmentSpeakerName(TranscriptSegment segment, List<TranscriptSegment> segments, BuildContext context) {
+    final personId = segment.personId;
+    final person = personId != null ? SharedPreferencesUtil().getPersonById(personId) : null;
+    final sharedName = personId != null ? widget.sharedProfileNamesByPersonId[personId] : null;
+
+    return person?.name ??
+        sharedName ??
+        context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1394,6 +1457,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               segments,
               photos,
               null,
+              sharedSpeakerNames: _getSharedSpeakerNames(segments),
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: provider.canDisplaySeconds,
@@ -1411,12 +1475,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person = segment.personId != null
-                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
-                    : null;
-                final speakerName =
-                    person?.name ??
-                    context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+                final speakerName = _getSegmentSpeakerName(segment, segments, context);
                 MixpanelManager().editSegmentTextStarted();
                 bool saved = false;
                 showEditSegmentBottomSheet(
