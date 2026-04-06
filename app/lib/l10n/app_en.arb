@@ -631,6 +631,22 @@
     "@deviceName": {
         "description": "Device name label"
     },
+    "renameDevice": "Rename Device",
+    "@renameDevice": {
+        "description": "Title for the rename device dialog"
+    },
+    "enterDeviceName": "Enter device name",
+    "@enterDeviceName": {
+        "description": "Hint text for the device name input field"
+    },
+    "deviceNameCannotBeEmpty": "Device name cannot be empty",
+    "@deviceNameCannotBeEmpty": {
+        "description": "Error shown when the device name field is empty"
+    },
+    "deviceNameUpdated": "Device name updated",
+    "@deviceNameUpdated": {
+        "description": "Snackbar shown after updating the device name"
+    },
     "deviceId": "Device ID",
     "@deviceId": {
         "description": "Label for device ID field"
