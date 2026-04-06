@@ -1,9 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class GenUiBlocksWidget extends StatelessWidget {
   final List<GenUiBlock> blocks;
@@ -54,11 +55,9 @@ class MapCardWidget extends StatelessWidget {
       onTap: () async {
         try {
           await MapsUtil.launchMap(lat, lng);
-        } catch (_) {
+        } on PlatformException {
           if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.couldNotOpenUrl)));
         }
       },
       child: Container(
@@ -101,9 +100,7 @@ class MapCardWidget extends StatelessWidget {
                 ),
                 errorWidget: (context, url, error) => Container(
                   color: const Color(0xFF0E1626),
-                  child: const Center(
-                    child: Icon(Icons.map_outlined, color: Colors.white24, size: 48),
-                  ),
+                  child: const Center(child: Icon(Icons.map_outlined, color: Colors.white24, size: 48)),
                 ),
               ),
             ),
@@ -126,10 +123,7 @@ class MapCardWidget extends StatelessWidget {
                     children: [
                       Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
                       const SizedBox(width: 4),
-                      Text(
-                        context.l10n.tapToOpenInMaps,
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                      ),
+                      Text(context.l10n.tapToOpenInMaps, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                     ],
                   ),
                 ],
