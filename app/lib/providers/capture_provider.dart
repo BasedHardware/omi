@@ -1028,6 +1028,18 @@ class CaptureProvider extends ChangeNotifier
 
     await _resetState();
 
+    // Re-check after the device-init await (_resetState opens BLE streams and
+    // the websocket).  A concurrent system-audio start that was queued while
+    // _resetState was suspended would now have set RecordingState.initialising;
+    // bail out so we do not leave a competing device WebSocket open.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug(
+          'streamDeviceRecording: aborted after device-init await — system audio is active (state=$recordingState)');
+      await _cleanupCurrentState();
+      return;
+    }
+
     if (wasPaused) {
       await pauseDeviceRecording();
     }
@@ -1065,19 +1077,18 @@ class CaptureProvider extends ChangeNotifier
       if (previousRecordingDevice == null) return;
 
       Logger.debug('streamSystemAudioRecording: restoring prior device stream after desktop websocket startup failure');
+      // Explicitly stop any partial socket before handing back to the BLE path.
+      await _socket?.stop(reason: 'system audio websocket failed — restoring device stream');
+      updateRecordingState(RecordingState.stop);
       await _resetState();
     }
 
     try {
-      // Inline BLE cleanup: if a device recording was active, tear it down now
-      // without calling stopStreamDeviceRecording() (async, would widen the race).
-      if (previousRecordingDevice != null) {
-        await _cleanupCurrentState();
-        await _socket?.stop(reason: 'system audio recording started');
-      }
-
       await _resetStateVariables();
 
+      // Attempt to open the desktop websocket BEFORE tearing down the BLE path.
+      // This way, if _initiateWebsocket fails we still have a valid device stream
+      // to fall back to instead of silently dropping to RecordingState.stop.
       await _initiateWebsocket(
         audioCodec: BleAudioCodec.pcm16,
         sampleRate: 16000,
@@ -1086,14 +1097,20 @@ class CaptureProvider extends ChangeNotifier
       );
 
       if (_socket == null) {
-        updateRecordingState(RecordingState.stop);
+        // Desktop socket did not come up — restore BLE device recording.
         await restorePreviousDeviceRecordingIfNeeded();
         return;
       }
 
+      // Desktop websocket is confirmed up.  Now it is safe to tear down the
+      // prior BLE stream inline (no extra async hop needed after this point).
+      if (previousRecordingDevice != null) {
+        await _cleanupCurrentState();
+        await _socket?.stop(reason: 'system audio recording started — replacing device stream');
+      }
+
       updateRecordingState(RecordingState.systemAudioRecord);
     } catch (_) {
-      updateRecordingState(RecordingState.stop);
       await restorePreviousDeviceRecordingIfNeeded();
       rethrow;
     }
@@ -1170,6 +1187,17 @@ class CaptureProvider extends ChangeNotifier
 
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+
+        // Re-check after the codec await: system audio may have started
+        // initialising while _getAudioCodec was suspended.  Opening a device
+        // websocket now would create a competing stream alongside system audio.
+        if (PlatformService.isDesktop &&
+            (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+          Logger.debug('[Provider] keep alive - system audio started during codec await, skipping device websocket');
+          t.cancel();
+          return;
+        }
+
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
