@@ -1538,19 +1538,68 @@ class AppState: ObservableObject {
 
   /// Stop real-time transcription
   /// The Python backend handles conversation lifecycle automatically — disconnecting the WebSocket
-  /// triggers conversation processing on the backend side.
+  /// triggers conversation processing on the backend side. We also call force-process to ensure
+  /// the conversation is finalized, preventing the retry service from creating duplicates.
   func stopTranscription() {
+    // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
+    let capturedSessionId = currentSessionId
+    let capturedStartTime = recordingStartTime
+
     stopAudioCapture()
     clearTranscriptionState()
 
-    // Backend processes the conversation when WebSocket disconnects.
-    // The local session stays as pendingUpload — the retry service will either:
-    // 1. Find the conversation on the backend (duplicate check) and mark it completed, or
-    // 2. Re-upload if backend processing failed (recovery path).
-    // We don't optimistically mark as completed because that orphans the session if backend fails.
+    // After WS close, the Python backend processes the conversation automatically.
+    // Call force-process to ensure finalization and get the backend conversation ID.
+    // This prevents the retry service from picking up the pendingUpload session.
     Task {
-      try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s for backend to process
+      try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s for backend to process after WS close
+
+      do {
+        if let conversation = try await APIClient.shared.forceProcessConversation() {
+          // 200: Backend processed the conversation — mark local session completed
+          if let sessionId = capturedSessionId {
+            try? await TranscriptionStorage.shared.markSessionCompleted(
+              id: sessionId, backendId: conversation.id)
+            log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
+          }
+        } else {
+          // 404: No in-progress conversation — WS close handler already processed it.
+          // Reconcile by checking if a matching conversation exists on the backend.
+          if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+            await reconcileSession(sessionId: sessionId, startTime: startTime)
+          }
+        }
+      } catch {
+        // Other error — leave session as pendingUpload for retry service to reconcile
+        logError("Transcription: Force-process failed, retry service will reconcile", error: error)
+      }
+
       await loadConversations()
+    }
+  }
+
+  /// Reconcile a local session by checking if a matching conversation exists on the backend.
+  /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
+  private func reconcileSession(sessionId: String, startTime: Date) async {
+    do {
+      let conversations = try await APIClient.shared.getConversations(
+        limit: 5,
+        includeDiscarded: true,
+        startDate: startTime.addingTimeInterval(-5),
+        endDate: Date().addingTimeInterval(5)
+      )
+      if let match = conversations.first(where: { conv in
+        guard let convStarted = conv.startedAt else { return false }
+        return abs(convStarted.timeIntervalSince(startTime)) < 10
+      }) {
+        try await TranscriptionStorage.shared.markSessionCompleted(
+          id: sessionId, backendId: match.id)
+        log("Transcription: Reconciled session \(sessionId) → backend conversation \(match.id)")
+      } else {
+        log("Transcription: No matching backend conversation found for session \(sessionId), leaving for retry")
+      }
+    } catch {
+      logError("Transcription: Reconciliation failed for session \(sessionId)", error: error)
     }
   }
 
