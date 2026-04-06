@@ -75,6 +75,10 @@ class CaptureProvider extends ChangeNotifier
   Future<void>? _peopleRefreshFuture;
 
   TranscriptSegmentSocketService? _socket;
+  // Set to true while the BLE stream is being torn down as part of the
+  // desktop-audio handoff so that onClosed() does not reset the
+  // initialising lock prematurely.
+  bool _desktopHandoffInProgress = false;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
 
@@ -1073,12 +1077,18 @@ class CaptureProvider extends ChangeNotifier
     // will see RecordingState.initialising and return early.
     updateRecordingState(RecordingState.initialising);
 
+    // Capture the current (BLE) socket BEFORE _initiateWebsocket overwrites
+    // _socket with the new desktop socket.  The recovery helper must stop the
+    // OLD socket, not the newly-created one.
+    final socketBeforeDesktopInit = _socket;
+
     Future<void> restorePreviousDeviceRecordingIfNeeded() async {
       if (previousRecordingDevice == null) return;
 
       Logger.debug('streamSystemAudioRecording: restoring prior device stream after desktop websocket startup failure');
-      // Explicitly stop any partial socket before handing back to the BLE path.
-      await _socket?.stop(reason: 'system audio websocket failed — restoring device stream');
+      // Stop the OLD BLE socket, not _socket which now points to the (failed)
+      // desktop socket after _initiateWebsocket ran.
+      await socketBeforeDesktopInit?.stop(reason: 'system audio websocket failed — restoring device stream');
       updateRecordingState(RecordingState.stop);
       await _resetState();
     }
@@ -1105,7 +1115,14 @@ class CaptureProvider extends ChangeNotifier
       // Desktop websocket is confirmed up.  Now it is safe to tear down the
       // prior BLE stream inline (no extra async hop needed after this point).
       if (previousRecordingDevice != null) {
-        await _cleanupCurrentState();
+        // Signal onClosed() not to reset the initialising lock when the BLE
+        // stream closes as part of this intentional handoff.
+        _desktopHandoffInProgress = true;
+        try {
+          await _cleanupCurrentState();
+        } finally {
+          _desktopHandoffInProgress = false;
+        }
         await _socket?.stop(reason: 'system audio recording started — replacing device stream');
       }
 
@@ -1142,7 +1159,8 @@ class CaptureProvider extends ChangeNotifier
     }
 
     if (PlatformService.isDesktop &&
-        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+        (recordingState == RecordingState.systemAudioRecord ||
+            (recordingState == RecordingState.initialising && !_desktopHandoffInProgress))) {
       updateRecordingState(RecordingState.stop);
     } else {
       notifyListeners();
