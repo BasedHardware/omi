@@ -237,10 +237,9 @@ class TranscriptionRetryService {
             // while recording would finalize the wrong conversation.
             let isRecording = await MainActor.run { AppState.current?.isTranscribing ?? false }
             if isRecording {
-                log("TranscriptionRetryService: App is recording, skipping force-process for session \(sessionId)")
-                try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                try await TranscriptionStorage.shared.markSessionFailed(
-                    id: sessionId, error: "Skipped force-process: app is actively recording")
+                // Don't consume retry budget — just skip this cycle. The session stays
+                // in its current state and will be retried when recording stops.
+                log("TranscriptionRetryService: App is recording, deferring force-process for session \(sessionId)")
                 return
             }
 
