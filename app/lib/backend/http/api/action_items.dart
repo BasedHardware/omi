@@ -204,8 +204,9 @@ Future<ActionItemsResponse> getConversationActionItems(String conversationId) as
     var body = utf8.decode(response.bodyBytes);
     var data = jsonDecode(body);
     return ActionItemsResponse(
-      actionItems:
-          (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      actionItems: (data['action_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
       hasMore: false, // Conversation-specific calls don't have pagination
     );
   } else {

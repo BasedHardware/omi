@@ -73,9 +73,9 @@ class TranscriptionRetryService {
             // Now process any pending sessions
             let pendingSessions = try await TranscriptionStorage.shared.getPendingUploadSessions()
             if !pendingSessions.isEmpty {
-                log("TranscriptionRetryService: Found \(pendingSessions.count) pending sessions to upload")
+                log("TranscriptionRetryService: Found \(pendingSessions.count) pending sessions to reconcile")
                 for session in pendingSessions {
-                    await uploadSession(session)
+                    await reconcileSession(session)
                 }
             }
 
@@ -94,7 +94,7 @@ class TranscriptionRetryService {
                 log("TranscriptionRetryService: Found \(failedSessions.count) failed sessions to retry")
                 for session in failedSessions {
                     if session.isReadyForRetry() {
-                        await uploadSession(session)
+                        await reconcileSession(session)
                     } else {
                         log("TranscriptionRetryService: Session \(session.id!) not ready for retry (backoff)")
                     }
@@ -130,7 +130,7 @@ class TranscriptionRetryService {
             consecutiveDBFailures = 0 // DB query succeeded, reset counter
 
             for session in pendingSessions {
-                await uploadSession(session)
+                await reconcileSession(session)
             }
 
             // Recover sessions stuck in 'uploading' for more than 5 minutes
@@ -143,7 +143,7 @@ class TranscriptionRetryService {
             let failedSessions = try await TranscriptionStorage.shared.getFailedSessions(maxRetries: maxRetries)
             for session in failedSessions {
                 if session.isReadyForRetry() {
-                    await uploadSession(session)
+                    await reconcileSession(session)
                 }
             }
 
@@ -178,9 +178,10 @@ class TranscriptionRetryService {
                 endDate: finishedAt.addingTimeInterval(2)
             )
 
-            // Look for a conversation with matching started_at/finished_at
+            // Look for a desktop conversation with matching started_at/finished_at
             if let match = existing.first(where: { conv in
                 guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                guard conv.source == .desktop else { return false }
                 return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
                     && abs(convFinished.timeIntervalSince(finishedAt)) < 5
             }) {
@@ -201,104 +202,54 @@ class TranscriptionRetryService {
         }
     }
 
-    // MARK: - Upload
+    // MARK: - Reconciliation
 
-    /// Upload a session to the backend
-    private func uploadSession(_ session: TranscriptionSessionRecord) async {
+    /// Reconcile a pending session with the backend.
+    /// Since /v4/listen stores segments in Firestore as they stream, the backend already has the
+    /// conversation data. We just need to find the matching backend conversation and mark local
+    /// session as completed. No segment re-upload needed.
+    private func reconcileSession(_ session: TranscriptionSessionRecord) async {
         guard let sessionId = session.id else { return }
 
-        log("TranscriptionRetryService: Uploading session \(sessionId) (retryCount: \(session.retryCount))")
+        log("TranscriptionRetryService: Reconciling session \(sessionId) (retryCount: \(session.retryCount))")
 
         do {
-            // Get session with segments
-            guard let sessionWithSegments = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId) else {
-                log("TranscriptionRetryService: Session \(sessionId) not found, deleting")
-                try? await TranscriptionStorage.shared.deleteSession(id: sessionId)
-                return
-            }
-
-            // Check if we have content
-            guard sessionWithSegments.hasContent else {
-                log("TranscriptionRetryService: Session \(sessionId) has no segments, deleting")
-                try? await TranscriptionStorage.shared.deleteSession(id: sessionId)
-                return
-            }
-
-            // Check if backend already has a conversation for this time window (prevents duplicates on retry)
+            // Check if backend already has a conversation for this time window
             let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
             if let existing = try? await APIClient.shared.getConversations(
                 limit: 5,
-                startDate: session.startedAt.addingTimeInterval(-2),
-                endDate: finishedAt.addingTimeInterval(2)
+                includeDiscarded: true,
+                startDate: session.startedAt.addingTimeInterval(-5),
+                endDate: finishedAt.addingTimeInterval(5)
             ), let match = existing.first(where: { conv in
-                guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
-                return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
-                    && abs(convFinished.timeIntervalSince(finishedAt)) < 5
-                    && conv.source == ConversationSource(rawValue: session.source)
+                guard let convStarted = conv.startedAt else { return false }
+                // Must be a desktop conversation with matching start time
+                guard conv.source == .desktop else { return false }
+                return abs(convStarted.timeIntervalSince(session.startedAt)) < 10
             }) {
-                log("TranscriptionRetryService: Session \(sessionId) already exists on backend as \(match.id), marking completed")
+                log("TranscriptionRetryService: Session \(sessionId) found on backend as \(match.id), marking completed")
                 try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
                 return
             }
 
-            // Mark as uploading
-            try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
+            // No matching conversation found on backend.
+            // Do NOT call force-process here — it acts on the user's current in-progress
+            // conversation which may belong to another device or a new recording session.
+            // Force-process is only safe immediately after stopping (in AppState.stopTranscription).
+            // The retry service only reconciles by timestamp; if no match exists yet, retry later.
+            log("TranscriptionRetryService: No backend match for session \(sessionId), will retry")
+            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+            try await TranscriptionStorage.shared.markSessionFailed(
+                id: sessionId, error: "No matching desktop conversation found on backend")
 
-            // Convert segments to API format
-            let apiSegments = sessionWithSegments.segments.map { segment in
-                APIClient.TranscriptSegmentRequest(
-                    text: segment.text,
-                    speaker: "SPEAKER_\(String(format: "%02d", segment.speaker))",
-                    speakerId: segment.speaker,
-                    isUser: segment.speaker == 0,
-                    personId: segment.personId,
-                    start: segment.startTime,
-                    end: segment.endTime
-                )
+            // Fire error event after all retries exhausted
+            if session.retryCount + 1 >= maxRetries {
+                await AnalyticsManager.shared.recordingError(
+                    error: "Session \(sessionId) could not be reconciled after \(maxRetries) attempts")
             }
-
-            // Determine conversation source
-            let source = ConversationSource(rawValue: session.source) ?? .desktop
-
-            // Upload to backend
-            let response = try await APIClient.shared.createConversationFromSegments(
-                segments: apiSegments,
-                startedAt: session.startedAt,
-                finishedAt: session.finishedAt ?? Date(),
-                source: source,
-                language: session.language,
-                timezone: session.timezone,
-                inputDeviceName: session.inputDeviceName
-            )
-
-            log("TranscriptionRetryService: Session \(sessionId) uploaded successfully (backendId: \(response.id))")
-
-            // Mark as completed
-            try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: response.id)
-
-            // Track analytics
-            let durationSeconds = Int(session.finishedAt?.timeIntervalSince(session.startedAt) ?? 0)
-            await AnalyticsManager.shared.conversationCreated(
-                conversationId: response.id,
-                source: session.source,
-                durationSeconds: durationSeconds
-            )
 
         } catch {
-            logError("TranscriptionRetryService: Upload failed for session \(sessionId)", error: error)
-
-            // Increment retry count and mark as failed
-            do {
-                try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: error.localizedDescription)
-
-                // Only fire error event after all retries are exhausted
-                if session.retryCount + 1 >= maxRetries {
-                    await AnalyticsManager.shared.recordingError(error: "Failed to save after \(maxRetries) retries: \(error.localizedDescription)")
-                }
-            } catch {
-                logError("TranscriptionRetryService: Failed to update session status", error: error)
-            }
+            logError("TranscriptionRetryService: Reconciliation failed for session \(sessionId)", error: error)
         }
     }
 

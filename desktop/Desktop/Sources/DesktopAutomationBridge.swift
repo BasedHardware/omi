@@ -55,6 +55,12 @@ struct DesktopAutomationNavigationRequest: Codable {
   let activateApp: Bool?
 }
 
+struct DesktopAutomationOpenConversationRequest: Codable {
+  let conversationId: String
+  let showTranscript: Bool?
+  let activateApp: Bool?
+}
+
 private struct DesktopAutomationResponse<T: Codable>: Codable {
   let ok: Bool
   let result: T?
@@ -227,6 +233,24 @@ final class DesktopAutomationBridge {
           statusCode: 400
         )
       }
+    case ("POST", "/conversation/open"):
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationOpenConversationRequest.self, from: request.body)
+        try await dispatchOpenConversation(payload)
+        try await Task.sleep(for: .milliseconds(350))
+        let snapshot = await DesktopAutomationStateStore.shared.current()
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<DesktopAutomationSnapshot>(
+            ok: false,
+            result: nil,
+            error: error.localizedDescription
+          ),
+          statusCode: 400
+        )
+      }
     case ("POST", "/gmail-read"):
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
@@ -277,6 +301,7 @@ final class DesktopAutomationBridge {
   }
 
   private func dispatchNavigation(_ payload: DesktopAutomationNavigationRequest) async throws {
+    await activateMainWindowIfNeeded(payload.activateApp ?? true)
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationNavigateRequested,
@@ -285,9 +310,32 @@ final class DesktopAutomationBridge {
           "target": payload.target,
           "settingsSection": payload.settingsSection as Any,
           "highlightedSettingId": payload.highlightedSettingId as Any,
-          "activateApp": payload.activateApp ?? true,
         ]
       )
+    }
+  }
+
+  private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
+    await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    await MainActor.run {
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: [
+          "conversationId": payload.conversationId,
+          "showTranscript": payload.showTranscript ?? false,
+        ]
+      )
+    }
+  }
+
+  private func activateMainWindowIfNeeded(_ activateApp: Bool) async {
+    guard activateApp else { return }
+    await MainActor.run {
+      NSApp.activate()
+      if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+        window.makeKeyAndOrderFront(nil)
+      }
     }
   }
 

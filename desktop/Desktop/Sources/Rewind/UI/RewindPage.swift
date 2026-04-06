@@ -37,7 +37,6 @@ struct RewindPage: View {
     @State private var showError = false
 
     // Speaker naming state
-    @State private var showNameSpeakerSheet = false
     @State private var selectedSpeakerSegment: SpeakerSegment? = nil
 
 
@@ -1205,7 +1204,6 @@ struct RewindPage: View {
                             speakerNames: speakerNames,
                             onSpeakerTapped: { segment in
                                 selectedSpeakerSegment = segment
-                                showNameSpeakerSheet = true
                             }
                         )
                     }
@@ -1227,8 +1225,8 @@ struct RewindPage: View {
         .task {
             await appState?.fetchPeople()
         }
-        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
-            if let segment = selectedSpeakerSegment, let appState = appState {
+        .dismissableSheet(item: $selectedSpeakerSegment) { segment in
+            if let appState = appState {
                 LiveNameSpeakerSheet(
                     speakerId: segment.speaker,
                     sampleText: segment.text,
@@ -1236,13 +1234,13 @@ struct RewindPage: View {
                     currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
                     onSave: { personId in
                         appState.liveSpeakerPersonMap[segment.speaker] = personId
-                        showNameSpeakerSheet = false
+                        selectedSpeakerSegment = nil
                     },
                     onCreatePerson: { name in
                         return await appState.createPerson(name: name)
                     },
                     onDismiss: {
-                        showNameSpeakerSheet = false
+                        selectedSpeakerSegment = nil
                     }
                 )
             }

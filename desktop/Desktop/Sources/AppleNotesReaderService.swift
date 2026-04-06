@@ -65,9 +65,7 @@ actor AppleNotesReaderService {
         )
 
         let notes = rows.compactMap { row -> AppleNoteRecord? in
-          guard
-            let rawTitle = row["ZTITLE"] as? String
-          else {
+          guard let rawTitle = row["ZTITLE"] as? String else {
             return nil
           }
 
@@ -239,12 +237,16 @@ actor AppleNotesReaderService {
       !selectedFolderPath.isEmpty
     {
       let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
+      if selectedFolderURL.lastPathComponent == "NoteStore.sqlite" {
+        candidates.append(selectedFolderURL)
+      }
       candidates.append(
         selectedFolderURL.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
       )
       candidates.append(
         selectedFolderURL.appendingPathComponent(
-          "NoteStore.sqlite-wal", isDirectory: false
+          "NoteStore.sqlite-wal",
+          isDirectory: false
         ).deletingLastPathComponent().appendingPathComponent("NoteStore.sqlite")
       )
       candidates.append(
@@ -255,6 +257,9 @@ actor AppleNotesReaderService {
       )
     }
 
+    candidates.append(
+      home.appendingPathComponent("Library/Group Containers/group.com.apple.notes/NoteStore.sqlite")
+    )
     candidates.append(
       home
         .appendingPathComponent("Library/Group Containers/group.com.apple.notes", isDirectory: true)
@@ -273,15 +278,16 @@ actor AppleNotesReaderService {
   }
 
   private static func normalizeNoteField(_ value: String) -> String {
-    let lines = value
-      .components(separatedBy: .newlines)
-      .map {
-        $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-      }
-      .filter { !$0.isEmpty }
-
-    return lines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    for noise in Self.classifierNoise {
+      normalized = normalized.replacingOccurrences(of: noise, with: "")
+    }
+    normalized = normalized.replacingOccurrences(
+      of: #"\s+"#,
+      with: " ",
+      options: .regularExpression
+    )
+    return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private static func isLikelyAttachment(title: String, summary: String) -> Bool {
@@ -292,23 +298,21 @@ actor AppleNotesReaderService {
       return true
     }
 
-    if classifierNoise.contains(where: { combined.contains($0) }) {
+    let lowerTitle = title.lowercased()
+    let attachmentExtensions = [".png", ".jpg", ".jpeg", ".heic", ".pdf", ".mov", ".mp4"]
+    if attachmentExtensions.contains(where: { lowerTitle.hasSuffix($0) }) {
       return true
     }
 
-    let lowercase = combined.lowercased()
-    if lowercase.hasSuffix(".jpg") || lowercase.hasSuffix(".jpeg") || lowercase.hasSuffix(".png")
-      || lowercase.hasSuffix(".heic")
-      || lowercase.hasSuffix(".pdf")
-    {
+    if lowerTitle.hasPrefix("cleanshot ") || lowerTitle.hasPrefix("image ") {
       return true
     }
 
-    if lowercase.contains("scan") && lowercase.contains("document") {
+    if lowerTitle.contains("scan") && lowerTitle.contains("document") {
       return true
     }
 
-    return false
+    return title.count < 3 && summary.count < 12
   }
 
   private static func extractJSONObject(from text: String) -> String {
@@ -344,7 +348,7 @@ actor AppleNotesReaderService {
       _ = try await APIClient.shared.createMemory(
         content: content,
         visibility: "private",
-        tags: ["apple_notes", "note"],
+        tags: ["apple_notes", "import", "note"],
         source: "apple_notes",
         windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))",
         headline: note.title
