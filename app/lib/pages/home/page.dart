@@ -43,6 +43,7 @@ import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -53,7 +54,6 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/apple_reminders_sync_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
@@ -680,38 +680,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               ),
                               // Phone calls button - bottom left
                               if (home.selectedIndex == 0)
-                                Positioned(
-                                  left: 20,
-                                  bottom: 100,
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      HapticFeedback.mediumImpact();
-                                      MixpanelManager().bottomNavigationTabClicked('Phone Calls');
-                                      var usageProvider = context.read<UsageProvider>();
-                                      if (usageProvider.subscription == null) {
-                                        await usageProvider.fetchSubscription();
-                                      }
-                                      var isUnlimited =
-                                          usageProvider.subscription?.subscription.plan == PlanType.unlimited;
-                                      if (!isUnlimited) {
-                                        MixpanelManager().phoneCallUpsellShown(source: 'home');
-                                        if (!context.mounted) return;
-                                        showPhoneCallsUpsell(context);
-                                        return;
-                                      }
-                                      if (!context.mounted) return;
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
-                                      );
-                                    },
-                                    child: Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
-                                      child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
-                                    ),
-                                  ),
+                                Consumer<DeveloperModeProvider>(
+                                  builder: (context, devProvider, _) {
+                                    if (!devProvider.showPhoneCallButton) return const SizedBox.shrink();
+                                    return Positioned(
+                                      left: 20,
+                                      bottom: 100,
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          HapticFeedback.mediumImpact();
+                                          MixpanelManager().bottomNavigationTabClicked('Phone Calls');
+                                          var usageProvider = context.read<UsageProvider>();
+                                          if (usageProvider.subscription == null) {
+                                            await usageProvider.fetchSubscription();
+                                          }
+                                          var isUnlimited =
+                                              usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                                          if (!isUnlimited) {
+                                            MixpanelManager().phoneCallUpsellShown(source: 'home');
+                                            if (!context.mounted) return;
+                                            showPhoneCallsUpsell(context);
+                                            return;
+                                          }
+                                          if (!context.mounted) return;
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration:
+                                              const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
+                                          child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               // Ask Omi button - bottom right
                               if (home.selectedIndex == 0)
@@ -835,8 +841,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -845,8 +851,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );
