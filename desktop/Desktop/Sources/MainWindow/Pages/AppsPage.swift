@@ -112,6 +112,8 @@ struct AppsPage: View {
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
     @State private var selectedConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
 
     var body: some View {
@@ -204,6 +206,10 @@ struct AppsPage: View {
                                 selectedConnector = connector
                             }
 
+                            ExportsSection(statuses: exportStatuses) { destination in
+                                selectedExportDestination = destination
+                            }
+
                             // Featured section (apps marked as is_popular in backend)
                             if !appProvider.popularApps.isEmpty {
                                 AppGridSection(
@@ -280,6 +286,16 @@ struct AppsPage: View {
             })
             .frame(width: 520, height: 620)
         }
+        .dismissableSheet(item: $selectedExportDestination) { destination in
+            MemoryExportDestinationSheet(
+                destination: destination,
+                statuses: $exportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
         .onAppear {
             // If apps are already loaded, notify sidebar to clear loading indicator
             if !appProvider.isLoading {
@@ -288,6 +304,7 @@ struct AppsPage: View {
         }
         .task {
             await connectorStatusStore.refresh()
+            exportStatuses = await MemoryExportService.shared.allStatuses()
         }
     }
 
