@@ -145,6 +145,7 @@ from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa: E402
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
+from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.
@@ -1461,3 +1462,156 @@ class TestMigrationBatchIntegration:
 
         assert result['moved'] == 257  # 260 - 3 kept
         batch1.commit.assert_called()  # intermediate commit at 500 ops
+
+
+# ============================================================================
+# TESTER-REQUESTED: Focus-stats duration_seconds=0 boundary
+# ============================================================================
+
+
+class TestFocusStatsDurationBoundary:
+    """Verify duration_seconds=0 and missing duration behavior."""
+
+    def test_distracted_zero_duration_treated_as_default(self):
+        """duration_seconds=0 is treated as 60 via `or 60` in get_focus_stats."""
+        sessions = [{'status': 'distracted', 'app_or_site': 'Twitter', 'duration_seconds': 0}]
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
+            result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
+        # duration_seconds=0 is falsy, so `or 60` defaults to 60
+        assert result['distracted_minutes'] == 1  # 60 seconds = 1 minute
+
+    def test_distracted_missing_duration_treated_as_default(self):
+        """Missing duration_seconds defaults to 60 via `or 60`."""
+        sessions = [{'status': 'distracted', 'app_or_site': 'Reddit'}]
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
+            result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
+        assert result['distracted_minutes'] == 1
+
+    def test_focused_zero_duration_is_zero(self):
+        """Focused sessions with duration_seconds=0 contribute 0 minutes."""
+        sessions = [{'status': 'focused', 'duration_seconds': 0}]
+        with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
+            result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
+        assert result['focused_minutes'] == 0
+
+
+# ============================================================================
+# TESTER-REQUESTED: BatchUpdateScoresRequest max_length=500 validation
+# ============================================================================
+
+
+class TestBatchScoresOverflow:
+    """Verify batch-scores rejects >500 items via Pydantic validation."""
+
+    def test_501_scores_rejected(self):
+        """BatchUpdateScoresRequest rejects list with 501 entries."""
+        with pytest.raises(ValidationError):
+            BatchUpdateScoresRequest(
+                scores=[BatchScoreEntry(id=f'id-{i}', relevance_score=i % 1000) for i in range(501)]
+            )
+
+    def test_500_scores_accepted(self):
+        """BatchUpdateScoresRequest accepts list with exactly 500 entries."""
+        req = BatchUpdateScoresRequest(
+            scores=[BatchScoreEntry(id=f'id-{i}', relevance_score=i % 1000) for i in range(500)]
+        )
+        assert len(req.scores) == 500
+
+
+# ============================================================================
+# TESTER-REQUESTED: Session-scoped query precedence
+# ============================================================================
+
+
+class TestSessionScopedPrecedence:
+    """Verify session_id takes precedence over app_id in get_messages/delete_messages."""
+
+    @staticmethod
+    def _get_field_filter_fields():
+        """Extract field names from all FieldFilter() calls."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        fields = []
+        for call in FieldFilter.call_args_list:
+            if call.args:
+                fields.append(call.args[0])
+        return fields
+
+    def test_get_messages_session_id_ignores_app_id(self):
+        """When both app_id and chat_session_id are provided, only session filter is applied."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        FieldFilter.reset_mock()
+
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.get_messages('uid', app_id='some-app', chat_session_id='sess-123')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+
+    def test_delete_messages_session_id_ignores_app_id(self):
+        """When both app_id and session_id are provided, only session filter is applied."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        FieldFilter.reset_mock()
+
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.delete_messages('uid', app_id='some-app', session_id='sess-123')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+
+
+# ============================================================================
+# TESTER-REQUESTED: LLM dual-write full payload parity
+# ============================================================================
+
+
+class TestLlmDualWritePayloadParity:
+    """Verify all fields are written to both primary and per-account buckets."""
+
+    def test_all_fields_written_to_both_buckets(self):
+        """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi in single set()."""
+        mock_ref = MagicMock()
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_ref
+            llm_usage_db.record_llm_usage_bucket(
+                uid='uid',
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=20,
+                cache_write_tokens=10,
+                total_tokens=180,
+                cost_usd=0.05,
+                bucket='desktop_chat',
+                account='omi',
+            )
+
+        # Single set(merge=True) call containing both bucket prefixes
+        mock_ref.set.assert_called_once()
+        data = mock_ref.set.call_args[0][0]
+
+        # Check all fields for primary bucket
+        expected_fields = ['input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'total_tokens', 'cost_usd', 'call_count']
+        for field in expected_fields:
+            assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
+            assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
+
+        # Verify shared metadata fields
+        assert 'date' in data
+        assert 'last_updated' in data
