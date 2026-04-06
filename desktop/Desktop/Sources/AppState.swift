@@ -26,10 +26,17 @@ enum FinishConversationResult {
 
 @MainActor
 class AppState: ObservableObject {
+  /// Weak reference to the current AppState instance, set on init.
+  /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
+  static weak var current: AppState?
+
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
   @Published var isTranscribing = false
+  /// Monotonically increasing counter — incremented each time a new recording starts.
+  /// Used to detect if a new recording began during the post-stop force-process delay.
+  private(set) var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed
   private var currentTranscript: String = ""
@@ -195,6 +202,9 @@ class AppState: ObservableObject {
   private var bluetoothStateCancellable: AnyCancellable?
 
   init() {
+    // Register as the current instance so background services can check recording state
+    AppState.current = self
+
     // Load API key from environment or .env file
     loadEnvironment()
 
@@ -1331,6 +1341,7 @@ class AppState: ObservableObject {
       )
 
       isTranscribing = true
+      recordingGeneration &+= 1
       AssistantSettings.shared.transcriptionEnabled = true
       audioSource = effectiveSource
       currentTranscript = ""
@@ -1544,6 +1555,7 @@ class AppState: ObservableObject {
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
+    let generationAtStop = recordingGeneration
 
     stopAudioCapture()
     clearTranscriptionState()
@@ -1553,6 +1565,14 @@ class AppState: ObservableObject {
     // This prevents the retry service from picking up the pendingUpload session.
     Task {
       try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s for backend to process after WS close
+
+      // If a new recording started during the delay, skip force-process — it would
+      // finalize the NEW conversation instead of the one we just stopped.
+      // The retry service will reconcile the old session by timestamp matching.
+      guard self.recordingGeneration == generationAtStop else {
+        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId ?? "nil")")
+        return
+      }
 
       do {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
@@ -1590,6 +1610,8 @@ class AppState: ObservableObject {
       )
       if let match = conversations.first(where: { conv in
         guard let convStarted = conv.startedAt else { return false }
+        // Must be a desktop conversation with matching start time
+        guard conv.source == .desktop else { return false }
         return abs(convStarted.timeIntervalSince(startTime)) < 10
       }) {
         try await TranscriptionStorage.shared.markSessionCompleted(
