@@ -1,5 +1,6 @@
-import SwiftUI
 import AppKit
+import GRDB
+import SwiftUI
 
 // MARK: - Safe Dismiss Button
 /// A dismiss button that prevents click-through to underlying views on macOS.
@@ -284,6 +285,9 @@ struct AppsPage: View {
             if !appProvider.isLoading {
                 NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
             }
+        }
+        .task {
+            await connectorStatusStore.refresh()
         }
     }
 
@@ -577,18 +581,33 @@ struct ImportConnector: Identifiable {
 
 @MainActor
 final class ImportConnectorStatusStore: ObservableObject {
+    struct ConnectorMetrics {
+        var sourceCount: Int?
+        var memoryCount: Int?
+        var lastSyncedAt: Date?
+        var lastDeltaCount: Int?
+        var availabilityText: String?
+    }
+
     struct Snapshot {
         let isConnected: Bool
         let actionTitle: String
-        let statusText: String
-        let metricText: String?
+        let primaryText: String
+        let secondaryText: String?
     }
 
-    @Published private var memoryCounts: [String: Int] = [:]
+    @Published private var metricsByID: [String: ConnectorMetrics] = [:]
 
     private let defaults: UserDefaults
-    private let countKeyPrefix = "appsImportConnectorMemoryCount."
+    private let sourceCountKeyPrefix = "appsImportConnectorSourceCount."
+    private let memoryCountKeyPrefix = "appsImportConnectorMemoryCount."
+    private let lastSyncedAtKeyPrefix = "appsImportConnectorLastSyncedAt."
+    private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
+    private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
+    private let appleNotesFolderDefaultsKey = "onboardingAppleNotesFolderPath"
+    private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
+    private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -596,41 +615,228 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     func snapshot(for connector: ImportConnector) -> Snapshot {
-        if connector.id == "local-files" {
-            return Snapshot(
-                isConnected: true,
-                actionTitle: "Connected",
-                statusText: "Connected",
-                metricText: connector.metricText
-            )
+        let metrics = metricsByID[connector.id] ?? ConnectorMetrics()
+        let isConnected =
+            metrics.memoryCount.map { $0 > 0 } ?? false
+            || metrics.sourceCount.map { $0 > 0 } ?? false
+            || metrics.availabilityText != nil
+            || connector.id == "local-files"
+        let actionTitle: String
+        if manualConnectorIDs.contains(connector.id) {
+            actionTitle = isConnected ? "Update" : "Connect"
+        } else {
+            actionTitle = isConnected ? "Sync now" : "Connect"
         }
-
-        let importedMemories = memoryCounts[connector.id] ?? 0
-        let isConnected = importedMemories > 0
-        let actionTitle = manualConnectorIDs.contains(connector.id)
-            ? (isConnected ? "Update" : "Connect")
-            : (isConnected ? "Connected" : "Connect")
 
         return Snapshot(
             isConnected: isConnected,
             actionTitle: actionTitle,
-            statusText: isConnected ? "Connected" : connector.statusText,
-            metricText: importedMemories > 0
-                ? "\(importedMemories.formatted()) memories imported"
-                : connector.metricText
+            primaryText: primaryText(for: connector, metrics: metrics, isConnected: isConnected),
+            secondaryText: secondaryText(for: connector, metrics: metrics, isConnected: isConnected)
         )
     }
 
-    func markImported(connectorID: String, memories: Int) {
-        let normalized = max(memories, 0)
-        memoryCounts[connectorID] = normalized
-        defaults.set(normalized, forKey: countKeyPrefix + connectorID)
+    func markSynced(
+        connectorID: String,
+        sourceCount: Int? = nil,
+        memoryCount: Int? = nil,
+        lastDeltaCount: Int? = nil,
+        availabilityText: String? = nil,
+        syncedAt: Date = Date()
+    ) {
+        var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
+        if let sourceCount {
+            metrics.sourceCount = max(sourceCount, 0)
+            defaults.set(metrics.sourceCount, forKey: sourceCountKeyPrefix + connectorID)
+        }
+        if let memoryCount {
+            metrics.memoryCount = max(memoryCount, 0)
+            defaults.set(metrics.memoryCount, forKey: memoryCountKeyPrefix + connectorID)
+        }
+        metrics.lastSyncedAt = syncedAt
+        defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + connectorID)
+        metrics.lastDeltaCount = lastDeltaCount
+        defaults.set(lastDeltaCount != nil, forKey: hasLastDeltaKeyPrefix + connectorID)
+        if let lastDeltaCount {
+            defaults.set(lastDeltaCount, forKey: lastDeltaCountKeyPrefix + connectorID)
+        } else {
+            defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
+        }
+        if let availabilityText {
+            metrics.availabilityText = availabilityText
+        }
+        metricsByID[connectorID] = metrics
+    }
+
+    func refresh() async {
+        await refreshLocalFilesMetrics()
+        await refreshAppleNotesMetrics()
     }
 
     private func load() {
-        for connector in ImportConnector.all where connector.id != "local-files" {
-            memoryCounts[connector.id] = defaults.integer(forKey: countKeyPrefix + connector.id)
+        for connector in ImportConnector.all {
+            var metrics = ConnectorMetrics()
+
+            if defaults.object(forKey: sourceCountKeyPrefix + connector.id) != nil {
+                metrics.sourceCount = defaults.integer(forKey: sourceCountKeyPrefix + connector.id)
+            }
+            if defaults.object(forKey: memoryCountKeyPrefix + connector.id) != nil {
+                metrics.memoryCount = defaults.integer(forKey: memoryCountKeyPrefix + connector.id)
+            }
+            if defaults.object(forKey: lastSyncedAtKeyPrefix + connector.id) != nil {
+                let timestamp = defaults.double(forKey: lastSyncedAtKeyPrefix + connector.id)
+                if timestamp > 0 {
+                    metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+                }
+            }
+            if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
+                metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
+            }
+
+            metricsByID[connector.id] = metrics
         }
+
+        hydrateLegacyManualImports()
+
+        if let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey), !folderPath.isEmpty {
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
+        }
+    }
+
+    private func hydrateLegacyManualImports() {
+        let legacyChatGPTCount = defaults.integer(forKey: onboardingChatGPTImportedMemoriesKey)
+        if legacyChatGPTCount > 0, metricsByID["chatgpt"]?.memoryCount == nil {
+            var metrics = metricsByID["chatgpt"] ?? ConnectorMetrics()
+            metrics.memoryCount = legacyChatGPTCount
+            metrics.availabilityText = "Imported during onboarding"
+            metricsByID["chatgpt"] = metrics
+        }
+
+        let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
+        if legacyClaudeCount > 0, metricsByID["claude"]?.memoryCount == nil {
+            var metrics = metricsByID["claude"] ?? ConnectorMetrics()
+            metrics.memoryCount = legacyClaudeCount
+            metrics.availabilityText = "Imported during onboarding"
+            metricsByID["claude"] = metrics
+        }
+    }
+
+    private func refreshLocalFilesMetrics() async {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
+
+        do {
+            let result: (count: Int, lastIndexedAt: Date?) = try await dbQueue.read { db in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                        SELECT COUNT(*) AS count, MAX(indexedAt) AS lastIndexedAt
+                        FROM indexed_files
+                    """
+                ) else {
+                    return (0, nil)
+                }
+                let count: Int = row["count"] ?? 0
+                let lastIndexedAt: Date? = row["lastIndexedAt"]
+                return (count, lastIndexedAt)
+            }
+
+            var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
+            metrics.sourceCount = result.count
+            metrics.lastSyncedAt = result.lastIndexedAt
+            metrics.availabilityText = "On-device index"
+            metricsByID["local-files"] = metrics
+        } catch {
+            log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
+        }
+    }
+
+    private func refreshAppleNotesMetrics() async {
+        do {
+            let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+            guard !notes.isEmpty else { return }
+
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.sourceCount = notes.count
+            metrics.availabilityText = "Private notes accessible"
+            metricsByID["apple-notes"] = metrics
+        } catch {
+            let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey) ?? ""
+            guard !folderPath.isEmpty else { return }
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
+        }
+    }
+
+    private func primaryText(
+        for connector: ImportConnector,
+        metrics: ConnectorMetrics,
+        isConnected: Bool
+    ) -> String {
+        if let sourceCount = metrics.sourceCount {
+            if let memoryCount = metrics.memoryCount, memoryCount > 0 {
+                return
+                    "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount)) • \(memoryCount.formatted()) memories"
+            }
+            if connector.id == "local-files" || sourceCount > 0 {
+                return "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount))"
+            }
+        }
+
+        if let memoryCount = metrics.memoryCount, memoryCount > 0 {
+            return "\(memoryCount.formatted()) memories imported"
+        }
+
+        if isConnected, let availabilityText = metrics.availabilityText {
+            return availabilityText
+        }
+
+        return connector.statusText
+    }
+
+    private func secondaryText(
+        for connector: ImportConnector,
+        metrics: ConnectorMetrics,
+        isConnected: Bool
+    ) -> String? {
+        if let lastSyncedAt = metrics.lastSyncedAt {
+            var text = "Synced \(relativeTimestamp(lastSyncedAt))"
+            if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
+                text += " • +\(lastDeltaCount.formatted()) new"
+            }
+            return text
+        }
+
+        if let availabilityText = metrics.availabilityText, availabilityText != primaryText(for: connector, metrics: metrics, isConnected: isConnected) {
+            return availabilityText
+        }
+
+        if let metricText = connector.metricText {
+            return metricText
+        }
+
+        return manualConnectorIDs.contains(connector.id) && isConnected ? "Imported earlier" : nil
+    }
+
+    private func sourceLabel(for connector: ImportConnector, count: Int) -> String {
+        switch connector.id {
+        case "calendar":
+            return count == 1 ? "event" : "events"
+        case "email":
+            return count == 1 ? "email" : "emails"
+        case "local-files":
+            return count == 1 ? "file indexed" : "files indexed"
+        case "apple-notes":
+            return count == 1 ? "note" : "notes"
+        default:
+            return count == 1 ? "item" : "items"
+        }
+    }
+
+    private func relativeTimestamp(_ date: Date) -> String {
+        RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -697,14 +903,15 @@ struct ImportConnectorCard: View {
 
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(snapshot.statusText)
+                        Text(snapshot.primaryText)
                             .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
 
-                        if let metricText = snapshot.metricText {
-                            Text(metricText)
+                        if let secondaryText = snapshot.secondaryText {
+                            Text(secondaryText)
                                 .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
                         }
                     }
 
@@ -748,6 +955,12 @@ struct ImportConnectorActionButton: View {
 
 @MainActor
 private final class ImportConnectorSheetModel: ObservableObject {
+    struct SyncResult {
+        let sourceCount: Int?
+        let memoryCount: Int?
+        let newItems: Int?
+    }
+
     @Published var isRunning = false
     @Published var statusMessage: String?
     @Published var errorMessage: String?
@@ -759,11 +972,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
         NSWorkspace.shared.open(source.prefilledBrowserURL)
     }
 
-    func importMemoryLog(source: OnboardingMemoryLogSource) async {
+    func importMemoryLog(source: OnboardingMemoryLogSource) async -> SyncResult? {
         let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             errorMessage = "Paste the full response first."
-            return
+            return nil
         }
 
         errorMessage = nil
@@ -774,14 +987,15 @@ private final class ImportConnectorSheetModel: ObservableObject {
         let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(trimmed, source: source)
         guard result.memories > 0 else {
             errorMessage = "No durable memories could be extracted from that import."
-            return
+            return nil
         }
 
         draftText = ""
         statusMessage = "Imported \(result.memories.formatted()) memories from \(source.displayName)."
+        return SyncResult(sourceCount: nil, memoryCount: result.memories, newItems: result.memories)
     }
 
-    func importGmail() async {
+    func importGmail() async -> SyncResult? {
         errorMessage = nil
         statusMessage = nil
         isRunning = true
@@ -794,14 +1008,17 @@ private final class ImportConnectorSheetModel: ObservableObject {
             )
             let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
             let synthesis = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
+            let memoryCount = rawImport.saved + synthesis.memories
             statusMessage =
-                "Imported \(emails.count.formatted()) emails and saved \((rawImport.saved + synthesis.memories).formatted()) memories."
+                "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
+            return SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count)
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
-    func importCalendar() async {
+    func importCalendar() async -> SyncResult? {
         errorMessage = nil
         statusMessage = nil
         isRunning = true
@@ -813,22 +1030,26 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 daysForward: 30,
                 maxResults: 500
             )
+            let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
             let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+            let memoryCount = rawImport.saved + synthesis.memories
             statusMessage =
-                "Read \(events.count.formatted()) calendar events and saved \(synthesis.memories.formatted()) memories."
+                "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
+            return SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count)
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
-    func importAppleNotes() async {
+    func importAppleNotes() async -> SyncResult? {
         errorMessage = nil
         statusMessage = nil
         isRunning = true
         defer { isRunning = false }
 
         do {
-            try await runAppleNotesImport()
+            return try await runAppleNotesImport()
         } catch let error as AppleNotesReaderError {
             switch error {
             case .storeNotFound, .storeUnavailable:
@@ -839,31 +1060,35 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 if errorMessage == nil {
                     errorMessage = error.localizedDescription
                 }
-                return
+                return nil
             }
 
             do {
-                try await runAppleNotesImport()
+                return try await runAppleNotesImport()
             } catch {
                 errorMessage = error.localizedDescription
+                return nil
             }
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
-    private func runAppleNotesImport() async throws {
+    private func runAppleNotesImport() async throws -> SyncResult {
         let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
         let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
         let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
+        let memoryCount = rawImport.saved + synthesis.memories
         statusMessage =
-            "Imported \(notes.count.formatted()) notes and saved \((rawImport.saved + synthesis.memories).formatted()) memories."
+            "Imported \(notes.count.formatted()) notes and saved \(memoryCount.formatted()) memories."
+        return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
     }
 
-    func rescanLocalFiles(appState: AppState?) async {
+    func rescanLocalFiles(appState: AppState?) async -> SyncResult? {
         guard let appState else {
             errorMessage = "App state is unavailable right now."
-            return
+            return nil
         }
 
         errorMessage = nil
@@ -871,6 +1096,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
         isRunning = true
         defer { isRunning = false }
 
+        let previousCount = await currentIndexedFileCount()
         ChatToolExecutor.onboardingAppState = appState
         let result = await ChatToolExecutor.execute(
             ToolCall(name: "scan_files", arguments: [:], thoughtSignature: nil)
@@ -878,8 +1104,12 @@ private final class ImportConnectorSheetModel: ObservableObject {
 
         if result.lowercased().hasPrefix("error") {
             errorMessage = result
+            return nil
         } else {
             statusMessage = result
+            let updatedCount = await currentIndexedFileCount()
+            let newItems = max(updatedCount - previousCount, 0)
+            return SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems)
         }
     }
 
@@ -928,6 +1158,18 @@ private final class ImportConnectorSheetModel: ObservableObject {
         errorMessage = nil
         await AppleNotesReaderService.shared.rememberSelectedFolder(path: resolvedURL.path)
         return true
+    }
+
+    private func currentIndexedFileCount() async -> Int {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return 0 }
+        do {
+            return try await dbQueue.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files") ?? 0
+            }
+        } catch {
+            log("ImportConnectorSheetModel: Failed to read indexed file count: \(error)")
+            return 0
+        }
     }
 }
 
@@ -1000,16 +1242,43 @@ struct ImportConnectorSheet: View {
                 Task {
                     switch connector.id {
                     case "calendar":
-                        await model.importCalendar()
-                        recordImportIfNeeded()
+                        if let result = await model.importCalendar() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems
+                            )
+                        }
                     case "email":
-                        await model.importGmail()
-                        recordImportIfNeeded()
+                        if let result = await model.importGmail() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems
+                            )
+                        }
                     case "apple-notes":
-                        await model.importAppleNotes()
-                        recordImportIfNeeded()
+                        if let result = await model.importAppleNotes() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "Private notes accessible"
+                            )
+                        }
                     case "local-files":
-                        await model.rescanLocalFiles(appState: appState)
+                        if let result = await model.rescanLocalFiles(appState: appState) {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "On-device index"
+                            )
+                        }
                     default:
                         break
                     }
@@ -1063,8 +1332,15 @@ struct ImportConnectorSheet: View {
 
             Button(model.isRunning ? "Importing…" : "Import \(connector.title)") {
                 Task {
-                    await model.importMemoryLog(source: memorySource)
-                    recordImportIfNeeded()
+                    if let result = await model.importMemoryLog(source: memorySource) {
+                        statusStore.markSynced(
+                            connectorID: connector.id,
+                            sourceCount: result.sourceCount,
+                            memoryCount: result.memoryCount,
+                            lastDeltaCount: result.newItems,
+                            availabilityText: "Imported manually"
+                        )
+                    }
                 }
             }
             .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
@@ -1089,19 +1365,6 @@ struct ImportConnectorSheet: View {
         default:
             return model.isRunning ? "Working…" : connector.actionTitle
         }
-    }
-
-    private func recordImportIfNeeded() {
-        guard let importedMemories = importedMemoriesCount(from: model.statusMessage) else { return }
-        statusStore.markImported(connectorID: connector.id, memories: importedMemories)
-    }
-
-    private func importedMemoriesCount(from statusMessage: String?) -> Int? {
-        guard let statusMessage else { return nil }
-        let values = statusMessage
-            .split(whereSeparator: { !$0.isNumber })
-            .compactMap { Int($0) }
-        return values.last
     }
 }
 
