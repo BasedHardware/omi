@@ -3176,7 +3176,8 @@ extension APIClient {
 
     /// Checks if an external integration app's setup is complete
     func isAppSetupCompleted(url: String, uid: String) async -> Bool {
-        guard !url.isEmpty, let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return true }
+        guard !url.isEmpty else { return true }
+        guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
         var request = URLRequest(url: fullUrl)
         request.httpMethod = "GET"
         do {
