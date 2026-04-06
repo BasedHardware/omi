@@ -782,6 +782,7 @@ struct Event: Codable, Identifiable, Equatable {
 
 struct TranscriptSegment: Codable, Identifiable {
     let id: String
+    let backendId: String?
     let text: String
     let speaker: String?
     let isUser: Bool
@@ -807,7 +808,9 @@ struct TranscriptSegment: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        let decodedId = try container.decodeIfPresent(String.self, forKey: .id)
+        id = decodedId ?? UUID().uuidString
+        backendId = decodedId
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
         isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
@@ -819,6 +822,7 @@ struct TranscriptSegment: Codable, Identifiable {
     /// Memberwise initializer for creating from local storage
     init(
         id: String,
+        backendId: String? = nil,
         text: String,
         speaker: String?,
         isUser: Bool,
@@ -827,6 +831,7 @@ struct TranscriptSegment: Codable, Identifiable {
         end: Double
     ) {
         self.id = id
+        self.backendId = backendId
         self.text = text
         self.speaker = speaker
         self.isUser = isUser
@@ -1212,6 +1217,7 @@ extension APIClient {
     }
 
     struct TranscriptSegmentRequest: Encodable {
+        let id: String?
         let text: String
         let speaker: String
         let speakerId: Int
@@ -1221,7 +1227,7 @@ extension APIClient {
         let end: Double
 
         enum CodingKeys: String, CodingKey {
-            case text, speaker
+            case id, text, speaker
             case speakerId = "speaker_id"
             case isUser = "is_user"
             case personId = "person_id"

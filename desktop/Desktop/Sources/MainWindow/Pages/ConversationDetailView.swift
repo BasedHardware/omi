@@ -13,7 +13,7 @@ struct ConversationDetailView: View {
     var people: [Person] = []
     var onFetchPeople: (() async -> Void)?
     var onCreatePerson: ((String) async -> Person?)?
-    var onAssignSpeaker: ((String, [Int], String?, Bool) async -> Bool)?
+    var onAssignSpeaker: ((String, [String], String?, Bool) async -> Bool)?
 
     @StateObject private var appProvider = AppProvider()
     @State private var showAppSelector = false
@@ -39,8 +39,24 @@ struct ConversationDetailView: View {
     @State private var isDeleting = false
 
     // Speaker naming state
-    @State private var showNameSpeakerSheet = false
     @State private var selectedSegmentForNaming: TranscriptSegment? = nil
+
+    static func assignmentMetadata(
+        for segmentIndices: [Int],
+        in segments: [TranscriptSegment]
+    ) -> (targets: [String], backendIds: [String], fallbackOrders: [Int]) {
+        let validIndices = segmentIndices.filter { segments.indices.contains($0) }
+        let targets = validIndices.map { index in
+            segments[index].backendId ?? "#index:\(index)"
+        }
+        let backendIds = validIndices.compactMap { index in
+            segments[index].backendId
+        }
+        let fallbackOrders = validIndices.filter { index in
+            segments[index].backendId == nil
+        }
+        return (targets, backendIds, fallbackOrders)
+    }
 
     /// The conversation to display - use loaded version if available, otherwise use prop
     private var displayConversation: ServerConversation {
@@ -190,6 +206,16 @@ struct ConversationDetailView: View {
                 isLoadingConversation = false
             }
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .desktopAutomationShowConversationTranscriptRequested)
+        ) { notification in
+            guard let conversationId = notification.userInfo?["conversationId"] as? String,
+                  conversationId == displayConversation.id
+            else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showTranscriptDrawer = true
+            }
+        }
         .dismissableSheet(isPresented: $showAppSelector) {
             AppSelectorSheet(
                 apps: appProvider.apps.filter { $0.capabilities.contains("memories") },
@@ -204,45 +230,43 @@ struct ConversationDetailView: View {
             )
             .frame(width: 400, height: 500)
         }
-        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
-            if let segment = selectedSegmentForNaming {
-                NameSpeakerSheet(
-                    segment: segment,
-                    allSegments: displayConversation.transcriptSegments,
-                    people: people,
-                    onSave: { personId, isUser, segmentIds in
-                        Task {
-                            let success = await onAssignSpeaker?(conversation.id, segmentIds, personId, isUser) ?? false
-                            if success {
-                                // Update local segments with the new personId/isUser
-                                var updated = displayConversation
-                                for idx in segmentIds where idx < updated.transcriptSegments.count {
-                                    let old = updated.transcriptSegments[idx]
-                                    updated.transcriptSegments[idx] = TranscriptSegment(
-                                        id: old.id,
-                                        text: old.text,
-                                        speaker: old.speaker,
-                                        isUser: isUser ? true : old.isUser,
-                                        personId: personId ?? old.personId,
-                                        start: old.start,
-                                        end: old.end
-                                    )
-                                }
-                                loadedConversation = updated
-                            }
-                            showNameSpeakerSheet = false
-                            selectedSegmentForNaming = nil
+        .dismissableSheet(item: $selectedSegmentForNaming) { segment in
+            NameSpeakerSheet(
+                segment: segment,
+                allSegments: displayConversation.transcriptSegments,
+                people: people,
+                onSave: { personId, isUser, segmentIndices in
+                    Task {
+                        let assignment = Self.assignmentMetadata(
+                            for: segmentIndices,
+                            in: displayConversation.transcriptSegments
+                        )
+                        let success = await onAssignSpeaker?(
+                            conversation.id,
+                            assignment.targets,
+                            personId,
+                            isUser
+                        ) ?? false
+                        if success {
+                            await persistSpeakerAssignment(
+                                conversationId: conversation.id,
+                                backendSegmentIds: assignment.backendIds,
+                                fallbackSegmentOrders: assignment.fallbackOrders,
+                                isUser: isUser,
+                                personId: personId
+                            )
+                            await updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
                         }
-                    },
-                    onCreatePerson: { name in
-                        await onCreatePerson?(name)
-                    },
-                    onDismiss: {
-                        showNameSpeakerSheet = false
                         selectedSegmentForNaming = nil
                     }
-                )
-            }
+                },
+                onCreatePerson: { name in
+                    await onCreatePerson?(name)
+                },
+                onDismiss: {
+                    selectedSegmentForNaming = nil
+                }
+            )
         }
     }
 
@@ -472,6 +496,7 @@ struct ConversationDetailView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(shareableUrl, forType: .string)
             }
+            AnalyticsManager.shared.shareAction(category: "conversation", properties: ["conversation_id": conversation.id])
         } catch {
             logError("Failed to get share link", error: error)
         }
@@ -672,10 +697,48 @@ struct ConversationDetailView: View {
                 personName: segment.personId.flatMap { peopleDict[$0]?.name },
                 onSpeakerTapped: segment.isUser ? nil : {
                     selectedSegmentForNaming = segment
-                    showNameSpeakerSheet = true
                 }
             )
             .padding(.horizontal, 16)
+        }
+    }
+
+    @MainActor
+    private func updateDisplayedConversation(segmentIndices: [Int], isUser: Bool, personId: String?) {
+        var updatedConversation = displayConversation
+        for index in segmentIndices where updatedConversation.transcriptSegments.indices.contains(index) {
+            let oldSegment = updatedConversation.transcriptSegments[index]
+            updatedConversation.transcriptSegments[index] = TranscriptSegment(
+                id: oldSegment.id,
+                backendId: oldSegment.backendId,
+                text: oldSegment.text,
+                speaker: oldSegment.speaker,
+                isUser: isUser,
+                personId: isUser ? nil : personId,
+                start: oldSegment.start,
+                end: oldSegment.end
+            )
+        }
+        loadedConversation = updatedConversation
+    }
+
+    private func persistSpeakerAssignment(
+        conversationId: String,
+        backendSegmentIds: [String],
+        fallbackSegmentOrders: [Int],
+        isUser: Bool,
+        personId: String?
+    ) async {
+        do {
+            try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+                conversationId,
+                segmentIds: backendSegmentIds,
+                fallbackSegmentOrders: fallbackSegmentOrders,
+                isUser: isUser,
+                personId: isUser ? nil : personId
+            )
+        } catch {
+            logError("ConversationDetail: Failed to persist speaker assignment locally", error: error)
         }
     }
 

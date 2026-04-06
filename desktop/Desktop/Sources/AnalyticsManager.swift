@@ -65,6 +65,14 @@ class AnalyticsManager {
       "Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
   }
 
+  func onboardingHowDidYouHear(source: String) {
+    let props: [String: Any] = ["source": source, "is_referral": source == "Friend"]
+    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+    MixpanelManager.shared.track("Onboarding How Did You Hear", properties: mixpanelProps)
+    PostHogManager.shared.track("Onboarding How Did You Hear", properties: props)
+    HeapManager.shared.track("Onboarding How Did You Hear", properties: ["source": source, "is_referral": "\(source == "Friend")"])
+  }
+
   func onboardingCompleted() {
     MixpanelManager.shared.onboardingCompleted()
     PostHogManager.shared.onboardingCompleted()
@@ -415,6 +423,15 @@ class AnalyticsManager {
   func memoryShareButtonClicked(conversationId: String) {
     MixpanelManager.shared.memoryShareButtonClicked(conversationId: conversationId)
     PostHogManager.shared.memoryShareButtonClicked(conversationId: conversationId)
+  }
+
+  func shareAction(category: String, properties: [String: Any] = [:]) {
+    var props = properties
+    props["category"] = category
+    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+    MixpanelManager.shared.track("Share Action", properties: mixpanelProps)
+    PostHogManager.shared.track("Share Action", properties: props)
+    HeapManager.shared.track("Share Action", properties: ["category": category])
   }
 
   func memoryListItemClicked(conversationId: String) {
