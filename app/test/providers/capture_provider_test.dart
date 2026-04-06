@@ -436,7 +436,7 @@ void main() {
       // We prime segments with a sentinel value.
       provider.segments = [_segment('sentinel', 'should stay')];
 
-      // On macOS (where the test runner executes), PlatformService.isDesktop == true,
+      // When running on a desktop host, PlatformService.isDesktop == true,
       // so the guard fires and streamDeviceRecording returns without touching state.
       await provider.streamDeviceRecording();
 
@@ -462,7 +462,7 @@ void main() {
       provider.dispose();
     });
 
-    test('streamSystemAudioRecording sets state to initialising synchronously', () {
+    test('streamSystemAudioRecording sets state to initialising synchronously', () async {
       final provider = CaptureProvider();
       provider.updateRecordingState(RecordingState.stop);
 
@@ -475,10 +475,9 @@ void main() {
       // Immediately after the call (same microtask), state must be initialising.
       expect(provider.recordingState, RecordingState.initialising);
 
-      // Let the rest of the future complete (or fail gracefully) before the test
-      // harness tears down the provider.  The _initiateWebsocket call will fail
-      // because ServiceManager has no real socket in tests, but that is expected.
-      future.catchError((_) {});
+      // Let the async setup finish before disposing the provider so the test
+      // does not leak in-flight work across the test boundary.
+      await future.catchError((_) {});
       provider.dispose();
     });
   });

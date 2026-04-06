@@ -400,9 +400,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -416,13 +415,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -515,24 +514,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -620,8 +615,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -724,9 +719,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1023,6 +1017,15 @@ class CaptureProvider extends ChangeNotifier
     _sendCurrentGeolocation();
 
     await _resetStateVariables();
+
+    // Re-check after the first await so a near-simultaneous desktop
+    // system-audio start cannot race past the initial synchronous guard.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug('streamDeviceRecording: aborted after await — system audio is active (state=$recordingState)');
+      return;
+    }
+
     await _resetState();
 
     if (wasPaused) {
@@ -1051,28 +1054,49 @@ class CaptureProvider extends ChangeNotifier
   Future<void> streamSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
 
+    final previousRecordingDevice = _recordingDevice;
+
     // --- SYNCHRONOUS state lock — this must come before any await ---
     // Any concurrent call to streamDeviceRecording() or the keep-alive timer
     // will see RecordingState.initialising and return early.
     updateRecordingState(RecordingState.initialising);
 
-    // Inline BLE cleanup: if a device recording was active, tear it down now
-    // without calling stopStreamDeviceRecording() (async, would widen the race).
-    if (_recordingDevice != null) {
-      await _cleanupCurrentState();
-      await _socket?.stop(reason: 'system audio recording started');
+    Future<void> restorePreviousDeviceRecordingIfNeeded() async {
+      if (previousRecordingDevice == null) return;
+
+      Logger.debug('streamSystemAudioRecording: restoring prior device stream after desktop websocket startup failure');
+      await _resetState();
     }
 
-    await _resetStateVariables();
+    try {
+      // Inline BLE cleanup: if a device recording was active, tear it down now
+      // without calling stopStreamDeviceRecording() (async, would widen the race).
+      if (previousRecordingDevice != null) {
+        await _cleanupCurrentState();
+        await _socket?.stop(reason: 'system audio recording started');
+      }
 
-    await _initiateWebsocket(
-      audioCodec: BleAudioCodec.pcm16,
-      sampleRate: 16000,
-      channels: 1,
-      source: ConversationSource.desktop.name,
-    );
+      await _resetStateVariables();
 
-    updateRecordingState(RecordingState.systemAudioRecord);
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        channels: 1,
+        source: ConversationSource.desktop.name,
+      );
+
+      if (_socket == null) {
+        updateRecordingState(RecordingState.stop);
+        await restorePreviousDeviceRecordingIfNeeded();
+        return;
+      }
+
+      updateRecordingState(RecordingState.systemAudioRecord);
+    } catch (_) {
+      updateRecordingState(RecordingState.stop);
+      await restorePreviousDeviceRecordingIfNeeded();
+      rethrow;
+    }
   }
 
   /// Stop system audio recording and reset state.
@@ -1100,7 +1124,12 @@ class CaptureProvider extends ChangeNotifier
       }
     }
 
-    notifyListeners();
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      updateRecordingState(RecordingState.stop);
+    } else {
+      notifyListeners();
+    }
     _startKeepAliveServices();
   }
 
@@ -1160,7 +1189,12 @@ class CaptureProvider extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
 
-    notifyListeners();
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      updateRecordingState(RecordingState.stop);
+    } else {
+      notifyListeners();
+    }
     _startKeepAliveServices();
   }
 

@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// A utility class to handle platform-specific service availability.
-/// The app targets mobile only (iOS/Android). Desktop lives in desktop/.
+/// A utility class to handle platform-specific service availability across
+/// mobile and desktop runtimes.
 class PlatformService {
   static bool get isAndroid => Platform.isAndroid;
   static bool get isIOS => Platform.isIOS;
