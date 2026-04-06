@@ -140,7 +140,12 @@ actor GmailReaderService {
   func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws
     -> [GmailEmail]
   {
-    let emails = try fetchGmailViaAtomFeed(maxResults: maxResults, query: query)
+    let emails: [GmailEmail]
+    if let days = Self.parseNewerThanDays(query), days > 20 {
+      emails = try fetchGmailViaDateWindows(daysBack: days, maxResults: maxResults)
+    } else {
+      emails = try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: query)
+    }
     return emails.sorted { $0.date > $1.date }
   }
 
@@ -280,36 +285,45 @@ actor GmailReaderService {
 
   /// Save fetched emails as memories via the OMI backend API.
   func saveAsMemories(emails: [GmailEmail]) async -> (saved: Int, failed: Int) {
-    var saved = 0
-    var failed = 0
-    for email in emails {
-      let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
-      let senderName =
-        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
-        ?? email.from
-      let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
-      do {
-        _ = try await APIClient.shared.createMemory(
-          content: content,
-          visibility: "private",
-          tags: ["gmail", "email"],
-          source: "gmail",
-          windowTitle: "Gmail — \(dateStr)",
-          headline: email.subject
-        )
-        saved += 1
-      } catch {
-        log("GmailReaderService: Failed to save memory for email \(email.id): \(error)")
-        failed += 1
+    guard !emails.isEmpty else { return (0, 0) }
+
+    let concurrency = min(8, emails.count)
+    var nextIndex = 0
+
+    return await withTaskGroup(of: Bool.self) { group in
+      func enqueueNext() {
+        guard nextIndex < emails.count else { return }
+        let email = emails[nextIndex]
+        nextIndex += 1
+        group.addTask {
+          await Self.saveMemory(for: email)
+        }
       }
+
+      for _ in 0..<concurrency {
+        enqueueNext()
+      }
+
+      var saved = 0
+      var failed = 0
+
+      while let success = await group.next() {
+        if success {
+          saved += 1
+        } else {
+          failed += 1
+        }
+        enqueueNext()
+      }
+
+      log("GmailReaderService: Saved \(saved) emails as memories (\(failed) failed)")
+      return (saved, failed)
     }
-    log("GmailReaderService: Saved \(saved) emails as memories (\(failed) failed)")
-    return (saved, failed)
   }
 
   // MARK: - All-in-one Python: decrypt cookies + fetch Atom feed + return JSON
 
-  private func fetchGmailViaAtomFeed(maxResults: Int, query: String = "newer_than:1d") throws
+  private func fetchGmailViaAtomFeedSingle(maxResults: Int, query: String = "newer_than:1d") throws
     -> [GmailEmail]
   {
     // Build browser configs as JSON for Python
@@ -357,6 +371,7 @@ actor GmailReaderService {
     let pythonScript = """
       import sys, json, sqlite3, hashlib, xml.etree.ElementTree as ET
       from http.cookiejar import MozillaCookieJar, Cookie
+      from urllib.parse import quote
       from urllib.request import Request, build_opener, HTTPCookieProcessor
       import time
 
@@ -452,7 +467,7 @@ actor GmailReaderService {
 
       def fetch_atom_feed(jar):
           opener = build_opener(HTTPCookieProcessor(jar))
-          req = Request(f'https://mail.google.com/mail/feed/atom?q={query}')
+          req = Request(f'https://mail.google.com/mail/feed/atom?q={quote(query)}')
           req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
           try:
               resp = opener.open(req, timeout=30)
@@ -597,6 +612,50 @@ actor GmailReaderService {
     }
   }
 
+  private func fetchGmailViaDateWindows(daysBack: Int, maxResults: Int) throws -> [GmailEmail] {
+    guard maxResults > 0 else { return [] }
+
+    let calendar = Calendar(identifier: .gregorian)
+    let now = Date()
+    guard
+      let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+    else {
+      return try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: "newer_than:\(daysBack)d")
+    }
+
+    var collected: [String: GmailEmail] = [:]
+    var inspectedWindows = 0
+    let windowSpanDays = daysBack > 120 ? 3 : 2
+    var remainingDays = max(daysBack, 1)
+    var windowEnd = tomorrow
+
+    while remainingDays > 0 && collected.count < maxResults {
+      let span = min(windowSpanDays, remainingDays)
+      guard let windowStart = calendar.date(byAdding: .day, value: -span, to: windowEnd) else {
+        break
+      }
+      inspectedWindows += 1
+
+      let query = Self.atomDateRangeQuery(start: windowStart, end: windowEnd)
+      let slice = try fetchGmailViaAtomFeedSingle(maxResults: min(20, maxResults), query: query)
+      for email in slice {
+        collected[email.id] = email
+      }
+
+      windowEnd = windowStart
+      remainingDays -= span
+    }
+
+    log(
+      "GmailReaderService: Collected \(collected.count) unique emails across \(inspectedWindows) windows"
+    )
+
+    return Array(collected.values)
+      .sorted { $0.date > $1.date }
+      .prefix(maxResults)
+      .map(\.self)
+  }
+
   // MARK: - Keychain
 
   private func getKeychainPassword(service: String) -> String? {
@@ -641,5 +700,50 @@ actor GmailReaderService {
       if let d = f.date(from: str) { return d }
     }
     return nil
+  }
+
+  nonisolated private static func parseNewerThanDays(_ query: String) -> Int? {
+    guard let regex = try? NSRegularExpression(pattern: #"newer_than:(\d+)d"#, options: []) else {
+      return nil
+    }
+    let range = NSRange(query.startIndex..., in: query)
+    guard let match = regex.firstMatch(in: query, options: [], range: range),
+      let daysRange = Range(match.range(at: 1), in: query)
+    else {
+      return nil
+    }
+    return Int(query[daysRange])
+  }
+
+  nonisolated private static func atomDateRangeQuery(start: Date, end: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy/MM/dd"
+    return "after:\(formatter.string(from: start)) before:\(formatter.string(from: end))"
+  }
+
+  nonisolated private static func saveMemory(for email: GmailEmail) async -> Bool {
+    let dateStr = email.date.formatted(date: .abbreviated, time: .shortened)
+    let senderName =
+      email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
+      ?? email.from
+    let content = "Email from \(senderName) — \"\(email.subject)\": \(email.snippet)"
+
+    do {
+      _ = try await APIClient.shared.createMemory(
+        content: content,
+        visibility: "private",
+        tags: ["gmail", "email"],
+        source: "gmail",
+        windowTitle: "Gmail — \(dateStr)",
+        headline: email.subject
+      )
+      return true
+    } catch {
+      log("GmailReaderService: Failed to save memory for email \(email.id): \(error)")
+      return false
+    }
   }
 }
