@@ -85,6 +85,7 @@ class Message(BaseModel):
     prompt_commit: Optional[str] = None  # LangSmith prompt commit/version for traceability
     rating: Optional[int] = None  # User feedback: 1 = thumbs up, -1 = thumbs down, None = no rating
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
+    ui_blocks: Optional[List[dict]] = None  # Generative UI blocks (maps, action buttons, etc.)
 
     @model_validator(mode='before')
     @classmethod
