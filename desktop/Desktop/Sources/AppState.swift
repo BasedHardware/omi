@@ -1570,7 +1570,7 @@ class AppState: ObservableObject {
       // finalize the NEW conversation instead of the one we just stopped.
       // The retry service will reconcile the old session by timestamp matching.
       guard self.recordingGeneration == generationAtStop else {
-        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId ?? "nil")")
+        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
         return
       }
 
@@ -1600,7 +1600,7 @@ class AppState: ObservableObject {
 
   /// Reconcile a local session by checking if a matching conversation exists on the backend.
   /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
-  private func reconcileSession(sessionId: String, startTime: Date) async {
+  private func reconcileSession(sessionId: Int64, startTime: Date) async {
     do {
       let conversations = try await APIClient.shared.getConversations(
         limit: 5,
