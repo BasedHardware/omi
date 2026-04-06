@@ -10,8 +10,8 @@ Tuning knobs:
         Set > 1.0 during events to relax limits, < 1.0 to tighten.
         Read from env var RATE_LIMIT_BOOST at startup.
 
-    RATE_LIMIT_SHADOW: defaults ON (shadow/log-only). Set env var
-        RATE_LIMIT_SHADOW_MODE=false to enable enforcement (429 rejections).
+    RATE_LIMIT_SHADOW: defaults OFF (enforcement/429 rejections). Set env var
+        RATE_LIMIT_SHADOW_MODE=true to revert to shadow/log-only mode.
 
 Redis efficiency:
     Each check = 1 Lua script call (atomic INCR + TTL check).
@@ -25,7 +25,7 @@ import os
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "true").lower() != "false"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() != "false"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)
@@ -36,7 +36,7 @@ RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "true").lower() !=
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Conversations — each triggers ~22 OpenAI calls
-    "conversations:create": (8, 3600),
+    "conversations:create": (10, 3600),
     "conversations:reprocess": (3, 3600),
     "conversations:merge": (5, 3600),
     # Chat — 2-6 LLM calls per message
@@ -44,10 +44,14 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "chat:initial": (60, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
+    "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
+    # Platform tools — backend RAG endpoints
+    "tools:search": (60, 3600),
+    "tools:mutate": (60, 3600),
     "mcp:sse": (200, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),

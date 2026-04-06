@@ -1701,12 +1701,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'อุปกรณ์',
-      one: 'อุปกรณ์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -3263,7 +3258,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get aboutYou => 'เกี่ยวกับคุณ';
 
   @override
-  String get manual => 'แมนนวล';
+  String get manual => 'ด้วยตนเอง';
 
   @override
   String get loadingYourMemories => 'กำลังโหลดความทรงจำของคุณ...';
@@ -8709,4 +8704,233 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get microphone => 'ไมโครโฟน';
+
+  @override
+  String get whyAreYouCanceling => 'ทำไมคุณถึงยกเลิก?';
+
+  @override
+  String get cancelReasonSubtitle => 'คุณบอกเราได้ไหมว่าทำไมถึงจากไป?';
+
+  @override
+  String get cancelReasonTooExpensive => 'แพงเกินไป';
+
+  @override
+  String get cancelReasonNotUsing => 'ไม่ได้ใช้มากพอ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'ขาดฟีเจอร์';
+
+  @override
+  String get cancelReasonAudioQuality => 'คุณภาพเสียง/การถอดเสียง';
+
+  @override
+  String get cancelReasonBatteryDrain => 'ความกังวลเรื่องแบตเตอรี่หมด';
+
+  @override
+  String get cancelReasonFoundAlternative => 'พบทางเลือกอื่น';
+
+  @override
+  String get cancelReasonOther => 'อื่นๆ';
+
+  @override
+  String get tellUsMore => 'บอกเราเพิ่มเติม (ไม่บังคับ)';
+
+  @override
+  String get cancelReasonDetailHint => 'เราขอบคุณทุกความคิดเห็น...';
+
+  @override
+  String get justAMoment => 'สักครู่';
+
+  @override
+  String get cancelConsequencesSubtitle => 'เราแนะนำอย่างยิ่งให้สำรวจตัวเลือกอื่นแทนการยกเลิก';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'แผนของคุณจะยังคงใช้งานได้จนถึง $date หลังจากนั้นคุณจะถูกย้ายไปเวอร์ชันฟรีที่มีฟีเจอร์จำกัด';
+  }
+
+  @override
+  String get ifYouCancel => 'หากคุณยกเลิก:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'ไม่มีการเข้าถึงแบบไม่จำกัดเมื่อสิ้นสุดรอบการเรียกเก็บเงิน';
+
+  @override
+  String get cancelConsequenceBattery => 'ใช้แบตเตอรี่มากขึ้น 7 เท่า (ประมวลผลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceQuality => 'คุณภาพการถอดเสียงต่ำลง 30% (โมเดลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceDelay => 'หน่วงเวลาประมวลผล 5-7 วินาที (โมเดลบนอุปกรณ์)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'ไม่สามารถระบุผู้พูดได้';
+
+  @override
+  String get confirmAndCancel => 'ยืนยันและยกเลิก';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'ไม่มีการถอดเสียงโทรศัพท์แบบเรียลไทม์';
+
+  @override
+  String get feedbackTitleTooExpensive => 'ราคาเท่าไหร่จึงจะเหมาะกับคุณ?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'คุณขาดฟีเจอร์อะไร?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'คุณพบปัญหาอะไรบ้าง?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'บอกเราเกี่ยวกับปัญหาแบตเตอรี่';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'คุณเปลี่ยนไปใช้อะไร?';
+
+  @override
+  String get feedbackTitleNotUsing => 'อะไรจะทำให้คุณใช้ Omi มากขึ้น?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'ความคิดเห็นของคุณช่วยเราหาจุดสมดุลที่เหมาะสม';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'เราสร้างอยู่เสมอ — สิ่งนี้ช่วยจัดลำดับความสำคัญ';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'เราอยากเข้าใจว่าอะไรผิดพลาด';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'สิ่งนี้ช่วยทีมฮาร์ดแวร์ปรับปรุง';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'เราอยากรู้ว่าอะไรดึงดูดคุณ';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'เราต้องการทำให้ Omi มีประโยชน์มากขึ้นสำหรับคุณ';
+
+  @override
+  String get deviceDiagnostics => 'การวินิจฉัยอุปกรณ์';
+
+  @override
+  String get signalStrength => 'ความแรงสัญญาณ';
+
+  @override
+  String get connectionUptime => 'เวลาทำงาน';
+
+  @override
+  String get reconnections => 'การเชื่อมต่อใหม่';
+
+  @override
+  String get disconnectHistory => 'ประวัติการตัดการเชื่อมต่อ';
+
+  @override
+  String get noDisconnectsRecorded => 'ไม่มีการตัดการเชื่อมต่อที่บันทึกไว้';
+
+  @override
+  String get diagnostics => 'การวินิจฉัย';
+
+  @override
+  String get waitingForData => 'กำลังรอข้อมูล...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI แบบเรียลไทม์ตามเวลา';
+
+  @override
+  String get noRssiDataYet => 'ยังไม่มีข้อมูล RSSI';
+
+  @override
+  String get collectingData => 'กำลังรวบรวมข้อมูล...';
+
+  @override
+  String get cleanDisconnect => 'ตัดการเชื่อมต่อปกติ';
+
+  @override
+  String get connectionTimeout => 'หมดเวลาการเชื่อมต่อ';
+
+  @override
+  String get remoteDeviceTerminated => 'อุปกรณ์ระยะไกลยุติการเชื่อมต่อ';
+
+  @override
+  String get pairedToAnotherPhone => 'จับคู่กับโทรศัพท์เครื่องอื่น';
+
+  @override
+  String get linkKeyMismatch => 'คีย์เชื่อมต่อไม่ตรงกัน';
+
+  @override
+  String get connectionFailed => 'การเชื่อมต่อล้มเหลว';
+
+  @override
+  String get appClosed => 'ปิดแอป';
+
+  @override
+  String get manualDisconnect => 'ตัดการเชื่อมต่อด้วยตนเอง';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count เหตุการณ์ล่าสุด';
+  }
+
+  @override
+  String get signal => 'สัญญาณ';
+
+  @override
+  String get battery => 'แบตเตอรี่';
+
+  @override
+  String get excellent => 'ยอดเยี่ยม';
+
+  @override
+  String get good => 'ดี';
+
+  @override
+  String get fair => 'พอใช้';
+
+  @override
+  String get weak => 'อ่อน';
+
+  @override
+  String gattError(String code) {
+    return 'ข้อผิดพลาด GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'ย้อนกลับเป็นเฟิร์มแวร์เสถียร';
+
+  @override
+  String get rollbackConfirmTitle => 'ย้อนกลับเฟิร์มแวร์?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'การดำเนินการนี้จะแทนที่เฟิร์มแวร์ปัจจุบันด้วยเวอร์ชันเสถียรล่าสุด ($version) อุปกรณ์ของคุณจะรีสตาร์ทหลังจากอัปเดต';
+  }
+
+  @override
+  String get stableFirmware => 'เฟิร์มแวร์เสถียร';
+
+  @override
+  String get fetchingStableFirmware => 'กำลังดึงเฟิร์มแวร์เสถียรล่าสุด...';
+
+  @override
+  String get noStableFirmwareFound => 'ไม่พบเวอร์ชันเฟิร์มแวร์เสถียรสำหรับอุปกรณ์ของคุณ';
+
+  @override
+  String get installStableFirmware => 'ติดตั้งเฟิร์มแวร์เสถียร';
+
+  @override
+  String get alreadyOnStableFirmware => 'คุณใช้เวอร์ชันเสถียรล่าสุดอยู่แล้ว';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'บันทึกเสียง $duration ไว้ในเครื่อง';
+  }
+
+  @override
+  String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

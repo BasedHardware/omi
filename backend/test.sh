@@ -40,6 +40,7 @@ pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
+pytest tests/unit/test_translation_cost_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
@@ -52,6 +53,7 @@ pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_listen_pipeline.py -v
@@ -64,12 +66,17 @@ pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_pcm_decode.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
+pytest tests/unit/test_fair_use_upgrade.py -v
+pytest tests/unit/test_skip_classifier_restrict.py -v
 pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_sync_v2.py -v
+pytest tests/unit/test_sync_transcription_prefs.py -v
+pytest tests/unit/test_vision_stream_async.py -v
+pytest tests/unit/test_desktop_transcribe.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

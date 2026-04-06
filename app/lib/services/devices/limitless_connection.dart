@@ -43,16 +43,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
-    // Limitless requires an encrypted link — bond before accessing characteristics
-    final bonded = await transport.requestBond();
-    if (!bonded) {
-      Logger.debug('Limitless: bonding failed — encrypted characteristics may not work');
-    }
-
     await Future.delayed(const Duration(seconds: 1));
 
-    _rxSubscription =
-        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
 
     await Future.delayed(const Duration(seconds: 1));
 
@@ -303,12 +298,45 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
           _flashPageController.add(flashPage);
         } else {
-          DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
-            'index': index,
-            'session': session,
-            'seq': seq,
-            'flashPageDataSize': flashPageData.length,
-          });
+          final isAudioPage = _hasAudioSubfields(flashPageData);
+          if (!isAudioPage) {
+            // Diagnostic page — firmware logs, RTOS snapshots, BLE events. No audio to extract.
+            DebugLogManager.logEvent('limitless_diagnostic_page_skipped', {
+              'index': index,
+              'session': session,
+              'seq': seq,
+              'flashPageDataSize': flashPageData.length,
+            });
+
+            final flashPage = {
+              'opus_frames': <List<int>>[],
+              'timestamp_ms': pageInfo['timestamp_ms'] ?? DateTime.now().millisecondsSinceEpoch,
+              'session': session,
+              'seq': seq,
+              'index': index,
+              'did_start_session': pageInfo['did_start_session'] ?? false,
+              'did_stop_session': pageInfo['did_stop_session'] ?? false,
+              'did_start_recording': false,
+              'did_stop_recording': false,
+            };
+
+            _completedFlashPages.add(flashPage);
+            _flashPageController.add(flashPage);
+          } else {
+            // Audio page that yielded zero frames — genuine parse failure
+            final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
+            final firstBytes = flashPageData
+                .sublist(0, firstBytesLen)
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(' ');
+            DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
+              'index': index,
+              'session': session,
+              'seq': seq,
+              'flashPageDataSize': flashPageData.length,
+              'firstBytes': firstBytes,
+            });
+          }
         }
       }
     } catch (e) {
@@ -501,6 +529,91 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     return frames;
+  }
+
+  /// Check if flash page data contains any audio subfields (0x12 inside 0x1a wrappers).
+  /// Returns true for audio pages, false for diagnostic pages (firmware logs, RTOS snapshots, etc.).
+  bool _hasAudioSubfields(List<int> flashPageData) {
+    try {
+      int pos = 0;
+
+      // Skip timestamp (0x08) if present
+      if (pos < flashPageData.length && flashPageData[pos] == 0x08) {
+        pos++;
+        final result = _decodeVarint(flashPageData, pos);
+        pos = result[1] as int;
+      }
+
+      // Skip 0x10 if present
+      if (pos < flashPageData.length && flashPageData[pos] == 0x10) {
+        pos++;
+        final result = _decodeVarint(flashPageData, pos);
+        pos = result[1] as int;
+      }
+
+      // Walk 0x1a wrappers looking for any 0x12 subfield
+      while (pos < flashPageData.length - 2) {
+        if (flashPageData[pos] == 0x1a) {
+          pos++;
+          final wrapperLengthResult = _decodeVarint(flashPageData, pos);
+          final wrapperLength = wrapperLengthResult[0] as int;
+          pos = wrapperLengthResult[1] as int;
+
+          final wrapperEnd = pos + wrapperLength;
+          if (wrapperEnd > flashPageData.length) break;
+
+          while (pos < wrapperEnd - 1) {
+            final marker = flashPageData[pos];
+
+            if (marker == 0x12) {
+              return true; // Found audio subfield
+            }
+
+            // Skip other fields
+            final wireType = marker & 0x07;
+            pos++;
+            if (wireType == 0) {
+              final result = _decodeVarint(flashPageData, pos);
+              pos = result[1] as int;
+            } else if (wireType == 2) {
+              final lengthResult = _decodeVarint(flashPageData, pos);
+              pos = lengthResult[1] as int;
+              pos += lengthResult[0] as int;
+            } else if (wireType == 1) {
+              pos += 8; // 64-bit fixed
+            } else if (wireType == 5) {
+              pos += 4; // 32-bit fixed
+            } else {
+              return true; // Unknown wire type — conservatively treat as audio
+            }
+          }
+
+          pos = wrapperEnd;
+        } else {
+          // Non-0x1a top-level field — skip it properly using wire type
+          final wireType = flashPageData[pos] & 0x07;
+          pos++;
+          if (wireType == 0) {
+            final r = _decodeVarint(flashPageData, pos);
+            pos = r[1] as int;
+          } else if (wireType == 2) {
+            final r = _decodeVarint(flashPageData, pos);
+            pos = (r[1] as int) + (r[0] as int);
+          } else if (wireType == 1) {
+            pos += 8;
+          } else if (wireType == 5) {
+            pos += 4;
+          } else {
+            return true; // Unknown wire type — conservatively treat as audio
+          }
+        }
+      }
+    } catch (e) {
+      // Parse error — conservatively treat as audio page to avoid ACKing something we can't classify
+      return true;
+    }
+
+    return false; // No 0x12 subfields found — diagnostic page
   }
 
   void _extractOpusRecursive(List<int> data, int start, int end, List<List<int>> frames) {
@@ -1004,10 +1117,20 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _completedFlashPages.clear();
 
       if (allFrames.isEmpty) {
-        DebugLogManager.logWarning('Limitless extractFramesWithSessionInfo: batch had pages but zero frames', {
-          'pageCount': pageCount,
-        });
-        return null;
+        // All pages were diagnostic — still return maxIndex so ACK can advance
+        DebugLogManager.logEvent('limitless_batch_diagnostic_only', {'pageCount': pageCount, 'maxIndex': maxIndex});
+        if (maxIndex == null) {
+          DebugLogManager.logWarning('limitless_batch_diagnostic_no_index', {'pageCount': pageCount});
+        }
+        return {
+          'opus_frames': <List<int>>[],
+          'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+          'max_index': maxIndex,
+          'did_start_session': didStartSession,
+          'did_stop_session': didStopSession,
+          'did_start_recording': didStartRecording,
+          'did_stop_recording': didStopRecording,
+        };
       }
 
       final avgFrameSize = allFrames.fold<int>(0, (sum, f) => sum + f.length) ~/ allFrames.length;
@@ -1606,8 +1729,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1621,8 +1743,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

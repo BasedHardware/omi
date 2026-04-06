@@ -3289,7 +3289,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutYou => 'О вас';
 
   @override
-  String get manual => 'Ручные';
+  String get manual => 'Ручное';
 
   @override
   String get loadingYourMemories => 'Загрузка ваших воспоминаний...';
@@ -8783,4 +8783,233 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get microphone => 'Микрофон';
+
+  @override
+  String get whyAreYouCanceling => 'Почему вы отменяете?';
+
+  @override
+  String get cancelReasonSubtitle => 'Расскажите, почему вы уходите?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Слишком дорого';
+
+  @override
+  String get cancelReasonNotUsing => 'Недостаточно использую';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Отсутствующие функции';
+
+  @override
+  String get cancelReasonAudioQuality => 'Качество аудио/транскрипции';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Проблемы с расходом батареи';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Нашёл альтернативу';
+
+  @override
+  String get cancelReasonOther => 'Другое';
+
+  @override
+  String get tellUsMore => 'Расскажите подробнее (необязательно)';
+
+  @override
+  String get cancelReasonDetailHint => 'Мы ценим любой отзыв...';
+
+  @override
+  String get justAMoment => 'Одну минутку';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Мы настоятельно рекомендуем изучить другие варианты вместо отмены.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Ваш план останется активным до $date. После этого вы будете переведены на бесплатную версию с ограниченными функциями.';
+  }
+
+  @override
+  String get ifYouCancel => 'Если вы отмените:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Больше не будет безлимитного доступа по окончании расчётного периода.';
+
+  @override
+  String get cancelConsequenceBattery => 'В 7 раз больше расход батареи (обработка на устройстве)';
+
+  @override
+  String get cancelConsequenceQuality => 'На 30% ниже качество транскрипции (модели на устройстве)';
+
+  @override
+  String get cancelConsequenceDelay => 'Задержка обработки 5-7 секунд (модели на устройстве)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Невозможно идентифицировать говорящих.';
+
+  @override
+  String get confirmAndCancel => 'Подтвердить и отменить';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Нет транскрипции телефонных звонков в реальном времени';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Какая цена вас бы устроила?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Каких функций вам не хватает?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'С какими проблемами вы столкнулись?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Расскажите о проблемах с батареей';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'На что вы переходите?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Что заставило бы вас использовать Omi больше?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Ваш отзыв помогает нам найти правильный баланс.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Мы всегда создаём — это помогает нам расставить приоритеты.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Мы хотели бы понять, что пошло не так.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Это помогает нашей команде аппаратного обеспечения улучшаться.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Нам интересно узнать, что привлекло ваше внимание.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Мы хотим сделать Omi более полезным для вас.';
+
+  @override
+  String get deviceDiagnostics => 'Диагностика устройства';
+
+  @override
+  String get signalStrength => 'Уровень сигнала';
+
+  @override
+  String get connectionUptime => 'Время работы';
+
+  @override
+  String get reconnections => 'Повторные подключения';
+
+  @override
+  String get disconnectHistory => 'История отключений';
+
+  @override
+  String get noDisconnectsRecorded => 'Отключения не зафиксированы';
+
+  @override
+  String get diagnostics => 'Диагностика';
+
+  @override
+  String get waitingForData => 'Ожидание данных...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI в реальном времени';
+
+  @override
+  String get noRssiDataYet => 'Данные RSSI пока отсутствуют';
+
+  @override
+  String get collectingData => 'Сбор данных...';
+
+  @override
+  String get cleanDisconnect => 'Чистое отключение';
+
+  @override
+  String get connectionTimeout => 'Тайм-аут соединения';
+
+  @override
+  String get remoteDeviceTerminated => 'Удалённое устройство разорвало соединение';
+
+  @override
+  String get pairedToAnotherPhone => 'Сопряжено с другим телефоном';
+
+  @override
+  String get linkKeyMismatch => 'Несовпадение ключа связи';
+
+  @override
+  String get connectionFailed => 'Ошибка подключения';
+
+  @override
+  String get appClosed => 'Приложение закрыто';
+
+  @override
+  String get manualDisconnect => 'Ручное отключение';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Последние $count событий';
+  }
+
+  @override
+  String get signal => 'Сигнал';
+
+  @override
+  String get battery => 'Батарея';
+
+  @override
+  String get excellent => 'Отлично';
+
+  @override
+  String get good => 'Хорошо';
+
+  @override
+  String get fair => 'Удовлетворительно';
+
+  @override
+  String get weak => 'Слабый';
+
+  @override
+  String gattError(String code) {
+    return 'Ошибка GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Откатить до стабильной прошивки';
+
+  @override
+  String get rollbackConfirmTitle => 'Откатить прошивку?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Текущая прошивка будет заменена на последнюю стабильную версию ($version). Устройство перезагрузится после обновления.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабильная прошивка';
+
+  @override
+  String get fetchingStableFirmware => 'Получение последней стабильной прошивки...';
+
+  @override
+  String get noStableFirmwareFound => 'Не удалось найти стабильную версию прошивки для вашего устройства.';
+
+  @override
+  String get installStableFirmware => 'Установить стабильную прошивку';
+
+  @override
+  String get alreadyOnStableFirmware => 'Вы уже используете последнюю стабильную версию.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудио сохранено локально';
+  }
+
+  @override
+  String get willSyncAutomatically => 'синхронизируется автоматически';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -1714,12 +1714,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'THIẾT BỊ',
-      one: 'THIẾT BỊ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8756,4 +8751,233 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get microphone => 'Micrô';
+
+  @override
+  String get whyAreYouCanceling => 'Tại sao bạn hủy?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bạn có thể cho chúng tôi biết tại sao bạn rời đi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Quá đắt';
+
+  @override
+  String get cancelReasonNotUsing => 'Không sử dụng đủ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Thiếu tính năng';
+
+  @override
+  String get cancelReasonAudioQuality => 'Chất lượng âm thanh/phiên âm';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Lo ngại về tiêu hao pin';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Đã tìm thấy giải pháp thay thế';
+
+  @override
+  String get cancelReasonOther => 'Khác';
+
+  @override
+  String get tellUsMore => 'Cho chúng tôi biết thêm (tùy chọn)';
+
+  @override
+  String get cancelReasonDetailHint => 'Chúng tôi đánh giá cao mọi phản hồi...';
+
+  @override
+  String get justAMoment => 'Một chút thôi';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Chúng tôi khuyên bạn nên khám phá các lựa chọn khác thay vì hủy.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Gói của bạn sẽ vẫn hoạt động đến $date. Sau đó, bạn sẽ được chuyển sang phiên bản miễn phí với tính năng hạn chế.';
+  }
+
+  @override
+  String get ifYouCancel => 'Nếu bạn hủy:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Không còn truy cập không giới hạn khi kết thúc kỳ thanh toán.';
+
+  @override
+  String get cancelConsequenceBattery => 'Tiêu thụ pin gấp 7 lần (xử lý trên thiết bị)';
+
+  @override
+  String get cancelConsequenceQuality => 'Chất lượng phiên âm thấp hơn 30% (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceDelay => 'Độ trễ xử lý 5-7 giây (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Không thể nhận dạng người nói.';
+
+  @override
+  String get confirmAndCancel => 'Xác nhận và hủy';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Không có phiên âm cuộc gọi thời gian thực';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Mức giá nào phù hợp với bạn?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Bạn thiếu tính năng gì?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Bạn gặp vấn đề gì?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Hãy cho chúng tôi biết về vấn đề pin';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Bạn chuyển sang gì?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Điều gì sẽ khiến bạn sử dụng Omi nhiều hơn?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Phản hồi của bạn giúp chúng tôi tìm sự cân bằng.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Chúng tôi luôn xây dựng — điều này giúp ưu tiên.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chúng tôi muốn hiểu điều gì đã sai.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Điều này giúp đội ngũ phần cứng cải thiện.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chúng tôi muốn biết điều gì thu hút bạn.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
+
+  @override
+  String get deviceDiagnostics => 'Chẩn đoán thiết bị';
+
+  @override
+  String get signalStrength => 'Cường độ tín hiệu';
+
+  @override
+  String get connectionUptime => 'Thời gian hoạt động';
+
+  @override
+  String get reconnections => 'Kết nối lại';
+
+  @override
+  String get disconnectHistory => 'Lịch sử ngắt kết nối';
+
+  @override
+  String get noDisconnectsRecorded => 'Không có ngắt kết nối nào được ghi nhận';
+
+  @override
+  String get diagnostics => 'Chẩn đoán';
+
+  @override
+  String get waitingForData => 'Đang chờ dữ liệu...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI trực tiếp theo thời gian';
+
+  @override
+  String get noRssiDataYet => 'Chưa có dữ liệu RSSI';
+
+  @override
+  String get collectingData => 'Đang thu thập dữ liệu...';
+
+  @override
+  String get cleanDisconnect => 'Ngắt kết nối sạch';
+
+  @override
+  String get connectionTimeout => 'Hết thời gian kết nối';
+
+  @override
+  String get remoteDeviceTerminated => 'Thiết bị từ xa đã ngắt kết nối';
+
+  @override
+  String get pairedToAnotherPhone => 'Đã ghép nối với điện thoại khác';
+
+  @override
+  String get linkKeyMismatch => 'Khóa liên kết không khớp';
+
+  @override
+  String get connectionFailed => 'Kết nối thất bại';
+
+  @override
+  String get appClosed => 'Ứng dụng đã đóng';
+
+  @override
+  String get manualDisconnect => 'Ngắt kết nối thủ công';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count sự kiện gần nhất';
+  }
+
+  @override
+  String get signal => 'Tín hiệu';
+
+  @override
+  String get battery => 'Pin';
+
+  @override
+  String get excellent => 'Xuất sắc';
+
+  @override
+  String get good => 'Tốt';
+
+  @override
+  String get fair => 'Khá';
+
+  @override
+  String get weak => 'Yếu';
+
+  @override
+  String gattError(String code) {
+    return 'Lỗi GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Quay lại firmware ổn định';
+
+  @override
+  String get rollbackConfirmTitle => 'Quay lại firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Thao tác này sẽ thay thế firmware hiện tại bằng phiên bản ổn định mới nhất ($version). Thiết bị của bạn sẽ khởi động lại sau khi cập nhật.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware ổn định';
+
+  @override
+  String get fetchingStableFirmware => 'Đang tải firmware ổn định mới nhất...';
+
+  @override
+  String get noStableFirmwareFound => 'Không tìm thấy phiên bản firmware ổn định cho thiết bị của bạn.';
+
+  @override
+  String get installStableFirmware => 'Cài đặt firmware ổn định';
+
+  @override
+  String get alreadyOnStableFirmware => 'Bạn đã sử dụng phiên bản ổn định mới nhất.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration âm thanh đã lưu cục bộ';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sẽ tự động đồng bộ';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -216,6 +216,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var relaunchOnLoginSuppressedForOnboarding = false
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    if ViewExporter.shouldExport() {
+      ViewExporter.run()
+      return
+    }
+
     // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
     // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
     signal(SIGPIPE, SIG_IGN)

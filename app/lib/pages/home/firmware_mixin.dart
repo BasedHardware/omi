@@ -79,7 +79,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
   Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
     if (isLegacySecureDFU) {
-      return startLegacyDfu(btDevice, fileInAssets: fileInAssets);
+      return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
   }
@@ -156,13 +156,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     await updateManager.update(images, configuration: configuration);
   }
 
-  Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false}) async {
+  Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
     setState(() {
       isInstalling = true;
     });
     await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
     await Future.delayed(const Duration(seconds: 2));
-    String firmwareFile = '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
+    String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     NordicDfu dfu = NordicDfu();
     await dfu.startDfu(
       btDevice.id,
@@ -219,6 +219,16 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
     );
+    if (latestFirmwareDetails['ota_update_steps'] != null) {
+      otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
+    }
+    if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
+      isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
+    }
+  }
+
+  Future getStableVersion({required String deviceModelNumber}) async {
+    latestFirmwareDetails = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }

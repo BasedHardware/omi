@@ -200,7 +200,6 @@ struct SettingsContentView: View {
     @State private var transcriptionAutoDetect: Bool = true
     @State private var transcriptionLanguage: String = "en"
     @State private var vadGateEnabled: Bool = false
-    @State private var batchTranscriptionEnabled: Bool = true
 
     // Multi-chat mode setting
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -310,9 +309,9 @@ struct SettingsContentView: View {
     @State private var deleteAccountError: String?
 
     // Developer API Key overrides
-    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
     @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
     @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
+    @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
 
     init(
         appState: AppState,
@@ -352,7 +351,6 @@ struct SettingsContentView: View {
         _memoryNotificationsEnabled = State(initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
         _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
         _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
-        _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
         _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
         _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
     }
@@ -1129,36 +1127,6 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Batch Transcription
-            settingsCard(settingId: "transcription.batch") {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "square.stack.3d.up")
-                            .scaledFont(size: 16)
-                            .foregroundColor(OmiColors.purplePrimary)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Batch Transcription")
-                                .scaledFont(size: 15, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            Text("Transcribes audio in chunks at silence boundaries. Better accuracy, but transcript appears with a few seconds delay.")
-                                .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $batchTranscriptionEnabled)
-                            .toggleStyle(.switch)
-                            .onChange(of: batchTranscriptionEnabled) { _, newValue in
-                                AssistantSettings.shared.batchTranscriptionEnabled = newValue
-                                restartTranscriptionIfNeeded()
-                            }
-                    }
-                }
-            }
         }
     }
 
@@ -1801,6 +1769,7 @@ struct SettingsContentView: View {
                         .tint(OmiColors.purplePrimary)
                 }
             }
+
         }
     }
 
@@ -4281,12 +4250,27 @@ struct SettingsContentView: View {
                 }
             }
 
-            developerKeyField(
-                title: "Deepgram API Key",
-                subtitle: "For transcription",
-                settingId: "advanced.devkeys.deepgram",
-                value: $devDeepgramKey
-            )
+            settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Voice Answers (Experimental)")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Speak shortcut-based floating-bar replies aloud. Saves your ElevenLabs settings to your backend profile so the app reconnects automatically.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                        if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("No personal ElevenLabs key saved. The app will use Omi's default Sloane voice when available, otherwise it falls back to Samantha.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                    Spacer()
+                    Toggle("", isOn: floatingBarVoiceAnswersBinding)
+                        .toggleStyle(.switch)
+                        .tint(OmiColors.purplePrimary)
+                }
+            }
 
             developerKeyField(
                 title: "Gemini API Key",
@@ -4302,14 +4286,29 @@ struct SettingsContentView: View {
                 value: $devAnthropicKey
             )
 
-            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+            developerKeyField(
+                title: "ElevenLabs API Key",
+                subtitle: "For experimental floating-bar voice answers with the Sloane voice",
+                settingId: "advanced.devkeys.elevenlabs",
+                value: syncedElevenLabsKeyBinding
+            )
+
+            if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
                     HStack {
                         Spacer()
                         Button(action: {
-                            devDeepgramKey = ""
                             devGeminiKey = ""
                             devAnthropicKey = ""
+                            devElevenLabsKey = ""
+                            SettingsSyncManager.shared.pushPartialUpdate(
+                                AssistantSettingsResponse(
+                                    floatingBar: FloatingBarSettingsResponse(
+                                        elevenLabsApiKey: "",
+                                        elevenLabsVoiceID: ""
+                                    )
+                                )
+                            )
                         }) {
                             Text("Clear All Custom Keys")
                                 .scaledFont(size: 13, weight: .medium)
@@ -4337,6 +4336,34 @@ struct SettingsContentView: View {
                     .scaledFont(size: 13)
             }
         }
+    }
+
+    private var floatingBarVoiceAnswersBinding: Binding<Bool> {
+        Binding(
+            get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
+            set: { newValue in
+                shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
+                SettingsSyncManager.shared.pushPartialUpdate(
+                    AssistantSettingsResponse(
+                        floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
+                    )
+                )
+            }
+        )
+    }
+
+    private var syncedElevenLabsKeyBinding: Binding<String> {
+        Binding(
+            get: { devElevenLabsKey },
+            set: { newValue in
+                devElevenLabsKey = newValue
+                SettingsSyncManager.shared.pushPartialUpdate(
+                    AssistantSettingsResponse(
+                        floatingBar: FloatingBarSettingsResponse(elevenLabsApiKey: newValue)
+                    )
+                )
+            }
+        )
     }
 
     private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
@@ -5295,7 +5322,6 @@ struct SettingsContentView: View {
         transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
         vocabularyList = AssistantSettings.shared.transcriptionVocabulary
         vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-        batchTranscriptionEnabled = AssistantSettings.shared.batchTranscriptionEnabled
 
         Task {
             do {

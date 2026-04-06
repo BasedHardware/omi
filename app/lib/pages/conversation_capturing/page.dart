@@ -18,6 +18,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/photo_viewer_page.dart';
 
@@ -196,10 +197,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     provider.photos.isNotEmpty
                         ? "📸"
                         : _isMuted
-                            ? "🔇"
-                            : provider.transcriptServiceReady
-                                ? "🎙️"
-                                : "🎙️⚡",
+                        ? "🔇"
+                        : provider.transcriptServiceReady
+                        ? "🎙️"
+                        : "🎙️⚡",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -207,10 +208,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       provider.photos.isNotEmpty
                           ? 'Capturing'
                           : (_isMuted
-                              ? context.l10n.muted
-                              : provider.transcriptServiceReady
-                                  ? context.l10n.listening
-                                  : context.l10n.transcriptionPaused),
+                                ? context.l10n.muted
+                                : provider.transcriptServiceReady
+                                ? context.l10n.listening
+                                : context.l10n.transcriptionPaused),
                     ),
                   ),
                 ],
@@ -225,72 +226,79 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        // Transcripts, photos
-                        provider.segments.isEmpty && provider.photos.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 50.0),
-                                  child: Text(context.l10n.waitingForTranscriptOrPhotos),
-                                ),
-                              )
-                            : provider.photos.isNotEmpty
-                                ? _buildChronologicalTimeline(provider)
-                                : getTranscriptWidget(
-                                    false,
-                                    provider.segments,
-                                    provider.photos,
-                                    deviceProvider.connectedDevice,
-                                    bottomMargin: 150,
-                                    suggestions: provider.suggestionsBySegmentId,
-                                    sharedSpeakerNames: provider.sharedSpeakerNames,
-                                    taggingSegmentIds: provider.taggingSegmentIds,
-                                    onAcceptSuggestion: (suggestion) {
-                                      provider.assignSpeakerToConversation(
-                                        suggestion.speakerId,
-                                        suggestion.personId,
-                                        suggestion.personName,
-                                        [suggestion.segmentId],
-                                      );
-                                    },
-                                    editSegment: (segmentId, speakerId) {
-                                      final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                        context,
-                                        listen: false,
-                                      );
-                                      if (!connectivityProvider.isConnected) {
-                                        ConnectivityProvider.showNoInternetDialog(context);
-                                        return;
-                                      }
-                                      showModalBottomSheet(
-                                        context: context,
-                                        isScrollControlled: true,
-                                        backgroundColor: Colors.black,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                        ),
-                                        builder: (context) {
-                                          final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                            (s) => s.speakerId == speakerId,
-                                            orElse: () => SpeakerLabelSuggestionEvent.empty(),
-                                          );
-                                          return NameSpeakerBottomSheet(
-                                            speakerId: speakerId,
-                                            segmentId: segmentId,
-                                            segments: provider.segments,
-                                            suggestion: suggestion,
-                                            onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                              await provider.assignSpeakerToConversation(
-                                                speakerId,
-                                                personId,
-                                                personName,
-                                                segmentIds,
-                                              );
-                                            },
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
+                        // Transcripts, photos + inline WAL safety indicator
+                        Column(
+                          children: [
+                            Expanded(
+                              child: provider.segments.isEmpty && provider.photos.isEmpty
+                                  ? Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 50.0),
+                                        child: Text(context.l10n.waitingForTranscriptOrPhotos),
+                                      ),
+                                    )
+                                  : provider.photos.isNotEmpty
+                                  ? _buildChronologicalTimeline(provider)
+                                  : getTranscriptWidget(
+                                      false,
+                                      provider.segments,
+                                      provider.photos,
+                                      deviceProvider.connectedDevice,
+                                      bottomMargin: 150,
+                                      suggestions: provider.suggestionsBySegmentId,
+                                      sharedSpeakerNames: provider.sharedSpeakerNames,
+                                      taggingSegmentIds: provider.taggingSegmentIds,
+                                      onAcceptSuggestion: (suggestion) {
+                                        provider.assignSpeakerToConversation(
+                                          suggestion.speakerId,
+                                          suggestion.personId,
+                                          suggestion.personName,
+                                          [suggestion.segmentId],
+                                        );
+                                      },
+                                      editSegment: (segmentId, speakerId) {
+                                        final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                          context,
+                                          listen: false,
+                                        );
+                                        if (!connectivityProvider.isConnected) {
+                                          ConnectivityProvider.showNoInternetDialog(context);
+                                          return;
+                                        }
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.black,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                          ),
+                                          builder: (context) {
+                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                              (s) => s.speakerId == speakerId,
+                                              orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                            );
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                  speakerId,
+                                                  personId,
+                                                  personName,
+                                                  segmentIds,
+                                                );
+                                              },
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                            ),
+                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals),
+                          ],
+                        ),
                         // Summary Tab
                         Center(
                           child: Padding(
@@ -655,6 +663,41 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals) {
+    if (unsyncedWals.isEmpty) return const SizedBox.shrink();
+    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds);
+    final label = totalSeconds >= 60 ? '${totalSeconds ~/ 60}m ${totalSeconds % 60}s' : '${totalSeconds}s';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C24),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF3A3A4A), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 14, color: Color(0xFF8B8B9E)),
+            const SizedBox(width: 6),
+            Text(
+              context.l10n.audioSavedLocally(label),
+              style: const TextStyle(color: Color(0xFF8B8B9E), fontSize: 12, height: 1.3),
+            ),
+            const SizedBox(width: 6),
+            const Text('·', style: TextStyle(color: Color(0xFF8B8B9E), fontSize: 12)),
+            const SizedBox(width: 6),
+            Text(
+              context.l10n.willSyncAutomatically,
+              style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.3),
+            ),
+          ],
+        ),
       ),
     );
   }

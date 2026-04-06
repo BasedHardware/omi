@@ -349,6 +349,16 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
     }
 
+    /// When true, floating-bar replies are spoken aloud.
+    @Published var floatingBarVoiceAnswersEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(floatingBarVoiceAnswersEnabled, forKey: "shortcut_floatingBarVoiceAnswersEnabled")
+            if !floatingBarVoiceAnswersEnabled {
+                FloatingBarVoicePlaybackService.shared.stop()
+            }
+        }
+    }
+
     var askOmiUsesCustomShortcut: Bool {
         !Self.askOmiPresets.contains(askOmiShortcut)
     }
@@ -384,6 +394,7 @@ class ShortcutSettings: ObservableObject {
             self.pttTranscriptionMode = .batch
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
+        self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? false
     }
 
     private func persistShortcut(_ shortcut: KeyboardShortcut, forKey key: String) {

@@ -1706,12 +1706,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8675,12 +8670,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8751,4 +8741,233 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get microphone => 'Microphone';
+
+  @override
+  String get whyAreYouCanceling => 'Why are you canceling?';
+
+  @override
+  String get cancelReasonSubtitle => 'Can you tell us why you\'re leaving?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Too expensive';
+
+  @override
+  String get cancelReasonNotUsing => 'Not using it enough';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Missing features';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transcription quality';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Battery drain concerns';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Found an alternative';
+
+  @override
+  String get cancelReasonOther => 'Other';
+
+  @override
+  String get tellUsMore => 'Tell us more (optional)';
+
+  @override
+  String get cancelReasonDetailHint => 'We appreciate any feedback...';
+
+  @override
+  String get justAMoment => 'Just a moment, please';
+
+  @override
+  String get cancelConsequencesSubtitle => 'We highly recommend exploring your other options instead of canceling.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Your plan will remain active until $date. After that, you\'ll be moved to the free version with limited features.';
+  }
+
+  @override
+  String get ifYouCancel => 'If you cancel:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'No longer have unlimited access at the end of your billing period.';
+
+  @override
+  String get cancelConsequenceBattery => '7x more battery usage (on-device processing)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lower transcription quality (on-device models)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 second processing delay (on-device models)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Cannot identify speakers.';
+
+  @override
+  String get confirmAndCancel => 'Confirm & Cancel';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'No real-time phone call transcription';
+
+  @override
+  String get feedbackTitleTooExpensive => 'What price would work for you?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'What features are you missing?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'What issues did you experience?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Tell us about the battery issues';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'What are you switching to?';
+
+  @override
+  String get feedbackTitleNotUsing => 'What would make you use Omi more?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Your feedback helps us find the right balance.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'We\'re always building — this helps us prioritize.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'We\'d love to understand what went wrong.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'This helps our hardware team improve.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'We\'d love to learn what caught your eye.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'We want to make Omi more useful for you.';
+
+  @override
+  String get deviceDiagnostics => 'Device Diagnostics';
+
+  @override
+  String get signalStrength => 'Signal Strength';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Reconnections';
+
+  @override
+  String get disconnectHistory => 'Disconnect History';
+
+  @override
+  String get noDisconnectsRecorded => 'No disconnects recorded';
+
+  @override
+  String get diagnostics => 'Diagnostics';
+
+  @override
+  String get waitingForData => 'Waiting for data...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI over time';
+
+  @override
+  String get noRssiDataYet => 'No RSSI data yet';
+
+  @override
+  String get collectingData => 'Collecting data...';
+
+  @override
+  String get cleanDisconnect => 'Clean disconnect';
+
+  @override
+  String get connectionTimeout => 'Connection timeout';
+
+  @override
+  String get remoteDeviceTerminated => 'Remote device terminated';
+
+  @override
+  String get pairedToAnotherPhone => 'Paired to another phone';
+
+  @override
+  String get linkKeyMismatch => 'Link key mismatch';
+
+  @override
+  String get connectionFailed => 'Connection failed';
+
+  @override
+  String get appClosed => 'App closed';
+
+  @override
+  String get manualDisconnect => 'Manual disconnect';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Last $count events';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Battery';
+
+  @override
+  String get excellent => 'Excellent';
+
+  @override
+  String get good => 'Good';
+
+  @override
+  String get fair => 'Fair';
+
+  @override
+  String get weak => 'Weak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT error ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Roll Back to Stable Firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Roll Back Firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'This will replace your current firmware with the latest stable version ($version). Your device will restart after the update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stable Firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Fetching latest stable firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Could not find a stable firmware version for your device.';
+
+  @override
+  String get installStableFirmware => 'Install Stable Firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'You are already on the latest stable version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saved locally';
+  }
+
+  @override
+  String get willSyncAutomatically => 'will sync automatically';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

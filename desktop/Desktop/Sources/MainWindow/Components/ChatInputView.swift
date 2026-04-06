@@ -71,8 +71,8 @@ struct ChatInputView: View {
                     }
                     .frame(maxHeight: 200)
                     .clipped()
-                    .background(OmiColors.backgroundSecondary)
-                    .cornerRadius(12)
+                    .background(OmiColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 // Floating Ask/Act toggle (top-right, inside the input area)
                 if askModeEnabled {
@@ -100,12 +100,14 @@ struct ChatInputView: View {
                 Button(action: handleSubmit) {
                     Image(systemName: "arrow.up.circle.fill")
                         .scaledFont(size: 24)
-                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textQuaternary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!hasText)
             }
         }
+        .padding(12)
+        .omiPanel(fill: OmiColors.backgroundSecondary, radius: 22, stroke: OmiColors.border.opacity(0.2), shadowOpacity: 0.1, shadowRadius: 12, shadowY: 6)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
             // When ask mode is disabled, ensure we're always in act mode
@@ -152,8 +154,8 @@ struct ChatModeToggle: View {
             modeButton(for: .ask, label: "Ask")
             modeButton(for: .act, label: "Act")
         }
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(14)
+        .background(OmiColors.backgroundQuaternary.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func modeButton(for targetMode: ChatMode, label: String) -> some View {
@@ -163,8 +165,8 @@ struct ChatModeToggle: View {
                 .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(mode == targetMode ? OmiColors.purplePrimary : Color.clear)
-                .cornerRadius(12)
+                .background(mode == targetMode ? OmiColors.userBubble : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
     }

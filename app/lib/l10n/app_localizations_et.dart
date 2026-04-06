@@ -1708,12 +1708,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8752,4 +8747,233 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miks tühistate?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kas saate meile öelda, miks lahkute?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Liiga kallis';
+
+  @override
+  String get cancelReasonNotUsing => 'Ei kasuta piisavalt';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Puuduvad funktsioonid';
+
+  @override
+  String get cancelReasonAudioQuality => 'Heli/transkriptsiooni kvaliteet';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Aku tühjenemise mured';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Leidsin alternatiivi';
+
+  @override
+  String get cancelReasonOther => 'Muu';
+
+  @override
+  String get tellUsMore => 'Rääkige meile rohkem (valikuline)';
+
+  @override
+  String get cancelReasonDetailHint => 'Hindame igasugust tagasisidet...';
+
+  @override
+  String get justAMoment => 'Üks hetk, palun';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Soovitame tungivalt uurida oma teisi võimalusi tühistamise asemel.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda viiakse teid üle tasuta versioonile piiratud funktsioonidega.';
+  }
+
+  @override
+  String get ifYouCancel => 'Kui tühistate:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Arveldusperioodi lõpus ei ole teil enam piiramatut juurdepääsu.';
+
+  @override
+  String get cancelConsequenceBattery => '7x suurem akukasutus (seadmes töötlemine)';
+
+  @override
+  String get cancelConsequenceQuality => '30% madalam transkriptsiooni kvaliteet (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundit töötlemisviivitust (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Ei suuda kõnelejaid tuvastada.';
+
+  @override
+  String get confirmAndCancel => 'Kinnita ja tühista';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Puudub reaalajas telefonikõnede transkriptsioon';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milline hind sobiks teile?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milliseid funktsioone teil puudu on?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milliseid probleeme kogesite?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Rääkige meile akuprobleemidest';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Millele lähete üle?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mis paneks teid Omi rohkem kasutama?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Teie tagasiside aitab meil leida õige tasakaalu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Ehitame alati — see aitab meil prioriteete seada.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Tahaksime mõista, mis läks valesti.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'See aitab meie riistvarameeskonnal paraneda.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Tahaksime teada, mis teie tähelepanu köitis.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
+
+  @override
+  String get deviceDiagnostics => 'Seadme diagnostika';
+
+  @override
+  String get signalStrength => 'Signaali tugevus';
+
+  @override
+  String get connectionUptime => 'Tööaeg';
+
+  @override
+  String get reconnections => 'Taasühendused';
+
+  @override
+  String get disconnectHistory => 'Katkestuste ajalugu';
+
+  @override
+  String get noDisconnectsRecorded => 'Katkestusi pole registreeritud';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Andmete ootel...';
+
+  @override
+  String get liveRssiOverTime => 'Reaalajas RSSI ajas';
+
+  @override
+  String get noRssiDataYet => 'RSSI andmeid veel pole';
+
+  @override
+  String get collectingData => 'Andmete kogumine...';
+
+  @override
+  String get cleanDisconnect => 'Puhas katkestus';
+
+  @override
+  String get connectionTimeout => 'Ühenduse ajalõpp';
+
+  @override
+  String get remoteDeviceTerminated => 'Kaugseade katkestas ühenduse';
+
+  @override
+  String get pairedToAnotherPhone => 'Seotud teise telefoniga';
+
+  @override
+  String get linkKeyMismatch => 'Lingivõtme mittevastavus';
+
+  @override
+  String get connectionFailed => 'Ühendamine ebaõnnestus';
+
+  @override
+  String get appClosed => 'Rakendus suletud';
+
+  @override
+  String get manualDisconnect => 'Käsitsi katkestus';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Viimased $count sündmust';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Aku';
+
+  @override
+  String get excellent => 'Suurepärane';
+
+  @override
+  String get good => 'Hea';
+
+  @override
+  String get fair => 'Rahuldav';
+
+  @override
+  String get weak => 'Nõrk';
+
+  @override
+  String gattError(String code) {
+    return 'GATT viga ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Tagasi stabiilsele püsivarale';
+
+  @override
+  String get rollbackConfirmTitle => 'Taastada püsivara?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'See asendab teie praeguse püsivara uusima stabiilse versiooniga ($version). Teie seade taaskäivitub pärast värskendust.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiilne püsivara';
+
+  @override
+  String get fetchingStableFirmware => 'Uusima stabiilse püsivara toomine...';
+
+  @override
+  String get noStableFirmwareFound => 'Teie seadmele ei leitud stabiilset püsivara versiooni.';
+
+  @override
+  String get installStableFirmware => 'Paigalda stabiilne püsivara';
+
+  @override
+  String get alreadyOnStableFirmware => 'Teil on juba uusim stabiilne versioon.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration heli salvestatud kohapeal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

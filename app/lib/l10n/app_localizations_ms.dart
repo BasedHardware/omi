@@ -1715,12 +1715,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANTI',
-      one: 'PERANTI',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -8778,4 +8773,234 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Mengapa anda membatalkan?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bolehkah anda memberitahu kami mengapa anda pergi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Terlalu mahal';
+
+  @override
+  String get cancelReasonNotUsing => 'Tidak cukup menggunakannya';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Ciri yang hilang';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kualiti audio/transkripsi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Kebimbangan penggunaan bateri';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Menemui alternatif';
+
+  @override
+  String get cancelReasonOther => 'Lain-lain';
+
+  @override
+  String get tellUsMore => 'Beritahu kami lebih lanjut (pilihan)';
+
+  @override
+  String get cancelReasonDetailHint => 'Kami menghargai sebarang maklum balas...';
+
+  @override
+  String get justAMoment => 'Sebentar, sila';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Kami amat mengesyorkan anda meneroka pilihan lain anda daripada membatalkan.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Pelan anda akan kekal aktif sehingga $date. Selepas itu, anda akan dipindahkan ke versi percuma dengan ciri terhad.';
+  }
+
+  @override
+  String get ifYouCancel => 'Jika anda membatalkan:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Tiada lagi akses tanpa had pada akhir tempoh pengebilan anda.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lebih penggunaan bateri (pemprosesan pada peranti)';
+
+  @override
+  String get cancelConsequenceQuality => '30% kualiti transkripsi lebih rendah (model pada peranti)';
+
+  @override
+  String get cancelConsequenceDelay => 'Kelewatan pemprosesan 5-7 saat (model pada peranti)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Tidak dapat mengenal pasti penutur.';
+
+  @override
+  String get confirmAndCancel => 'Sahkan dan batalkan';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Tiada transkripsi panggilan telefon masa nyata';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Harga berapa yang sesuai untuk anda?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Apakah ciri yang anda perlukan?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Apakah masalah yang anda alami?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Beritahu kami tentang masalah bateri';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Anda beralih ke apa?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Apa yang akan membuat anda menggunakan Omi lebih banyak?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Maklum balas anda membantu kami mencari keseimbangan yang betul.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Kami sentiasa membina — ini membantu kami mengutamakan.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Kami ingin memahami apa yang salah.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ini membantu pasukan perkakasan kami meningkatkan.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Kami ingin tahu apa yang menarik perhatian anda.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Kami mahu menjadikan Omi lebih berguna untuk anda.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostik Peranti';
+
+  @override
+  String get signalStrength => 'Kekuatan Isyarat';
+
+  @override
+  String get connectionUptime => 'Masa Aktif';
+
+  @override
+  String get reconnections => 'Sambungan Semula';
+
+  @override
+  String get disconnectHistory => 'Sejarah Pemutusan';
+
+  @override
+  String get noDisconnectsRecorded => 'Tiada pemutusan direkodkan';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Menunggu data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI langsung dari semasa ke semasa';
+
+  @override
+  String get noRssiDataYet => 'Belum ada data RSSI';
+
+  @override
+  String get collectingData => 'Mengumpul data...';
+
+  @override
+  String get cleanDisconnect => 'Pemutusan bersih';
+
+  @override
+  String get connectionTimeout => 'Masa sambungan tamat';
+
+  @override
+  String get remoteDeviceTerminated => 'Peranti jauh menamatkan sambungan';
+
+  @override
+  String get pairedToAnotherPhone => 'Dipasangkan dengan telefon lain';
+
+  @override
+  String get linkKeyMismatch => 'Kunci pautan tidak sepadan';
+
+  @override
+  String get connectionFailed => 'Sambungan gagal';
+
+  @override
+  String get appClosed => 'Aplikasi ditutup';
+
+  @override
+  String get manualDisconnect => 'Pemutusan manual';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count peristiwa terakhir';
+  }
+
+  @override
+  String get signal => 'Isyarat';
+
+  @override
+  String get battery => 'Bateri';
+
+  @override
+  String get excellent => 'Cemerlang';
+
+  @override
+  String get good => 'Baik';
+
+  @override
+  String get fair => 'Sederhana';
+
+  @override
+  String get weak => 'Lemah';
+
+  @override
+  String gattError(String code) {
+    return 'Ralat GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Kembali ke firmware stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Kembalikan firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ini akan menggantikan firmware semasa anda dengan versi stabil terkini ($version). Peranti anda akan dimulakan semula selepas kemas kini.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware Stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Mendapatkan firmware stabil terkini...';
+
+  @override
+  String get noStableFirmwareFound => 'Tidak dapat mencari versi firmware stabil untuk peranti anda.';
+
+  @override
+  String get installStableFirmware => 'Pasang firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terkini.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio disimpan secara tempatan';
+  }
+
+  @override
+  String get willSyncAutomatically => 'akan disegerakkan secara automatik';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

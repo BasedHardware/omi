@@ -1713,12 +1713,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -3283,7 +3278,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get aboutYou => 'O vás';
 
   @override
-  String get manual => 'Manuálne';
+  String get manual => 'Ručné';
 
   @override
   String get loadingYourMemories => 'Načítavanie vašich spomienok...';
@@ -8742,4 +8737,233 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofón';
+
+  @override
+  String get whyAreYouCanceling => 'Prečo rušíte?';
+
+  @override
+  String get cancelReasonSubtitle => 'Môžete nám povedať, prečo odchádzate?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Príliš drahé';
+
+  @override
+  String get cancelReasonNotUsing => 'Nepoužívam to dosť';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Chýbajúce funkcie';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kvalita zvuku/prepisu';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obavy z vyčerpania batérie';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Našiel som alternatívu';
+
+  @override
+  String get cancelReasonOther => 'Iné';
+
+  @override
+  String get tellUsMore => 'Povedzte nám viac (voliteľné)';
+
+  @override
+  String get cancelReasonDetailHint => 'Oceníme akúkoľvek spätnú väzbu...';
+
+  @override
+  String get justAMoment => 'Moment, prosím';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Dôrazne odporúčame preskúmať vaše ďalšie možnosti namiesto zrušenia.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Váš plán zostane aktívny do $date. Potom budete presunutý na bezplatnú verziu s obmedzenými funkciami.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ak zrušíte:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Na konci fakturačného obdobia už nebudete mať neobmedzený prístup.';
+
+  @override
+  String get cancelConsequenceBattery => '7x väčšia spotreba batérie (spracovanie na zariadení)';
+
+  @override
+  String get cancelConsequenceQuality => 'O 30% nižšia kvalita prepisu (modely na zariadení)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundové oneskorenie spracovania (modely na zariadení)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nedokáže identifikovať rečníkov.';
+
+  @override
+  String get confirmAndCancel => 'Potvrdiť a zrušiť';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Žiadny prepis telefonátov v reálnom čase';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Aká cena by vám vyhovovala?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Aké funkcie vám chýbajú?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Aké problémy ste zaznamenali?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Povedzte nám o problémoch s batériou';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na čo prechádzate?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Čo by vás primälo používať Omi viac?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Vaša spätná väzba nám pomáha nájsť správnu rovnováhu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Stále budujeme — to nám pomáha stanoviť priority.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Radi by sme pochopili, čo sa pokazilo.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomáha nášmu hardvérovému tímu zlepšiť sa.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Radi by sme sa dozvedeli, čo vás zaujalo.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chceme, aby bol Omi pre vás užitočnejší.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostika zariadenia';
+
+  @override
+  String get signalStrength => 'Sila signálu';
+
+  @override
+  String get connectionUptime => 'Doba prevádzky';
+
+  @override
+  String get reconnections => 'Opätovné pripojenia';
+
+  @override
+  String get disconnectHistory => 'História odpojení';
+
+  @override
+  String get noDisconnectsRecorded => 'Žiadne odpojenia neboli zaznamenané';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Čakanie na dáta...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI v reálnom čase';
+
+  @override
+  String get noRssiDataYet => 'Zatiaľ žiadne dáta RSSI';
+
+  @override
+  String get collectingData => 'Zber dát...';
+
+  @override
+  String get cleanDisconnect => 'Čisté odpojenie';
+
+  @override
+  String get connectionTimeout => 'Vypršal časový limit pripojenia';
+
+  @override
+  String get remoteDeviceTerminated => 'Vzdialené zariadenie ukončilo spojenie';
+
+  @override
+  String get pairedToAnotherPhone => 'Spárované s iným telefónom';
+
+  @override
+  String get linkKeyMismatch => 'Nezhoda kľúča prepojenia';
+
+  @override
+  String get connectionFailed => 'Pripojenie zlyhalo';
+
+  @override
+  String get appClosed => 'Aplikácia zatvorená';
+
+  @override
+  String get manualDisconnect => 'Ručné odpojenie';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Posledných $count udalostí';
+  }
+
+  @override
+  String get signal => 'Signál';
+
+  @override
+  String get battery => 'Batéria';
+
+  @override
+  String get excellent => 'Vynikajúci';
+
+  @override
+  String get good => 'Dobrý';
+
+  @override
+  String get fair => 'Uspokojivý';
+
+  @override
+  String get weak => 'Slabý';
+
+  @override
+  String gattError(String code) {
+    return 'Chyba GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Vrátiť sa na stabilný firmvér';
+
+  @override
+  String get rollbackConfirmTitle => 'Vrátiť firmvér?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tým sa nahradí aktuálny firmvér najnovšou stabilnou verziou ($version). Po aktualizácii sa zariadenie reštartuje.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilný firmvér';
+
+  @override
+  String get fetchingStableFirmware => 'Načítava sa najnovší stabilný firmvér...';
+
+  @override
+  String get noStableFirmwareFound => 'Pre vaše zariadenie sa nepodarilo nájsť stabilnú verziu firmvéru.';
+
+  @override
+  String get installStableFirmware => 'Nainštalovať stabilný firmvér';
+
+  @override
+  String get alreadyOnStableFirmware => 'Už máte najnovšiu stabilnú verziu.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženého lokálne';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje sa automaticky';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

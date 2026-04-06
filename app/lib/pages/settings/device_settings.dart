@@ -9,9 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -289,6 +291,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 routeToPage(context, page);
               }
             },
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.stethoscope,
+            title: context.l10n.diagnostics,
+            onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: deviceId)),
           ),
         ],
       ),
@@ -767,13 +775,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             // Disconnect
             GestureDetector(
               onTap: () async {
+                final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                 SharedPreferencesUtil().deviceName = '';
-                if (provider.connectedDevice != null) {
-                  await _bleDisconnectDevice(provider.connectedDevice!);
+
+                if (deviceId.isNotEmpty) {
+                  await ServiceManager.instance().device.forgetDevice(deviceId);
+                  try {
+                    BleHostApi().unmanageDevice(deviceId);
+                  } catch (_) {}
                 }
+
                 provider.setIsConnected(false);
-                provider.setConnectedDevice(null);
+                await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
                 MixpanelManager().disconnectFriendClicked();
                 if (context.mounted) {

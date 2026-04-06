@@ -59,7 +59,7 @@
     },
     "close": "Close",
     "@close": {
-        "description": "Close button label"
+        "description": "Close button text"
     },
     "clear": "Clear",
     "@clear": {
@@ -2903,7 +2903,7 @@
     },
     "back": "Back",
     "@back": {
-        "description": "Back button label"
+        "description": "Back button text"
     },
     "keyboardShortcuts": "Keyboard Shortcuts",
     "@keyboardShortcuts": {
@@ -10575,5 +10575,235 @@
     "microphone": "Microphone",
     "@microphone": {
         "description": "Label for microphone permission"
-    }
+    },
+    "whyAreYouCanceling": "Why are you canceling?",
+    "@whyAreYouCanceling": {
+        "description": "Title for cancel subscription reason page"
+    },
+    "cancelReasonSubtitle": "Can you tell us why you're leaving?",
+    "@cancelReasonSubtitle": {
+        "description": "Subtitle for cancel reason page"
+    },
+    "cancelReasonTooExpensive": "Too expensive",
+    "@cancelReasonTooExpensive": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonNotUsing": "Not using it enough",
+    "@cancelReasonNotUsing": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonMissingFeatures": "Missing features",
+    "@cancelReasonMissingFeatures": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonAudioQuality": "Audio/transcription quality",
+    "@cancelReasonAudioQuality": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonBatteryDrain": "Battery drain concerns",
+    "@cancelReasonBatteryDrain": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonFoundAlternative": "Found an alternative",
+    "@cancelReasonFoundAlternative": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonOther": "Other",
+    "@cancelReasonOther": {
+        "description": "Cancel reason option"
+    },
+    "tellUsMore": "Tell us more (optional)",
+    "@tellUsMore": {
+        "description": "Label for optional details text field"
+    },
+    "cancelReasonDetailHint": "We appreciate any feedback...",
+    "@cancelReasonDetailHint": {
+        "description": "Hint for cancel reason detail text field"
+    },
+    "justAMoment": "Just a moment, please",
+    "@justAMoment": {
+        "description": "Title for cancel consequences page"
+    },
+    "cancelConsequencesSubtitle": "We highly recommend exploring your other options instead of canceling.",
+    "@cancelConsequencesSubtitle": {
+        "description": "Subtitle for cancel consequences page"
+    },
+    "cancelBillingPeriodInfo": "Your plan will remain active until {date}. After that, you'll be moved to the free version with limited features.",
+    "@cancelBillingPeriodInfo": {
+        "description": "Info about billing period end",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "ifYouCancel": "If you cancel:",
+    "@ifYouCancel": {
+        "description": "Header for consequences list"
+    },
+    "cancelConsequenceNoAccess": "No longer have unlimited access at the end of your billing period.",
+    "@cancelConsequenceNoAccess": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceBattery": "7x more battery usage (on-device processing)",
+    "@cancelConsequenceBattery": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceQuality": "30% lower transcription quality (on-device models)",
+    "@cancelConsequenceQuality": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceDelay": "5-7 second processing delay (on-device models)",
+    "@cancelConsequenceDelay": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceSpeakers": "Cannot identify speakers.",
+    "@cancelConsequenceSpeakers": {
+        "description": "Cancel consequence"
+    },
+    "confirmAndCancel": "Confirm & Cancel",
+    "@confirmAndCancel": {
+        "description": "Confirm cancellation button text"
+    },
+    "cancelConsequencePhoneCalls": "No real-time phone call transcription",
+    "@cancelConsequencePhoneCalls": {
+        "description": "Cancel consequence - phone calls"
+    },
+    "feedbackTitleTooExpensive": "What price would work for you?",
+    "@feedbackTitleTooExpensive": {
+        "description": "Feedback title when cancel reason is too expensive"
+    },
+    "feedbackTitleMissingFeatures": "What features are you missing?",
+    "@feedbackTitleMissingFeatures": {
+        "description": "Feedback title when cancel reason is missing features"
+    },
+    "feedbackTitleAudioQuality": "What issues did you experience?",
+    "@feedbackTitleAudioQuality": {
+        "description": "Feedback title when cancel reason is audio quality"
+    },
+    "feedbackTitleBatteryDrain": "Tell us about the battery issues",
+    "@feedbackTitleBatteryDrain": {
+        "description": "Feedback title when cancel reason is battery drain"
+    },
+    "feedbackTitleFoundAlternative": "What are you switching to?",
+    "@feedbackTitleFoundAlternative": {
+        "description": "Feedback title when cancel reason is found alternative"
+    },
+    "feedbackTitleNotUsing": "What would make you use Omi more?",
+    "@feedbackTitleNotUsing": {
+        "description": "Feedback title when cancel reason is not using enough"
+    },
+    "feedbackSubtitleTooExpensive": "Your feedback helps us find the right balance.",
+    "@feedbackSubtitleTooExpensive": {
+        "description": "Feedback subtitle for too expensive"
+    },
+    "feedbackSubtitleMissingFeatures": "We're always building — this helps us prioritize.",
+    "@feedbackSubtitleMissingFeatures": {
+        "description": "Feedback subtitle for missing features"
+    },
+    "feedbackSubtitleAudioQuality": "We'd love to understand what went wrong.",
+    "@feedbackSubtitleAudioQuality": {
+        "description": "Feedback subtitle for audio quality"
+    },
+    "feedbackSubtitleBatteryDrain": "This helps our hardware team improve.",
+    "@feedbackSubtitleBatteryDrain": {
+        "description": "Feedback subtitle for battery drain"
+    },
+    "feedbackSubtitleFoundAlternative": "We'd love to learn what caught your eye.",
+    "@feedbackSubtitleFoundAlternative": {
+        "description": "Feedback subtitle for found alternative"
+    },
+    "feedbackSubtitleNotUsing": "We want to make Omi more useful for you.",
+    "@feedbackSubtitleNotUsing": {
+        "description": "Feedback subtitle for not using enough"
+    },
+    "deviceDiagnostics": "Device Diagnostics",
+    "signalStrength": "Signal Strength",
+    "connectionUptime": "Uptime",
+    "reconnections": "Reconnections",
+    "disconnectHistory": "Disconnect History",
+    "noDisconnectsRecorded": "No disconnects recorded",
+    "diagnostics": "Diagnostics",
+    "waitingForData": "Waiting for data...",
+    "liveRssiOverTime": "Live RSSI over time",
+    "noRssiDataYet": "No RSSI data yet",
+    "collectingData": "Collecting data...",
+    "cleanDisconnect": "Clean disconnect",
+    "connectionTimeout": "Connection timeout",
+    "remoteDeviceTerminated": "Remote device terminated",
+    "pairedToAnotherPhone": "Paired to another phone",
+    "linkKeyMismatch": "Link key mismatch",
+    "connectionFailed": "Connection failed",
+    "appClosed": "App closed",
+    "manualDisconnect": "Manual disconnect",
+    "lastNEvents": "Last {count} events",
+    "@lastNEvents": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "signal": "Signal",
+    "battery": "Battery",
+    "excellent": "Excellent",
+    "good": "Good",
+    "fair": "Fair",
+    "weak": "Weak",
+    "gattError": "GATT error ({code})",
+    "@gattError": {
+        "placeholders": {
+            "code": {
+                "type": "String"
+            }
+        }
+    },
+    "rollbackToStableFirmware": "Roll Back to Stable Firmware",
+    "@rollbackToStableFirmware": {
+        "description": "Action item title for rolling back to the latest stable firmware version"
+    },
+    "rollbackConfirmTitle": "Roll Back Firmware?",
+    "@rollbackConfirmTitle": {
+        "description": "Confirmation dialog title for firmware rollback"
+    },
+    "rollbackConfirmMessage": "This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.",
+    "@rollbackConfirmMessage": {
+        "description": "Confirmation dialog message for firmware rollback",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "stableFirmware": "Stable Firmware",
+    "@stableFirmware": {
+        "description": "Title for the stable firmware rollback page"
+    },
+    "fetchingStableFirmware": "Fetching latest stable firmware...",
+    "@fetchingStableFirmware": {
+        "description": "Loading text while fetching stable firmware version"
+    },
+    "noStableFirmwareFound": "Could not find a stable firmware version for your device.",
+    "@noStableFirmwareFound": {
+        "description": "Error message when no stable firmware is available"
+    },
+    "installStableFirmware": "Install Stable Firmware",
+    "@installStableFirmware": {
+        "description": "Button text to install the stable firmware"
+    },
+    "alreadyOnStableFirmware": "You are already on the latest stable version.",
+    "@alreadyOnStableFirmware": {
+        "description": "Message when device is already on the latest stable firmware"
+    },
+    "audioSavedLocally": "{duration} audio saved locally",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "will sync automatically",
+    "enableLocationTitle": "Enable Location",
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
 }

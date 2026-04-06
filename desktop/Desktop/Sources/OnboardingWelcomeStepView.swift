@@ -6,6 +6,7 @@ struct OnboardingWelcomeStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onForceComplete: (() -> Void)?
 
   var body: some View {
     OnboardingStepScaffold(
@@ -15,7 +16,8 @@ struct OnboardingWelcomeStepView: View {
       eyebrow: "Name",
       title: "What should Omi call you?",
       description: "",
-      layoutMode: .centered
+      layoutMode: .centered,
+      onForceComplete: onForceComplete
     ) {
       VStack(spacing: 18) {
         TextField("Your name", text: $coordinator.draftName)

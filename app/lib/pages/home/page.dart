@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -51,6 +52,10 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/services/apple_reminders_sync_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
@@ -86,7 +91,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('HomePageWrapper', boundDeviceOnly: true);
       }
-      if (SharedPreferencesUtil().notificationsEnabled) {
+      // Check actual system permission state — the SharedPreferences flag may
+      // be stale (e.g. user granted via Settings > Permissions, or reinstall).
+      final notifGranted = await Permission.notification.isGranted;
+      if (notifGranted) {
+        SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
 
@@ -202,6 +211,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
         ensureAgentVm();
         Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
+      }
+
+      // Sync Apple Reminders on foreground resume
+      if (mounted && PlatformService.isApple) {
+        final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+        if (taskProvider.selectedApp == TaskIntegrationApp.appleReminders) {
+          AppleRemindersSyncService().syncOnForegroundResume().then((_) {
+            if (mounted) {
+              Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
+            }
+          });
+        }
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -345,16 +366,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
+          // so the widget tree is fully settled — push directly.
           // If there's an auto-message (e.g., from daily reflection notification), send it
           final autoMessageToSend = widget.autoMessage;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
-              );
-            }
-          });
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
+            );
+          }
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -814,8 +835,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -824,8 +845,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );

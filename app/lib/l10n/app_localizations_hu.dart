@@ -1720,12 +1720,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ESZKÖZ',
-      one: 'ESZKÖZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -8792,4 +8787,234 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miért mondod le?';
+
+  @override
+  String get cancelReasonSubtitle => 'El tudod mondani, miért távozol?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Túl drága';
+
+  @override
+  String get cancelReasonNotUsing => 'Nem használom eleget';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Hiányzó funkciók';
+
+  @override
+  String get cancelReasonAudioQuality => 'Hang/átírási minőség';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Akkumerülési aggodalmak';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Találtam alternatívát';
+
+  @override
+  String get cancelReasonOther => 'Egyéb';
+
+  @override
+  String get tellUsMore => 'Mondj el többet (opcionális)';
+
+  @override
+  String get cancelReasonDetailHint => 'Minden visszajelzést értékelünk...';
+
+  @override
+  String get justAMoment => 'Egy pillanat, kérlek';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Erősen javasoljuk, hogy a lemondás helyett fedezd fel a többi lehetőségedet.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'A csomagod aktív marad $date-ig. Ezután az ingyenes verzióra leszel átállítva korlátozott funkciókkal.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ha lemondod:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'A számlázási időszak végén már nem lesz korlátlan hozzáférésed.';
+
+  @override
+  String get cancelConsequenceBattery => '7x több akkuhasználat (eszközön történő feldolgozás)';
+
+  @override
+  String get cancelConsequenceQuality => '30%-kal alacsonyabb átírási minőség (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 másodperces feldolgozási késleltetés (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nem tudja azonosítani a beszélőket.';
+
+  @override
+  String get confirmAndCancel => 'Megerősítés és lemondás';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nincs valós idejű telefonhívás átírás';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milyen ár lenne megfelelő számodra?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milyen funkciók hiányoznak?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milyen problémákat tapasztaltál?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Mesélj az akkuproblémákról';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Mire váltasz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mi késztetne arra, hogy többet használd az Omit?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Visszajelzésed segít megtalálni a megfelelő egyensúlyt.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mindig építünk — ez segít a prioritások meghatározásában.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Szeretnénk megérteni, mi ment rosszul.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ez segít hardvercsapatunknak fejlődni.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Szeretnénk tudni, mi ragadta meg a figyelmedet.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
+
+  @override
+  String get deviceDiagnostics => 'Eszközdiagnosztika';
+
+  @override
+  String get signalStrength => 'Jelerősség';
+
+  @override
+  String get connectionUptime => 'Üzemidő';
+
+  @override
+  String get reconnections => 'Újracsatlakozások';
+
+  @override
+  String get disconnectHistory => 'Lecsatlakozási előzmények';
+
+  @override
+  String get noDisconnectsRecorded => 'Nincs rögzített lecsatlakozás';
+
+  @override
+  String get diagnostics => 'Diagnosztika';
+
+  @override
+  String get waitingForData => 'Adatokra várakozás...';
+
+  @override
+  String get liveRssiOverTime => 'Élő RSSI az idő függvényében';
+
+  @override
+  String get noRssiDataYet => 'Még nincs RSSI adat';
+
+  @override
+  String get collectingData => 'Adatgyűjtés...';
+
+  @override
+  String get cleanDisconnect => 'Tiszta lecsatlakozás';
+
+  @override
+  String get connectionTimeout => 'Kapcsolat időtúllépés';
+
+  @override
+  String get remoteDeviceTerminated => 'A távoli eszköz megszakította a kapcsolatot';
+
+  @override
+  String get pairedToAnotherPhone => 'Másik telefonhoz párosítva';
+
+  @override
+  String get linkKeyMismatch => 'Kapcsolati kulcs eltérés';
+
+  @override
+  String get connectionFailed => 'Sikertelen kapcsolódás';
+
+  @override
+  String get appClosed => 'Alkalmazás bezárva';
+
+  @override
+  String get manualDisconnect => 'Kézi lecsatlakozás';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Utolsó $count esemény';
+  }
+
+  @override
+  String get signal => 'Jel';
+
+  @override
+  String get battery => 'Akkumulátor';
+
+  @override
+  String get excellent => 'Kiváló';
+
+  @override
+  String get good => 'Jó';
+
+  @override
+  String get fair => 'Elfogadható';
+
+  @override
+  String get weak => 'Gyenge';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hiba ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Visszaállítás stabil firmware-re';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware visszaállítása?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ez lecseréli a jelenlegi firmware-t a legújabb stabil verzióra ($version). Az eszköz a frissítés után újraindul.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Legújabb stabil firmware lekérése...';
+
+  @override
+  String get noStableFirmwareFound => 'Nem található stabil firmware verzió az eszközéhez.';
+
+  @override
+  String get installStableFirmware => 'Stabil firmware telepítése';
+
+  @override
+  String get alreadyOnStableFirmware => 'Már a legújabb stabil verzión van.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration hang helyben mentve';
+  }
+
+  @override
+  String get willSyncAutomatically => 'automatikusan szinkronizálódik';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

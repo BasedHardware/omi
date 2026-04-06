@@ -145,6 +145,53 @@ class TestSyncV2Structure:
 
         assert '404' in func_body, "GET must return 404 for missing job"
 
+    def test_v2_fetches_prefs_and_cache_before_bg_thread(self):
+        """v2 must fetch transcription_prefs and build person_embeddings_cache before spawning bg thread."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert 'get_user_transcription_preferences' in func_body, "v2 must fetch transcription preferences"
+        assert 'build_person_embeddings_cache' in func_body, "v2 must build person embeddings cache"
+
+        # Both must appear before bg_thread.start()
+        prefs_pos = func_body.index('get_user_transcription_preferences')
+        cache_pos = func_body.index('build_person_embeddings_cache')
+        thread_start_pos = func_body.index('bg_thread.start()')
+        assert prefs_pos < thread_start_pos, "Prefs must be fetched before bg thread starts"
+        assert cache_pos < thread_start_pos, "Cache must be built before bg thread starts"
+
+    def test_v2_bg_worker_accepts_prefs_and_cache_params(self):
+        """_process_segments_background must accept transcription_prefs and person_embeddings_cache."""
+        source = self._read_sync_source()
+        start = source.index('def _process_segments_background')
+        # Find the closing paren of the signature (handles multi-line)
+        sig_end = source.index('):', start)
+        func_sig = source[start : sig_end + 2]
+
+        assert 'transcription_prefs' in func_sig, "bg worker must accept transcription_prefs param"
+        assert 'person_embeddings_cache' in func_sig, "bg worker must accept person_embeddings_cache param"
+
+    def test_v2_passes_prefs_and_cache_to_bg_thread(self):
+        """v2 must pass transcription_prefs and person_embeddings_cache in bg thread args."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        # Find the Thread constructor args
+        thread_start = func_body.index('threading.Thread')
+        thread_end = func_body.index('bg_thread.start()')
+        thread_block = func_body[thread_start:thread_end]
+
+        assert 'transcription_prefs' in thread_block, "v2 must pass transcription_prefs to bg thread"
+        assert 'person_embeddings_cache' in thread_block, "v2 must pass person_embeddings_cache to bg thread"
+
 
 # ---------------------------------------------------------------------------
 # 2. Redis sync_jobs module tests
@@ -711,6 +758,9 @@ class TestBackgroundWorkerBehavioral:
             'utils.subscription',
             'utils.observability',
             'utils.log_sanitizer',
+            'utils.speaker_assignment',
+            'utils.speaker_identification',
+            'utils.stt.speaker_embedding',
         ]
         heavy_deps.extend(utils_subs)
 
@@ -823,7 +873,9 @@ class TestBackgroundWorkerBehavioral:
 
         call_count = [0]
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             call_count[0] += 1
             if call_count[0] % 2 == 0:
                 with lock:
@@ -857,7 +909,9 @@ class TestBackgroundWorkerBehavioral:
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
 
-        def mock_process_segment(path, uid, response, lock, errors, source, is_locked):
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
             with lock:
                 errors.append(f'Failed: {path}')
 
@@ -979,6 +1033,132 @@ class TestBackgroundWorkerBehavioral:
 
         assert not os.path.exists(job_dir), "Job directory must be cleaned up even on failure"
 
+    def test_bg_worker_forwards_prefs_and_cache_to_process_segment(self):
+        """Worker must forward transcription_prefs and person_embeddings_cache to each process_segment call."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'prefs': prefs, 'cache': cache})
+
+        mod.process_segment = mock_process_segment
+
+        test_prefs = {'language': 'es', 'model': 'nova-3'}
+        test_cache = {'p-alice': {'name': 'Alice', 'embedding': [0.1, 0.2]}}
+
+        mod._process_segments_background(
+            job_id='prefs-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/p1.wav', '/tmp/p2.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=10.0,
+            job_dir='/tmp/prefs-dir',
+            transcription_prefs=test_prefs,
+            person_embeddings_cache=test_cache,
+        )
+
+        assert len(received_args) == 2
+        for args in received_args:
+            assert args['prefs'] is test_prefs
+            assert args['cache'] is test_cache
+
+    def test_bg_worker_defaults_prefs_and_cache_to_none(self):
+        """Worker must default transcription_prefs and person_embeddings_cache to None when not provided."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'prefs': prefs, 'cache': cache})
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='noprefs-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/n1.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=5.0,
+            job_dir='/tmp/noprefs-dir',
+        )
+
+        assert len(received_args) == 1
+        assert received_args[0]['prefs'] is None
+        assert received_args[0]['cache'] is None
+
+    def test_bg_worker_forwards_target_conversation_id_to_process_segment(self):
+        """Worker must forward target_conversation_id to each process_segment call."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'target_conversation_id': target_conversation_id})
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='target-conv-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/tc1.wav', '/tmp/tc2.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=10.0,
+            job_dir='/tmp/target-conv-dir',
+            target_conversation_id='conv-123',
+        )
+
+        assert len(received_args) == 2
+        for args in received_args:
+            assert args['target_conversation_id'] == 'conv-123'
+
+    def test_bg_worker_defaults_target_conversation_id_to_none(self):
+        """Worker must default target_conversation_id to None when not provided."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        received_args = []
+
+        def mock_process_segment(
+            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
+        ):
+            received_args.append({'target_conversation_id': target_conversation_id})
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='no-target-conv-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/nt1.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=5.0,
+            job_dir='/tmp/no-target-conv-dir',
+        )
+
+        assert len(received_args) == 1
+        assert received_args[0]['target_conversation_id'] is None
+
 
 # ---------------------------------------------------------------------------
 # 8. v2 endpoint execution tests via FastAPI TestClient
@@ -1026,6 +1206,9 @@ class TestV2EndpointExecution:
             'utils.subscription',
             'utils.observability',
             'utils.log_sanitizer',
+            'utils.speaker_assignment',
+            'utils.speaker_identification',
+            'utils.stt.speaker_embedding',
         ]
 
         for mod_name in heavy_deps:

@@ -92,7 +92,12 @@ from utils.fair_use import (
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
-from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
+from utils.translation_cache import (
+    TranscriptSegmentLanguageCache,
+    ConversationLanguageState,
+    should_persist_translation,
+)
+from utils.translation_coordinator import TranslationCoordinator
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
@@ -1551,91 +1556,43 @@ async def _stream_handler(
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
     translation_language_base = translation_language.split('-')[0] if translation_language else None
 
-    # Temporal debounce state: accumulate segments, translate after quiet period
-    pending_translations = {}  # segment_id -> {text_hash, version} for stale-write protection
-    TRANSLATION_DEBOUNCE_SECONDS = 1.0
+    # Translation coordinator (issue #6155) — replaces debounce/per-segment state
     translation_persist_lock = asyncio.Lock()
-    translation_flushing = False
-    translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
-    _debounce_buffer = []  # [(segment, conversation_id, version), ...]
-    _debounce_task = None  # asyncio.Task for the pending batch timer
-    _inflight_translate_tasks = []  # tracked tasks from _flush_debounce_buffer
+    conversation_language_state = (
+        ConversationLanguageState(translation_language or 'en') if translation_enabled else None
+    )
 
-    # Translation metrics counters
-    translate_metrics = {
-        'api_calls': 0,
-        'cache_hits_memory': 0,
-        'cache_hits_redis': 0,
-        'segments_buffered': 0,
-        'lang_cache_skips': 0,
-        'same_text_skips': 0,
-        'segments_translated': 0,
-        'total_translate_calls': 0,
-    }
-
-    async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
-        """Translate a single segment and persist/notify."""
+    async def _on_translation_ready(segment_id: str, translated_text: str, detected_lang: str, conversation_id: str):
+        """Callback from TranslationCoordinator when a translation is ready to persist."""
         if not translation_language:
             return
-        # Allow translation during flush (translation_flushing=True) but not after full shutdown
-        if not websocket_active and not translation_flushing:
+        if not websocket_active and not (translation_coordinator and translation_coordinator._flushing):
             return
 
         try:
-            segment_text = segment.text.strip()
-            if not segment_text:
-                return
-
-            # Pre-API stale-write check: abort if a newer version exists or entry was pruned
-            pending = pending_translations.get(segment.id)
-            if not pending or pending.get('version', 0) != version:
-                return
-
-            translated_text, detected_lang = translation_service.translate_text_by_sentence(
-                translation_language, segment_text
-            )
-
-            # Post-API stale-write check: abort if a newer version exists or entry was pruned
-            pending = pending_translations.get(segment.id)
-            if not pending or pending.get('version', 0) != version:
-                return
-
-            # Update language cache from translate response (free detection)
-            if detected_lang:
-                language_cache.update_from_translate_response(
-                    segment.id, detected_lang, translation_language_base or translation_language
-                )
-
-            if not should_persist_translation(
-                segment_text, translated_text, detected_lang, translation_language_base or translation_language
-            ):
-                pending_translations.pop(segment.id, None)
-                return
-
-            # Create/Update Translation object
             trans = Translation(lang=translation_language, text=translated_text)
-            if segment.translations is not None:
-                existing_idx = next(
-                    (i for i, t in enumerate(segment.translations) if t.lang == translation_language), None
-                )
-                if existing_idx is not None:
-                    segment.translations[existing_idx] = trans
-                else:
-                    segment.translations.append(trans)
 
             # Persist with lock to prevent concurrent read-modify-write clobbering
             async with translation_persist_lock:
-                # Use cache only if conversation_id matches current; fall back to DB otherwise
                 if conversation_id == current_conversation_id:
                     conversation = _get_cached_conversation()
                     protection_level = _cached_protection_level
                 else:
                     conversation = conversations_db.get_conversation(uid, conversation_id)
-                    protection_level = None  # let DB function read it
+                    protection_level = None
                 if conversation:
-                    for i, existing_segment in enumerate(conversation['transcript_segments']):
-                        if existing_segment['id'] == segment.id:
-                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                    for i, existing_segment in enumerate(conversation.get('transcript_segments', [])):
+                        if existing_segment['id'] == segment_id:
+                            # Update or add translation
+                            translations = existing_segment.get('translations', [])
+                            existing_idx = next(
+                                (j for j, t in enumerate(translations) if t.get('lang') == translation_language), None
+                            )
+                            if existing_idx is not None:
+                                translations[existing_idx] = trans.dict()
+                            else:
+                                translations.append(trans.dict())
+                            conversation['transcript_segments'][i]['translations'] = translations
                             conversations_db.update_conversation_segments(
                                 uid,
                                 conversation_id,
@@ -1647,124 +1604,54 @@ async def _stream_handler(
                             break
 
             if websocket_active:
-                _send_message_event(TranslationEvent(segments=[segment.dict()]))
-
-            # Prune completed entry
-            pending_translations.pop(segment.id, None)
+                # Build segment dict for the event
+                seg_dict = None
+                if conversation_id == current_conversation_id:
+                    conv = _get_cached_conversation()
+                    if conv:
+                        for s in conv.get('transcript_segments', []):
+                            if s['id'] == segment_id:
+                                seg_dict = s
+                                break
+                if seg_dict:
+                    _send_message_event(TranslationEvent(segments=[seg_dict]))
 
         except Exception as e:
-            logger.error(f"Translation error: {e} {uid} {session_id}")
-            # Prune failed entry so it doesn't block future translations for this segment
-            pending = pending_translations.get(segment.id)
-            if pending and pending.get('version', 0) == version:
-                pending_translations.pop(segment.id, None)
+            logger.error(f"Translation persist error: {e} {uid} {session_id}")
 
-    async def _flush_debounce_buffer():
-        """Translate all segments accumulated in the debounce buffer."""
-        nonlocal _debounce_task
-        batch = list(_debounce_buffer)
-        _debounce_buffer.clear()
-        _debounce_task = None
+    translation_coordinator = (
+        TranslationCoordinator(
+            target_language=translation_language or 'en',
+            translation_service=translation_service,
+            on_translation_ready=_on_translation_ready,
+            language_state=conversation_language_state,
+        )
+        if translation_enabled
+        else None
+    )
 
-        if not batch:
+    # Keep legacy state for backward compatibility during transition
+    pending_translations = {}
+    translation_flushing = False
+
+    async def translate(segments: List[TranscriptSegment], conversation_id: str, removed_ids: List[str] = None):
+        """Route updated segments to the TranslationCoordinator."""
+        if not translation_coordinator:
             return
-
-        translate_metrics['segments_translated'] += len(batch)
-        logger.info(f"translate [batch] segments={len(batch)} {uid}")
-
-        for seg, conv_id, ver in batch:
-            task = asyncio.ensure_future(_translate_segment(seg, conv_id, ver))
-            _inflight_translate_tasks.append(task)
-
-    async def translate(segments: List[TranscriptSegment], conversation_id: str):
-        nonlocal _debounce_task
-        if not translation_language:
-            return
-
-        for segment in segments:
-            if not segment or not segment.id:
-                continue
-
-            segment_text = segment.text.strip()
-            if not segment_text:
-                continue
-
-            # Free local language detection pre-filter (use base language for comparison)
-            if language_cache.is_in_target_language(
-                segment.id, segment_text, translation_language_base or translation_language
-            ):
-                translate_metrics['lang_cache_skips'] += 1
-                continue
-
-            text_hash = hashlib.md5(segment_text.encode()).hexdigest()
-            pending = pending_translations.get(segment.id)
-
-            if pending and pending.get('text_hash') == text_hash:
-                # Same text, skip (already translating or translated)
-                translate_metrics['same_text_skips'] += 1
-                continue
-
-            # Monotonic version for stale-write protection (never reuses values after prune)
-            nonlocal translation_version_counter
-            translation_version_counter += 1
-            new_version = translation_version_counter
-
-            # Register in pending_translations for stale-write protection in _translate_segment
-            pending_translations[segment.id] = {
-                'text_hash': text_hash,
-                'version': new_version,
-            }
-
-            # Add to temporal debounce buffer
-            translate_metrics['segments_buffered'] += 1
-            _debounce_buffer.append((segment, conversation_id, new_version))
-            logger.info(f"translate [buffered] seg={segment.id[:8]} v={new_version} buf={len(_debounce_buffer)} {uid}")
-
-        # (Re)start the debounce timer — fires after TRANSLATION_DEBOUNCE_SECONDS of quiet
-        if _debounce_buffer:
-            if _debounce_task and not _debounce_task.done():
-                _debounce_task.cancel()
-
-            async def _debounce_timer():
-                await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
-                await _flush_debounce_buffer()
-
-            _debounce_task = asyncio.ensure_future(_debounce_timer())
+        await translation_coordinator.observe(segments, removed_ids or [], conversation_id)
 
     async def flush_pending_translations():
-        """Flush all pending debounced translations before cleanup."""
-        nonlocal translation_flushing, _debounce_task
-        translation_flushing = True
-
-        # Cancel debounce timer and immediately flush the buffer
-        if _debounce_task and not _debounce_task.done():
-            _debounce_task.cancel()
-            _debounce_task = None
-        await _flush_debounce_buffer()
-
-        # Await all in-flight _translate_segment tasks with bounded timeout
-        if _inflight_translate_tasks:
-            pending = [t for t in _inflight_translate_tasks if not t.done()]
-            if pending:
-                try:
-                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
-                except asyncio.TimeoutError:
-                    logger.warning(f"translate flush timeout: {len(pending)} tasks still pending {uid} {session_id}")
-            _inflight_translate_tasks.clear()
-
-        pending_translations.clear()
-        _debounce_buffer.clear()
-        translation_flushing = False
-        # Log session translation metrics summary
-        # total_segments = segments that entered translate() (buffered + lang_skip + same_text_skip)
-        # segments_translated = subset of buffered that were dispatched to _translate_segment
-        m = translate_metrics
-        total_segments = m['segments_buffered'] + m['lang_cache_skips'] + m['same_text_skips']
-        logger.info(
-            f"translate_summary {uid} session={session_id} "
-            f"total={total_segments} buffered={m['segments_buffered']} translated={m['segments_translated']} "
-            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']}"
-        )
+        """Flush all pending translations before cleanup."""
+        if translation_coordinator:
+            await translation_coordinator.flush()
+            m = translation_coordinator.metrics
+            logger.info(
+                f"translate_summary {uid} session={session_id} "
+                f"mono_skips={m['mono_gate_skips']} classify_skips={m['classify_skips']} "
+                f"defers={m['classify_defers']} translates={m['classify_translates']} "
+                f"batches={m['batch_api_calls']} neg_cache={m['negative_cache_sets']} "
+                f"prefix_resets={m['prefix_resets']}"
+            )
 
     async def conversation_lifecycle_manager():
         """Background task that checks conversation timeout and triggers processing every 5 seconds."""
@@ -1875,7 +1762,9 @@ async def _stream_handler(
                     continue
 
                 emb = person.get('speaker_embedding')
-                if emb:
+                # Only load embedding if person has speech samples — contacts without
+                # samples may have stale embeddings from a pre-v3 model (#6238)
+                if emb and person.get('speech_samples'):
                     person_embeddings_cache[person['id']] = {
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],
@@ -2251,7 +2140,7 @@ async def _stream_handler(
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
-                    await translate(updated_segments, conversation.id)
+                    await translate(updated_segments, conversation.id, removed_ids=removed_ids)
 
                 # Speaker detection
                 for segment in updated_segments:

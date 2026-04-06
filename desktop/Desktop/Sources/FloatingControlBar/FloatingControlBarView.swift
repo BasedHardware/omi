@@ -10,6 +10,7 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onClearVisibleConversation: () -> Void
 
     @State private var isHovering = false
 
@@ -306,8 +307,10 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
+            canClearVisibleConversation: state.hasVisibleConversation,
             onSend: { message in
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
@@ -315,7 +318,7 @@ struct FloatingControlBarView: View {
                 }
                 onSendQuery(message)
             },
-            onCancel: onCloseAI,
+            onClearVisibleConversation: onClearVisibleConversation,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -346,7 +349,8 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            onClose: onCloseAI,
+            canClearVisibleConversation: state.hasVisibleConversation,
+            onClearVisibleConversation: onClearVisibleConversation,
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
@@ -355,6 +359,7 @@ struct FloatingControlBarView: View {
                 }
 
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil

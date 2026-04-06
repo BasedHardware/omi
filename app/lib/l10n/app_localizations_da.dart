@@ -8738,4 +8738,235 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Hvorfor annullerer du?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kan du fortælle os, hvorfor du forlader?';
+
+  @override
+  String get cancelReasonTooExpensive => 'For dyrt';
+
+  @override
+  String get cancelReasonNotUsing => 'Bruger det ikke nok';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Manglende funktioner';
+
+  @override
+  String get cancelReasonAudioQuality => 'Lyd-/transskriptionskvalitet';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Bekymringer om batteriforbrug';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Fandt et alternativ';
+
+  @override
+  String get cancelReasonOther => 'Andet';
+
+  @override
+  String get tellUsMore => 'Fortæl os mere (valgfrit)';
+
+  @override
+  String get cancelReasonDetailHint => 'Vi sætter pris på enhver feedback...';
+
+  @override
+  String get justAMoment => 'Et øjeblik, tak';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Vi anbefaler stærkt at udforske dine andre muligheder i stedet for at annullere.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Din plan forbliver aktiv indtil $date. Derefter vil du blive flyttet til den gratis version med begrænsede funktioner.';
+  }
+
+  @override
+  String get ifYouCancel => 'Hvis du annullerer:';
+
+  @override
+  String get cancelConsequenceNoAccess =>
+      'Du vil ikke længere have ubegrænset adgang ved slutningen af din faktureringsperiode.';
+
+  @override
+  String get cancelConsequenceBattery => '7x mere batteriforbrug (behandling på enheden)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lavere transskriptionskvalitet (modeller på enheden)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekunders behandlingsforsinkelse (modeller på enheden)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Kan ikke identificere talere.';
+
+  @override
+  String get confirmAndCancel => 'Bekræft og annuller';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Ingen realtids transskription af telefonopkald';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Hvilken pris ville passe dig?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Hvilke funktioner mangler du?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Hvilke problemer oplevede du?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Fortæl os om batteriproblemer';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Hvad skifter du til?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Hvad ville få dig til at bruge Omi mere?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Din feedback hjælper os med at finde den rigtige balance.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Vi bygger altid — dette hjælper os med at prioritere.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Vi vil gerne forstå, hvad der gik galt.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Dette hjælper vores hardwareteam med at forbedre sig.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Vi vil gerne vide, hvad der fangede dit øje.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Vi vil gøre Omi mere nyttig for dig.';
+
+  @override
+  String get deviceDiagnostics => 'Enhedsdiagnostik';
+
+  @override
+  String get signalStrength => 'Signalstyrke';
+
+  @override
+  String get connectionUptime => 'Oppetid';
+
+  @override
+  String get reconnections => 'Genforbindelser';
+
+  @override
+  String get disconnectHistory => 'Afbrydelseshistorik';
+
+  @override
+  String get noDisconnectsRecorded => 'Ingen afbrydelser registreret';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Venter på data...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI over tid';
+
+  @override
+  String get noRssiDataYet => 'Ingen RSSI-data endnu';
+
+  @override
+  String get collectingData => 'Indsamler data...';
+
+  @override
+  String get cleanDisconnect => 'Ren afbrydelse';
+
+  @override
+  String get connectionTimeout => 'Forbindelsestimeout';
+
+  @override
+  String get remoteDeviceTerminated => 'Fjernenheden afbrød forbindelsen';
+
+  @override
+  String get pairedToAnotherPhone => 'Parret med en anden telefon';
+
+  @override
+  String get linkKeyMismatch => 'Uoverensstemmelse i forbindelsesnøgle';
+
+  @override
+  String get connectionFailed => 'Forbindelse mislykkedes';
+
+  @override
+  String get appClosed => 'App lukket';
+
+  @override
+  String get manualDisconnect => 'Manuel afbrydelse';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Sidste $count begivenheder';
+  }
+
+  @override
+  String get signal => 'Signal';
+
+  @override
+  String get battery => 'Batteri';
+
+  @override
+  String get excellent => 'Fremragende';
+
+  @override
+  String get good => 'God';
+
+  @override
+  String get fair => 'Rimelig';
+
+  @override
+  String get weak => 'Svag';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fejl ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Rul tilbage til stabil firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Rul firmware tilbage?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dette vil erstatte din nuværende firmware med den seneste stabile version ($version). Din enhed genstarter efter opdateringen.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Henter seneste stabile firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Kunne ikke finde en stabil firmwareversion til din enhed.';
+
+  @override
+  String get installStableFirmware => 'Installer stabil firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Du er allerede på den seneste stabile version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration lyd gemt lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseres automatisk';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

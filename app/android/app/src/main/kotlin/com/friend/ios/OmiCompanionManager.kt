@@ -5,6 +5,9 @@ import android.bluetooth.le.ScanFilter
 import android.companion.*
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -66,31 +69,49 @@ class OmiCompanionManager(
         requestBuilder.addDeviceFilter(filterBuilder.build())
 
         val request = requestBuilder.build()
-        val executor = ContextCompat.getMainExecutor(context)
 
         Log.d(TAG, "Calling CompanionDeviceManager.associate")
-        companionDeviceManager.associate(request, executor, object : CompanionDeviceManager.Callback() {
-            override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
-                Log.d(TAG, "onDeviceFound → launching chooser")
-                val activity = getActivity()
-                if (activity == null) {
-                    Log.e(TAG, "Cannot launch chooser: activity is null")
-                    return
+        if (Build.VERSION.SDK_INT >= 33) {
+            val executor = ContextCompat.getMainExecutor(context)
+            companionDeviceManager.associate(request, executor, object : CompanionDeviceManager.Callback() {
+                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                    Log.d(TAG, "onDeviceFound → launching chooser")
+                    launchChooser(chooserLauncher)
                 }
-                try {
-                    activity.startIntentSenderForResult(
-                        chooserLauncher, COMPANION_REQUEST_CODE,
-                        null, 0, 0, 0
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start chooser", e)
-                }
-            }
 
-            override fun onFailure(error: CharSequence?) {
-                Log.e(TAG, "associate() failed: $error")
-            }
-        })
+                override fun onFailure(error: CharSequence?) {
+                    Log.e(TAG, "associate() failed: $error")
+                }
+            })
+        } else {
+            @Suppress("deprecation")
+            companionDeviceManager.associate(request, object : CompanionDeviceManager.Callback() {
+                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                    Log.d(TAG, "onDeviceFound → launching chooser")
+                    launchChooser(chooserLauncher)
+                }
+
+                override fun onFailure(error: CharSequence?) {
+                    Log.e(TAG, "associate() failed: $error")
+                }
+            }, Handler(Looper.getMainLooper()))
+        }
+    }
+
+    private fun launchChooser(chooserLauncher: android.content.IntentSender) {
+        val activity = getActivity()
+        if (activity == null) {
+            Log.e(TAG, "Cannot launch chooser: activity is null")
+            return
+        }
+        try {
+            activity.startIntentSenderForResult(
+                chooserLauncher, COMPANION_REQUEST_CODE,
+                null, 0, 0, 0
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start chooser", e)
+        }
     }
 
     /**
@@ -113,11 +134,17 @@ class OmiCompanionManager(
         return address
     }
 
+    @Suppress("deprecation")
     fun getAssociations(): List<String> = companionDeviceManager.associations
 
     fun getMacAddresses(): List<String> {
-        return companionDeviceManager.myAssociations.mapNotNull {
-            it.deviceMacAddress?.toString()
+        return if (Build.VERSION.SDK_INT >= 33) {
+            companionDeviceManager.myAssociations.mapNotNull {
+                it.deviceMacAddress?.toString()
+            }
+        } else {
+            @Suppress("deprecation")
+            companionDeviceManager.associations
         }
     }
 
@@ -136,32 +163,59 @@ class OmiCompanionManager(
     /**
      * Start observing device presence for the most recent association.
      * This enables BleCompanionService to receive appear/disappear callbacks.
+     * Requires API 33+ (startObservingDevicePresence). On older APIs, auto-reconnect
+     * relies on autoConnect=true GATT and ForegroundService.
      */
     @Suppress("deprecation")
     fun startObserving() {
+        if (Build.VERSION.SDK_INT < 33) {
+            Log.d(TAG, "startObserving: skipped (API ${Build.VERSION.SDK_INT} < 33)")
+            return
+        }
         stopObserving()
         val associations = companionDeviceManager.myAssociations
         if (associations.isEmpty()) return
 
         val association = associations.last()
-        val mac = association.deviceMacAddress
-        if (mac != null) {
+
+        if (Build.VERSION.SDK_INT >= 36) {
             try {
-                companionDeviceManager.startObservingDevicePresence(mac.toString())
-                Log.d(TAG, "Started observing device presence for $mac")
+                val request = ObservingDevicePresenceRequest.Builder()
+                    .setAssociationId(association.id)
+                    .build()
+                companionDeviceManager.startObservingDevicePresence(request)
+                Log.d(TAG, "Observing device presence (API 36+) for association ${association.id}")
             } catch (e: Exception) {
-                Log.w(TAG, "startObserving failed: ${e.message}")
+                Log.w(TAG, "startObserving (API 36+) failed: ${e.message}")
+            }
+        } else {
+            val mac = association.deviceMacAddress
+            if (mac != null) {
+                try {
+                    companionDeviceManager.startObservingDevicePresence(mac.toString())
+                    Log.d(TAG, "Started observing device presence for $mac")
+                } catch (e: Exception) {
+                    Log.w(TAG, "startObserving failed: ${e.message}")
+                }
             }
         }
     }
 
     @Suppress("deprecation")
     fun stopObserving() {
+        if (Build.VERSION.SDK_INT < 33) return
         for (association in companionDeviceManager.myAssociations) {
             try {
-                val mac = association.deviceMacAddress
-                if (mac != null) {
-                    companionDeviceManager.stopObservingDevicePresence(mac.toString())
+                if (Build.VERSION.SDK_INT >= 36) {
+                    val request = ObservingDevicePresenceRequest.Builder()
+                        .setAssociationId(association.id)
+                        .build()
+                    companionDeviceManager.stopObservingDevicePresence(request)
+                } else {
+                    val mac = association.deviceMacAddress
+                    if (mac != null) {
+                        companionDeviceManager.stopObservingDevicePresence(mac.toString())
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "stopObserving failed: ${e.message}")

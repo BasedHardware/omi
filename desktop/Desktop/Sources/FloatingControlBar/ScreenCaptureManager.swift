@@ -3,6 +3,14 @@ import ImageIO
 
 class ScreenCaptureManager {
     static func captureScreen() -> URL? {
+        // Check screen recording permission before capture.
+        // On macOS 15+, CGDisplayCreateImage returns a wallpaper-only image (not nil)
+        // when permission is denied, so we must check explicitly.
+        guard CGPreflightScreenCaptureAccess() else {
+            log("ScreenCaptureManager: Screen recording permission not granted, skipping capture")
+            return nil
+        }
+
         let fileManager = FileManager.default
         guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
             log("ScreenCaptureManager: Could not find documents directory")

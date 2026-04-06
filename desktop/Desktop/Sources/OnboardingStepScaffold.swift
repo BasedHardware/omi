@@ -21,8 +21,10 @@ struct OnboardingStepScaffold<Content: View>: View {
   let description: String
   let layoutMode: OnboardingLayoutMode
   let rightPaneMode: OnboardingRightPaneMode
+  let rightPaneFooterText: String?
   let showsSkip: Bool
   let onSkip: (() -> Void)?
+  let onForceComplete: (() -> Void)?
   let content: Content
 
   init(
@@ -34,8 +36,10 @@ struct OnboardingStepScaffold<Content: View>: View {
     description: String,
     layoutMode: OnboardingLayoutMode = .split,
     rightPaneMode: OnboardingRightPaneMode = .graph,
+    rightPaneFooterText: String? = nil,
     showsSkip: Bool = false,
     onSkip: (() -> Void)? = nil,
+    onForceComplete: (() -> Void)? = nil,
     @ViewBuilder content: () -> Content
   ) {
     _graphViewModel = ObservedObject(wrappedValue: graphViewModel)
@@ -46,8 +50,10 @@ struct OnboardingStepScaffold<Content: View>: View {
     self.description = description
     self.layoutMode = layoutMode
     self.rightPaneMode = rightPaneMode
+    self.rightPaneFooterText = rightPaneFooterText
     self.showsSkip = showsSkip
     self.onSkip = onSkip
+    self.onForceComplete = onForceComplete
     self.content = content()
   }
 
@@ -61,8 +67,12 @@ struct OnboardingStepScaffold<Content: View>: View {
         Divider()
           .background(OmiColors.backgroundTertiary)
 
-        OnboardingSecondBrainPane(graphViewModel: graphViewModel, mode: rightPaneMode)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        OnboardingSecondBrainPane(
+          graphViewModel: graphViewModel,
+          mode: rightPaneMode,
+          footerText: rightPaneFooterText
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(OmiColors.backgroundPrimary)
@@ -119,19 +129,7 @@ struct OnboardingStepScaffold<Content: View>: View {
 
   private var header: some View {
     HStack {
-      if let logoImage = onboardingLogoImage() {
-        Image(nsImage: logoImage)
-          .resizable()
-          .renderingMode(.template)
-          .foregroundColor(.white)
-          .scaledToFit()
-          .frame(width: 52, height: 18)
-          .accessibilityLabel("omi")
-      } else {
-        Text("omi")
-          .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(.white)
-      }
+      OnboardingLogoMark(onForceComplete: onForceComplete)
 
       Spacer()
 
@@ -161,10 +159,12 @@ struct OnboardingStepScaffold<Content: View>: View {
 
   private func titleBlock(centered: Bool) -> some View {
     VStack(alignment: centered ? .center : .leading, spacing: 14) {
-      Text(eyebrow.uppercased())
-        .font(.system(size: 12, weight: .semibold))
-        .tracking(1.2)
-        .foregroundColor(OmiColors.textTertiary)
+      if !eyebrow.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text(eyebrow.uppercased())
+          .font(.system(size: 12, weight: .semibold))
+          .tracking(1.2)
+          .foregroundColor(OmiColors.textTertiary)
+      }
 
       Text(title)
         .font(.system(size: 40, weight: .bold))
@@ -172,14 +172,42 @@ struct OnboardingStepScaffold<Content: View>: View {
         .lineSpacing(2)
         .multilineTextAlignment(centered ? .center : .leading)
 
-      Text(description)
-        .font(.system(size: 16))
-        .foregroundColor(OmiColors.textSecondary)
-        .lineSpacing(4)
-        .multilineTextAlignment(centered ? .center : .leading)
-        .frame(maxWidth: 460, alignment: centered ? .center : .leading)
+      if !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text(description)
+          .font(.system(size: 16))
+          .foregroundColor(OmiColors.textSecondary)
+          .lineSpacing(4)
+          .multilineTextAlignment(centered ? .center : .leading)
+          .frame(maxWidth: 460, alignment: centered ? .center : .leading)
+      }
     }
     .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+  }
+}
+
+struct OnboardingLogoMark: View {
+  let onForceComplete: (() -> Void)?
+
+  var body: some View {
+    Group {
+      if let logoImage = onboardingLogoImage() {
+        Image(nsImage: logoImage)
+          .resizable()
+          .renderingMode(.template)
+          .foregroundColor(.white)
+          .scaledToFit()
+          .frame(width: 52, height: 18)
+      } else {
+        Text("omi")
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundColor(.white)
+      }
+    }
+    .contentShape(Rectangle())
+    .onLongPressGesture(minimumDuration: 1) {
+      onForceComplete?()
+    }
+    .accessibilityLabel("omi")
   }
 
   private func onboardingLogoImage() -> NSImage? {
@@ -198,38 +226,35 @@ struct OnboardingStepScaffold<Content: View>: View {
 private struct OnboardingSecondBrainPane: View {
   @ObservedObject var graphViewModel: MemoryGraphViewModel
   let mode: OnboardingRightPaneMode
+  let footerText: String?
 
   var body: some View {
-    ZStack {
+    ZStack(alignment: .bottom) {
       OmiColors.backgroundSecondary
         .ignoresSafeArea()
 
-      switch mode {
-      case .message(let title, let detail):
-        VStack(spacing: 12) {
-          Text(title)
-            .font(.system(size: 28, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
-            .multilineTextAlignment(.center)
+      VStack(spacing: 0) {
+        graphBody
 
-          Text(detail)
-            .font(.system(size: 15))
-            .foregroundColor(OmiColors.textTertiary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 320)
-        }
-      case .graph:
-        if graphViewModel.isEmpty {
-          VStack(spacing: 14) {
-            Text("Your graph appears once Omi has something real to map.")
-              .font(.system(size: 15, weight: .medium))
+        if case .graph = mode, let footerText, !footerText.isEmpty {
+          Divider()
+            .background(Color.white.opacity(0.08))
+
+          VStack(alignment: .leading, spacing: 10) {
+            Text("Who you are")
+              .font(.system(size: 12, weight: .semibold))
               .foregroundColor(OmiColors.textTertiary)
-              .multilineTextAlignment(.center)
-              .frame(maxWidth: 320)
+              .tracking(0.6)
+
+            Text(footerText)
+              .font(.system(size: 14))
+              .foregroundColor(OmiColors.textSecondary)
+              .lineSpacing(3)
           }
-        } else {
-          MemoryGraphSceneView(viewModel: graphViewModel)
-            .ignoresSafeArea()
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 24)
+          .padding(.vertical, 18)
+          .background(OmiColors.backgroundPrimary.opacity(0.92))
         }
       }
     }
@@ -267,6 +292,41 @@ private struct OnboardingSecondBrainPane: View {
       await graphViewModel.addGraphFromStorage()
       if graphViewModel.isEmpty {
         await graphViewModel.loadGraph()
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var graphBody: some View {
+    switch mode {
+    case .message(let title, let detail):
+      VStack(spacing: 12) {
+        Text(title)
+          .font(.system(size: 28, weight: .bold))
+          .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.center)
+
+        Text(detail)
+          .font(.system(size: 15))
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 320)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+    case .graph:
+      if graphViewModel.isEmpty {
+        VStack(spacing: 14) {
+          Text("Your graph appears once Omi has something real to map.")
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(OmiColors.textTertiary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 320)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        MemoryGraphSceneView(viewModel: graphViewModel)
+          .ignoresSafeArea()
       }
     }
   }

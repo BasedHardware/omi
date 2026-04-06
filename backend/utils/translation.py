@@ -6,11 +6,13 @@ from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple
 
 from google.cloud import translate_v3
-from langdetect import detect as langdetect_detect, DetectorFactory
+from langdetect import detect as langdetect_detect, detect_langs as langdetect_detect_langs, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
+from enum import Enum
 import logging
 
 from database.redis_db import r
+from models.transcript_segment import SENTENCE_FINDALL_RE
 
 logger = logging.getLogger(__name__)
 
@@ -233,23 +235,156 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
     return detected_language
 
 
+# --- Confidence-based language detection (issue #6155) ---
+
+# Minimum number of lexical characters required for confident detection.
+# Below this threshold, langdetect is unreliable on streaming text.
+MIN_CONFIDENT_CHARS = 12
+
+# Confidence thresholds for language detection probabilities.
+CONFIDENCE_TARGET_SKIP = 0.90  # Skip translation if target language detected at this confidence
+CONFIDENCE_FOREIGN_TRANSLATE = 0.80  # Translate if foreign language detected at this confidence
+
+
+class TranslationNeed(str, Enum):
+    """Result of classify_translation_need()."""
+
+    SKIP = 'skip'  # Confident target language — no translation needed
+    TRANSLATE = 'translate'  # Confident foreign language — should translate
+    DEFER = 'defer'  # Uncertain — wait for more text or closing signal
+
+
+def detect_language_with_confidence(
+    text: str, remove_non_lexical: bool = True, hint_language: str = None
+) -> Tuple[Optional[str], float]:
+    """Detect language with confidence score using langdetect.detect_langs().
+
+    Returns (language_code, confidence) where confidence is 0.0-1.0.
+    Returns (None, 0.0) if detection fails or text is too short.
+    """
+    text_for_detection = text
+    if remove_non_lexical:
+        cleaned_text = _non_lexical_utterances_pattern.sub('', text)
+        text_for_detection = re.sub(r'\s+', ' ', cleaned_text).strip()
+
+    if not text_for_detection or len(text_for_detection) < MIN_CONFIDENT_CHARS:
+        return (None, 0.0)
+
+    # Check cache first (reuse existing detection_cache)
+    cache_key = f"conf:{text_for_detection}"
+    if cache_key in detection_cache:
+        detection_cache.move_to_end(cache_key)
+        return detection_cache[cache_key]
+
+    try:
+        results = langdetect_detect_langs(text_for_detection)
+        if not results:
+            return (None, 0.0)
+
+        top = results[0]
+        result = (top.lang, top.prob)
+
+        # Cache the result
+        if len(detection_cache) >= MAX_DETECTION_CACHE_SIZE:
+            detection_cache.popitem(last=False)
+        detection_cache[cache_key] = result
+        return result
+    except LangDetectException:
+        return (None, 0.0)
+    except Exception as e:
+        logger.error(f"Confident language detection error: {e}")
+        return (None, 0.0)
+
+
+def classify_translation_need(text: str, target_language: str, is_stable: bool = False) -> TranslationNeed:
+    """Classify whether text needs translation based on confidence-based detection.
+
+    Args:
+        text: The segment text to classify.
+        target_language: The user's target language (e.g., 'en').
+        is_stable: Whether the text is considered stable (sentence-complete, etc.).
+
+    Returns:
+        TranslationNeed.SKIP — confident target language, no translation needed.
+        TranslationNeed.TRANSLATE — confident foreign language and stable text.
+        TranslationNeed.DEFER — uncertain, wait for more text or closing signal.
+    """
+    target_base = target_language.split('-')[0].lower() if target_language else None
+    if not target_base:
+        return TranslationNeed.SKIP
+
+    detected_lang, confidence = detect_language_with_confidence(text, remove_non_lexical=True)
+
+    if detected_lang is None:
+        # Too short or detection failed — defer
+        return TranslationNeed.DEFER
+
+    detected_base = detected_lang.split('-')[0].lower()
+
+    if detected_base == target_base:
+        if confidence >= CONFIDENCE_TARGET_SKIP:
+            return TranslationNeed.SKIP
+        # Low-confidence same language — defer, don't waste money
+        return TranslationNeed.DEFER
+
+    # Detected a different language
+    if confidence >= CONFIDENCE_FOREIGN_TRANSLATE:
+        if is_stable:
+            return TranslationNeed.TRANSLATE
+        # Foreign but not stable yet — defer until stable
+        return TranslationNeed.DEFER
+
+    # Low-confidence foreign — defer
+    return TranslationNeed.DEFER
+
+
 def split_into_sentences(text: str) -> List[str]:
-    """Splits text into sentences based on sentence-ending punctuation (.?!) and newlines."""
+    """Splits text into sentences based on sentence-ending punctuation and newlines.
+
+    Recognizes Unicode sentence enders for CJK, Arabic, Hindi, and other non-English languages.
+    """
     if not text:
         return []
-    # Split on newlines first, then split each line on sentence-ending punctuation
+
     result = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
             continue
-        sentences = re.findall(r'[^.?!]+(?:[.?!]\s*|\s*$)', line)
+        sentences = SENTENCE_FINDALL_RE.findall(line)
         result.extend(s.strip() for s in sentences if s.strip())
     return result
 
 
 def _redis_cache_key(text_hash: str, dest_lang: str) -> str:
     return f"translate:v1:{text_hash}:{dest_lang}"
+
+
+def _redis_negative_cache_key(text_hash: str, dest_lang: str) -> str:
+    """Key for negative cache — records that text does NOT need translation."""
+    return f"translate:v2:neg:{text_hash}:{dest_lang}"
+
+
+NEGATIVE_CACHE_TTL = 60 * 60 * 24 * 7  # 7 days for negative cache
+
+
+def get_negative_cache(text_hash: str, dest_lang: str) -> bool:
+    """Check if text is negatively cached (known to not need translation). Returns True if cached."""
+    try:
+        key = _redis_negative_cache_key(text_hash, dest_lang)
+        return r.exists(key) == 1
+    except Exception as e:
+        logger.warning(f"Redis negative cache read error: {e}")
+    return False
+
+
+def set_negative_cache(text_hash: str, dest_lang: str):
+    """Mark text as not needing translation in Redis."""
+    try:
+        key = _redis_negative_cache_key(text_hash, dest_lang)
+        r.set(key, "1", ex=NEGATIVE_CACHE_TTL)
+    except Exception as e:
+        logger.warning(f"Redis negative cache write error: {e}")
 
 
 def get_cached_translation(text_hash: str, dest_lang: str) -> Optional[dict]:
@@ -391,6 +526,99 @@ class TranslationService:
 
         translated_text = ' '.join(r for r in results if r is not None)
         return (translated_text, dominant_lang)
+
+    def translate_units_batch(self, dest_language: str, units: List[Tuple[str, str]]) -> List[Tuple[str, str, str]]:
+        """Translate a batch of (unit_id, text) pairs in minimal GCP API calls.
+
+        Deduplicates identical texts, checks all cache layers, and batches
+        only truly uncached texts into a single API call.
+
+        Returns list of (unit_id, translated_text, detected_lang) in input order.
+        """
+        if not units:
+            return []
+
+        # Build deduplicated mapping: text_hash -> (text, [indices])
+        results = [None] * len(units)
+        hash_to_info = {}  # text_hash -> {'text': str, 'indices': [int]}
+
+        for i, (unit_id, text) in enumerate(units):
+            text_hash = hashlib.md5(text.encode()).hexdigest()
+            if text_hash not in hash_to_info:
+                hash_to_info[text_hash] = {'text': text, 'indices': [], 'hash': text_hash}
+            hash_to_info[text_hash]['indices'].append(i)
+
+        # Phase 1: Check caches for each unique text
+        uncached_hashes = []
+        for text_hash, info in hash_to_info.items():
+            # Check negative cache first
+            if get_negative_cache(text_hash, dest_language):
+                for idx in info['indices']:
+                    results[idx] = (units[idx][0], info['text'], '')  # return original text
+                continue
+
+            # Check memory cache
+            cached = self._check_memory_cache(text_hash, dest_language)
+            if cached:
+                for idx in info['indices']:
+                    results[idx] = (units[idx][0], cached[0], cached[1])
+                continue
+
+            # Check Redis cache
+            redis_cached = get_cached_translation(text_hash, dest_language)
+            if redis_cached:
+                translated = redis_cached["text"]
+                detected = redis_cached.get("detected_lang", "")
+                self._set_memory_cache(text_hash, dest_language, translated, detected)
+                for idx in info['indices']:
+                    results[idx] = (units[idx][0], translated, detected)
+                continue
+
+            uncached_hashes.append(text_hash)
+
+        # Phase 2: Batch translate uncached texts
+        if uncached_hashes:
+            uncached_texts = [hash_to_info[h]['text'] for h in uncached_hashes]
+
+            for chunk_start in range(0, len(uncached_texts), MAX_BATCH_SIZE):
+                chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_texts))
+                chunk = uncached_texts[chunk_start:chunk_end]
+                chunk_hashes = uncached_hashes[chunk_start:chunk_end]
+
+                try:
+                    response = _client.translate_text(
+                        contents=chunk,
+                        parent=_parent,
+                        mime_type=_mime_type,
+                        target_language_code=dest_language,
+                    )
+
+                    for j, translation in enumerate(response.translations):
+                        text_hash = chunk_hashes[j]
+                        translated_text = translation.translated_text
+                        detected_lang = translation.detected_language_code or ""
+                        info = hash_to_info[text_hash]
+
+                        self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
+                        cache_translation(text_hash, dest_language, translated_text, detected_lang)
+
+                        for idx in info['indices']:
+                            results[idx] = (units[idx][0], translated_text, detected_lang)
+
+                except Exception as e:
+                    logger.error(f"Batch translation error: {e}")
+                    for h in chunk_hashes:
+                        info = hash_to_info[h]
+                        for idx in info['indices']:
+                            if results[idx] is None:
+                                results[idx] = (units[idx][0], info['text'], '')
+
+        # Fill any remaining None results (shouldn't happen, but be safe)
+        for i in range(len(results)):
+            if results[i] is None:
+                results[i] = (units[i][0], units[i][1], '')
+
+        return results
 
     def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
         """

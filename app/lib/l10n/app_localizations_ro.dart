@@ -1718,12 +1718,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -8797,4 +8792,233 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get microphone => 'Microfon';
+
+  @override
+  String get whyAreYouCanceling => 'De ce anulezi?';
+
+  @override
+  String get cancelReasonSubtitle => 'Ne poți spune de ce pleci?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Prea scump';
+
+  @override
+  String get cancelReasonNotUsing => 'Nu-l folosesc suficient';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Funcții lipsă';
+
+  @override
+  String get cancelReasonAudioQuality => 'Calitatea audio/transcrierii';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Preocupări privind consumul bateriei';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Am găsit o alternativă';
+
+  @override
+  String get cancelReasonOther => 'Altele';
+
+  @override
+  String get tellUsMore => 'Spune-ne mai multe (opțional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Apreciem orice feedback...';
+
+  @override
+  String get justAMoment => 'O clipă, te rog';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Recomandăm cu tărie să explorați alte opțiuni în loc să anulați.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planul tău va rămâne activ până la $date. După aceea, vei fi trecut la versiunea gratuită cu funcții limitate.';
+  }
+
+  @override
+  String get ifYouCancel => 'Dacă anulezi:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Nu vei mai avea acces nelimitat la sfârșitul perioadei de facturare.';
+
+  @override
+  String get cancelConsequenceBattery => '7x mai mult consum de baterie (procesare pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceQuality => '30% calitate mai scăzută a transcrierii (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceDelay => 'Întârziere de procesare de 5-7 secunde (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nu poate identifica vorbitorii.';
+
+  @override
+  String get confirmAndCancel => 'Confirmă și anulează';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Fără transcriere apeluri telefonice în timp real';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Ce preț ar fi potrivit pentru tine?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Ce funcții îți lipsesc?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ce probleme ai întâmpinat?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Spune-ne despre problemele cu bateria';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'La ce treci?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Ce te-ar face să folosești Omi mai mult?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Feedback-ul tău ne ajută să găsim echilibrul potrivit.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Construim mereu — acest lucru ne ajută să stabilim priorități.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Am dori să înțelegem ce a mers prost.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Acest lucru ajută echipa noastră hardware să se îmbunătățească.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Am dori să aflăm ce v-a atras atenția.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnosticarea dispozitivului';
+
+  @override
+  String get signalStrength => 'Puterea semnalului';
+
+  @override
+  String get connectionUptime => 'Timp de funcționare';
+
+  @override
+  String get reconnections => 'Reconectări';
+
+  @override
+  String get disconnectHistory => 'Istoric deconectări';
+
+  @override
+  String get noDisconnectsRecorded => 'Nicio deconectare înregistrată';
+
+  @override
+  String get diagnostics => 'Diagnosticare';
+
+  @override
+  String get waitingForData => 'Se așteaptă date...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI în timp real';
+
+  @override
+  String get noRssiDataYet => 'Încă nu există date RSSI';
+
+  @override
+  String get collectingData => 'Se colectează date...';
+
+  @override
+  String get cleanDisconnect => 'Deconectare curată';
+
+  @override
+  String get connectionTimeout => 'Expirarea timpului de conectare';
+
+  @override
+  String get remoteDeviceTerminated => 'Dispozitivul la distanță a încheiat conexiunea';
+
+  @override
+  String get pairedToAnotherPhone => 'Asociat cu alt telefon';
+
+  @override
+  String get linkKeyMismatch => 'Nepotrivire cheie de legătură';
+
+  @override
+  String get connectionFailed => 'Conectare eșuată';
+
+  @override
+  String get appClosed => 'Aplicație închisă';
+
+  @override
+  String get manualDisconnect => 'Deconectare manuală';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ultimele $count evenimente';
+  }
+
+  @override
+  String get signal => 'Semnal';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Excelent';
+
+  @override
+  String get good => 'Bun';
+
+  @override
+  String get fair => 'Acceptabil';
+
+  @override
+  String get weak => 'Slab';
+
+  @override
+  String gattError(String code) {
+    return 'Eroare GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Revenire la firmware-ul stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Reveniți la firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ($version). Dispozitivul se va reporni după actualizare.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Se obține cel mai recent firmware stabil...';
+
+  @override
+  String get noStableFirmwareFound => 'Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.';
+
+  @override
+  String get installStableFirmware => 'Instalare firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sunteți deja pe cea mai recentă versiune stabilă.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio salvat local';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se va sincroniza automat';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

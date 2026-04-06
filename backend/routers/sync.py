@@ -11,7 +11,10 @@ import uuid as _uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import requests
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -43,7 +46,7 @@ from utils.other.storage import (
 
 from utils import encryption
 from utils.log_sanitizer import sanitize
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
@@ -56,6 +59,13 @@ from utils.fair_use import (
     record_dg_usage_ms,
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
+)
+from utils.speaker_assignment import process_speaker_assigned_segments
+from utils.speaker_identification import detect_speaker_from_text
+from utils.stt.speaker_embedding import (
+    extract_embedding_from_bytes,
+    compare_embeddings,
+    SPEAKER_MATCH_THRESHOLD,
 )
 from utils.subscription import has_transcription_credits
 
@@ -697,6 +707,209 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
+USER_SELF_PERSON_ID = 'user'
+SPEAKER_ID_MIN_AUDIO = 1.0  # Minimum seconds of audio per speaker for embedding extraction
+
+
+def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
+    """Build a cache of person embeddings for speaker identification.
+
+    Loads the user's own speaker embedding and all people with stored embeddings.
+    Returns dict mapping person_id -> {embedding: np.ndarray, name: str}.
+    """
+    cache: Dict[str, dict] = {}
+
+    # Load user's own speaker embedding
+    embedding_list = users_db.get_user_speaker_embedding(uid)
+    if embedding_list:
+        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
+        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': 'User'}
+
+    # Load all people with speaker embeddings
+    people = users_db.get_people(uid)
+    for person in people or []:
+        emb = person.get('speaker_embedding')
+        # Only load embedding if person has speech samples — contacts without
+        # samples may have stale embeddings from a pre-v3 model (#6238)
+        if emb and person.get('speech_samples'):
+            cache[person['id']] = {
+                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                'name': person['name'],
+            }
+
+    return cache
+
+
+def _download_audio_bytes(url: str) -> Optional[bytes]:
+    """Download audio from a signed URL. Returns WAV bytes or None on failure."""
+    try:
+        resp = requests.get(url, timeout=60)
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        logger.warning(f'Speaker ID: failed to download audio: {e}')
+        return None
+
+
+def _extract_speaker_clip_wav(audio_bytes: bytes, start_sec: float, end_sec: float) -> Optional[bytes]:
+    """Extract a clip from WAV audio bytes between start_sec and end_sec.
+
+    Returns WAV bytes for the clip, or None if extraction fails or clip is too short.
+    """
+    try:
+        with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
+            framerate = wf.getframerate()
+            n_channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            n_frames = wf.getnframes()
+            total_duration = n_frames / framerate
+
+            # Clamp to audio bounds
+            start_sec = max(0.0, start_sec)
+            end_sec = min(total_duration, end_sec)
+            if end_sec - start_sec < SPEAKER_ID_MIN_AUDIO:
+                return None
+
+            # Cap extraction at 10 seconds
+            if end_sec - start_sec > 10.0:
+                center = (start_sec + end_sec) / 2
+                start_sec = center - 5.0
+                end_sec = center + 5.0
+                start_sec = max(0.0, start_sec)
+                end_sec = min(total_duration, end_sec)
+
+            start_frame = int(start_sec * framerate)
+            end_frame = int(end_sec * framerate)
+
+            wf.setpos(start_frame)
+            frames = wf.readframes(end_frame - start_frame)
+
+        # Write clip as WAV
+        clip_buf = io.BytesIO()
+        with wave.open(clip_buf, 'wb') as out_wf:
+            out_wf.setnchannels(n_channels)
+            out_wf.setsampwidth(sampwidth)
+            out_wf.setframerate(framerate)
+            out_wf.writeframes(frames)
+        return clip_buf.getvalue()
+    except Exception as e:
+        logger.warning(f'Speaker ID: failed to extract clip: {e}')
+        return None
+
+
+def identify_speakers_for_segments(
+    transcript_segments: List['TranscriptSegment'],
+    audio_bytes: Optional[bytes],
+    person_embeddings_cache: Dict[str, dict],
+    uid: str,
+) -> None:
+    """Identify speakers in transcript segments using voice embeddings and text detection.
+
+    Modifies segments in-place by assigning person_id and is_user fields.
+
+    Steps:
+    1. Voice embedding matching (requires audio_bytes and non-empty cache):
+       For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
+       get embedding, match against person_embeddings_cache.
+    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
+    3. Apply assignments via process_speaker_assigned_segments.
+    """
+    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
+    segment_person_assignment_map: Dict[str, str] = {}
+
+    # Group segments by speaker_id, find best (longest) segment per speaker for embedding
+    speaker_segments: Dict[int, List[TranscriptSegment]] = {}
+    for seg in transcript_segments:
+        sid = seg.speaker_id if seg.speaker_id is not None else 0
+        speaker_segments.setdefault(sid, []).append(seg)
+
+    # Voice embedding matching (only when audio and cached embeddings are available)
+    # Track matched person_ids so each person is only assigned to one speaker
+    # (diarization tells us speakers are distinct — no person can be two speakers).
+    matched_person_ids: set = set()
+
+    if audio_bytes and person_embeddings_cache:
+        # Sort speakers by best single segment duration (longest first) — this is the clip
+        # actually used for embedding, so it determines match quality.
+        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
+        # If diarization fragments one person across speaker IDs, only the best match wins.
+        sorted_speakers = sorted(
+            speaker_segments.items(),
+            key=lambda kv: max(s.end - s.start for s in kv[1]),
+            reverse=True,
+        )
+
+        for speaker_id, segments in sorted_speakers:
+            best_seg = max(segments, key=lambda s: s.end - s.start)
+            seg_duration = best_seg.end - best_seg.start
+
+            if seg_duration < SPEAKER_ID_MIN_AUDIO:
+                continue
+
+            clip_wav = _extract_speaker_clip_wav(audio_bytes, best_seg.start, best_seg.end)
+            if not clip_wav:
+                continue
+
+            try:
+                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
+            except (ValueError, Exception) as e:
+                logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
+                continue
+
+            # Compare only against unmatched candidates (each person can be one speaker)
+            best_match = None
+            best_distance = float('inf')
+            for person_id, data in person_embeddings_cache.items():
+                if person_id in matched_person_ids:
+                    continue
+                distance = compare_embeddings(query_embedding, data['embedding'])
+                if distance < best_distance:
+                    best_distance = distance
+                    best_match = (person_id, data['name'])
+
+            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
+                person_id, person_name = best_match
+                speaker_to_person_map[speaker_id] = (person_id, person_name)
+                segment_person_assignment_map[best_seg.id] = person_id
+                matched_person_ids.add(person_id)
+                logger.info(
+                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
+                    f'(distance={best_distance:.3f}) uid={uid}'
+                )
+
+    # Text-based detection runs independently for all unmatched speakers.
+    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
+    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
+    # segments to one person when diarization is inactive).
+    for speaker_id, segments in speaker_segments.items():
+        if speaker_id in speaker_to_person_map:
+            continue
+        for seg in segments:
+            detected_name = detect_speaker_from_text(seg.text)
+            if detected_name:
+                person = users_db.get_person_by_name(uid, detected_name)
+                if person:
+                    # Per-segment assignment always applies
+                    segment_person_assignment_map[seg.id] = person['id']
+                    # Update speaker map only when diarization is active
+                    if speaker_id > 0:
+                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
+                    logger.info(
+                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
+                        f'{person["id"]} via "{detected_name}" uid={uid}'
+                    )
+                    if speaker_id > 0:
+                        break  # One match per diarized speaker is enough
+
+    # Apply all assignments to segments
+    if speaker_to_person_map or segment_person_assignment_map:
+        process_speaker_assigned_segments(
+            transcript_segments,
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -705,6 +918,9 @@ def process_segment(
     errors: list,
     source: ConversationSource = ConversationSource.omi,
     is_locked: bool = False,
+    transcription_prefs: dict = None,
+    person_embeddings_cache: dict = None,
+    target_conversation_id: str = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -715,7 +931,31 @@ def process_segment(
 
         threading.Thread(target=delete_file).start()
 
-        words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+        # Apply user transcription preferences (vocabulary, language, model)
+        prefs = transcription_prefs or {}
+        user_vocab = [w for w in dict.fromkeys(prefs.get('vocabulary', [])) if w != "Omi"]
+        vocabulary = ["Omi"] + user_vocab[:99]
+        user_language = prefs.get('language', '') or ''
+        single_language_mode = prefs.get('single_language_mode', False)
+
+        if single_language_mode and user_language:
+            dg_language, dg_model = get_deepgram_model_for_language(user_language)
+        else:
+            dg_language, dg_model = get_deepgram_model_for_language('multi')
+
+        # When single-language mode is active, trust the user's language choice
+        # rather than Deepgram's detection (avoids overriding explicit selection).
+        use_return_language = not (single_language_mode and user_language)
+        words, detected_language = deepgram_prerecorded(
+            url,
+            speakers_count=3,
+            attempts=0,
+            return_language=True,
+            language=dg_language,
+            model=dg_model,
+            keywords=vocabulary if vocabulary else None,
+        )
+        language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
@@ -726,9 +966,30 @@ def process_segment(
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return
 
+        # Speaker identification: voice embedding matching + text-based detection
+        audio_bytes = _download_audio_bytes(url) if person_embeddings_cache else None
+        try:
+            identify_speakers_for_segments(transcript_segments, audio_bytes, person_embeddings_cache or {}, uid)
+        except Exception as e:
+            logger.warning(f'Speaker ID (sync): identification failed for {path}: {e}')
+        finally:
+            if audio_bytes:
+                del audio_bytes
+
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
-        closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+
+        # When a target conversation is specified (auto-sync from live capture),
+        # attach segments to it directly instead of searching by timestamp.
+        if target_conversation_id:
+            closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
+            if not closest_memory:
+                logger.warning(
+                    f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
+                )
+                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+        else:
+            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
         if not closest_memory:
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -803,9 +1064,10 @@ def process_segment(
             if is_locked:
                 conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
 
-            # If the conversation was previously discarded, reprocess it with the new segments
-            if closest_memory.get('discarded', False):
-                logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+            # Reprocess if conversation was discarded or if auto-synced WALs added new segments
+            if closest_memory.get('discarded', False) or target_conversation_id:
+                reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
+                logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
                 _reprocess_conversation_after_update(uid, closest_memory['id'], language)
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
@@ -825,7 +1087,13 @@ def _cleanup_files(file_paths):
 
 
 @router.post("/v1/sync-local-files")
-async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+    conversation_id: str = Query(
+        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
+    ),
+):
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
@@ -922,6 +1190,18 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 },
             )
 
+        # Fetch user transcription preferences once before spawning threads
+        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+
+        # Build speaker embeddings cache once for all segments (voice + text identification)
+        try:
+            person_embeddings_cache = build_person_embeddings_cache(uid)
+            if person_embeddings_cache:
+                logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
+        except Exception as e:
+            logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
+            person_embeddings_cache = {}
+
         threads = [
             threading.Thread(
                 target=process_segment,
@@ -933,6 +1213,9 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     segment_errors,
                     source,
                     is_locked,
+                    transcription_prefs,
+                    person_embeddings_cache,
+                    conversation_id,
                 ),
             )
             for path in segmented_paths
@@ -1036,6 +1319,9 @@ def _process_segments_background(
     fair_use_restrict_dg: bool,
     total_speech_seconds: float,
     job_dir: str,
+    transcription_prefs: Optional[dict] = None,
+    person_embeddings_cache: Optional[Dict[str, dict]] = None,
+    target_conversation_id: str = None,
 ):
     """Background worker: runs segment processing and updates Redis job status."""
     try:
@@ -1060,7 +1346,18 @@ def _process_segments_background(
         threads = [
             threading.Thread(
                 target=process_segment,
-                args=(path, uid, response, segment_lock, segment_errors, source, is_locked),
+                args=(
+                    path,
+                    uid,
+                    response,
+                    segment_lock,
+                    segment_errors,
+                    source,
+                    is_locked,
+                    transcription_prefs,
+                    person_embeddings_cache,
+                    target_conversation_id,
+                ),
             )
             for path in segmented_paths
         ]
@@ -1119,7 +1416,13 @@ def _process_segments_background(
 
 
 @router.post("/v2/sync-local-files")
-async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files_v2(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+    conversation_id: str = Query(
+        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
+    ),
+):
     """
     Async version of sync-local-files. Does fast-path work (decode, VAD) inline,
     then starts background processing and returns 202 with a job_id for polling.
@@ -1218,6 +1521,20 @@ async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = De
         # --- Create Redis job and start background thread ---
         job = create_sync_job(uid, total_files=len(files), total_segments=total_segments, job_id=job_id)
 
+        # Fetch user transcription preferences once before spawning background thread
+        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+
+        # Build speaker embeddings cache once for all segments (voice + text identification)
+        try:
+            person_embeddings_cache = build_person_embeddings_cache(uid)
+            if person_embeddings_cache:
+                logger.info(
+                    f'sync_v2: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}'
+                )
+        except Exception as e:
+            logger.warning(f'sync_v2: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
+            person_embeddings_cache = {}
+
         # Transfer ownership of segmented_paths to the background thread
         owned_paths = list(segmented_paths)
         segmented_paths = set()  # Prevent finally cleanup of files now owned by bg thread
@@ -1233,6 +1550,9 @@ async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = De
                 fair_use_restrict_dg,
                 total_speech_seconds,
                 job_dir,
+                transcription_prefs,
+                person_embeddings_cache,
+                conversation_id,
             ),
             daemon=True,
         )

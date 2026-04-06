@@ -1696,12 +1696,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'أجهزة',
-      one: 'جهاز',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8694,4 +8689,233 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get microphone => 'الميكروفون';
+
+  @override
+  String get whyAreYouCanceling => 'لماذا تلغي اشتراكك؟';
+
+  @override
+  String get cancelReasonSubtitle => 'هل يمكنك إخبارنا لماذا ستغادر؟';
+
+  @override
+  String get cancelReasonTooExpensive => 'مكلف جداً';
+
+  @override
+  String get cancelReasonNotUsing => 'لا أستخدمه بما يكفي';
+
+  @override
+  String get cancelReasonMissingFeatures => 'ميزات مفقودة';
+
+  @override
+  String get cancelReasonAudioQuality => 'جودة الصوت/النسخ';
+
+  @override
+  String get cancelReasonBatteryDrain => 'مخاوف استنزاف البطارية';
+
+  @override
+  String get cancelReasonFoundAlternative => 'وجدت بديلاً';
+
+  @override
+  String get cancelReasonOther => 'أخرى';
+
+  @override
+  String get tellUsMore => 'أخبرنا المزيد (اختياري)';
+
+  @override
+  String get cancelReasonDetailHint => 'نقدر أي ملاحظات...';
+
+  @override
+  String get justAMoment => 'لحظة من فضلك';
+
+  @override
+  String get cancelConsequencesSubtitle => 'نوصي بشدة باستكشاف خياراتك الأخرى بدلاً من الإلغاء.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'سيظل اشتراكك نشطاً حتى $date. بعد ذلك، سيتم نقلك إلى النسخة المجانية ذات الميزات المحدودة.';
+  }
+
+  @override
+  String get ifYouCancel => 'إذا ألغيت:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'لن يكون لديك وصول غير محدود بعد نهاية فترة الفوترة.';
+
+  @override
+  String get cancelConsequenceBattery => 'استهلاك بطارية أكثر بـ 7 أضعاف (معالجة على الجهاز)';
+
+  @override
+  String get cancelConsequenceQuality => 'جودة نسخ أقل بنسبة 30% (نماذج على الجهاز)';
+
+  @override
+  String get cancelConsequenceDelay => 'تأخير معالجة 5-7 ثوانٍ (نماذج على الجهاز)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'لا يمكن التعرف على المتحدثين.';
+
+  @override
+  String get confirmAndCancel => 'تأكيد والإلغاء';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'لا نسخ مكالمات هاتفية في الوقت الحقيقي';
+
+  @override
+  String get feedbackTitleTooExpensive => 'ما السعر المناسب لك؟';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'ما الميزات التي تفتقدها؟';
+
+  @override
+  String get feedbackTitleAudioQuality => 'ما المشاكل التي واجهتها؟';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'أخبرنا عن مشاكل البطارية';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'إلى ماذا ستنتقل؟';
+
+  @override
+  String get feedbackTitleNotUsing => 'ما الذي يجعلك تستخدم Omi أكثر؟';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'ملاحظاتك تساعدنا في إيجاد التوازن الصحيح.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'نحن نبني دائماً — هذا يساعدنا في تحديد الأولويات.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'نود أن نفهم ما حدث.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'هذا يساعد فريق الأجهزة لدينا على التحسين.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'نود معرفة ما لفت انتباهك.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'نريد جعل Omi أكثر فائدة لك.';
+
+  @override
+  String get deviceDiagnostics => 'تشخيصات الجهاز';
+
+  @override
+  String get signalStrength => 'قوة الإشارة';
+
+  @override
+  String get connectionUptime => 'وقت التشغيل';
+
+  @override
+  String get reconnections => 'إعادة الاتصال';
+
+  @override
+  String get disconnectHistory => 'سجل قطع الاتصال';
+
+  @override
+  String get noDisconnectsRecorded => 'لم يتم تسجيل أي انقطاعات';
+
+  @override
+  String get diagnostics => 'التشخيصات';
+
+  @override
+  String get waitingForData => 'في انتظار البيانات...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI المباشر عبر الوقت';
+
+  @override
+  String get noRssiDataYet => 'لا توجد بيانات RSSI بعد';
+
+  @override
+  String get collectingData => 'جارٍ جمع البيانات...';
+
+  @override
+  String get cleanDisconnect => 'قطع اتصال نظيف';
+
+  @override
+  String get connectionTimeout => 'انتهت مهلة الاتصال';
+
+  @override
+  String get remoteDeviceTerminated => 'أنهى الجهاز البعيد الاتصال';
+
+  @override
+  String get pairedToAnotherPhone => 'مقترن بهاتف آخر';
+
+  @override
+  String get linkKeyMismatch => 'عدم تطابق مفتاح الارتباط';
+
+  @override
+  String get connectionFailed => 'فشل الاتصال';
+
+  @override
+  String get appClosed => 'تم إغلاق التطبيق';
+
+  @override
+  String get manualDisconnect => 'قطع اتصال يدوي';
+
+  @override
+  String lastNEvents(int count) {
+    return 'آخر $count أحداث';
+  }
+
+  @override
+  String get signal => 'إشارة';
+
+  @override
+  String get battery => 'بطارية';
+
+  @override
+  String get excellent => 'ممتاز';
+
+  @override
+  String get good => 'جيد';
+
+  @override
+  String get fair => 'مقبول';
+
+  @override
+  String get weak => 'ضعيف';
+
+  @override
+  String gattError(String code) {
+    return 'خطأ GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'الرجوع إلى البرنامج الثابت المستقر';
+
+  @override
+  String get rollbackConfirmTitle => 'الرجوع إلى البرنامج الثابت؟';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'سيتم استبدال البرنامج الثابت الحالي بأحدث إصدار مستقر ($version). سيتم إعادة تشغيل جهازك بعد التحديث.';
+  }
+
+  @override
+  String get stableFirmware => 'البرنامج الثابت المستقر';
+
+  @override
+  String get fetchingStableFirmware => 'جارٍ جلب أحدث برنامج ثابت مستقر...';
+
+  @override
+  String get noStableFirmwareFound => 'تعذر العثور على إصدار مستقر من البرنامج الثابت لجهازك.';
+
+  @override
+  String get installStableFirmware => 'تثبيت البرنامج الثابت المستقر';
+
+  @override
+  String get alreadyOnStableFirmware => 'أنت بالفعل على أحدث إصدار مستقر.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'تم حفظ $duration من الصوت محليًا';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -1,11 +1,14 @@
 package com.friend.ios
 
 import android.app.Activity
+import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
 
 /**
- * Implements the Pigeon BleHostApi interface, delegating all calls to OmiBleManager.
- * Thin wrapper — same pattern as BleHostApiImpl.swift on iOS.
+ * Implements the Pigeon BleHostApi interface.
+ * Connection lifecycle is routed to OmiBleForegroundService (the single owner).
+ * Characteristic operations are delegated to OmiBleManager (the GATT wrapper).
  */
 class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
@@ -22,6 +25,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         companionManager = OmiCompanionManager(activity, getActivity)
     }
 
+    // ── Scanning ──
+
     override fun startScan(timeoutSeconds: Long, serviceUuids: List<String>) {
         bleManager.startScan(timeoutSeconds.toInt(), serviceUuids)
     }
@@ -30,21 +35,27 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.stopScan()
     }
 
-    override fun connectPeripheral(uuid: String) {
-        bleManager.connectPeripheral(uuid, caller = "Dart")
+    // ── Connection lifecycle (routed to foreground service) ──
+
+    override fun manageDevice(uuid: String, requiresBond: Boolean) {
+        Log.i(TAG, "manageDevice: $uuid, requiresBond=$requiresBond")
+        val context = getActivity()?.applicationContext ?: return
+        OmiBleForegroundService.startService(context, uuid, requiresBond = requiresBond, caller = "Dart")
     }
 
-    override fun disconnectPeripheral(uuid: String) {
-        bleManager.disconnectPeripheral(uuid)
+    override fun unmanageDevice(uuid: String) {
+        Log.i(TAG, "unmanageDevice: $uuid")
+        OmiBleForegroundService.instance?.unmanageDevice(uuid)
+            ?: bleManager.closeGatt(uuid) // Fallback if service not running
     }
 
-    override fun reconnectKnownPeripheral(uuid: String) {
-        bleManager.reconnectKnownPeripheral(uuid)
-    }
+    // ── Bonding ──
 
     override fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit) {
         bleManager.requestBond(uuid, callback)
     }
+
+    // ── Characteristic operations (direct to GATT wrapper) ──
 
     override fun readCharacteristic(
         peripheralUuid: String,
@@ -73,6 +84,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.unsubscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid)
     }
 
+    // ── State ──
+
     override fun getBluetoothState(): String {
         return bleManager.getBluetoothState()
     }
@@ -80,6 +93,31 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     override fun isPeripheralConnected(uuid: String): Boolean {
         return bleManager.isPeripheralConnected(uuid)
     }
+
+    // ── Diagnostics ──
+
+    override fun startRssiStreaming(uuid: String) {
+        bleManager.isRssiStreamingEnabled = true
+    }
+
+    override fun stopRssiStreaming(uuid: String) {
+        bleManager.isRssiStreamingEnabled = false
+    }
+
+    override fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit) {
+        val service = OmiBleForegroundService.instance
+        if (service != null) {
+            callback(Result.success(service.getDeviceDiagnostics(uuid)))
+        } else {
+            callback(Result.success(BleDeviceDiagnostics(
+                disconnectHistory = emptyList(),
+                reconnectionCount = 0,
+                connectedAt = 0
+            )))
+        }
+    }
+
+    // ── CompanionDeviceManager ──
 
     override fun hasCompanionDeviceAssociation(): Boolean {
         val cm = companionManager ?: return false
@@ -100,7 +138,6 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             }
         }
 
-        // Store callback — will be completed in onActivityResult
         companionAssociationCallback = callback
         cm.associate(deviceAddress = deviceAddress)
     }
@@ -108,7 +145,7 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     /**
      * Called from MainActivity.onActivityResult to handle companion chooser result.
      */
-    fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?): String? {
+    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): String? {
         val address = companionManager?.onActivityResult(requestCode, resultCode, data)
         val cb = companionAssociationCallback
         companionAssociationCallback = null

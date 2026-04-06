@@ -133,8 +133,14 @@ struct PromptSuggestionBanner: View {
   let onAsk: (String) -> Void
   let onDismiss: () -> Void
 
-  private let calloutAmber = Color(hex: 0xC9972D)
-  private let calloutCream = Color(hex: 0xF4E3AA)
+  private let calloutAmber = Color(hex: 0xE3BF63)
+  private let bannerSurface = OmiColors.backgroundSecondary
+  private let bannerSurfaceShadow = Color(hex: 0x22201C)
+  private let bannerStroke = Color(hex: 0x4E4535)
+  private let bannerPrimaryText = OmiColors.textPrimary
+  private let bannerSecondaryText = OmiColors.textSecondary
+  private let bannerChipFill = OmiColors.backgroundTertiary
+  private let bannerChipStroke = OmiColors.backgroundQuaternary
 
   private func compactLabel(for suggestion: String) -> String {
     if suggestion == "What should I focus on today to achieve my goals?" {
@@ -168,15 +174,21 @@ struct PromptSuggestionBanner: View {
             Text("Suggested first ask")
               .font(.system(size: 12, weight: .semibold))
           }
-          .foregroundColor(Color.black.opacity(0.68))
+          .foregroundColor(calloutAmber)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .background(
+            Capsule()
+              .fill(calloutAmber.opacity(0.14))
+          )
 
           Text("Next step -> Ask omi")
             .font(.system(size: 20, weight: .semibold, design: .serif))
-            .foregroundColor(Color.black.opacity(0.86))
+            .foregroundColor(bannerPrimaryText)
 
           Text("Use your real screen and your existing context to get value quickly. Tap to open a few suggested questions.")
             .font(.system(size: 14, weight: .medium))
-            .foregroundColor(Color.black.opacity(0.72))
+            .foregroundColor(bannerSecondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
@@ -189,13 +201,17 @@ struct PromptSuggestionBanner: View {
           } label: {
             Text(compactLabel(for: suggestion))
               .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(Color.black.opacity(0.74))
+              .foregroundColor(bannerPrimaryText)
               .lineLimit(1)
               .padding(.horizontal, 12)
               .padding(.vertical, 9)
               .background(
                 Capsule()
-                  .fill(Color.white.opacity(0.5))
+                  .fill(bannerChipFill)
+              )
+              .overlay(
+                Capsule()
+                  .stroke(bannerChipStroke, lineWidth: 1)
               )
           }
           .buttonStyle(.plain)
@@ -208,7 +224,7 @@ struct PromptSuggestionBanner: View {
       RoundedRectangle(cornerRadius: 20, style: .continuous)
         .fill(
           LinearGradient(
-            colors: [calloutCream, Color(hex: 0xEFD07A)],
+            colors: [bannerSurface, bannerSurfaceShadow],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
           )
@@ -216,12 +232,23 @@ struct PromptSuggestionBanner: View {
     )
     .overlay(
       RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .stroke(calloutAmber.opacity(0.24), lineWidth: 1)
+        .stroke(bannerStroke.opacity(0.9), lineWidth: 1)
     )
+    .overlay(alignment: .topLeading) {
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(
+          LinearGradient(
+            colors: [calloutAmber.opacity(0.15), .clear],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .allowsHitTesting(false)
+    }
     .overlay(alignment: .topTrailing) {
       ZStack(alignment: .topTrailing) {
         Circle()
-          .fill(Color.white.opacity(0.3))
+          .fill(calloutAmber.opacity(0.08))
           .frame(width: 120, height: 120)
           .blur(radius: 34)
           .offset(x: 34, y: -42)
@@ -230,16 +257,17 @@ struct PromptSuggestionBanner: View {
         Button(action: onDismiss) {
           Image(systemName: "xmark")
             .font(.system(size: 11, weight: .bold))
-            .foregroundColor(Color.black.opacity(0.58))
+            .foregroundColor(bannerSecondaryText)
             .frame(width: 24, height: 24)
             .background(
               Circle()
-                .fill(Color.white.opacity(0.45))
+                .fill(OmiColors.backgroundTertiary)
             )
         }
         .buttonStyle(.plain)
         .padding(14)
       }
     }
+    .shadow(color: .black.opacity(0.28), radius: 22, x: 0, y: 14)
   }
 }

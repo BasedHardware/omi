@@ -8,16 +8,20 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.core.content.ContextCompat
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
- * Native Android BLE manager — scanning, GATT lifecycle, characteristic ops, and audio batching.
+ * Pure GATT wrapper — scanning, characteristic ops, and command queue.
+ * Connection lifecycle (connect, retry, reconnect) is owned by OmiBleForegroundService.
  * Uses a serialized command queue (Android allows one pending GATT operation at a time).
  * GATT callbacks arrive on binder threads; Pigeon calls are posted to mainHandler.
  */
@@ -26,12 +30,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     companion object {
         private const val TAG = "OmiBle"
-        private const val RECONNECT_DELAY_MS = 3000L // 3s between retries
-        private const val MTU_REQUEST_DELAY_MS = 100L // Small delay for BLE stack stability
-        private const val STABILITY_TIMER_MS = 60000L // 60s — reset retry count after stable connection
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
-        /** GATT status codes that are transient and worth retrying. */
-        private val RETRYABLE_STATUS_CODES = setOf(8, 19, 22, 62, 133, 147, 257)
 
         @Volatile
         private var _instance: OmiBleManager? = null
@@ -41,6 +40,13 @@ class OmiBleManager private constructor(private val application: Application) {
 
         val isInitialized: Boolean
             get() = _instance != null
+
+        /** True while the Flutter engine is alive. Set in MainActivity.configureFlutterEngine,
+         *  cleared in MainActivity.onDestroy(isFinishing). CompanionService checks this to
+         *  avoid starting the foreground service when the app is dead — Omi needs the Flutter
+         *  app for WebSocket audio streaming. */
+        @Volatile
+        var isFlutterAlive: Boolean = false
 
         fun initialize(application: Application) {
             if (_instance == null) {
@@ -56,20 +62,28 @@ class OmiBleManager private constructor(private val application: Application) {
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
+    // ── Listener for the foreground service ──
+
+    interface BleConnectionListener {
+        fun onGattConnected(address: String, gatt: BluetoothGatt)
+        fun onGattDisconnected(address: String, gattHash: Int, status: Int)
+        fun onGattServicesDiscovered(address: String, services: List<BleService>)
+        fun onMtuChanged(address: String, mtu: Int, status: Int)
+    }
+
+    @Volatile
+    var connectionListener: BleConnectionListener? = null
+
     @Volatile
     var flutterApi: BleFlutterApi? = null
 
     private val bluetoothManager = application.getSystemService(Application.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
-    private val mainHandler = Handler(Looper.getMainLooper())
+    val mainHandler = Handler(Looper.getMainLooper())
 
-    private val connectedGatts = ConcurrentHashMap<String, BluetoothGatt>()
+    val connectedGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val readCompletions = ConcurrentHashMap<String, (Result<ByteArray>) -> Unit>()
     private val writeCompletions = ConcurrentHashMap<String, (Result<Unit>) -> Unit>()
-    private val manuallyDisconnected = ConcurrentHashMap.newKeySet<String>()
-    @Volatile var appClosed = false
-
-    private val reconnectRetryCount = ConcurrentHashMap<String, Int>()
 
     private val servicesDiscoveredFor = ConcurrentHashMap.newKeySet<String>()
 
@@ -82,10 +96,10 @@ class OmiBleManager private constructor(private val application: Application) {
     private var isProcessingCommand = false
 
     private var rssiKeepAliveRunnable: Runnable? = null
-    private val rssiKeepAliveInterval = 500L // ms
+    private val rssiKeepAliveInterval = 3000L // ms
+    @Volatile
+    var isRssiStreamingEnabled = false
 
-    private var stabilityTimerRunnable: Runnable? = null
-    private var pendingReconnectRunnable: Runnable? = null
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
     private var bondingAddress: String? = null
@@ -125,6 +139,8 @@ class OmiBleManager private constructor(private val application: Application) {
         application.registerReceiver(bondStateReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
     }
 
+    // ── Scanning ──
+
     fun startScan(timeout: Int, serviceUuids: List<String>) {
         val state = getBluetoothState()
         Log.i(TAG, "startScan called, state=$state, timeout=$timeout, serviceUuids=$serviceUuids")
@@ -132,6 +148,12 @@ class OmiBleManager private constructor(private val application: Application) {
         val adapter = bluetoothAdapter ?: return
         if (!adapter.isEnabled) {
             Log.w(TAG, "Bluetooth not enabled, cannot scan")
+            return
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(application, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "BLUETOOTH_SCAN permission not granted, cannot scan")
             return
         }
 
@@ -205,104 +227,36 @@ class OmiBleManager private constructor(private val application: Application) {
         scanCallback = null
     }
 
-    /** Addresses with an in-flight GATT connect (between connectGatt and onConnectionStateChange). */
-    private val connectingAddresses = ConcurrentHashMap.newKeySet<String>()
+    // ── GATT connection methods ──
 
-    fun connectPeripheral(address: String, caller: String = "unknown") {
+    fun connectGatt(address: String, autoConnect: Boolean): BluetoothGatt? {
         val addr = address.uppercase()
-        appClosed = false
-        manuallyDisconnected.remove(addr)
-
-        connectedGatts[addr]?.let { gatt ->
-            if (bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT) == BluetoothProfile.STATE_CONNECTED) {
-                Log.i(TAG, "connectPeripheral($caller): $addr already connected, skipping")
-                return
-            }
+        val adapter = bluetoothAdapter ?: return null
+        // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
+        val device = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            adapter.getRemoteLeDevice(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM)
+        } else {
+            adapter.getRemoteDevice(addr)
         }
-
-        // If native already has a pending reconnect (e.g. after status=5 bond removal),
-        // let it handle reconnection with autoConnect=true — don't cancel it with a
-        // competing autoConnect=false connection that may fail.
-        if (pendingReconnectRunnable != null) {
-            Log.i(TAG, "connectPeripheral($caller): $addr has pending native reconnect, skipping")
-            return
+        val callback = createGattCallback()
+        val gatt = device.connectGatt(application, autoConnect, callback, BluetoothDevice.TRANSPORT_LE)
+        if (gatt != null) {
+            connectedGatts[addr] = gatt
+        } else {
+            Log.e(TAG, "connectGatt returned null for $addr")
         }
-
-        // Guard: skip if a GATT connect is already in-flight for this address.
-        if (connectingAddresses.contains(addr)) {
-            Log.i(TAG, "connectPeripheral($caller): $addr connect already in-flight, skipping")
-            return
-        }
-
-        reconnectRetryCount[addr] = 0
-
-        connectedGatts[addr]?.close()
-        connectedGatts.remove(addr)
-        servicesDiscoveredFor.remove(addr)
-
-        val adapter = bluetoothAdapter ?: return
-        val device = adapter.getRemoteDevice(addr)
-        Log.i(TAG, "connectPeripheral($caller): $addr")
-        connectingAddresses.add(addr)
-        val gatt = device.connectGatt(application, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        connectedGatts[addr] = gatt
+        return gatt
     }
 
-    fun disconnectPeripheral(address: String) {
+    fun disconnectGatt(address: String) {
+        connectedGatts[address.uppercase()]?.disconnect()
+    }
+
+    fun closeGatt(address: String) {
         val addr = address.uppercase()
-        manuallyDisconnected.add(addr)
-        connectingAddresses.remove(addr)
         cleanupPeripheral(addr)
-        connectedGatts[addr]?.apply {
-            disconnect()
-            close()
-        }
-        connectedGatts.remove(addr)
-        OmiBleForegroundService.stopService(application)
-    }
-
-    fun disconnectAllPeripherals() {
-        appClosed = true
-        for ((addr, gatt) in connectedGatts) {
-            manuallyDisconnected.add(addr)
-            cleanupPeripheral(addr)
-            gatt.disconnect()
-            gatt.close()
-        }
-        connectedGatts.clear()
-        OmiBleForegroundService.stopService(application)
-    }
-
-    fun isManuallyDisconnected(address: String): Boolean {
-        return manuallyDisconnected.contains(address.uppercase())
-    }
-
-    fun reconnectKnownPeripheral(address: String) {
-        val addr = address.uppercase()
-        appClosed = false
-        reconnectRetryCount[addr] = 0
-        cancelPendingReconnect()
-
-        if (isPeripheralConnected(addr)) {
-            Log.i(TAG, "reconnectKnownPeripheral: $addr already connected, skipping")
-            return
-        }
-
-        if (connectingAddresses.contains(addr)) {
-            Log.i(TAG, "reconnectKnownPeripheral: $addr connect already in-flight, skipping")
-            return
-        }
-
         connectedGatts[addr]?.close()
         connectedGatts.remove(addr)
-        servicesDiscoveredFor.remove(addr)
-
-        val adapter = bluetoothAdapter ?: return
-        val device = adapter.getRemoteDevice(addr)
-        Log.i(TAG, "reconnectKnownPeripheral: $addr (autoConnect=true)")
-        connectingAddresses.add(addr)
-        val gatt = device.connectGatt(application, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        connectedGatts[addr] = gatt
     }
 
     fun isPeripheralConnected(address: String): Boolean {
@@ -310,6 +264,8 @@ class OmiBleManager private constructor(private val application: Application) {
         val gatt = connectedGatts[addr] ?: return false
         return bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT) == BluetoothProfile.STATE_CONNECTED
     }
+
+    // ── Bonding ──
 
     fun requestBond(address: String, completion: (Result<Boolean>) -> Unit) {
         val addr = address.uppercase()
@@ -337,6 +293,8 @@ class OmiBleManager private constructor(private val application: Application) {
         bondTimeoutRunnable = timeoutRunnable
         mainHandler.postDelayed(timeoutRunnable, BOND_TIMEOUT_MS)
     }
+
+    // ── Characteristic operations ──
 
     fun readCharacteristic(
         address: String,
@@ -391,13 +349,23 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         enqueueCommand {
-            val result = gatt.writeCharacteristic(characteristic, data, writeType)
-            if (result != BluetoothStatusCodes.SUCCESS) {
-                Log.e(TAG, "writeCharacteristic returned $result for $key")
-                writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected: $result")))
+            @Suppress("deprecation")
+            val success = if (Build.VERSION.SDK_INT >= 33) {
+                val result = gatt.writeCharacteristic(characteristic, data, writeType)
+                if (result != BluetoothStatusCodes.SUCCESS) {
+                    Log.e(TAG, "writeCharacteristic returned $result for $key")
+                }
+                result == BluetoothStatusCodes.SUCCESS
+            } else {
+                characteristic.value = data
+                characteristic.writeType = writeType
+                gatt.writeCharacteristic(characteristic)
+            }
+            if (!success) {
+                Log.e(TAG, "writeCharacteristic failed for $key")
+                writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected")))
                 completeCommand()
             } else if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
-                // No onCharacteristicWrite callback for no-response writes
                 completeCommand()
             }
         }
@@ -416,7 +384,7 @@ class OmiBleManager private constructor(private val application: Application) {
         enqueueCommand {
             gatt.setCharacteristicNotification(characteristic, true)
             if (descriptor != null) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             } else {
                 completeCommand()
             }
@@ -432,18 +400,19 @@ class OmiBleManager private constructor(private val application: Application) {
         enqueueCommand {
             gatt.setCharacteristicNotification(characteristic, false)
             if (descriptor != null) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
             } else {
                 completeCommand()
             }
         }
     }
 
-    private fun startRssiKeepAlive(address: String) {
+    // ── RSSI keep-alive ──
+
+    fun startRssiKeepAlive(address: String) {
         stopRssiKeepAlive()
         val runnable = object : Runnable {
             override fun run() {
-                // Direct call — bypasses GATT queue since readRemoteRssi operates at HCI level
                 connectedGatts[address]?.readRemoteRssi()
                 mainHandler.postDelayed(this, rssiKeepAliveInterval)
             }
@@ -452,41 +421,12 @@ class OmiBleManager private constructor(private val application: Application) {
         mainHandler.postDelayed(runnable, rssiKeepAliveInterval)
     }
 
-    private fun stopRssiKeepAlive() {
+    fun stopRssiKeepAlive() {
         rssiKeepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
         rssiKeepAliveRunnable = null
     }
 
-    private fun startStabilityTimer(address: String) {
-        stopStabilityTimer()
-        val runnable = Runnable {
-            Log.i(TAG, "Connection stable for 60s, resetting retry count for $address")
-            reconnectRetryCount[address] = 0
-        }
-        stabilityTimerRunnable = runnable
-        mainHandler.postDelayed(runnable, STABILITY_TIMER_MS)
-    }
-
-    private fun stopStabilityTimer() {
-        stabilityTimerRunnable?.let { mainHandler.removeCallbacks(it) }
-        stabilityTimerRunnable = null
-    }
-
-    private fun cancelPendingReconnect() {
-        pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
-        pendingReconnectRunnable = null
-    }
-
-    /** Remove a stale bond so the next connection re-pairs fresh. */
-    private fun removeBond(device: BluetoothDevice) {
-        try {
-            val method = device.javaClass.getMethod("removeBond")
-            val result = method.invoke(device) as Boolean
-            Log.i(TAG, "removeBond(${device.address}): $result")
-        } catch (e: Exception) {
-            Log.w(TAG, "removeBond(${device.address}) failed: ${e.message}")
-        }
-    }
+    // ── State & utility ──
 
     fun getBluetoothState(): String {
         val adapter = bluetoothAdapter ?: return "unsupported"
@@ -499,24 +439,30 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
+    // ── Command queue ──
+
     @Synchronized
-    private fun enqueueCommand(command: Runnable) {
+    fun enqueueCommand(command: Runnable) {
         gattQueue.add(command)
         processNextCommand()
     }
 
     @Synchronized
     private fun processNextCommand() {
-        if (isProcessingCommand) return // Already processing
-        val cmd = gattQueue.poll()
-        if (cmd != null) {
-            isProcessingCommand = true
+        if (isProcessingCommand) return
+        val cmd = gattQueue.peek() ?: return
+        isProcessingCommand = true
+        try {
             mainHandler.post(cmd)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error posting command: ${e.message}")
+            completeCommand()
         }
     }
 
     @Synchronized
-    private fun completeCommand() {
+    fun completeCommand() {
+        gattQueue.poll()
         isProcessingCommand = false
         processNextCommand()
     }
@@ -526,7 +472,21 @@ class OmiBleManager private constructor(private val application: Application) {
         return service.getCharacteristic(UUID.fromString(characteristicUuid))
     }
 
-    private fun cleanupPeripheral(address: String) {
+    @Suppress("deprecation")
+    private fun writeDescriptorCompat(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, value: ByteArray) {
+        val success = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
+        } else {
+            descriptor.value = value
+            gatt.writeDescriptor(descriptor)
+        }
+        if (!success) {
+            Log.e(TAG, "writeDescriptor failed for ${descriptor.uuid}")
+            completeCommand()
+        }
+    }
+
+    fun cleanupPeripheral(address: String) {
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
@@ -547,101 +507,36 @@ class OmiBleManager private constructor(private val application: Application) {
         isProcessingCommand = false
     }
 
-    private val gattCallback = object : BluetoothGattCallback() {
+    // ── GATT callback factory ──
+
+    private fun createGattCallback() = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             val address = gatt.device.address.uppercase()
             Log.i(TAG, "onConnectionStateChange: address=$address, status=$status, newState=$newState")
 
-            // Connection attempt resolved — allow future connectPeripheral calls
-            connectingAddresses.remove(address)
-
-            if (connectedGatts[address] != null && connectedGatts[address] !== gatt) {
-                Log.w(TAG, "Ignoring stale GATT event from $address")
-                return
-            }
-
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
-                    reconnectRetryCount[address] = 0
-                    cancelPendingReconnect()
 
-                    OmiBleForegroundService.startService(application, address, caller = "gattCallback.connected")
-                    OmiBleForegroundService.updateNotificationText("Listening and transcribing")
-
-                    mainHandler.post {
-                        flutterApi?.onPeripheralConnected(address) {}
-                    }
-
-                    startStabilityTimer(address)
-
-                    // Always discover services immediately — no bonding in the connection pipeline.
-                    // Bonding is only done on-demand via requestBond() for devices that need it.
+                    // Discover services
                     enqueueCommand {
                         if (!gatt.discoverServices()) {
                             Log.e(TAG, "discoverServices returned false for $address")
                             completeCommand()
                         }
                     }
+
+                    // Notify the connection owner
+                    connectionListener?.onGattConnected(address, gatt)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.i(TAG, "Disconnected from $address (status=$status)")
+                    Log.i(TAG, "Disconnected from $address (status=$status, gattHash=${gatt.hashCode()})")
                     cleanupPeripheral(address)
-                    stopStabilityTimer()
-                    cancelPendingReconnect()
-                    mainHandler.post {
-                        flutterApi?.onPeripheralDisconnected(address, if (status != 0) "status=$status" else null) {}
-                    }
 
-                    if (!manuallyDisconnected.contains(address)) {
-                        val retries = reconnectRetryCount.getOrDefault(address, 0)
-                        val isRetryable = status == 0 || RETRYABLE_STATUS_CODES.contains(status)
-                        val isAuthFailure = status == 5 && gatt.device.bondState == BluetoothDevice.BOND_BONDED
-
-                        if (isAuthFailure) {
-                            // GATT_INSUFFICIENT_AUTHENTICATION with stale bond — remove bond and retry
-                            Log.w(TAG, "Authentication failure for $address, removing stale bond and retrying")
-                            removeBond(gatt.device)
-                            reconnectRetryCount[address] = retries + 1
-                            OmiBleForegroundService.updateNotificationText("Reconnecting...")
-                            val runnable = Runnable {
-                                pendingReconnectRunnable = null
-                                gatt.close()
-                                connectedGatts.remove(address)
-                                val device = bluetoothAdapter?.getRemoteDevice(address) ?: return@Runnable
-                                connectingAddresses.add(address)
-                                val newGatt = device.connectGatt(application, true, this, BluetoothDevice.TRANSPORT_LE)
-                                connectedGatts[address] = newGatt
-                            }
-                            pendingReconnectRunnable = runnable
-                            mainHandler.postDelayed(runnable, RECONNECT_DELAY_MS)
-                        } else if (isRetryable) {
-                            reconnectRetryCount[address] = retries + 1
-                            Log.i(TAG, "Auto-reconnecting to $address in ${RECONNECT_DELAY_MS}ms (retry ${retries + 1})")
-                            OmiBleForegroundService.updateNotificationText("Reconnecting...")
-                            val runnable = Runnable {
-                                pendingReconnectRunnable = null
-                                gatt.close()
-                                connectedGatts.remove(address)
-                                val device = bluetoothAdapter?.getRemoteDevice(address) ?: return@Runnable
-                                connectingAddresses.add(address)
-                                val newGatt = device.connectGatt(application, true, this, BluetoothDevice.TRANSPORT_LE)
-                                connectedGatts[address] = newGatt
-                            }
-                            pendingReconnectRunnable = runnable
-                            mainHandler.postDelayed(runnable, RECONNECT_DELAY_MS)
-                        } else {
-                            Log.w(TAG, "Not retrying $address: non-retryable status=$status")
-                            OmiBleForegroundService.updateNotificationText("Connection failed")
-                            gatt.close()
-                            connectedGatts.remove(address)
-                        }
-                    } else {
-                        gatt.close()
-                        connectedGatts.remove(address)
-                    }
+                    // Notify the connection owner with GATT hash for stale callback rejection
+                    connectionListener?.onGattDisconnected(address, gatt.hashCode(), status)
                 }
             }
         }
@@ -654,6 +549,9 @@ class OmiBleManager private constructor(private val application: Application) {
                 Log.i(TAG, "MTU changed to $mtu for $address")
             }
             completeCommand()
+
+            // Notify connection owner so it can fire onDeviceReady
+            connectionListener?.onMtuChanged(address, mtu, status)
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -668,10 +566,14 @@ class OmiBleManager private constructor(private val application: Application) {
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Service discovery failed for $address (status=$status)")
+                completeCommand()
                 return
             }
 
-            val services = gatt.services ?: return
+            val services = gatt.services ?: run {
+                completeCommand()
+                return
+            }
             val bleServices = services.map { svc ->
                 BleService(
                     uuid = svc.uuid.toString().lowercase(),
@@ -685,21 +587,9 @@ class OmiBleManager private constructor(private val application: Application) {
                 Log.w(TAG, "Failed to request high connection priority")
             }
 
-            startRssiKeepAlive(address)
             completeCommand()
 
-            mainHandler.post {
-                flutterApi?.onServicesDiscovered(address, bleServices) {}
-            }
-
-            mainHandler.postDelayed({
-                enqueueCommand {
-                    if (!gatt.requestMtu(512)) {
-                        Log.e(TAG, "requestMtu returned false")
-                        completeCommand()
-                    }
-                }
-            }, MTU_REQUEST_DELAY_MS)
+            connectionListener?.onGattServicesDiscovered(address, bleServices)
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
@@ -765,6 +655,13 @@ class OmiBleManager private constructor(private val application: Application) {
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.w(TAG, "RSSI read failed: status=$status for ${gatt.device.address}")
+                return
+            }
+            if (isRssiStreamingEnabled) {
+                val address = gatt.device.address.uppercase()
+                mainHandler.post {
+                    flutterApi?.onRssiUpdate(address, rssi.toLong()) {}
+                }
             }
         }
     }

@@ -7,6 +7,7 @@ struct OnboardingTrustStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onForceComplete: (() -> Void)?
 
   var body: some View {
     OnboardingStepScaffold(
@@ -17,7 +18,8 @@ struct OnboardingTrustStepView: View {
       title: "I’m going to ask for a few permissions.",
       description:
         "Omi is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
-      layoutMode: .centered
+      layoutMode: .centered,
+      onForceComplete: onForceComplete
     ) {
       VStack(spacing: 18) {
         VStack(alignment: .leading, spacing: 12) {

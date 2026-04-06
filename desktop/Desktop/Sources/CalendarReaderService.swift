@@ -234,6 +234,44 @@ actor CalendarReaderService {
     }
   }
 
+  func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int) {
+    let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
+    guard !eventsToSave.isEmpty else { return (0, 0) }
+
+    let concurrency = min(8, eventsToSave.count)
+    var nextIndex = 0
+
+    return await withTaskGroup(of: Bool.self) { group in
+      func enqueueNext() {
+        guard nextIndex < eventsToSave.count else { return }
+        let event = eventsToSave[nextIndex]
+        nextIndex += 1
+        group.addTask {
+          await Self.saveMemory(for: event)
+        }
+      }
+
+      for _ in 0..<concurrency {
+        enqueueNext()
+      }
+
+      var saved = 0
+      var failed = 0
+
+      while let success = await group.next() {
+        if success {
+          saved += 1
+        } else {
+          failed += 1
+        }
+        enqueueNext()
+      }
+
+      log("CalendarReaderService: Saved \(saved) events as memories (\(failed) failed)")
+      return (saved, failed)
+    }
+  }
+
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
   private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
@@ -268,7 +306,7 @@ actor CalendarReaderService {
     // No temp file cleanup needed — we read the original DB directly in read-only mode
 
     let pythonScript = """
-      import sys, json, os, sqlite3, hashlib, time, urllib.request, urllib.error
+      import sys, json, os, sqlite3, hashlib, time, urllib.request, urllib.error, urllib.parse
       from http.cookiejar import MozillaCookieJar, Cookie
       from datetime import datetime, timedelta, timezone
 
@@ -391,50 +429,69 @@ actor CalendarReaderService {
           time_min = (now - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%SZ')
           time_max = (now + timedelta(days=days_forward)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-          url = (
-              f"https://clients6.google.com/calendar/v3/calendars/primary/events"
-              f"?timeMin={time_min}&timeMax={time_max}"
-              f"&singleEvents=true&orderBy=startTime&maxResults={max_results}"
-              f"&key={os.environ.get('GOOGLE_CALENDAR_API_KEY', '')}"
-          )
-
           opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-          req = urllib.request.Request(url)
-          req.add_header('Authorization', auth_header)
-          req.add_header('Origin', origin)
-          req.add_header('Referer', 'https://calendar.google.com/')
-          req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
-          req.add_header('X-Goog-AuthUser', '0')
+          all_items = []
+          page_token = None
 
-          try:
-              resp = opener.open(req, timeout=30)
-              status = resp.getcode()
-              body = resp.read()
-              if status != 200:
-                  return None, f"HTTP {status}"
-              data = json.loads(body)
-              return data.get('items', []), None
-          except urllib.error.HTTPError as e:
-              body = e.read().decode('utf-8', errors='replace')[:200] if e.fp else ''
-              return None, f"HTTP {e.code}: {body}"
-          except Exception as e:
-              return None, str(e)
+          while len(all_items) < max_results:
+              page_size = min(2500, max_results - len(all_items))
+              url = (
+                  f"https://clients6.google.com/calendar/v3/calendars/primary/events"
+                  f"?timeMin={time_min}&timeMax={time_max}"
+                  f"&singleEvents=true&orderBy=startTime&maxResults={page_size}"
+                  f"&key={os.environ.get('GOOGLE_CALENDAR_API_KEY', '')}"
+              )
+              if page_token:
+                  url += f"&pageToken={urllib.parse.quote(page_token)}"
+
+              req = urllib.request.Request(url)
+              req.add_header('Authorization', auth_header)
+              req.add_header('Origin', origin)
+              req.add_header('Referer', 'https://calendar.google.com/')
+              req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
+              req.add_header('X-Goog-AuthUser', '0')
+
+              try:
+                  resp = opener.open(req, timeout=30)
+                  status = resp.getcode()
+                  body = resp.read()
+                  if status != 200:
+                      return None, f"HTTP {status}"
+                  data = json.loads(body)
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode('utf-8', errors='replace')[:200] if e.fp else ''
+                  return None, f"HTTP {e.code}: {body}"
+              except Exception as e:
+                  return None, str(e)
+
+              items = data.get('items', [])
+              all_items.extend(items)
+              page_token = data.get('nextPageToken')
+              if not page_token or not items:
+                  break
+
+          return all_items[:max_results], None
+
+      last_error = None
 
       # Try each browser
       for browser in browsers:
           cookies, err = decrypt_cookies(browser['db_path'], browser['password'])
           if err or not cookies:
+              last_error = f"{browser['name']}: cookie read failed ({err or 'no cookies'})"
               continue
 
           # Check for auth cookies
           auth_names = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
           found_auth = [c for c in cookies if c['name'] in auth_names]
           if not found_auth:
+              last_error = f"{browser['name']}: no Google auth cookies"
               continue
 
           jar = make_cookie_jar(cookies)
           events, fetch_err = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
           if fetch_err or events is None:
+              last_error = f"{browser['name']}: {fetch_err or 'unknown fetch error'}"
               continue
 
           # Format events for output
@@ -469,7 +526,7 @@ actor CalendarReaderService {
       import tempfile
       outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
       with open(outfile, 'w') as f:
-          json.dump({'ok': False, 'error': 'No browser with valid Google session found'}, f)
+          json.dump({'ok': False, 'error': last_error or 'No browser with valid Google session found'}, f)
       print(outfile)
       sys.exit(0)
       """
@@ -604,6 +661,34 @@ actor CalendarReaderService {
       } catch {
         return nil
       }
+    }
+  }
+
+  nonisolated private static func saveMemory(for event: CalendarEvent) async -> Bool {
+    var parts = ["Calendar event — \(event.summary)"]
+    if !event.startTime.isEmpty {
+      parts.append("Starts: \(event.startTime)")
+    }
+    if !event.location.isEmpty {
+      parts.append("Location: \(event.location)")
+    }
+    if !event.attendees.isEmpty {
+      parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
+    }
+    let content = parts.joined(separator: " | ")
+
+    do {
+      _ = try await APIClient.shared.createMemory(
+        content: content,
+        visibility: "private",
+        tags: ["calendar", "onboarding", "event"],
+        source: "google_calendar",
+        headline: event.summary
+      )
+      return true
+    } catch {
+      log("CalendarReaderService: Failed to save raw event memory \(event.id): \(error)")
+      return false
     }
   }
 }

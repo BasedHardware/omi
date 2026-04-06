@@ -32,6 +32,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: RESEND_API_KEY
     valueFrom:
       secretKeyRef:

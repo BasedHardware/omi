@@ -6,11 +6,14 @@ import 'package:omi/utils/logger.dart';
 /// Callback signature for characteristic value updates.
 typedef CharacteristicValueCallback = void Function(String serviceUuid, String characteristicUuid, Uint8List value);
 
-/// Callback signature for connection state changes.
+/// Callback signature for connection state changes
 typedef ConnectionStateCallback = void Function(bool connected, String? error);
 
-/// Callback signature for service discovery.
-typedef ServicesDiscoveredCallback = void Function(List<BleService> services);
+/// Callback signature for device ready (connected + services + bonded + MTU done).
+typedef DeviceReadyCallback = void Function(List<BleService> services);
+
+/// Callback signature for RSSI updates (diagnostics).
+typedef RssiUpdateCallback = void Function(int rssi);
 
 /// Singleton bridge that implements BleFlutterApi (Pigeon) and dispatches
 /// native BLE events to registered listeners (NativeBleTransport instances).
@@ -20,8 +23,9 @@ class BleBridge implements BleFlutterApi {
   BleBridge._();
 
   final Map<String, CharacteristicValueCallback> _characteristicCallbacks = {};
-  final Map<String, ConnectionStateCallback> _connectionCallbacks = {};
-  final Map<String, ServicesDiscoveredCallback> _servicesCallbacks = {};
+  final Map<String, ConnectionStateCallback> _disconnectCallbacks = {};
+  final Map<String, DeviceReadyCallback> _deviceReadyCallbacks = {};
+  final Map<String, RssiUpdateCallback> _rssiCallbacks = {};
 
   void Function(String state)? bluetoothStateChangedCallback;
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
@@ -31,19 +35,27 @@ class BleBridge implements BleFlutterApi {
     required String peripheralUuid,
     CharacteristicValueCallback? onCharacteristicValue,
     ConnectionStateCallback? onConnectionState,
-    ServicesDiscoveredCallback? onServicesDiscovered,
+    DeviceReadyCallback? onDeviceReady,
   }) {
     final key = peripheralUuid.toUpperCase();
     if (onCharacteristicValue != null) _characteristicCallbacks[key] = onCharacteristicValue;
-    if (onConnectionState != null) _connectionCallbacks[key] = onConnectionState;
-    if (onServicesDiscovered != null) _servicesCallbacks[key] = onServicesDiscovered;
+    if (onConnectionState != null) _disconnectCallbacks[key] = onConnectionState;
+    if (onDeviceReady != null) _deviceReadyCallbacks[key] = onDeviceReady;
+  }
+
+  void registerRssiCallback(String peripheralUuid, RssiUpdateCallback callback) {
+    _rssiCallbacks[peripheralUuid.toUpperCase()] = callback;
+  }
+
+  void unregisterRssiCallback(String peripheralUuid) {
+    _rssiCallbacks.remove(peripheralUuid.toUpperCase());
   }
 
   void unregisterPeripheral(String peripheralUuid) {
     final key = peripheralUuid.toUpperCase();
     _characteristicCallbacks.remove(key);
-    _connectionCallbacks.remove(key);
-    _servicesCallbacks.remove(key);
+    _disconnectCallbacks.remove(key);
+    _deviceReadyCallbacks.remove(key);
   }
 
   @override
@@ -57,28 +69,31 @@ class BleBridge implements BleFlutterApi {
   }
 
   @override
-  void onPeripheralConnected(String peripheralUuid) {
+  void onDeviceReady(String peripheralUuid, List<BleService> services) {
     final key = peripheralUuid.toUpperCase();
-    _connectionCallbacks[key]?.call(true, null);
+    _deviceReadyCallbacks[key]?.call(services);
   }
 
   @override
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
-    _connectionCallbacks[key]?.call(false, error);
-  }
-
-  @override
-  void onServicesDiscovered(String peripheralUuid, List<BleService> services) {
-    final key = peripheralUuid.toUpperCase();
-    _servicesCallbacks[key]?.call(services);
+    _disconnectCallbacks[key]?.call(false, error);
   }
 
   @override
   void onCharacteristicValueUpdated(
-      String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value) {
+    String peripheralUuid,
+    String serviceUuid,
+    String characteristicUuid,
+    Uint8List value,
+  ) {
     final key = peripheralUuid.toUpperCase();
     _characteristicCallbacks[key]?.call(serviceUuid, characteristicUuid, value);
+  }
+
+  @override
+  void onRssiUpdate(String peripheralUuid, int rssi) {
+    _rssiCallbacks[peripheralUuid.toUpperCase()]?.call(rssi);
   }
 
   @override

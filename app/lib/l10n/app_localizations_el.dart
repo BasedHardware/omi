@@ -1721,12 +1721,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ΣΥΣΚΕΥΕΣ',
-      one: 'ΣΥΣΚΕΥΗ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -3304,7 +3299,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get aboutYou => 'Σχετικά με εσάς';
 
   @override
-  String get manual => 'Χειροκίνητο';
+  String get manual => 'Χειροκίνητη';
 
   @override
   String get loadingYourMemories => 'Φόρτωση των αναμνήσεών σας...';
@@ -8818,4 +8813,234 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get microphone => 'Μικρόφωνο';
+
+  @override
+  String get whyAreYouCanceling => 'Γιατί ακυρώνετε;';
+
+  @override
+  String get cancelReasonSubtitle => 'Μπορείτε να μας πείτε γιατί φεύγετε;';
+
+  @override
+  String get cancelReasonTooExpensive => 'Πολύ ακριβό';
+
+  @override
+  String get cancelReasonNotUsing => 'Δεν το χρησιμοποιώ αρκετά';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Λειτουργίες που λείπουν';
+
+  @override
+  String get cancelReasonAudioQuality => 'Ποιότητα ήχου/μεταγραφής';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Ανησυχίες για εξάντληση μπαταρίας';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Βρήκα εναλλακτική';
+
+  @override
+  String get cancelReasonOther => 'Άλλο';
+
+  @override
+  String get tellUsMore => 'Πείτε μας περισσότερα (προαιρετικό)';
+
+  @override
+  String get cancelReasonDetailHint => 'Εκτιμούμε κάθε σχόλιο...';
+
+  @override
+  String get justAMoment => 'Μια στιγμή, παρακαλώ';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Συνιστούμε ανεπιφύλακτα να εξερευνήσετε τις άλλες επιλογές σας αντί να ακυρώσετε.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Το πλάνο σας θα παραμείνει ενεργό μέχρι τις $date. Μετά, θα μεταφερθείτε στη δωρεάν έκδοση με περιορισμένες λειτουργίες.';
+  }
+
+  @override
+  String get ifYouCancel => 'Αν ακυρώσετε:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Δεν θα έχετε πλέον απεριόριστη πρόσβαση στο τέλος της περιόδου τιμολόγησης.';
+
+  @override
+  String get cancelConsequenceBattery => '7x περισσότερη κατανάλωση μπαταρίας (επεξεργασία στη συσκευή)';
+
+  @override
+  String get cancelConsequenceQuality => '30% χαμηλότερη ποιότητα μεταγραφής (μοντέλα στη συσκευή)';
+
+  @override
+  String get cancelConsequenceDelay => 'Καθυστέρηση επεξεργασίας 5-7 δευτερόλεπτα (μοντέλα στη συσκευή)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Δεν μπορεί να αναγνωρίσει ομιλητές.';
+
+  @override
+  String get confirmAndCancel => 'Επιβεβαίωση και ακύρωση';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Χωρίς μεταγραφή τηλεφωνικών κλήσεων σε πραγματικό χρόνο';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Ποια τιμή θα σας ταίριαζε;';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Ποιες λειτουργίες σας λείπουν;';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Τι προβλήματα αντιμετωπίσατε;';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Πείτε μας για τα προβλήματα μπαταρίας';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Σε τι αλλάζετε;';
+
+  @override
+  String get feedbackTitleNotUsing => 'Τι θα σας έκανε να χρησιμοποιείτε το Omi περισσότερο;';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Τα σχόλιά σας μας βοηθούν να βρούμε τη σωστή ισορροπία.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Πάντα χτίζουμε — αυτό μας βοηθά να ιεραρχήσουμε.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Θα θέλαμε να καταλάβουμε τι πήγε στραβά.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Αυτό βοηθά την ομάδα υλικού μας να βελτιωθεί.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Θα θέλαμε να μάθουμε τι τράβηξε το μάτι σας.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Θέλουμε να κάνουμε το Omi πιο χρήσιμο για εσάς.';
+
+  @override
+  String get deviceDiagnostics => 'Διαγνωστικά συσκευής';
+
+  @override
+  String get signalStrength => 'Ισχύς σήματος';
+
+  @override
+  String get connectionUptime => 'Χρόνος λειτουργίας';
+
+  @override
+  String get reconnections => 'Επανασυνδέσεις';
+
+  @override
+  String get disconnectHistory => 'Ιστορικό αποσυνδέσεων';
+
+  @override
+  String get noDisconnectsRecorded => 'Δεν καταγράφηκαν αποσυνδέσεις';
+
+  @override
+  String get diagnostics => 'Διαγνωστικά';
+
+  @override
+  String get waitingForData => 'Αναμονή για δεδομένα...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI σε πραγματικό χρόνο';
+
+  @override
+  String get noRssiDataYet => 'Δεν υπάρχουν δεδομένα RSSI ακόμη';
+
+  @override
+  String get collectingData => 'Συλλογή δεδομένων...';
+
+  @override
+  String get cleanDisconnect => 'Καθαρή αποσύνδεση';
+
+  @override
+  String get connectionTimeout => 'Λήξη χρόνου σύνδεσης';
+
+  @override
+  String get remoteDeviceTerminated => 'Η απομακρυσμένη συσκευή τερμάτισε';
+
+  @override
+  String get pairedToAnotherPhone => 'Συζευγμένο με άλλο τηλέφωνο';
+
+  @override
+  String get linkKeyMismatch => 'Αναντιστοιχία κλειδιού σύνδεσης';
+
+  @override
+  String get connectionFailed => 'Αποτυχία σύνδεσης';
+
+  @override
+  String get appClosed => 'Η εφαρμογή έκλεισε';
+
+  @override
+  String get manualDisconnect => 'Χειροκίνητη αποσύνδεση';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Τελευταία $count συμβάντα';
+  }
+
+  @override
+  String get signal => 'Σήμα';
+
+  @override
+  String get battery => 'Μπαταρία';
+
+  @override
+  String get excellent => 'Εξαιρετικό';
+
+  @override
+  String get good => 'Καλό';
+
+  @override
+  String get fair => 'Μέτριο';
+
+  @override
+  String get weak => 'Αδύναμο';
+
+  @override
+  String gattError(String code) {
+    return 'Σφάλμα GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Επαναφορά σε σταθερό firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Επαναφορά firmware;';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Αυτό θα αντικαταστήσει το τρέχον firmware με την τελευταία σταθερή έκδοση ($version). Η συσκευή σας θα επανεκκινηθεί μετά την ενημέρωση.';
+  }
+
+  @override
+  String get stableFirmware => 'Σταθερό firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Ανάκτηση τελευταίου σταθερού firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Δεν βρέθηκε σταθερή έκδοση firmware για τη συσκευή σας.';
+
+  @override
+  String get installStableFirmware => 'Εγκατάσταση σταθερού firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ήχου αποθηκεύτηκε τοπικά';
+  }
+
+  @override
+  String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

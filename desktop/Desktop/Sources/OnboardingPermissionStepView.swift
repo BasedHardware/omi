@@ -20,6 +20,7 @@ struct OnboardingPermissionStepView: View {
   let requiresRestart: Bool
   let onContinue: () -> Void
   let onSkip: () -> Void
+  let onForceComplete: (() -> Void)?
 
   @State private var isRequesting = false
   @State private var hasAutoAdvanced = false
@@ -36,7 +37,8 @@ struct OnboardingPermissionStepView: View {
       title: title,
       description: description,
       showsSkip: true,
-      onSkip: onSkip
+      onSkip: onSkip,
+      onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 20) {
         VStack(alignment: .leading, spacing: 18) {

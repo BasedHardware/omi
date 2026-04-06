@@ -7,6 +7,8 @@ struct OnboardingView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
   var onComplete: (() -> Void)? = nil
+  var exportStepOverride: Int? = nil
+  var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
@@ -17,6 +19,11 @@ struct OnboardingView: View {
   @AppStorage("onboardingFloatingBarShortcutStepInserted") private
     var hasInsertedFloatingBarShortcutStep = false
   @AppStorage("onboardingTrustStepReordered") private var hasReorderedTrustStep = false
+  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep =
+    false
+  @AppStorage("onboardingDataSourcesStepInserted") private var hasInsertedDataSourcesStep = false
+  @AppStorage("onboardingSecondBrainStepInserted") private var hasInsertedSecondBrainStep = false
+  @AppStorage("onboardingResearchStepRemoved") private var hasRemovedResearchStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -29,7 +36,7 @@ struct OnboardingView: View {
         .ignoresSafeArea()
 
       Group {
-        if appState.hasCompletedOnboarding {
+        if appState.hasCompletedOnboarding && !isExportPreview {
           Color.clear
             .onAppear {
               log("OnboardingView: hasCompletedOnboarding=true, starting monitoring")
@@ -51,16 +58,24 @@ struct OnboardingView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      currentStep = OnboardingFlow.migratedStep(
-        currentStep: currentStep,
-        hasMigratedVideoStep: hasMigratedOnboardingSteps,
-        hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
-        hasMergedVoiceInputStep: hasMergedVoiceInputStep,
-        hasRemovedNotificationStep: hasRemovedNotificationStep,
-        hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
-        hasMigratedPagedIntro: hasMigratedPagedIntro,
-        hasReorderedTrustStep: hasReorderedTrustStep
-      )
+      if let exportStepOverride {
+        currentStep = exportStepOverride
+      } else {
+        currentStep = OnboardingFlow.migratedStep(
+          currentStep: currentStep,
+          hasMigratedVideoStep: hasMigratedOnboardingSteps,
+          hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
+          hasMergedVoiceInputStep: hasMergedVoiceInputStep,
+          hasRemovedNotificationStep: hasRemovedNotificationStep,
+          hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
+          hasMigratedPagedIntro: hasMigratedPagedIntro,
+          hasReorderedTrustStep: hasReorderedTrustStep,
+          hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep,
+          hasInsertedDataSourcesStep: hasInsertedDataSourcesStep,
+          hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
+          hasRemovedResearchStep: hasRemovedResearchStep
+        )
+      }
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true
       hasInsertedVoiceShortcutStep = true
@@ -68,9 +83,14 @@ struct OnboardingView: View {
       hasRemovedNotificationStep = true
       hasInsertedFloatingBarShortcutStep = true
       hasReorderedTrustStep = true
+      hasInsertedHowDidYouHearStep = true
+      hasInsertedDataSourcesStep = true
+      hasInsertedSecondBrainStep = false
+      hasRemovedResearchStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
+      guard !isExportPreview else { return }
       // Pre-warm the ACP bridge before the chat step starts.
       await chatProvider.warmupBridge()
       await graphViewModel.addGraphFromStorage()
@@ -95,7 +115,8 @@ struct OnboardingView: View {
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
             currentStep = 1
-          }
+          },
+          onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 1 {
         OnboardingLanguageStepView(
@@ -106,25 +127,38 @@ struct OnboardingView: View {
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
             currentStep = 2
-          }
+          },
+          onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 2 {
-        OnboardingTrustStepView(
-          coordinator: introCoordinator,
+        OnboardingHowDidYouHearStepView(
           graphViewModel: graphViewModel,
           stepIndex: 2,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Trust")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "HowDidYouHear")
             currentStep = 3
-          }
+          },
+          onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 3 {
+        OnboardingTrustStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 3,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Trust")
+            currentStep = 4
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 4 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 3,
+          stepIndex: 4,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi read your screen.",
@@ -136,22 +170,23 @@ struct OnboardingView: View {
           primaryActionLabel: "Open Screen Recording settings",
           requiresRestart: true,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "ScreenRecording")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
             startMonitoringIfNeeded()
-            currentStep = 4
+            currentStep = 5
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 3, stepName: "ScreenRecording_Skipped")
-            currentStep = 4
-          }
+              step: 4, stepName: "ScreenRecording_Skipped")
+            currentStep = 5
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 4 {
+      } else if currentStep == 5 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 4,
+          stepIndex: 5,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Access",
           title: "Let Omi scan your work.",
@@ -163,37 +198,39 @@ struct OnboardingView: View {
           primaryActionLabel: "Open Disk Access",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FullDiskAccess")
-            currentStep = 5
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
+            currentStep = 6
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 4, stepName: "FullDiskAccess_Skipped")
-            currentStep = 5
-          }
+              step: 5, stepName: "FullDiskAccess_Skipped")
+            currentStep = 6
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 5 {
+      } else if currentStep == 6 {
         OnboardingFileScanStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 5,
+          stepIndex: 6,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan")
-            currentStep = 6
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan")
+            currentStep = 7
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan_Skipped")
-            currentStep = 6
-          }
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan_Skipped")
+            currentStep = 7
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 6 {
+      } else if currentStep == 7 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 6,
+          stepIndex: 7,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi use your mic.",
@@ -205,20 +242,21 @@ struct OnboardingView: View {
           primaryActionLabel: "Grant microphone access",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone")
-            currentStep = 7
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
+            currentStep = 8
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone_Skipped")
-            currentStep = 7
-          }
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone_Skipped")
+            currentStep = 8
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 7 {
+      } else if currentStep == 8 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 7,
+          stepIndex: 8,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi send reminders.",
@@ -230,21 +268,22 @@ struct OnboardingView: View {
           primaryActionLabel: "Enable notifications",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Notifications")
-            currentStep = 8
+            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Notifications")
+            currentStep = 9
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 7, stepName: "Notifications_Skipped")
-            currentStep = 8
-          }
+              step: 8, stepName: "Notifications_Skipped")
+            currentStep = 9
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 8 {
+      } else if currentStep == 9 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 8,
+          stepIndex: 9,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi see the active app.",
@@ -256,21 +295,22 @@ struct OnboardingView: View {
           primaryActionLabel: "Open Accessibility settings",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
-            currentStep = 9
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Accessibility")
+            currentStep = 10
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 8, stepName: "Accessibility_Skipped")
-            currentStep = 9
-          }
+              step: 9, stepName: "Accessibility_Skipped")
+            currentStep = 10
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 9 {
+      } else if currentStep == 10 {
         OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 9,
+          stepIndex: 10,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi act when asked.",
@@ -282,107 +322,116 @@ struct OnboardingView: View {
           primaryActionLabel: "Grant automation access",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
-            currentStep = 10
+            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Automation")
+            currentStep = 11
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation_Skipped")
-            currentStep = 10
-          }
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 10, stepName: "Automation_Skipped")
+            currentStep = 11
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 10 {
+      } else if currentStep == 11 {
         OnboardingFloatingBarShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 10, stepName: "FloatingBarShortcut")
-            currentStep = 11
+              step: 11, stepName: "FloatingBarShortcut")
+            currentStep = 12
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 10, stepName: "FloatingBarShortcut_Skipped")
-            currentStep = 11
-          }
+              step: 11, stepName: "FloatingBarShortcut_Skipped")
+            currentStep = 12
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 11 {
+      } else if currentStep == 12 {
         OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
-            currentStep = 12
+            AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "FloatingBar")
+            currentStep = 13
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 11, stepName: "FloatingBar_Skipped")
-            currentStep = 12
-          }
+              step: 12, stepName: "FloatingBar_Skipped")
+            currentStep = 13
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 12 {
+      } else if currentStep == 13 {
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "VoiceShortcut")
-            currentStep = 13
+            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceShortcut")
+            currentStep = 14
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 12, stepName: "VoiceShortcut_Skipped")
-            currentStep = 13
-          }
+              step: 13, stepName: "VoiceShortcut_Skipped")
+            currentStep = 14
+          },
+          onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 13 {
+      } else if currentStep == 14 {
         OnboardingVoiceDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceDemo")
-            currentStep = 14
+            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "VoiceDemo")
+            currentStep = 15
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 13, stepName: "VoiceDemo_Skipped")
-            currentStep = 14
-          }
-        )
-      } else if currentStep == 14 {
-        OnboardingResearchStepView(
-          coordinator: introCoordinator,
-          graphViewModel: graphViewModel,
-          stepIndex: 14,
-          totalSteps: OnboardingFlow.introStepCount,
-          onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "Research")
+              step: 14, stepName: "VoiceDemo_Skipped")
             currentStep = 15
-          }
+          },
+          onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 15 {
-        OnboardingGoalStepView(
-          appState: appState,
+        OnboardingDataSourcesStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 15,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Goal")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources")
+            currentStep = 16
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 16 {
+        OnboardingGoalStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 16,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
             if !ProactiveAssistantsPlugin.shared.isMonitoring {
               ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
-            currentStep = 16
-          }
+            currentStep = 17
+          },
+          onForceComplete: handleOnboardingComplete
         )
       } else {
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
-          }
+          },
+          onForceComplete: handleOnboardingComplete
         )
       }
     }
@@ -399,7 +448,8 @@ struct OnboardingView: View {
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-    PostOnboardingPromptSuggestions.save(OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
+    PostOnboardingPromptSuggestions.save(
+      OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false

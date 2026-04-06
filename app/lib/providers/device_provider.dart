@@ -52,6 +52,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   String _latestFirmwareVersion = '';
   String get latestFirmwareVersion => _latestFirmwareVersion;
 
+  // Latest stable firmware version (for rollback comparison)
+  String _latestStableFirmwareVersion = '';
+  String get latestStableFirmwareVersion => _latestStableFirmwareVersion;
+
   // OmiGlass firmware update details from GitHub releases
   Map<String, dynamic> _latestOmiGlassFirmwareDetails = {};
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
@@ -199,8 +203,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -567,6 +572,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           };
         }
 
+        // Fetch latest stable version for rollback comparison
+        try {
+          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          var stableVersion = stableDetails['version']?.toString() ?? '';
+          if (stableVersion.startsWith('v')) stableVersion = stableVersion.substring(1);
+          _latestStableFirmwareVersion = stableVersion;
+        } catch (e) {
+          Logger.debug('Error fetching stable firmware version: $e');
+        }
+
         notifyListeners();
         return hasUpdate;
       } catch (e) {
@@ -650,6 +665,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _disconnectDebouncer.cancel();
         _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
+      case DeviceConnectionState.connecting:
+        break;
       case DeviceConnectionState.disconnected:
         _connectDebouncer.cancel();
         // Check if this is the paired device or currently connected device
@@ -658,8 +675,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           _disconnectDebouncer.run(onDeviceDisconnected);
         }
         break;
-      default:
-        Logger.debug("Device connection state is not supported $state");
     }
   }
 

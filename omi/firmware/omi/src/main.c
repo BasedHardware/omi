@@ -20,10 +20,10 @@
 #include "lib/core/storage.h"
 #endif
 #include <hal/nrf_reset.h>
-#include "rtc.h"
-#include "imu.h"
 
+#include "imu.h"
 #include "lib/core/sd_card.h"
+#include "rtc.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
 
@@ -135,6 +135,17 @@ void set_led_state()
         return;
     }
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // If RTC not synced, blink red to warn user to connect phone app
+    if (!rtc_is_valid()) {
+        set_led_green(is_charging);
+        set_led_blue(!blink_toggle && is_connected);
+        set_led_red(blink_toggle);
+        blink_toggle = !blink_toggle;
+        return;
+    }
+#endif
+
     bool green = false;
     bool blue = false;
     bool red = false;
@@ -232,7 +243,7 @@ int main(void)
         LOG_WRN("UTC time not synchronized yet");
     }
 
-    (void)lsm6dsl_time_boot_adjust_rtc();
+    (void) lsm6dsl_time_boot_adjust_rtc();
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
@@ -332,10 +343,6 @@ int main(void)
         error_microphone();
         return ret;
     }
-#ifdef CONFIG_OMI_ENABLE_WIFI
-    // Initialize wifi
-    wifi_init();
-#endif
     LOG_INF("Device initialized successfully\n");
 
     while (1) {
@@ -346,16 +353,6 @@ int main(void)
 
         set_led_state();
         k_msleep(1000);
-// Print current UTC time every second for debugging
-#ifdef CONFIG_LOG
-        char utc_str[RTC_UTC_DATETIME_STRLEN];
-        int fmt_err = rtc_format_now_utc_datetime(utc_str, sizeof(utc_str));
-        if (fmt_err) {
-            LOG_INF("Current UTC time: <unsynced>");
-        } else {
-            LOG_INF("Current UTC time: %s", utc_str);
-        }
-#endif
     }
 
     printk("Exiting omi...");

@@ -3254,7 +3254,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get aboutYou => 'आपके बारे में';
 
   @override
-  String get manual => 'मैनुअल';
+  String get manual => 'मैन्युअल';
 
   @override
   String get loadingYourMemories => 'आपकी यादें लोड हो रही हैं...';
@@ -8734,4 +8734,235 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get microphone => 'माइक्रोफ़ोन';
+
+  @override
+  String get whyAreYouCanceling => 'आप रद्द क्यों कर रहे हैं?';
+
+  @override
+  String get cancelReasonSubtitle => 'क्या आप हमें बता सकते हैं कि आप क्यों जा रहे हैं?';
+
+  @override
+  String get cancelReasonTooExpensive => 'बहुत महंगा';
+
+  @override
+  String get cancelReasonNotUsing => 'पर्याप्त उपयोग नहीं कर रहा';
+
+  @override
+  String get cancelReasonMissingFeatures => 'लापता सुविधाएं';
+
+  @override
+  String get cancelReasonAudioQuality => 'ऑडियो/ट्रांसक्रिप्शन गुणवत्ता';
+
+  @override
+  String get cancelReasonBatteryDrain => 'बैटरी ड्रेन की चिंता';
+
+  @override
+  String get cancelReasonFoundAlternative => 'एक विकल्प मिला';
+
+  @override
+  String get cancelReasonOther => 'अन्य';
+
+  @override
+  String get tellUsMore => 'हमें और बताएं (वैकल्पिक)';
+
+  @override
+  String get cancelReasonDetailHint => 'हम किसी भी प्रतिक्रिया की सराहना करते हैं...';
+
+  @override
+  String get justAMoment => 'एक क्षण, कृपया';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'हम दृढ़ता से अनुशंसा करते हैं कि आप रद्द करने के बजाय अपने अन्य विकल्पों का पता लगाएं।';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'आपकी योजना $date तक सक्रिय रहेगी। उसके बाद, आपको सीमित सुविधाओं वाले मुफ्त संस्करण में स्थानांतरित कर दिया जाएगा।';
+  }
+
+  @override
+  String get ifYouCancel => 'यदि आप रद्द करते हैं:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'आपके बिलिंग अवधि के अंत में अनलिमिटेड एक्सेस नहीं होगा।';
+
+  @override
+  String get cancelConsequenceBattery => '7 गुना अधिक बैटरी उपयोग (डिवाइस पर प्रोसेसिंग)';
+
+  @override
+  String get cancelConsequenceQuality => '30% कम ट्रांसक्रिप्शन गुणवत्ता (डिवाइस पर मॉडल)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 सेकंड प्रोसेसिंग देरी (डिवाइस पर मॉडल)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'वक्ताओं की पहचान नहीं कर सकता।';
+
+  @override
+  String get confirmAndCancel => 'पुष्टि करें और रद्द करें';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'रीयल-टाइम फोन कॉल ट्रांसक्रिप्शन नहीं';
+
+  @override
+  String get feedbackTitleTooExpensive => 'आपके लिए कौन सी कीमत उचित होगी?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'आपको किन सुविधाओं की कमी है?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'आपने किन समस्याओं का अनुभव किया?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'बैटरी की समस्याओं के बारे में बताएं';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'आप किसमें जा रहे हैं?';
+
+  @override
+  String get feedbackTitleNotUsing => 'आपको Omi का अधिक उपयोग करने के लिए क्या प्रेरित करेगा?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'आपकी प्रतिक्रिया हमें सही संतुलन खोजने में मदद करती है।';
+
+  @override
+  String get feedbackSubtitleMissingFeatures =>
+      'हम हमेशा निर्माण कर रहे हैं — इससे हमें प्राथमिकता तय करने में मदद मिलती है।';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'हम समझना चाहेंगे कि क्या गलत हुआ।';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'इससे हमारी हार्डवेयर टीम को सुधार करने में मदद मिलती है।';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'हम जानना चाहेंगे कि आपकी नज़र किसने खींची।';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'हम Omi को आपके लिए अधिक उपयोगी बनाना चाहते हैं।';
+
+  @override
+  String get deviceDiagnostics => 'डिवाइस डायग्नोस्टिक्स';
+
+  @override
+  String get signalStrength => 'सिग्नल की शक्ति';
+
+  @override
+  String get connectionUptime => 'अपटाइम';
+
+  @override
+  String get reconnections => 'पुनः कनेक्शन';
+
+  @override
+  String get disconnectHistory => 'डिस्कनेक्ट इतिहास';
+
+  @override
+  String get noDisconnectsRecorded => 'कोई डिस्कनेक्ट दर्ज नहीं';
+
+  @override
+  String get diagnostics => 'डायग्नोस्टिक्स';
+
+  @override
+  String get waitingForData => 'डेटा की प्रतीक्षा...';
+
+  @override
+  String get liveRssiOverTime => 'समय के साथ लाइव RSSI';
+
+  @override
+  String get noRssiDataYet => 'अभी तक कोई RSSI डेटा नहीं';
+
+  @override
+  String get collectingData => 'डेटा एकत्र हो रहा है...';
+
+  @override
+  String get cleanDisconnect => 'स्वच्छ डिस्कनेक्ट';
+
+  @override
+  String get connectionTimeout => 'कनेक्शन टाइमआउट';
+
+  @override
+  String get remoteDeviceTerminated => 'रिमोट डिवाइस ने कनेक्शन समाप्त किया';
+
+  @override
+  String get pairedToAnotherPhone => 'दूसरे फोन से जुड़ा';
+
+  @override
+  String get linkKeyMismatch => 'लिंक कुंजी मेल नहीं खाती';
+
+  @override
+  String get connectionFailed => 'कनेक्शन विफल';
+
+  @override
+  String get appClosed => 'ऐप बंद';
+
+  @override
+  String get manualDisconnect => 'मैन्युअल डिस्कनेक्ट';
+
+  @override
+  String lastNEvents(int count) {
+    return 'अंतिम $count इवेंट';
+  }
+
+  @override
+  String get signal => 'सिग्नल';
+
+  @override
+  String get battery => 'बैटरी';
+
+  @override
+  String get excellent => 'उत्कृष्ट';
+
+  @override
+  String get good => 'अच्छा';
+
+  @override
+  String get fair => 'ठीक';
+
+  @override
+  String get weak => 'कमज़ोर';
+
+  @override
+  String gattError(String code) {
+    return 'GATT त्रुटि ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'स्थिर फ़र्मवेयर पर वापस जाएँ';
+
+  @override
+  String get rollbackConfirmTitle => 'फ़र्मवेयर वापस लाएँ?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'यह आपके वर्तमान फ़र्मवेयर को नवीनतम स्थिर संस्करण ($version) से बदल देगा। अपडेट के बाद आपका डिवाइस पुनः आरंभ होगा।';
+  }
+
+  @override
+  String get stableFirmware => 'स्थिर फ़र्मवेयर';
+
+  @override
+  String get fetchingStableFirmware => 'नवीनतम स्थिर फ़र्मवेयर प्राप्त किया जा रहा है...';
+
+  @override
+  String get noStableFirmwareFound => 'आपके डिवाइस के लिए स्थिर फ़र्मवेयर संस्करण नहीं मिला।';
+
+  @override
+  String get installStableFirmware => 'स्थिर फ़र्मवेयर इंस्टॉल करें';
+
+  @override
+  String get alreadyOnStableFirmware => 'आप पहले से नवीनतम स्थिर संस्करण पर हैं।';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ऑडियो स्थानीय रूप से सहेजा गया';
+  }
+
+  @override
+  String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

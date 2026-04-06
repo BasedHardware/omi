@@ -32,11 +32,14 @@ abstract class IDeviceService {
   // WiFi sync support - pause BLE reconnection during WiFi transfer
   void setWifiSyncInProgress(bool value);
   Future<void> disconnectDevice();
+
+  /// Fully tear down connection + transport for a device being forgotten/unpaired.
+  Future<void> forgetDevice(String deviceId);
 }
 
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState { connected, disconnected }
+enum DeviceConnectionState { connected, connecting, disconnected }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -284,5 +287,28 @@ class DeviceService implements IDeviceService {
       await _connection?.disconnect();
       _connection = null;
     }
+  }
+
+  @override
+  Future<void> forgetDevice(String deviceId) async {
+    Logger.debug("DeviceService: Forgetting device $deviceId");
+    if (_connection != null) {
+      if (_connection!.status == DeviceConnectionState.connected) {
+        try {
+          await _connection!.disconnect();
+        } catch (e) {
+          Logger.debug("DeviceService: disconnect during forget failed: $e");
+        }
+      }
+
+      try {
+        await _connection!.transport.dispose();
+      } catch (e) {
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
+      }
+      _connection = null;
+    }
+
+    _devices.removeWhere((d) => d.id == deviceId);
   }
 }

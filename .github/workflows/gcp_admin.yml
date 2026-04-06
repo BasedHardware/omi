@@ -1,0 +1,100 @@
+name: Deploy Admin Dashboard to Cloud Run
+
+on:
+  push:
+    branches: [ "main", "development" ]
+    paths:
+      - 'web/admin/**'
+  workflow_dispatch:
+
+env:
+  SERVICE: omi-admin-dashboard
+  REGION: us-central1
+  GCP_PROJECT: based-hardware
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
+    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - run: gcloud auth configure-docker
+
+      - name: Fetch build-time secrets from GCP Secret Manager
+        id: secrets
+        run: |
+          echo "Fetching NEXT_PUBLIC_ build-time secrets from GCP Secret Manager..."
+          {
+            echo "NEXT_PUBLIC_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_API_KEY --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_PROJECT_ID --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_APP_ID --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_FIREBASE_VAPID_KEY=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_VAPID_KEY --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_PLUGINS_APP_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_PLUGINS_APP_ID --project=${{ env.GCP_PROJECT }})"
+            echo "NEXT_PUBLIC_OMI_API_URL=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_OMI_API_URL --project=${{ env.GCP_PROJECT }})"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: web/admin
+          push: true
+          platforms: linux/amd64
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          build-args: |
+            NEXT_PUBLIC_FIREBASE_API_KEY=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_API_KEY }}
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+            NEXT_PUBLIC_FIREBASE_APP_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_APP_ID }}
+            NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
+            NEXT_PUBLIC_PLUGINS_APP_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_PLUGINS_APP_ID }}
+            NEXT_PUBLIC_OMI_API_URL=${{ steps.secrets.outputs.NEXT_PUBLIC_OMI_API_URL }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          revision_traffic: LATEST=100
+          secrets: |
+            FIREBASE_PROJECT_ID=WEB_ADMIN_FIREBASE_PROJECT_ID:latest
+            FIREBASE_CLIENT_EMAIL=WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest
+            FIREBASE_PRIVATE_KEY=WEB_ADMIN_FIREBASE_PRIVATE_KEY:latest
+            OMI_API_SECRET_KEY=WEB_ADMIN_OMI_API_SECRET_KEY:latest
+            TYPESENSE_HOST=WEB_ADMIN_TYPESENSE_HOST:latest
+            TYPESENSE_API_KEY=WEB_ADMIN_TYPESENSE_API_KEY:latest
+            STRIPE_SECRET_KEY=WEB_ADMIN_STRIPE_SECRET_KEY:latest
+            STRIPE_UNLIMITED_MONTHLY_PRICE_ID=WEB_ADMIN_STRIPE_UNLIMITED_MONTHLY_PRICE_ID:latest
+            STRIPE_UNLIMITED_ANNUAL_PRICE_ID=WEB_ADMIN_STRIPE_UNLIMITED_ANNUAL_PRICE_ID:latest
+            REDIS_HOST=WEB_ADMIN_REDIS_HOST:latest
+            REDIS_PORT=WEB_ADMIN_REDIS_PORT:latest
+            REDIS_PASSWORD=WEB_ADMIN_REDIS_PASSWORD:latest
+            SHIPBOB_API_KEY=WEB_ADMIN_SHIPBOB_API_KEY:latest
+            SHOPIFY_STORE=WEB_ADMIN_SHOPIFY_STORE:latest
+            SHOPIFY_ACCESS_TOKEN=WEB_ADMIN_SHOPIFY_ACCESS_TOKEN:latest
+            MIXPANEL_SECRET=WEB_ADMIN_MIXPANEL_SECRET:latest
+            OPENAI_API_KEY=WEB_ADMIN_OPENAI_API_KEY:latest
+            POSTHOG_PERSONAL_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest
+            POSTHOG_PROJECT_ID=WEB_ADMIN_POSTHOG_PROJECT_ID:latest
+            POSTHOG_HOST=WEB_ADMIN_POSTHOG_HOST:latest
+
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}

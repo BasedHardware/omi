@@ -596,9 +596,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
             let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6"
+                : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
-                .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt)
+                .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt),
+                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
         } catch {

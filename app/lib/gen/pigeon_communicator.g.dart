@@ -143,6 +143,115 @@ class BleService {
 ;
 }
 
+/// A single disconnect event stored in native preferences.
+class BleDisconnectEvent {
+  BleDisconnectEvent({
+    required this.timestamp,
+    required this.reason,
+    required this.reasonCode,
+    required this.isManual,
+  });
+
+  int timestamp;
+
+  String reason;
+
+  int reasonCode;
+
+  bool isManual;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      timestamp,
+      reason,
+      reasonCode,
+      isManual,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static BleDisconnectEvent decode(Object result) {
+    result as List<Object?>;
+    return BleDisconnectEvent(
+      timestamp: result[0]! as int,
+      reason: result[1]! as String,
+      reasonCode: result[2]! as int,
+      isManual: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! BleDisconnectEvent || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+/// Diagnostics data read from native preferences on demand.
+class BleDeviceDiagnostics {
+  BleDeviceDiagnostics({
+    required this.disconnectHistory,
+    required this.reconnectionCount,
+    required this.connectedAt,
+  });
+
+  List<BleDisconnectEvent> disconnectHistory;
+
+  int reconnectionCount;
+
+  int connectedAt;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      disconnectHistory,
+      reconnectionCount,
+      connectedAt,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static BleDeviceDiagnostics decode(Object result) {
+    result as List<Object?>;
+    return BleDeviceDiagnostics(
+      disconnectHistory: (result[0] as List<Object?>?)!.cast<BleDisconnectEvent>(),
+      reconnectionCount: result[1]! as int,
+      connectedAt: result[2]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! BleDeviceDiagnostics || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -157,6 +266,12 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BleService) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
+    }    else if (value is BleDisconnectEvent) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.encode());
+    }    else if (value is BleDeviceDiagnostics) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -169,6 +284,10 @@ class _PigeonCodec extends StandardMessageCodec {
         return BlePeripheral.decode(readValue(buffer)!);
       case 130: 
         return BleService.decode(readValue(buffer)!);
+      case 131: 
+        return BleDisconnectEvent.decode(readValue(buffer)!);
+      case 132: 
+        return BleDeviceDiagnostics.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -858,8 +977,31 @@ class BleHostApi {
     }
   }
 
-  Future<void> connectPeripheral(String uuid) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.connectPeripheral$pigeonVar_messageChannelSuffix';
+  Future<void> manageDevice(String uuid, bool requiresBond) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.manageDevice$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid, requiresBond]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> unmanageDevice(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -881,57 +1023,6 @@ class BleHostApi {
     }
   }
 
-  Future<void> disconnectPeripheral(String uuid) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.disconnectPeripheral$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  /// Reconnect a previously-paired peripheral. No active scanning — the platform
-  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
-  Future<void> reconnectKnownPeripheral(String uuid) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.reconnectKnownPeripheral$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  /// Request bonding/pairing for a connected peripheral.
-  /// Only needed for devices that require encrypted links (e.g. Limitless).
-  /// Waits for bond to complete or timeout. Returns true if bonded.
   Future<bool> requestBond(String uuid) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1113,8 +1204,81 @@ class BleHostApi {
     }
   }
 
+  Future<void> startRssiStreaming(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.startRssiStreaming$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> stopRssiStreaming(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.stopRssiStreaming$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<BleDeviceDiagnostics> getDeviceDiagnostics(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getDeviceDiagnostics$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as BleDeviceDiagnostics?)!;
+    }
+  }
+
   /// (Android only) Check if any CompanionDeviceManager association exists.
-  /// Returns true on iOS (state restoration handles background reconnection).
   Future<bool> hasCompanionDeviceAssociation() async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1144,9 +1308,6 @@ class BleHostApi {
   }
 
   /// (Android only) Initiate CompanionDeviceManager association for a device.
-  /// Shows the system chooser dialog filtered to this device's address.
-  /// Returns the associated device address on success, empty string on failure/cancel.
-  /// On iOS, returns empty string (state restoration handles background reconnection).
   Future<String> requestCompanionDeviceAssociation(String deviceAddress) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1176,7 +1337,6 @@ class BleHostApi {
   }
 }
 
-/// Native → Dart: events pushed from the native BLE module to Flutter.
 abstract class BleFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
@@ -1184,16 +1344,14 @@ abstract class BleFlutterApi {
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
-  void onPeripheralConnected(String peripheralUuid);
+  void onDeviceReady(String peripheralUuid, List<BleService> services);
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
 
-  void onServicesDiscovered(String peripheralUuid, List<BleService> services);
-
-  /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
 
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
+  void onRssiUpdate(String peripheralUuid, int rssi);
+
   void onStateRestored(List<String> peripheralUuids);
 
   static void setUp(BleFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
@@ -1250,20 +1408,23 @@ abstract class BleFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralConnected$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralConnected was null.');
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_peripheralUuid = (args[0] as String?);
           assert(arg_peripheralUuid != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralConnected was null, expected non-null String.');
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady was null, expected non-null String.');
+          final List<BleService>? arg_services = (args[1] as List<Object?>?)?.cast<BleService>();
+          assert(arg_services != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onDeviceReady was null, expected non-null List<BleService>.');
           try {
-            api.onPeripheralConnected(arg_peripheralUuid!);
+            api.onDeviceReady(arg_peripheralUuid!, arg_services!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -1301,34 +1462,6 @@ abstract class BleFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onServicesDiscovered$messageChannelSuffix', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onServicesDiscovered was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final String? arg_peripheralUuid = (args[0] as String?);
-          assert(arg_peripheralUuid != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onServicesDiscovered was null, expected non-null String.');
-          final List<BleService>? arg_services = (args[1] as List<Object?>?)?.cast<BleService>();
-          assert(arg_services != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onServicesDiscovered was null, expected non-null List<BleService>.');
-          try {
-            api.onServicesDiscovered(arg_peripheralUuid!, arg_services!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
           'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
@@ -1352,6 +1485,34 @@ abstract class BleFlutterApi {
               'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated was null, expected non-null Uint8List.');
           try {
             api.onCharacteristicValueUpdated(arg_peripheralUuid!, arg_serviceUuid!, arg_characteristicUuid!, arg_value!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_peripheralUuid = (args[0] as String?);
+          assert(arg_peripheralUuid != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate was null, expected non-null String.');
+          final int? arg_rssi = (args[1] as int?);
+          assert(arg_rssi != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onRssiUpdate was null, expected non-null int.');
+          try {
+            api.onRssiUpdate(arg_peripheralUuid!, arg_rssi!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

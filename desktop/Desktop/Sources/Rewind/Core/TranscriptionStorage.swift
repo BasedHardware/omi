@@ -272,6 +272,137 @@ actor TranscriptionStorage {
         return record.id!
     }
 
+    /// Upsert a segment by backend segment ID — update if exists, insert if not.
+    /// This handles the Python backend protocol where segments are sent with updates.
+    @discardableResult
+    func upsertSegment(
+        sessionId: Int64,
+        backendSegmentId: String?,
+        speaker: Int,
+        text: String,
+        startTime: Double,
+        endTime: Double,
+        isUser: Bool = false,
+        personId: String? = nil
+    ) async throws -> Int64 {
+        let db = try await ensureInitialized()
+
+        // If we have a backend segment ID, try to update existing
+        if let segId = backendSegmentId {
+            let updated = try await db.write { database -> Bool in
+                try database.execute(
+                    sql: """
+                        UPDATE transcription_segments
+                        SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?
+                        WHERE sessionId = ? AND segmentId = ?
+                        """,
+                    arguments: [text, speaker, startTime, endTime, isUser, personId, sessionId, segId]
+                )
+                return database.changesCount > 0
+            }
+            if updated {
+                return 0  // Updated existing row
+            }
+        }
+
+        // Insert new segment
+        let segmentOrder = try await db.read { database -> Int in
+            try Int.fetchOne(
+                database,
+                sql: "SELECT COALESCE(MAX(segmentOrder), -1) + 1 FROM transcription_segments WHERE sessionId = ?",
+                arguments: [sessionId]
+            ) ?? 0
+        }
+
+        let segment = TranscriptionSegmentRecord(
+            sessionId: sessionId,
+            speaker: speaker,
+            text: text,
+            startTime: startTime,
+            endTime: endTime,
+            segmentOrder: segmentOrder,
+            segmentId: backendSegmentId,
+            isUser: isUser,
+            personId: personId
+        )
+
+        let record = try await db.write { database in
+            try segment.inserted(database)
+        }
+
+        return record.id!
+    }
+
+    /// Delete segments by their backend segment IDs
+    func deleteSegmentsByBackendIds(sessionId: Int64, segmentIds: [String]) async throws {
+        guard !segmentIds.isEmpty else { return }
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            try TranscriptionSegmentRecord
+                .filter(Column("sessionId") == sessionId)
+                .filter(segmentIds.contains(Column("segmentId")))
+                .deleteAll(database)
+        }
+        log("TranscriptionStorage: Deleted \(segmentIds.count) segments by backend IDs from session \(sessionId)")
+    }
+
+    /// Update speaker assignment metadata for existing segments in a synced conversation.
+    /// Matches by backend segment IDs when available, then falls back to local segment order.
+    func updateSpeakerAssignmentByBackendId(
+        _ backendId: String,
+        segmentIds: [String],
+        fallbackSegmentOrders: [Int],
+        isUser: Bool,
+        personId: String?
+    ) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard let sessionId = try Int64.fetchOne(
+                database,
+                sql: "SELECT id FROM transcription_sessions WHERE backendId = ?",
+                arguments: [backendId]
+            ) else {
+                return
+            }
+
+            let encodedSegmentIds = String(
+                decoding: try JSONEncoder().encode(segmentIds),
+                as: UTF8.self
+            )
+            let encodedFallbackOrders = String(
+                decoding: try JSONEncoder().encode(fallbackSegmentOrders),
+                as: UTF8.self
+            )
+
+            if !segmentIds.isEmpty {
+                try database.execute(
+                    sql: """
+                        UPDATE transcription_segments
+                        SET isUser = ?, personId = ?
+                        WHERE sessionId = ? AND segmentId IN (
+                            SELECT value FROM json_each(?)
+                        )
+                        """,
+                    arguments: [isUser, personId, sessionId, encodedSegmentIds]
+                )
+            }
+
+            if !fallbackSegmentOrders.isEmpty {
+                try database.execute(
+                    sql: """
+                        UPDATE transcription_segments
+                        SET isUser = ?, personId = ?
+                        WHERE sessionId = ? AND segmentOrder IN (
+                            SELECT value FROM json_each(?)
+                        )
+                        """,
+                    arguments: [isUser, personId, sessionId, encodedFallbackOrders]
+                )
+            }
+        }
+    }
     /// Get all segments for a session ordered by segmentOrder
     func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
         let db = try await ensureInitialized()
