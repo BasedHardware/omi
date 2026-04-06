@@ -1838,6 +1838,7 @@ workflows:
   #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
   #                                       MIXPANEL_PROJECT_TOKEN=<token>
+  #                                     NOTE: OMI_PYTHON_API_URL is set via workflow vars (not in this secret)
   #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
   #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
   #                                       GOOGLE_CALENDAR_API_KEY
@@ -1876,6 +1877,7 @@ workflows:
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
         DESKTOP_BACKEND_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app"
+        OMI_PYTHON_API_URL: "https://api.omi.me"
         GCP_PROJECT: "based-hardware"
         GCP_REGION: "us-central1"
         CLOUD_RUN_SERVICE: "desktop-backend"
@@ -2168,6 +2170,9 @@ workflows:
           # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
           echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          # OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
+          # Must point to api.omi.me, NOT the Rust desktop-backend
+          echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app

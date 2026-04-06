@@ -1708,12 +1708,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -8943,4 +8938,44 @@ class AppLocalizationsFi extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-virhe ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Palaa vakaaseen laiteohjelmistoon';
+
+  @override
+  String get rollbackConfirmTitle => 'Palauta laiteohjelmisto?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tämä korvaa nykyisen laiteohjelmiston uusimmalla vakaalla versiolla ($version). Laitteesi käynnistyy uudelleen päivityksen jälkeen.';
+  }
+
+  @override
+  String get stableFirmware => 'Vakaa laiteohjelmisto';
+
+  @override
+  String get fetchingStableFirmware => 'Haetaan uusinta vakaata laiteohjelmistoa...';
+
+  @override
+  String get noStableFirmwareFound => 'Laitteellesi ei löytynyt vakaata laiteohjelmistoversiota.';
+
+  @override
+  String get installStableFirmware => 'Asenna vakaa laiteohjelmisto';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sinulla on jo uusin vakaa versio.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ääntä tallennettu paikallisesti';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkronoidaan automaattisesti';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

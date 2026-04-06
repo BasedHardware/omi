@@ -2877,5 +2877,22 @@
     "good": "Bo",
     "fair": "Acceptable",
     "weak": "Feble",
-    "gattError": "Error GATT ({code})"
+    "gattError": "Error GATT ({code})",
+    "rollbackToStableFirmware": "Tornar al firmware estable",
+    "rollbackConfirmTitle": "Tornar al firmware?",
+    "rollbackConfirmMessage": "Això substituirà el firmware actual amb la darrera versió estable ({version}). El dispositiu es reiniciarà després de l'actualització.",
+    "stableFirmware": "Firmware estable",
+    "fetchingStableFirmware": "Obtenint el darrer firmware estable...",
+    "noStableFirmwareFound": "No s'ha pogut trobar una versió estable del firmware per al vostre dispositiu.",
+    "installStableFirmware": "Instal·lar firmware estable",
+    "alreadyOnStableFirmware": "Ja esteu a la darrera versió estable.",
+    "audioSavedLocally": "{duration} d'àudio desat localment",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "es sincronitzarà automàticament"
 }

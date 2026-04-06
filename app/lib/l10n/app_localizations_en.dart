@@ -1706,12 +1706,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8675,12 +8670,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8940,4 +8930,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String gattError(String code) {
     return 'GATT error ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Roll Back to Stable Firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Roll Back Firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'This will replace your current firmware with the latest stable version ($version). Your device will restart after the update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stable Firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Fetching latest stable firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Could not find a stable firmware version for your device.';
+
+  @override
+  String get installStableFirmware => 'Install Stable Firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'You are already on the latest stable version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saved locally';
+  }
+
+  @override
+  String get willSyncAutomatically => 'will sync automatically';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -1721,12 +1721,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ΣΥΣΚΕΥΕΣ',
-      one: 'ΣΥΣΚΕΥΗ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -9008,4 +9003,44 @@ class AppLocalizationsEl extends AppLocalizations {
   String gattError(String code) {
     return 'Σφάλμα GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Επαναφορά σε σταθερό firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Επαναφορά firmware;';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Αυτό θα αντικαταστήσει το τρέχον firmware με την τελευταία σταθερή έκδοση ($version). Η συσκευή σας θα επανεκκινηθεί μετά την ενημέρωση.';
+  }
+
+  @override
+  String get stableFirmware => 'Σταθερό firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Ανάκτηση τελευταίου σταθερού firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Δεν βρέθηκε σταθερή έκδοση firmware για τη συσκευή σας.';
+
+  @override
+  String get installStableFirmware => 'Εγκατάσταση σταθερού firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ήχου αποθηκεύτηκε τοπικά';
+  }
+
+  @override
+  String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

@@ -10681,5 +10681,53 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "rollbackToStableFirmware": "Roll Back to Stable Firmware",
+    "@rollbackToStableFirmware": {
+        "description": "Action item title for rolling back to the latest stable firmware version"
+    },
+    "rollbackConfirmTitle": "Roll Back Firmware?",
+    "@rollbackConfirmTitle": {
+        "description": "Confirmation dialog title for firmware rollback"
+    },
+    "rollbackConfirmMessage": "This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.",
+    "@rollbackConfirmMessage": {
+        "description": "Confirmation dialog message for firmware rollback",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "stableFirmware": "Stable Firmware",
+    "@stableFirmware": {
+        "description": "Title for the stable firmware rollback page"
+    },
+    "fetchingStableFirmware": "Fetching latest stable firmware...",
+    "@fetchingStableFirmware": {
+        "description": "Loading text while fetching stable firmware version"
+    },
+    "noStableFirmwareFound": "Could not find a stable firmware version for your device.",
+    "@noStableFirmwareFound": {
+        "description": "Error message when no stable firmware is available"
+    },
+    "installStableFirmware": "Install Stable Firmware",
+    "@installStableFirmware": {
+        "description": "Button text to install the stable firmware"
+    },
+    "alreadyOnStableFirmware": "You are already on the latest stable version.",
+    "@alreadyOnStableFirmware": {
+        "description": "Message when device is already on the latest stable firmware"
+    },
+    "audioSavedLocally": "{duration} audio saved locally",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "will sync automatically",
+    "enableLocationTitle": "Enable Location",
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
 }

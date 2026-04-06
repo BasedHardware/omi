@@ -80,15 +80,21 @@ async def _execute_file_chat_stream(
     callback = AsyncStreamingCallback()
 
     try:
-        answer = fc_tool.process_chat_with_file_stream(question, file_ids, callback=callback)
+        # Run the producer as a concurrent task so chunks stream in real-time
+        async def _produce():
+            return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=callback)
 
-        # Yield chunks from callback
+        task = asyncio.create_task(_produce())
+
+        # Drain the queue concurrently while the producer runs
         while True:
             chunk = await callback.queue.get()
             if chunk:
                 yield chunk
             else:
                 break
+
+        answer = await task
 
         if callback_data is not None:
             callback_data['answer'] = answer

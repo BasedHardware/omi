@@ -417,7 +417,7 @@ extension TranscriptionSegmentRecord {
             startTime: segment.start,
             endTime: segment.end,
             segmentOrder: segmentOrder,
-            segmentId: segment.id,
+            segmentId: segment.backendId,
             speakerLabel: segment.speaker,
             isUser: segment.isUser,
             personId: segment.personId
@@ -428,6 +428,7 @@ extension TranscriptionSegmentRecord {
     func toTranscriptSegment() -> TranscriptSegment {
         return TranscriptSegment(
             id: segmentId ?? UUID().uuidString,
+            backendId: segmentId,
             text: text,
             speaker: speakerLabel,
             isUser: isUser,

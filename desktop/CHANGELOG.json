@@ -2,6 +2,83 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.232",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.231",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.230",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.229",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.228",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.227",
+      "date": "2026-04-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.226",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.225",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.224",
+      "date": "2026-04-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.223",
+      "date": "2026-04-04",
+      "changes": [
+        "Fixed speaker diarization in Take Note by migrating live transcription to production backend"
+      ]
+    },
+    {
+      "version": "0.11.222",
+      "date": "2026-04-03",
+      "changes": [
+        "Fixed floating bar screenshots not capturing screen content when screen recording permission was revoked after app update"
+      ]
+    },
+    {
       "version": "0.11.221",
       "date": "2026-04-02",
       "changes": [

@@ -17,7 +17,12 @@ from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
+from utils.stt.pre_recorded import (
+    deepgram_prerecorded,
+    deepgram_prerecorded_from_bytes,
+    postprocess_words,
+    get_deepgram_model_for_language,
+)
 from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 import logging
 
@@ -96,6 +101,69 @@ def transcribe_voice_message_segment(
     transcript_segments.clear()
     if len(text) == 0:
         logger.info('voice message text is empty')
+        return None, detected_language
+
+    return text, detected_language
+
+
+def transcribe_pcm_bytes(
+    audio_bytes: bytes,
+    uid: str,
+    language: str = 'multi',
+    encoding: str = 'linear16',
+    sample_rate: int = 16000,
+    channels: int = 1,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Transcribe raw PCM audio bytes directly via Deepgram pre-recorded API.
+
+    Skips GCS upload and WAV conversion for maximum speed.
+    Used by desktop PTT batch mode.
+    """
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+    is_multi = stt_language == 'multi'
+
+    # Let RuntimeError propagate so the router can distinguish backend failure from no-speech
+    if is_multi:
+        result = deepgram_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=False,
+            encoding=encoding,
+            channels=channels,
+            language=stt_language,
+            model=stt_model,
+            return_language=True,
+        )
+        words, detected_language = result
+    else:
+        words = deepgram_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=False,
+            encoding=encoding,
+            channels=channels,
+            language=stt_language,
+            model=stt_model,
+        )
+        detected_language = stt_language
+
+    if not words:
+        logger.info('transcribe_pcm_bytes: no words')
+        return None, detected_language
+
+    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    del words
+    if not transcript_segments:
+        logger.error('transcribe_pcm_bytes: failed to get segments')
+        return None, detected_language
+
+    text = " ".join([segment.text for segment in transcript_segments]).strip()
+    transcript_segments.clear()
+    if len(text) == 0:
+        logger.info('transcribe_pcm_bytes: text is empty')
         return None, detected_language
 
     return text, detected_language

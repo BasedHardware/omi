@@ -150,8 +150,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+          Logger.debug('dfu log: ${log.message}');
+        });
 
     await updateManager.update(images, configuration: configuration);
   }
@@ -219,6 +219,16 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
     );
+    if (latestFirmwareDetails['ota_update_steps'] != null) {
+      otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
+    }
+    if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
+      isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
+    }
+  }
+
+  Future getStableVersion({required String deviceModelNumber}) async {
+    latestFirmwareDetails = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }

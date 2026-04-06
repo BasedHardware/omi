@@ -40,7 +40,8 @@ class ClockSkewDetector {
     final event = parseResponse(response);
     if (event == null) return;
 
-    final msg = 'Clock skew detected: skew_seconds=${event.skewSeconds}, '
+    final msg =
+        'Clock skew detected: skew_seconds=${event.skewSeconds}, '
         'server_time=${event.serverTime}, '
         'client_time=${event.clientTime}';
     Logger.warning(msg);

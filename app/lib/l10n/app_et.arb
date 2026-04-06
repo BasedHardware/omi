@@ -2908,5 +2908,22 @@
     "good": "Hea",
     "fair": "Rahuldav",
     "weak": "Nõrk",
-    "gattError": "GATT viga ({code})"
+    "gattError": "GATT viga ({code})",
+    "rollbackToStableFirmware": "Tagasi stabiilsele püsivarale",
+    "rollbackConfirmTitle": "Taastada püsivara?",
+    "rollbackConfirmMessage": "See asendab teie praeguse püsivara uusima stabiilse versiooniga ({version}). Teie seade taaskäivitub pärast värskendust.",
+    "stableFirmware": "Stabiilne püsivara",
+    "fetchingStableFirmware": "Uusima stabiilse püsivara toomine...",
+    "noStableFirmwareFound": "Teie seadmele ei leitud stabiilset püsivara versiooni.",
+    "installStableFirmware": "Paigalda stabiilne püsivara",
+    "alreadyOnStableFirmware": "Teil on juba uusim stabiilne versioon.",
+    "audioSavedLocally": "{duration} heli salvestatud kohapeal",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
 }

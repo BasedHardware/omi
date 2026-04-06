@@ -57,9 +57,13 @@ struct SpeakerBubbleView: View {
                                     .scaledFont(size: 10)
                             }
                         }
+                        .padding(.vertical, 2)
+                        .contentShape(Rectangle())
                         .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
+                    .accessibilityLabel("Transcript speaker \(speakerLabel)")
                     .onHover { hovering in
                         if hovering {
                             NSCursor.pointingHand.push()

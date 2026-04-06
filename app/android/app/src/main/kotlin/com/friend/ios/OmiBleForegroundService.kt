@@ -286,7 +286,16 @@ class OmiBleForegroundService : Service() {
             val autoConnect = source != "manageDevice"
 
             Log.i(TAG, "connectToDevice($source): $addr (autoConnect=$autoConnect)")
-            val gatt = bleManager.connectGatt(addr, autoConnect = autoConnect) ?: run {
+            val gatt = try {
+                bleManager.connectGatt(addr, autoConnect = autoConnect)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "connectToDevice($source): BLUETOOTH_CONNECT permission denied for $addr")
+                bleManager.mainHandler.post {
+                    bleManager.flutterApi?.onPeripheralDisconnected(addr, "permission_denied") {}
+                }
+                return
+            }
+            if (gatt == null) {
                 Log.e(TAG, "connectToDevice($source): connectGatt returned null for $addr")
                 return
             }

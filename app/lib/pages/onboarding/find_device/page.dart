@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -68,6 +69,24 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               () {},
               context.l10n.enableBluetooth,
               context.l10n.bluetoothNeeded,
+              singleButton: true,
+            ),
+          );
+        }
+      },
+      onShowLocationDialog: () {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+              () {},
+              context.l10n.enableLocationTitle,
+              context.l10n.enableLocationDescription,
               singleButton: true,
             ),
           );

@@ -423,7 +423,7 @@ class AppState: ObservableObject {
             guard !key.hasPrefix("#") else { continue }
             // API keys are fetched from the backend at runtime (APIKeyService).
             // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
-            let backendServedKeys = ["DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            let backendServedKeys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
               continue
@@ -2900,6 +2900,12 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
+  /// Posted by the local desktop automation bridge to open a specific conversation detail.
+  static let desktopAutomationOpenConversationRequested = Notification.Name(
+    "desktopAutomationOpenConversationRequested")
+  /// Posted by the local desktop automation bridge to expand the transcript drawer.
+  static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
+    "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

@@ -1711,12 +1711,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -8948,4 +8943,44 @@ class AppLocalizationsSv extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-fel ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Återgå till stabil firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Återställ firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Detta ersätter din nuvarande firmware med den senaste stabila versionen ($version). Din enhet startas om efter uppdateringen.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Hämtar senaste stabila firmware...';
+
+  @override
+  String get noStableFirmwareFound => 'Kunde inte hitta en stabil firmwareversion för din enhet.';
+
+  @override
+  String get installStableFirmware => 'Installera stabil firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Du har redan den senaste stabila versionen.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ljud sparat lokalt';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synkroniseras automatiskt';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

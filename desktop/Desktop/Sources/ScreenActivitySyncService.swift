@@ -18,9 +18,9 @@ actor ScreenActivitySyncService {
     private var syncTask: Task<Void, Never>?
     private var consecutiveFailures = 0
 
-    private let batchSize = 20
-    private let baseSyncInterval: UInt64 = 10_000_000_000  // 10s in nanoseconds
-    private let maxSyncInterval: UInt64 = 120_000_000_000  // 120s max backoff
+    private let batchSize = 100
+    private let baseSyncInterval: UInt64 = 60_000_000_000  // 60s in nanoseconds
+    private let maxSyncInterval: UInt64 = 300_000_000_000  // 300s max backoff
 
     private let cursorKey = "screenActivitySync_lastId"
 

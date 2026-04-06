@@ -82,7 +82,11 @@ class BleBridge implements BleFlutterApi {
 
   @override
   void onCharacteristicValueUpdated(
-      String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value) {
+    String peripheralUuid,
+    String serviceUuid,
+    String characteristicUuid,
+    Uint8List value,
+  ) {
     final key = peripheralUuid.toUpperCase();
     _characteristicCallbacks[key]?.call(serviceUuid, characteristicUuid, value);
   }

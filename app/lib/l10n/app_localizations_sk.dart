@@ -1713,12 +1713,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -8931,4 +8926,44 @@ class AppLocalizationsSk extends AppLocalizations {
   String gattError(String code) {
     return 'Chyba GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Vrátiť sa na stabilný firmvér';
+
+  @override
+  String get rollbackConfirmTitle => 'Vrátiť firmvér?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tým sa nahradí aktuálny firmvér najnovšou stabilnou verziou ($version). Po aktualizácii sa zariadenie reštartuje.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilný firmvér';
+
+  @override
+  String get fetchingStableFirmware => 'Načítava sa najnovší stabilný firmvér...';
+
+  @override
+  String get noStableFirmwareFound => 'Pre vaše zariadenie sa nepodarilo nájsť stabilnú verziu firmvéru.';
+
+  @override
+  String get installStableFirmware => 'Nainštalovať stabilný firmvér';
+
+  @override
+  String get alreadyOnStableFirmware => 'Už máte najnovšiu stabilnú verziu.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženého lokálne';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje sa automaticky';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

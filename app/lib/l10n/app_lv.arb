@@ -2908,5 +2908,22 @@
     "good": "Labi",
     "fair": "Apmierinošs",
     "weak": "Vājš",
-    "gattError": "GATT kļūda ({code})"
+    "gattError": "GATT kļūda ({code})",
+    "rollbackToStableFirmware": "Atgriezties uz stabilo programmaparatūru",
+    "rollbackConfirmTitle": "Atgriezt programmaparatūru?",
+    "rollbackConfirmMessage": "Tas aizstās jūsu pašreizējo programmaparatūru ar jaunāko stabilo versiju ({version}). Jūsu ierīce tiks restartēta pēc atjaunināšanas.",
+    "stableFirmware": "Stabila programmaparatūra",
+    "fetchingStableFirmware": "Tiek iegūta jaunākā stabilā programmaparatūra...",
+    "noStableFirmwareFound": "Jūsu ierīcei nevarēja atrast stabilu programmaparatūras versiju.",
+    "installStableFirmware": "Instalēt stabilo programmaparatūru",
+    "alreadyOnStableFirmware": "Jums jau ir jaunākā stabilā versija.",
+    "audioSavedLocally": "{duration} audio saglabāts lokāli",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "tiks sinhronizēts automātiski"
 }

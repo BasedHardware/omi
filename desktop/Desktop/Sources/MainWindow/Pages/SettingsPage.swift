@@ -309,7 +309,6 @@ struct SettingsContentView: View {
     @State private var deleteAccountError: String?
 
     // Developer API Key overrides
-    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
     @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
     @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
     @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
@@ -4274,13 +4273,6 @@ struct SettingsContentView: View {
             }
 
             developerKeyField(
-                title: "Deepgram API Key",
-                subtitle: "For transcription",
-                settingId: "advanced.devkeys.deepgram",
-                value: $devDeepgramKey
-            )
-
-            developerKeyField(
                 title: "Gemini API Key",
                 subtitle: "For proactive AI (memory, tasks, advice, focus)",
                 settingId: "advanced.devkeys.gemini",
@@ -4301,12 +4293,11 @@ struct SettingsContentView: View {
                 value: syncedElevenLabsKeyBinding
             )
 
-            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
+            if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
                     HStack {
                         Spacer()
                         Button(action: {
-                            devDeepgramKey = ""
                             devGeminiKey = ""
                             devAnthropicKey = ""
                             devElevenLabsKey = ""

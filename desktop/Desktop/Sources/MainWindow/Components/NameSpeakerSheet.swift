@@ -5,7 +5,7 @@ struct NameSpeakerSheet: View {
     let segment: TranscriptSegment
     let allSegments: [TranscriptSegment]
     let people: [Person]
-    let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIds: [Int]) -> Void
+    let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIndices: [Int]) -> Void
     let onCreatePerson: (_ name: String) async -> Person?
     let onDismiss: () -> Void
 
@@ -293,8 +293,8 @@ struct NameSpeakerSheet: View {
 
     private func save() {
         isSaving = true
-        let indices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
-        onSave(selectedPersonId, isUserSelected, indices)
+        let segmentIndices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
+        onSave(selectedPersonId, isUserSelected, segmentIndices)
     }
 
     private func personChip(label: String, isSelected: Bool, isAction: Bool = false, action: @escaping () -> Void) -> some View {

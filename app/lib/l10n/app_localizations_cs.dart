@@ -1710,12 +1710,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZAŘÍZENÍ',
-      one: 'ZAŘÍZENÍ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -8940,4 +8935,44 @@ class AppLocalizationsCs extends AppLocalizations {
   String gattError(String code) {
     return 'Chyba GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Vrátit se na stabilní firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Vrátit firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tím se nahradí aktuální firmware nejnovější stabilní verzí ($version). Po aktualizaci se zařízení restartuje.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilní firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Načítání nejnovějšího stabilního firmwaru...';
+
+  @override
+  String get noStableFirmwareFound => 'Nepodařilo se najít stabilní verzi firmwaru pro vaše zařízení.';
+
+  @override
+  String get installStableFirmware => 'Nainstalovat stabilní firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Již máte nejnovější stabilní verzi.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženo lokálně';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje se automaticky';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

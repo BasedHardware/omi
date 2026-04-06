@@ -1722,12 +1722,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'GERÄTE',
-      one: 'GERÄT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -9019,4 +9014,44 @@ class AppLocalizationsDe extends AppLocalizations {
   String gattError(String code) {
     return 'GATT-Fehler ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Auf stabile Firmware zurücksetzen';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware zurücksetzen?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dies ersetzt Ihre aktuelle Firmware durch die neueste stabile Version ($version). Ihr Gerät wird nach dem Update neu gestartet.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabile Firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Neueste stabile Firmware wird abgerufen...';
+
+  @override
+  String get noStableFirmwareFound => 'Es konnte keine stabile Firmware-Version für Ihr Gerät gefunden werden.';
+
+  @override
+  String get installStableFirmware => 'Stabile Firmware installieren';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sie verwenden bereits die neueste stabile Version.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration Audio lokal gespeichert';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wird automatisch synchronisiert';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }

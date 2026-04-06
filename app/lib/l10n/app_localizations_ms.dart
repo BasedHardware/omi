@@ -1715,12 +1715,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANTI',
-      one: 'PERANTI',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -8968,4 +8963,44 @@ class AppLocalizationsMs extends AppLocalizations {
   String gattError(String code) {
     return 'Ralat GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Kembali ke firmware stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Kembalikan firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ini akan menggantikan firmware semasa anda dengan versi stabil terkini ($version). Peranti anda akan dimulakan semula selepas kemas kini.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware Stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Mendapatkan firmware stabil terkini...';
+
+  @override
+  String get noStableFirmwareFound => 'Tidak dapat mencari versi firmware stabil untuk peranti anda.';
+
+  @override
+  String get installStableFirmware => 'Pasang firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terkini.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio disimpan secara tempatan';
+  }
+
+  @override
+  String get willSyncAutomatically => 'akan disegerakkan secara automatik';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 }
