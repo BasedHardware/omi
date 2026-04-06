@@ -1191,89 +1191,35 @@ struct ServerMemory: Codable, Identifiable {
     }
 }
 
-// MARK: - Create Conversation API
+// MARK: - Force Process Conversation API
 
 extension APIClient {
 
-    /// Request model for creating a conversation from transcript segments
-    struct CreateConversationFromSegmentsRequest: Encodable {
-        let transcriptSegments: [TranscriptSegmentRequest]
-        let source: String
-        let startedAt: String
-        let finishedAt: String
-        let language: String
-        let timezone: String
-        let inputDeviceName: String?
+    /// Response from Python POST /v1/conversations (force-process)
+    struct ForceProcessConversationResponse: Decodable {
+        let conversation: ServerConversation
+    }
 
-        enum CodingKeys: String, CodingKey {
-            case transcriptSegments = "transcript_segments"
-            case source
-            case startedAt = "started_at"
-            case finishedAt = "finished_at"
-            case language
-            case timezone
-            case inputDeviceName = "input_device_name"
+    /// Force-process the current in-progress conversation on the Python backend.
+    /// Endpoint: POST /v1/conversations (Python backend)
+    /// This is the same endpoint the mobile app uses when stopping phone mic recording.
+    /// The Python backend finds the in-progress conversation via Redis and processes it.
+    /// Returns the processed conversation on success, nil on 404 (already processed).
+    /// Throws on other errors.
+    func forceProcessConversation() async throws -> ServerConversation? {
+        struct EmptyBody: Encodable {}
+
+        do {
+            let response: ForceProcessConversationResponse = try await post(
+                "v1/conversations",
+                body: EmptyBody(),
+                customBaseURL: pythonBackendURL
+            )
+            return response.conversation
+        } catch APIError.httpError(let statusCode) where statusCode == 404 {
+            // 404 = no in-progress conversation found — WS close handler already processed it
+            return nil
         }
-    }
-
-    struct TranscriptSegmentRequest: Encodable {
-        let id: String?
-        let text: String
-        let speaker: String
-        let speakerId: Int
-        let isUser: Bool
-        let personId: String?
-        let start: Double
-        let end: Double
-
-        enum CodingKeys: String, CodingKey {
-            case id, text, speaker
-            case speakerId = "speaker_id"
-            case isUser = "is_user"
-            case personId = "person_id"
-            case start, end
-        }
-    }
-
-    struct CreateConversationResponse: Decodable {
-        let id: String
-        let status: String
-        let discarded: Bool
-    }
-
-    /// Creates a conversation from transcript segments
-    /// Endpoint: POST /v1/conversations/from-segments (local backend)
-    /// - Parameters:
-    ///   - segments: Transcript segments to include
-    ///   - startedAt: When the recording started
-    ///   - finishedAt: When the recording finished
-    ///   - source: Source of the conversation (e.g., "desktop", "omi", "bee")
-    ///   - language: Language code for transcription
-    ///   - timezone: User's timezone
-    ///   - inputDeviceName: Name of the input device (microphone or BLE device)
-    func createConversationFromSegments(
-        segments: [TranscriptSegmentRequest],
-        startedAt: Date,
-        finishedAt: Date,
-        source: ConversationSource = .desktop,
-        language: String = "en",
-        timezone: String = "UTC",
-        inputDeviceName: String? = nil
-    ) async throws -> CreateConversationResponse {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let request = CreateConversationFromSegmentsRequest(
-            transcriptSegments: segments,
-            source: source.rawValue,
-            startedAt: formatter.string(from: startedAt),
-            finishedAt: formatter.string(from: finishedAt),
-            language: language,
-            timezone: timezone,
-            inputDeviceName: inputDeviceName
-        )
-
-        return try await post("v1/conversations/from-segments", body: request)
     }
 }
 
