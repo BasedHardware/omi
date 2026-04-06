@@ -178,9 +178,10 @@ class TranscriptionRetryService {
                 endDate: finishedAt.addingTimeInterval(2)
             )
 
-            // Look for a conversation with matching started_at/finished_at
+            // Look for a desktop conversation with matching started_at/finished_at
             if let match = existing.first(where: { conv in
                 guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                guard conv.source == .desktop else { return false }
                 return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
                     && abs(convFinished.timeIntervalSince(finishedAt)) < 5
             }) {
@@ -222,6 +223,8 @@ class TranscriptionRetryService {
                 endDate: finishedAt.addingTimeInterval(5)
             ), let match = existing.first(where: { conv in
                 guard let convStarted = conv.startedAt else { return false }
+                // Must be a desktop conversation with matching start time
+                guard conv.source == .desktop else { return false }
                 return abs(convStarted.timeIntervalSince(session.startedAt)) < 10
             }) {
                 log("TranscriptionRetryService: Session \(sessionId) found on backend as \(match.id), marking completed")
@@ -229,14 +232,35 @@ class TranscriptionRetryService {
                 return
             }
 
-            // No matching conversation found — try force-process if app is not actively recording
-            // POST /v1/conversations processes the current in-progress conversation on the Python backend
+            // No matching conversation found — try force-process only if app is NOT actively recording.
+            // POST /v1/conversations processes the CURRENT in-progress conversation, so calling it
+            // while recording would finalize the wrong conversation.
+            let isRecording = await MainActor.run { AppState.current?.isTranscribing ?? false }
+            if isRecording {
+                log("TranscriptionRetryService: App is recording, skipping force-process for session \(sessionId)")
+                try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+                try await TranscriptionStorage.shared.markSessionFailed(
+                    id: sessionId, error: "Skipped force-process: app is actively recording")
+                return
+            }
+
             log("TranscriptionRetryService: No backend match for session \(sessionId), attempting force-process")
 
             do {
                 if let conversation = try await APIClient.shared.forceProcessConversation() {
-                    log("TranscriptionRetryService: Force-processed conversation \(conversation.id) for session \(sessionId)")
-                    try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
+                    // Validate the returned conversation matches the session we're reconciling
+                    if let convStarted = conversation.startedAt,
+                       abs(convStarted.timeIntervalSince(session.startedAt)) < 10,
+                       conversation.source == .desktop {
+                        log("TranscriptionRetryService: Force-processed conversation \(conversation.id) for session \(sessionId)")
+                        try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
+                    } else {
+                        // Force-process returned a different conversation (wrong session)
+                        log("TranscriptionRetryService: Force-processed conversation \(conversation.id) does not match session \(sessionId), will retry")
+                        try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+                        try await TranscriptionStorage.shared.markSessionFailed(
+                            id: sessionId, error: "Force-processed conversation did not match session timestamps")
+                    }
                 } else {
                     // 404: no in-progress conversation — may still be processing, retry later
                     log("TranscriptionRetryService: No in-progress conversation found (404), will retry session \(sessionId)")
