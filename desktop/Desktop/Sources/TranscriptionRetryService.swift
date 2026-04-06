@@ -232,46 +232,15 @@ class TranscriptionRetryService {
                 return
             }
 
-            // No matching conversation found — try force-process only if app is NOT actively recording.
-            // POST /v1/conversations processes the CURRENT in-progress conversation, so calling it
-            // while recording would finalize the wrong conversation.
-            let isRecording = await MainActor.run { AppState.current?.isTranscribing ?? false }
-            if isRecording {
-                // Don't consume retry budget — just skip this cycle. The session stays
-                // in its current state and will be retried when recording stops.
-                log("TranscriptionRetryService: App is recording, deferring force-process for session \(sessionId)")
-                return
-            }
-
-            log("TranscriptionRetryService: No backend match for session \(sessionId), attempting force-process")
-
-            do {
-                if let conversation = try await APIClient.shared.forceProcessConversation() {
-                    // Validate the returned conversation matches the session we're reconciling
-                    if let convStarted = conversation.startedAt,
-                       abs(convStarted.timeIntervalSince(session.startedAt)) < 10,
-                       conversation.source == .desktop {
-                        log("TranscriptionRetryService: Force-processed conversation \(conversation.id) for session \(sessionId)")
-                        try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
-                    } else {
-                        // Force-process returned a different conversation (wrong session)
-                        log("TranscriptionRetryService: Force-processed conversation \(conversation.id) does not match session \(sessionId), will retry")
-                        try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                        try await TranscriptionStorage.shared.markSessionFailed(
-                            id: sessionId, error: "Force-processed conversation did not match session timestamps")
-                    }
-                } else {
-                    // 404: no in-progress conversation — may still be processing, retry later
-                    log("TranscriptionRetryService: No in-progress conversation found (404), will retry session \(sessionId)")
-                    try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                    try await TranscriptionStorage.shared.markSessionFailed(
-                        id: sessionId, error: "No in-progress conversation found on backend")
-                }
-            } catch {
-                logError("TranscriptionRetryService: Force-process failed for session \(sessionId)", error: error)
-                try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: error.localizedDescription)
-            }
+            // No matching conversation found on backend.
+            // Do NOT call force-process here — it acts on the user's current in-progress
+            // conversation which may belong to another device or a new recording session.
+            // Force-process is only safe immediately after stopping (in AppState.stopTranscription).
+            // The retry service only reconciles by timestamp; if no match exists yet, retry later.
+            log("TranscriptionRetryService: No backend match for session \(sessionId), will retry")
+            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+            try await TranscriptionStorage.shared.markSessionFailed(
+                id: sessionId, error: "No matching desktop conversation found on backend")
 
             // Fire error event after all retries exhausted
             if session.retryCount + 1 >= maxRetries {
