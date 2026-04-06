@@ -247,9 +247,11 @@ private struct OnboardingSecondBrainPane: View {
               .tracking(0.6)
 
             Text(footerText)
-              .font(.system(size: 14))
+              .font(.system(size: 13))
               .foregroundColor(OmiColors.textSecondary)
               .lineSpacing(3)
+              .lineLimit(4)
+              .fixedSize(horizontal: false, vertical: true)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal, 24)
@@ -268,24 +270,6 @@ private struct OnboardingSecondBrainPane: View {
           .background(Color.black.opacity(0.35))
           .cornerRadius(8)
           .padding(.top, 18)
-      }
-    }
-    .overlay(alignment: .bottom) {
-      if case .graph = mode, !graphViewModel.isEmpty {
-        HStack(spacing: 20) {
-          graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
-          graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
-          graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-          LinearGradient(
-            colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
-            startPoint: .top,
-            endPoint: .bottom
-          )
-        )
       }
     }
     .task {
@@ -325,8 +309,25 @@ private struct OnboardingSecondBrainPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        MemoryGraphSceneView(viewModel: graphViewModel)
-          .ignoresSafeArea()
+        ZStack(alignment: .bottom) {
+          MemoryGraphSceneView(viewModel: graphViewModel)
+            .ignoresSafeArea()
+
+          HStack(spacing: 20) {
+            graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+            graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+            graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+          }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 10)
+          .background(
+            LinearGradient(
+              colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
+        }
       }
     }
   }
