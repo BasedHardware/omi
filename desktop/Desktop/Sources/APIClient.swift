@@ -2784,8 +2784,8 @@ struct OmiApp: Codable, Identifiable, Sendable {
     let approved: Bool
     let `private`: Bool
     let installs: Int
-    let ratingAvg: Double?
-    let ratingCount: Int
+    var ratingAvg: Double?
+    var ratingCount: Int
     let isPaid: Bool
     let price: Double?
     var enabled: Bool
@@ -2838,7 +2838,7 @@ struct OmiApp: Codable, Identifiable, Sendable {
 
     /// Formatted rating string
     var formattedRating: String? {
-        guard let rating = ratingAvg else { return nil }
+        guard let rating = ratingAvg, ratingCount > 0 else { return nil }
         return String(format: "%.1f", rating)
     }
 
@@ -2884,6 +2884,7 @@ struct OmiAppDetails: Codable, Identifiable {
     let twitter: String?
     let createdAt: Date?
     var enabled: Bool
+    let externalIntegration: ExternalIntegration?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, image, category, author, email, capabilities
@@ -2902,6 +2903,7 @@ struct OmiAppDetails: Codable, Identifiable {
         case username, twitter
         case createdAt = "created_at"
         case enabled
+        case externalIntegration = "external_integration"
     }
 
     init(from decoder: Decoder) throws {
@@ -2931,6 +2933,7 @@ struct OmiAppDetails: Codable, Identifiable {
         twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        externalIntegration = try container.decodeIfPresent(ExternalIntegration.self, forKey: .externalIntegration)
     }
 }
 
@@ -2944,7 +2947,39 @@ struct OmiAppCategory: Codable, Identifiable, Sendable {
 struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
-    let description: String
+    let description: String?
+}
+
+/// Auth step for external integration setup
+struct AuthStep: Codable, Sendable {
+    let name: String
+    let url: String
+}
+
+/// External integration setup details
+struct ExternalIntegration: Codable, Sendable {
+    let authSteps: [AuthStep]
+    let setupCompletedUrl: String?
+    let setupInstructionsFilePath: String?
+    let appHomeUrl: String?
+    let isInstructionsUrl: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case authSteps = "auth_steps"
+        case setupCompletedUrl = "setup_completed_url"
+        case setupInstructionsFilePath = "setup_instructions_file_path"
+        case appHomeUrl = "app_home_url"
+        case isInstructionsUrl = "is_instructions_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        authSteps = try container.decodeIfPresent([AuthStep].self, forKey: .authSteps) ?? []
+        setupCompletedUrl = try container.decodeIfPresent(String.self, forKey: .setupCompletedUrl)
+        setupInstructionsFilePath = try container.decodeIfPresent(String.self, forKey: .setupInstructionsFilePath)
+        appHomeUrl = try container.decodeIfPresent(String.self, forKey: .appHomeUrl)
+        isInstructionsUrl = try container.decodeIfPresent(Bool.self, forKey: .isInstructionsUrl)
+    }
 }
 
 /// App review
@@ -3046,7 +3081,12 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    /// Fetches all apps with real rating data from v1/apps
+    func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
+        return try await get("v1/apps?limit=\(limit)")
+    }
+
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
@@ -3067,6 +3107,10 @@ extension APIClient {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> [OmiApp] {
+        struct SearchResponse: Decodable {
+            let data: [OmiApp]
+        }
+
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)"
@@ -3093,7 +3137,8 @@ extension APIClient {
         }
 
         let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        let response: SearchResponse = try await get(endpoint)
+        return response.data
     }
 
     /// Fetches app details by ID
@@ -3113,28 +3158,34 @@ extension APIClient {
 
     /// Enables an app for the current user
     func enableApp(appId: String) async throws {
-        struct EnableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = EnableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/enable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
     }
 
     /// Disables an app for the current user
     func disableApp(appId: String) async throws {
-        struct DisableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = DisableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/disable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
+    }
+
+    /// Checks if an external integration app's setup is complete
+    func isAppSetupCompleted(url: String, uid: String) async -> Bool {
+        guard !url.isEmpty, let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return true }
+        var request = URLRequest(url: fullUrl)
+        request.httpMethod = "GET"
+        do {
+            let (data, _) = try await session.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json["is_setup_completed"] as? Bool ?? false
+            }
+        } catch {}
+        return false
     }
 
     /// Submits a review for an app
