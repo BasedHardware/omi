@@ -1235,7 +1235,7 @@ extension APIClient {
             let response: ForceProcessConversationResponse = try await post(
                 "v1/conversations",
                 body: EmptyBody(),
-                customBaseURL: pythonBackendURL
+                customBaseURL: nil
             )
             return response.conversation
         } catch APIError.httpError(let statusCode) where statusCode == 404 {
@@ -4690,7 +4690,7 @@ extension APIClient {
         var params = "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
         if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
         if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolSearchConversations(
@@ -4701,7 +4701,7 @@ extension APIClient {
         includeTranscript: Bool = true
     ) async throws -> ToolResponse {
         let body = SearchRequest(query: query, startDate: startDate, endDate: endDate, limit: limit, includeTranscript: includeTranscript)
-        return try await post("v1/tools/conversations/search", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/conversations/search", body: body, customBaseURL: nil)
     }
 
     func toolGetMemories(
@@ -4713,12 +4713,12 @@ extension APIClient {
         var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
         if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
         if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolSearchMemories(query: String, limit: Int = 5) async throws -> ToolResponse {
         let body = MemorySearchRequest(query: query, limit: limit)
-        return try await post("v1/tools/memories/search", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/memories/search", body: body, customBaseURL: nil)
     }
 
     func toolGetActionItems(
@@ -4736,16 +4736,16 @@ extension APIClient {
         if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
         if let dsd = dueStartDate { params += "&due_start_date=\(dsd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? dsd)" }
         if let ded = dueEndDate { params += "&due_end_date=\(ded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ded)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolCreateActionItem(description: String, dueAt: String? = nil, conversationId: String? = nil) async throws -> ToolResponse {
         let body = CreateActionItemRequest(description: description, dueAt: dueAt, conversationId: conversationId)
-        return try await post("v1/tools/action-items", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/action-items", body: body, customBaseURL: nil)
     }
 
     func toolUpdateActionItem(id: String, completed: Bool? = nil, description: String? = nil, dueAt: String? = nil) async throws -> ToolResponse {
         let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
-        return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: pythonBackendURL)
+        return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
     }
 }
