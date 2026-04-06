@@ -2162,18 +2162,42 @@ class AppState: ObservableObject {
   /// Assigns segments to a person or user via bulk API
   func assignSpeakerToSegments(
     conversationId: String,
-    segmentIds: [Int],
+    segmentIds: [String],
     personId: String?,
     isUser: Bool
   ) async -> Bool {
     do {
       try await APIClient.shared.assignSegmentsBulk(
         conversationId: conversationId,
-        segmentIds: segmentIds.map(String.init),
+        segmentIds: segmentIds,
         isUser: isUser,
         personId: personId
       )
       log("People: Assigned \(segmentIds.count) segments in conversation \(conversationId)")
+      // Update in-memory conversations list so the prop is fresh on next open
+      let idSet = Set(segmentIds)
+      if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+        for segIdx in conversations[idx].transcriptSegments.indices
+          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+          let old = conversations[idx].transcriptSegments[segIdx]
+          conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
+            id: old.id,
+            text: old.text,
+            speaker: old.speaker,
+            isUser: isUser ? true : old.isUser,
+            personId: personId ?? old.personId,
+            start: old.start,
+            end: old.end
+          )
+        }
+      }
+      // Also update local SQLite cache so changes persist across app restarts
+      try? await TranscriptionStorage.shared.updateSegmentSpeakerAssignment(
+        backendConversationId: conversationId,
+        segmentIds: segmentIds,
+        personId: personId,
+        isUser: isUser
+      )
       return true
     } catch {
       logError("People: Failed to assign segments", error: error)

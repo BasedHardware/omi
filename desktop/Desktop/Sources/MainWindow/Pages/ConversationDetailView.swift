@@ -13,7 +13,7 @@ struct ConversationDetailView: View {
     var people: [Person] = []
     var onFetchPeople: (() async -> Void)?
     var onCreatePerson: ((String) async -> Person?)?
-    var onAssignSpeaker: ((String, [Int], String?, Bool) async -> Bool)?
+    var onAssignSpeaker: ((String, [String], String?, Bool) async -> Bool)?
 
     @StateObject private var appProvider = AppProvider()
     @State private var showAppSelector = false
@@ -39,7 +39,6 @@ struct ConversationDetailView: View {
     @State private var isDeleting = false
 
     // Speaker naming state
-    @State private var showNameSpeakerSheet = false
     @State private var selectedSegmentForNaming: TranscriptSegment? = nil
 
     /// The conversation to display - use loaded version if available, otherwise use prop
@@ -204,45 +203,48 @@ struct ConversationDetailView: View {
             )
             .frame(width: 400, height: 500)
         }
-        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
-            if let segment = selectedSegmentForNaming {
-                NameSpeakerSheet(
-                    segment: segment,
-                    allSegments: displayConversation.transcriptSegments,
-                    people: people,
-                    onSave: { personId, isUser, segmentIds in
-                        Task {
-                            let success = await onAssignSpeaker?(conversation.id, segmentIds, personId, isUser) ?? false
-                            if success {
-                                // Update local segments with the new personId/isUser
-                                var updated = displayConversation
-                                for idx in segmentIds where idx < updated.transcriptSegments.count {
-                                    let old = updated.transcriptSegments[idx]
-                                    updated.transcriptSegments[idx] = TranscriptSegment(
-                                        id: old.id,
-                                        text: old.text,
-                                        speaker: old.speaker,
-                                        isUser: isUser ? true : old.isUser,
-                                        personId: personId ?? old.personId,
-                                        start: old.start,
-                                        end: old.end
-                                    )
-                                }
-                                loadedConversation = updated
-                            }
-                            showNameSpeakerSheet = false
-                            selectedSegmentForNaming = nil
+        .dismissableSheet(item: $selectedSegmentForNaming) { segment in
+            NameSpeakerSheet(
+                segment: segment,
+                allSegments: displayConversation.transcriptSegments,
+                people: people,
+                onSave: { personId, isUser, segmentIndices in
+                    Task {
+                        // Convert positional indices to segment UUIDs for the API
+                        let segments = displayConversation.transcriptSegments
+                        let segmentIds = segmentIndices.compactMap { idx -> String? in
+                            guard idx < segments.count else { return nil }
+                            return segments[idx].id
                         }
-                    },
-                    onCreatePerson: { name in
-                        await onCreatePerson?(name)
-                    },
-                    onDismiss: {
-                        showNameSpeakerSheet = false
+                        let success = await onAssignSpeaker?(conversation.id, segmentIds, personId, isUser) ?? false
+                        if success {
+                            // Update local in-memory segments by matching UUID
+                            var updated = displayConversation
+                            let idSet = Set(segmentIds)
+                            for idx in updated.transcriptSegments.indices where idSet.contains(updated.transcriptSegments[idx].id) {
+                                let old = updated.transcriptSegments[idx]
+                                updated.transcriptSegments[idx] = TranscriptSegment(
+                                    id: old.id,
+                                    text: old.text,
+                                    speaker: old.speaker,
+                                    isUser: isUser ? true : old.isUser,
+                                    personId: personId ?? old.personId,
+                                    start: old.start,
+                                    end: old.end
+                                )
+                            }
+                            loadedConversation = updated
+                        }
                         selectedSegmentForNaming = nil
                     }
-                )
-            }
+                },
+                onCreatePerson: { name in
+                    await onCreatePerson?(name)
+                },
+                onDismiss: {
+                    selectedSegmentForNaming = nil
+                }
+            )
         }
     }
 
@@ -673,7 +675,6 @@ struct ConversationDetailView: View {
                 personName: segment.personId.flatMap { peopleDict[$0]?.name },
                 onSpeakerTapped: segment.isUser ? nil : {
                     selectedSegmentForNaming = segment
-                    showNameSpeakerSheet = true
                 }
             )
             .padding(.horizontal, 16)
