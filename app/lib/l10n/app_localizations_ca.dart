@@ -8929,6 +8929,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcriptionUnavailable => 'Transcripció no disponible';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Sortida d\'àudio';
 
   @override

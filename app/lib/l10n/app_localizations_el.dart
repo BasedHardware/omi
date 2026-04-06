@@ -8940,6 +8940,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptionUnavailable => 'Η μεταγραφή δεν είναι διαθέσιμη';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Έξοδος ήχου';
 
   @override

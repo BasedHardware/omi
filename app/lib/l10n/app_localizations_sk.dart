@@ -8865,6 +8865,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcriptionUnavailable => 'Prepis nie je dostupný';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Zvukový výstup';
 
   @override

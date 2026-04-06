@@ -8877,6 +8877,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcriptionUnavailable => 'Phiên âm không khả dụng';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Đầu ra âm thanh';
 
   @override

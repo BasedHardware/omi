@@ -8916,6 +8916,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcriptionUnavailable => 'Átírás nem elérhető';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Hangkimenet';
 
   @override

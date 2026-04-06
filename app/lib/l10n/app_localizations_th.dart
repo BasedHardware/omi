@@ -8831,6 +8831,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcriptionUnavailable => 'การถอดเสียงไม่พร้อมใช้งาน';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'เอาต์พุตเสียง';
 
   @override

@@ -8903,6 +8903,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get transcriptionUnavailable => 'ಪ್ರತಿಲೇಖನ ಲಭ್ಯವಿಲ್ಲ';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'ಆಡಿಯೋ ವಿನಿಯೋಗ';
 
   @override

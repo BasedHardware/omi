@@ -8874,6 +8874,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcriptionUnavailable => 'رونویسی در دسترس نیست';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'خروجی صوت';
 
   @override

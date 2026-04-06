@@ -8881,6 +8881,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptionUnavailable => 'Transkription otillgänglig';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Ljudutgång';
 
   @override

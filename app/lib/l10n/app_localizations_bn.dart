@@ -8881,6 +8881,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcriptionUnavailable => 'ট্রান্সক্রিপশন অনুপলব্ধ';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'অডিও আউটপুট';
 
   @override

@@ -8912,6 +8912,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcriptionUnavailable => 'Транскрипцията не е налична';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Аудио изход';
 
   @override
