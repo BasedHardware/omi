@@ -1576,11 +1576,18 @@ class AppState: ObservableObject {
 
       do {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
-          // 200: Backend processed the conversation — mark local session completed
-          if let sessionId = capturedSessionId {
+          // Validate the returned conversation matches the session we just stopped
+          if let sessionId = capturedSessionId, let startTime = capturedStartTime,
+             let convStarted = conversation.startedAt,
+             abs(convStarted.timeIntervalSince(startTime)) < 10,
+             conversation.source == .desktop {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
             log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
+          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+            // Force-process returned a different conversation — fall back to reconciliation
+            log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
+            await reconcileSession(sessionId: sessionId, startTime: startTime)
           }
         } else {
           // 404: No in-progress conversation — WS close handler already processed it.
