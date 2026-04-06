@@ -32,10 +32,10 @@ class PhoneCallToken {
   final String accessToken;
   final int ttl;
   final String identity;
+  final DateTime expiresAt;
 
-  PhoneCallToken({required this.accessToken, required this.ttl, required this.identity});
-
-  DateTime get expiresAt => DateTime.now().add(Duration(seconds: ttl));
+  PhoneCallToken({required this.accessToken, required this.ttl, required this.identity})
+      : expiresAt = DateTime.now().add(Duration(seconds: ttl));
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
     return PhoneCallToken(

@@ -19,9 +19,6 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     private var isSpeakerOn: Bool = false
     private var audioDevice = OmiRecordingAudioDevice()
 
-    // Audio event dispatch — dedicated queue to avoid flooding the main thread
-    private let audioEventQueue = DispatchQueue(label: "com.omi.phonecalls.audio", qos: .userInteractive)
-
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
     fileprivate let callCoordinator: OmiCallCoordinatorProtocol
     fileprivate var callUUID: UUID?
@@ -357,15 +354,12 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     func sendAudioDataEvent(_ data: Data, channel: Int) {
-        audioEventQueue.async { [weak self] in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                self.eventSink?([
-                    "type": "audioData",
-                    "data": FlutterStandardTypedData(bytes: data),
-                    "channel": channel,
-                ])
-            }
+        DispatchQueue.main.async { [weak self] in
+            self?.eventSink?([
+                "type": "audioData",
+                "data": FlutterStandardTypedData(bytes: data),
+                "channel": channel,
+            ])
         }
     }
 

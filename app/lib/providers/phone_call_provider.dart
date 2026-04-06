@@ -64,7 +64,6 @@ class PhoneCallProvider extends ChangeNotifier {
 
   // Token refresh
   Timer? _tokenRefreshTimer;
-  DateTime? _tokenExpiry;
 
   // WebSocket for transcription
   WebSocketChannel? _transcriptionSocket;
@@ -231,7 +230,7 @@ class PhoneCallProvider extends ChangeNotifier {
     }
 
     // Schedule token refresh before expiry (3-minute buffer)
-    _tokenExpiry = token.expiresAt;
+
     _scheduleTokenRefresh(token.ttl);
 
     // Make the call via native layer
@@ -403,8 +402,10 @@ class PhoneCallProvider extends ChangeNotifier {
       var token = await api.getPhoneCallToken();
       if (token != null) {
         await _nativeService.initialize(token.accessToken);
-        _tokenExpiry = token.expiresAt;
         _scheduleTokenRefresh(token.ttl);
+      } else {
+        Logger.error('PhoneCallProvider: token refresh failed, retrying in 30s');
+        _scheduleTokenRefresh(30);
       }
     });
   }
