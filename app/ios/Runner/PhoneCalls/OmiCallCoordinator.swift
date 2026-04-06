@@ -281,7 +281,7 @@ extension OmiCallCoordinator: CXProviderDelegate {
         do {
             try audioSession.setCategory(
                 .playAndRecord,
-                mode: .voiceChat,
+                mode: .default,
                 options: [.allowBluetooth, .allowBluetoothA2DP]
             )
             try audioSession.setPreferredSampleRate(48000)

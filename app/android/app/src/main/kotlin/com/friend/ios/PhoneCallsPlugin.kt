@@ -200,6 +200,9 @@ class PhoneCallsPlugin private constructor(
         isMuted = muted
         activeCall?.mute(muted)
         audioDevice.isMicStreamMuted = muted
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            eventSink?.success(mapOf("type" to "muteConfirmed", "muted" to muted))
+        }
         result.success(null)
     }
 
@@ -222,6 +225,9 @@ class PhoneCallsPlugin private constructor(
                 audioManager.startBluetoothSco()
                 audioManager.isBluetoothScoOn = true
             }
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            eventSink?.success(mapOf("type" to "speakerConfirmed", "speakerOn" to speakerOn))
         }
         result.success(null)
     }

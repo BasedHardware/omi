@@ -30,7 +30,7 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     fileprivate let proximitySensor = OmiProximitySensor()
 
     override init() {
-        // Phase 5: Select coordinator based on region
+        // Select coordinator based on region
         if OmiRegionCheck.isCallKitRestricted {
             callCoordinator = OmiDirectCallCoordinator()
             print("OmiPhoneCallsPlugin: using DirectCallCoordinator (CallKit restricted)")
