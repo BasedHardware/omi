@@ -1636,6 +1636,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
+                        // Phone Call Button
+                        _buildExperimentalItem(
+                          title: context.l10n.showPhoneCallButtonTitle,
+                          description: context.l10n.showPhoneCallButtonDesc,
+                          icon: FontAwesomeIcons.phone,
+                          value: provider.showPhoneCallButton,
+                          onChanged: provider.onShowPhoneCallButtonChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
                         // VAD Gate
                         _buildExperimentalItem(
                           title: 'VAD Gate',
