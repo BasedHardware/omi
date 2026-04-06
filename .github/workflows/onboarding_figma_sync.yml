@@ -1,19 +1,6 @@
 name: Sync macOS onboarding to Figma source
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/onboarding_figma_sync.yml"
-      - "scripts/export_onboarding_sync_bundle.sh"
-      - "scripts/prepare_onboarding_sync_bundle.sh"
-      - "scripts/publish_onboarding_sync_branch.sh"
-      - "desktop/Desktop/Package.swift"
-      - "desktop/Desktop/Sources/OmiApp.swift"
-      - "desktop/Desktop/Sources/ViewExporter.swift"
-      - "desktop/Desktop/Sources/Theme/**"
-      - "desktop/Desktop/Sources/Onboarding*.swift"
-      - "desktop/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift"
   workflow_dispatch:
 
 permissions:
