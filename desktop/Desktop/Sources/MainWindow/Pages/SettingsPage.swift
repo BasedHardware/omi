@@ -4253,17 +4253,12 @@ struct SettingsContentView: View {
             settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Voice Answers (Experimental)")
+                        Text("Voice Responses")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
-                        Text("Speak shortcut-based floating-bar replies aloud. Saves your ElevenLabs settings to your backend profile so the app reconnects automatically.")
+                        Text("Speak answers to voice questions aloud. When you ask with voice, Omi responds with voice. Text questions get text-only responses.")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
-                        if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("No personal ElevenLabs key saved. The app will use Omi's default Sloane voice when available, otherwise it falls back to Samantha.")
-                                .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
                     }
                     Spacer()
                     Toggle("", isOn: floatingBarVoiceAnswersBinding)
