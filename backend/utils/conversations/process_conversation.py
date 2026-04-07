@@ -1,7 +1,6 @@
 import os
 import random
 import re
-import concurrent.futures
 import threading
 import uuid
 import logging
@@ -43,6 +42,7 @@ from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
+from utils.executors import critical_executor
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -366,8 +366,12 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(filtered_apps), 1)) as executor:
-        executor.map(execute_app, filtered_apps)
+    futures = [critical_executor.submit(execute_app, app) for app in filtered_apps]
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            logger.error(f"Error executing app: {e}")
 
 
 def _update_goal_progress(uid: str, conversation: Conversation):
@@ -570,7 +574,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        threading.Thread(target=_run_auto_sync, daemon=True).start()
+        critical_executor.submit(_run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -717,21 +721,12 @@ def process_conversation(
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
-        (
-            threading.Thread(
-                target=save_structured_vector,
-                args=(
-                    uid,
-                    conversation,
-                ),
-            ).start()
-            if not is_reprocess
-            else None
-        )
-        threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
-        threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
-        threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
-        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
+        if not is_reprocess:
+            critical_executor.submit(save_structured_vector, uid, conversation)
+        critical_executor.submit(_extract_memories, uid, conversation)
+        critical_executor.submit(_extract_trends, uid, conversation)
+        critical_executor.submit(_save_action_items, uid, conversation)
+        critical_executor.submit(_update_goal_progress, uid, conversation)
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -755,15 +750,13 @@ def process_conversation(
         folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
-        threading.Thread(
-            target=conversation_created_webhook,
-            args=(
-                uid,
-                conversation,
-            ),
-        ).start()
+
+        def _run_webhook():
+            asyncio.run(conversation_created_webhook(uid, conversation))
+
+        critical_executor.submit(_run_webhook)
         # Update persona prompts with new conversation
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
