@@ -46,6 +46,9 @@ class ShortcutSettings: ObservableObject {
         var displayTokens: [String] {
             let modifierTokens = Self.modifierTokens(for: modifiers)
             if modifierOnly {
+                if requiresRightCommand {
+                    return ["Right ⌘"]
+                }
                 return modifierTokens
             }
             if let keyDisplay {
