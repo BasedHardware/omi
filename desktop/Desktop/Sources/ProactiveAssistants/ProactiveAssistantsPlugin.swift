@@ -172,7 +172,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // MARK: - gRPC Lifecycle
 
-    /// Connect to the ProactiveAI gRPC server and wire the client to TaskAssistant.
+    /// Connect to the ProactiveAI gRPC server with reconnect on failure.
     /// Runs asynchronously — monitoring starts regardless of whether gRPC connects.
     private func connectGRPCClient(for taskAssistant: TaskAssistant) async {
         // Read gRPC server config from environment (set via .env or run.sh)
@@ -190,10 +190,21 @@ public class ProactiveAssistantsPlugin: NSObject {
             port = 50051
         }
 
+        await attemptGRPCConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: 1)
+    }
+
+    /// Attempt a single gRPC connection. On failure, schedule a retry with exponential backoff.
+    private func attemptGRPCConnect(host: String, port: Int, taskAssistant: TaskAssistant, attempt: Int) async {
+        let maxAttempts = 5
+        guard attempt <= maxAttempts else {
+            log("ProactiveGRPC: Max reconnect attempts (\(maxAttempts)) reached — task extraction disabled")
+            return
+        }
+
         // Get Firebase auth token
         let authToken: String
         do {
-            authToken = try await AuthService.shared.getIdToken(forceRefresh: false)
+            authToken = try await AuthService.shared.getIdToken(forceRefresh: attempt > 1)
         } catch {
             log("ProactiveGRPC: Skipping — no auth token: \(error.localizedDescription)")
             return
@@ -219,8 +230,11 @@ public class ProactiveAssistantsPlugin: NSObject {
             await taskAssistant.setGRPCClient(client)
             self.grpcClient = client
         } catch {
-            log("ProactiveGRPC: Connection failed — falling back to local: \(error.localizedDescription)")
-            // TaskAssistant continues using local Gemini proxy (no grpcClient set)
+            // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+            let delaySec = UInt64(pow(2.0, Double(attempt)))
+            log("ProactiveGRPC: Connection failed (attempt \(attempt)/\(maxAttempts)), retrying in \(delaySec)s: \(error.localizedDescription)")
+            try? await Task.sleep(nanoseconds: delaySec * 1_000_000_000)
+            await attemptGRPCConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: attempt + 1)
         }
     }
 
