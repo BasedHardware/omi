@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { sendOrganizationInvitation } from '@/lib/services/invitation';
+import { useAuthToken, authFetch } from '@/hooks/useAuthToken';
 
 export interface Employee {
   email: string;
@@ -60,13 +61,16 @@ export const useOrganizations = () => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { token, loading: authTokenLoading } = useAuthToken();
+  const fetchWithAuth = authFetch(token);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
+    if (!token) return;
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/organizations');
+
+      const response = await fetchWithAuth('/api/organizations');
       if (!response.ok) {
         throw new Error('Failed to fetch organizations');
       }
@@ -78,17 +82,14 @@ export const useOrganizations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, fetchWithAuth]);
 
   const createOrganization = async (organizationData: CreateOrganizationData) => {
     try {
       setError(null);
-      
-      const response = await fetch('/api/organizations', {
+
+      const response = await fetchWithAuth('/api/organizations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(organizationData),
       });
 
@@ -127,12 +128,9 @@ export const useOrganizations = () => {
   const toggleOrganizationStatus = async (organizationId: string, isActive: boolean) => {
     try {
       setError(null);
-      
-      const response = await fetch(`/api/organizations/${organizationId}`, {
+
+      const response = await fetchWithAuth(`/api/organizations/${organizationId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ is_active: isActive }),
       });
 
@@ -162,12 +160,9 @@ export const useOrganizations = () => {
   const updateMaxSeats = async (organizationId: string, maxSeats: number) => {
     try {
       setError(null);
-      
-      const response = await fetch(`/api/organizations/${organizationId}`, {
+
+      const response = await fetchWithAuth(`/api/organizations/${organizationId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ max_seats: maxSeats }),
       });
 
@@ -197,12 +192,9 @@ export const useOrganizations = () => {
   const updateOrganization = async (organizationId: string, updateData: UpdateOrganizationData) => {
     try {
       setError(null);
-      
-      const response = await fetch(`/api/organizations/${organizationId}`, {
+
+      const response = await fetchWithAuth(`/api/organizations/${organizationId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(updateData),
       });
 
@@ -267,8 +259,10 @@ export const useOrganizations = () => {
   };
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
+    if (!authTokenLoading && token) {
+      fetchOrganizations();
+    }
+  }, [token, authTokenLoading, fetchOrganizations]);
 
   return {
     organizations,
