@@ -2926,5 +2926,6 @@
             }
         }
     },
-    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा"
+    "willSyncAutomatically": "स्वचालित रूप से सिंक होगा",
+    "voiceRecordingFound": "रिकॉर्डिंग मिली"
 }

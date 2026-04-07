@@ -2934,5 +2934,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
+    "willSyncAutomatically": "synkroniseres automatisk",
+    "voiceRecordingFound": "Optagelse fundet"
 }
