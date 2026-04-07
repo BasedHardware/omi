@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import requests
@@ -58,6 +59,24 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
     return len(segments) == 0
 
 
+def _read_file(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+def _local_vad(file_path: str) -> list:
+    wav = read_audio(file_path, sampling_rate=16000)
+    timestamps = get_speech_timestamps(wav, model, sampling_rate=16000)
+    return [
+        {
+            'start': ts['start'] / 16000.0,
+            'end': ts['end'] / 16000.0,
+            'duration': (ts['end'] - ts['start']) / 16000.0,
+        }
+        for ts in timestamps
+    ]
+
+
 async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
     """Async version of vad_is_empty using httpx.AsyncClient for hosted VAD."""
     caching_key = f'vad_is_empty:{file_path}'
@@ -71,8 +90,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
-            with open(file_path, 'rb') as file:
-                file_data = file.read()
+            file_data = await asyncio.to_thread(_read_file, file_path)
             files = {'file': (file_path.split('/')[-1], file_data, 'audio/wav')}
             client = get_stt_client()
             response = await client.post(hosted_vad_url, files=files)
@@ -82,16 +100,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:
-        wav = read_audio(file_path, sampling_rate=16000)
-        timestamps = get_speech_timestamps(wav, model, sampling_rate=16000)
-        segments = [
-            {
-                'start': ts['start'] / 16000.0,
-                'end': ts['end'] / 16000.0,
-                'duration': (ts['end'] - ts['start']) / 16000.0,
-            }
-            for ts in timestamps
-        ]
+        segments = await asyncio.to_thread(_local_vad, file_path)
 
     if cache:
         redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
