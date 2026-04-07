@@ -1,4 +1,4 @@
-import threading
+import concurrent.futures
 from collections import Counter, defaultdict
 from typing import List, Tuple
 
@@ -31,24 +31,16 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     end_timestamp = dates_range[1].timestamp() if len(dates_range) == 2 else None
 
     memories_id = defaultdict(list)
-    threads = []
     top_k = 10 if len(topics) == 1 else 5
-    for topic in topics:
-        t = threading.Thread(
-            target=retrieve_for_topic, args=(uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(topics), 1)) as executor:
+        executor.map(
+            lambda topic: retrieve_for_topic(uid, topic, start_timestamp, end_timestamp, top_k, memories_id), topics
         )
-        threads.append(t)
-    [t.start() for t in threads]
-    [t.join() for t in threads]
 
     # FIXME, fix the source of the issue, not this patch
     if not memories_id and len(dates_range) == 2:
-        threads = []
-        for topic in topics:
-            t = threading.Thread(target=retrieve_for_topic, args=(uid, topic, None, None, top_k, memories_id))
-            threads.append(t)
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(topics), 1)) as executor:
+            executor.map(lambda topic: retrieve_for_topic(uid, topic, None, None, top_k, memories_id), topics)
 
     return memories_id, get_conversations_by_id(uid, memories_id.keys())
 
@@ -101,15 +93,13 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
     if memories_id_to_topics:
         # TODO: restore sorthing here
         context_data = {}
-        threads = []
-        for memory in memories:
-            topics = memories_id_to_topics.get(memory.id, [])
-            t = threading.Thread(
-                target=get_better_conversation_chunk, args=(memory, topics, context_data, people, user_name)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(memories), 1)) as executor:
+            executor.map(
+                lambda m: get_better_conversation_chunk(
+                    m, memories_id_to_topics.get(m.id, []), context_data, people, user_name
+                ),
+                memories,
             )
-            threads.append(t)
-        [t.start() for t in threads]
-        [t.join() for t in threads]
         context_str = '\n'.join(context_data.values()).strip()
     else:
         context_str = conversations_to_string(memories, people=people, user_name=user_name)

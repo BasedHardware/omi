@@ -9,6 +9,7 @@ import threading
 import time
 import uuid as _uuid
 import wave
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -1118,18 +1119,13 @@ async def sync_local_files(
         paths = retrieve_file_paths(files, uid)
         wav_paths = decode_files_to_wav(paths)
 
-        def chunk_threads(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-
         vad_errors = []
-        threads = [
-            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
-            for path in wav_paths
-        ]
-        chunk_threads(threads)
+
+        def _run_vad(path):
+            retrieve_vad_segments(path, segmented_paths, vad_errors)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            executor.map(_run_vad, wav_paths)
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1204,25 +1200,24 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    conversation_id,
-                ),
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            list(
+                executor.map(
+                    lambda path: process_segment(
+                        path,
+                        uid,
+                        response,
+                        segment_lock,
+                        segment_errors,
+                        source,
+                        is_locked,
+                        transcription_prefs,
+                        person_embeddings_cache,
+                        conversation_id,
+                    ),
+                    segmented_paths,
+                )
             )
-            for path in segmented_paths
-        ]
-        chunk_threads(threads)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1334,36 +1329,32 @@ def _process_segments_background(
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        def chunk_threads_bg(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-                # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
-                try:
-                    update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(threads))})
-                except Exception:
-                    pass  # Non-fatal: stale detection is a safety net, not a hard gate
-
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    target_conversation_id,
-                ),
+        def _process_one_segment(path):
+            process_segment(
+                path,
+                uid,
+                response,
+                segment_lock,
+                segment_errors,
+                source,
+                is_locked,
+                transcription_prefs,
+                person_embeddings_cache,
+                target_conversation_id,
             )
-            for path in segmented_paths
-        ]
-        chunk_threads_bg(threads)
+
+        # Process in chunks of 5, with heartbeat after each chunk
+        chunk_size = 5
+        segment_list = list(segmented_paths)
+        for i in range(0, len(segment_list), chunk_size):
+            chunk = segment_list[i : i + chunk_size]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=chunk_size) as executor:
+                executor.map(_process_one_segment, chunk)
+            # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
+            try:
+                update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(segment_list))})
+            except Exception:
+                pass  # Non-fatal: stale detection is a safety net, not a hard gate
 
         # Record DG usage after processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1455,18 +1446,13 @@ async def sync_local_files_v2(
         paths = _retrieve_file_paths_v2(files, uid, job_id)
         wav_paths = decode_files_to_wav(paths)
 
-        def chunk_threads_local(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-
         vad_errors = []
-        threads = [
-            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
-            for path in wav_paths
-        ]
-        chunk_threads_local(threads)
+
+        def _run_vad_v2(path):
+            retrieve_vad_segments(path, segmented_paths, vad_errors)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            executor.map(_run_vad_v2, wav_paths)
 
         _cleanup_files(wav_paths)
         wav_paths = []

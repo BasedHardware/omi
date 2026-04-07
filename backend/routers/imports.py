@@ -2,6 +2,7 @@
 Import endpoints for importing data from external sources.
 """
 
+import asyncio
 import os
 import threading
 import uuid
@@ -56,9 +57,12 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        with open(zip_path, 'wb') as f:
+        f = open(zip_path, 'wb')
+        try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                f.write(contents)
+                await asyncio.to_thread(f.write, contents)
+        finally:
+            f.close()
     except Exception as e:
         # Clean up on error
         import_jobs_db.update_import_job(

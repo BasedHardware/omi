@@ -3,7 +3,6 @@ import uuid
 import json
 import hashlib
 import time
-import requests
 import jwt
 from typing import Optional
 from urllib.parse import quote
@@ -15,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
+from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -283,7 +283,8 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
         'grant_type': 'authorization_code',
     }
 
-    token_response = requests.post(token_url, data=token_data)
+    client = get_auth_client()
+    token_response = await client.post(token_url, data=token_data)
     if token_response.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to exchange Google code")
 
@@ -340,7 +341,8 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
             'redirect_uri': callback_url,
         }
 
-        token_response = requests.post(
+        client = get_auth_client()
+        token_response = await client.post(
             token_url, data=token_data, headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
 
@@ -407,7 +409,8 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         }
 
         # Call Firebase Auth REST API to sign in
-        response = requests.post(sign_in_url, json=payload)
+        client = get_auth_client()
+        response = await client.post(sign_in_url, json=payload)
 
         if response.status_code != 200:
             logger.error(f"Firebase sign-in failed: {sanitize(response.text)}")
@@ -469,13 +472,14 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         raise HTTPException(status_code=500, detail="Failed to generate Apple client secret")
 
 
-def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
+async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
     """
     Verify Apple ID token and extract user information
     """
     try:
         # Get Apple's public keys
-        apple_keys_response = requests.get('https://appleid.apple.com/auth/keys')
+        client = get_auth_client()
+        apple_keys_response = await client.get('https://appleid.apple.com/auth/keys')
         if apple_keys_response.status_code != 200:
             raise Exception("Failed to fetch Apple's public keys")
 

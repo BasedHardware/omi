@@ -1,4 +1,6 @@
+import asyncio
 import io
+import logging
 import os
 import struct
 import wave
@@ -7,6 +9,10 @@ from typing import Optional, Tuple
 import numpy as np
 import requests
 from scipy.spatial.distance import cdist
+
+from utils.http_client import get_stt_client
+
+logger = logging.getLogger(__name__)
 
 # Cosine distance threshold for speaker matching
 # Based on VoxCeleb 1 test set EER of 2.8%
@@ -105,6 +111,65 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
 
+    return embedding
+
+
+def _read_file(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+async def async_extract_embedding(audio_path: str) -> np.ndarray:
+    """Async version of extract_embedding using httpx.AsyncClient."""
+    api_url = _get_api_url()
+    client = get_stt_client()
+
+    file_data = await asyncio.to_thread(_read_file, audio_path)
+
+    files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
+    try:
+        response = await client.post(f"{api_url}/v2/embedding", files=files)
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"async_extract_embedding failed for {audio_path}: {e}")
+        raise
+
+    result = response.json()
+    if isinstance(result, list):
+        embedding = np.array(result, dtype=np.float32)
+    else:
+        embedding = np.array(result['embedding'], dtype=np.float32)
+
+    if embedding.ndim == 1:
+        embedding = embedding.reshape(1, -1)
+    return embedding
+
+
+async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray:
+    """Async version of extract_embedding_from_bytes using httpx.AsyncClient."""
+    duration = _get_wav_duration(audio_data)
+    if duration < MIN_EMBEDDING_AUDIO_DURATION:
+        raise ValueError(f"Audio too short for speaker embedding: {duration:.3f}s < {MIN_EMBEDDING_AUDIO_DURATION}s")
+
+    api_url = _get_api_url()
+    client = get_stt_client()
+
+    files = {'file': (filename, audio_data, 'audio/wav')}
+    try:
+        response = await client.post(f"{api_url}/v2/embedding", files=files)
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"async_extract_embedding_from_bytes failed: {e}")
+        raise
+
+    result = response.json()
+    if isinstance(result, list):
+        embedding = np.array(result, dtype=np.float32)
+    else:
+        embedding = np.array(result['embedding'], dtype=np.float32)
+
+    if embedding.ndim == 1:
+        embedding = embedding.reshape(1, -1)
     return embedding
 
 

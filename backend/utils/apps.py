@@ -1,6 +1,6 @@
+import asyncio
 import math
 import os
-import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
@@ -721,30 +721,20 @@ def update_personas_async(uid: str):
     if personas:
         set_persona_update_timestamp(uid)
 
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
 
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_batch())
+        except Exception as e:
+            logger.error(f"Error in persona batch update for uid={uid}: {str(e)}")
+        finally:
+            loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
     else:
         logger.info(f"[PERSONAS] No personas found for uid={uid}")
-
-
-def sync_update_persona_prompt(persona: dict):
-    """Synchronous wrapper for update_persona_prompt"""
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(update_persona_prompt(persona))
-    except Exception as e:
-        logger.error(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
-        return None
-    finally:
-        loop.close()
 
 
 async def update_persona_prompt(persona: dict):

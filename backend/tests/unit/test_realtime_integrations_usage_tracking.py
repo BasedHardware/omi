@@ -10,6 +10,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -41,6 +43,8 @@ for submodule in [
     "llm_usage",
     "_client",
     "chat",
+    "goals",
+    "auth",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -68,6 +72,15 @@ redis_mod.get_generic_cache = MagicMock(return_value=None)
 redis_mod.set_generic_cache = MagicMock()
 redis_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
 redis_mod.set_proactive_noti_sent_at = MagicMock()
+redis_mod.incr_daily_notification_count = MagicMock()
+redis_mod.get_daily_notification_count = MagicMock(return_value=0)
+redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
+
+goals_mod = sys.modules["database.goals"]
+goals_mod.get_user_goals = MagicMock(return_value=[])
+
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="Test User")
 
 chat_mod = sys.modules["database.chat"]
 chat_mod.add_app_message = MagicMock(return_value={"id": "msg-1"})
@@ -75,6 +88,7 @@ chat_mod.get_app_messages = MagicMock(return_value=[])
 
 notifications_mod = sys.modules["database.notifications"]
 notifications_mod.get_token_only = MagicMock(return_value=None)
+notifications_mod.get_mentor_notification_frequency = MagicMock(return_value=0)
 
 conversations_mod = sys.modules["database.conversations"]
 conversations_mod.get_conversations_by_id = MagicMock(return_value=[])
@@ -88,9 +102,24 @@ for name in [
     "utils.llm.clients",
     "utils.llm.proactive_notification",
     "utils.mentor_notifications",
+    "utils.http_client",
+    "utils.log_sanitizer",
+    "utils.llms",
+    "utils.llms.memory",
 ]:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
+
+# Ensure http_client stubs have correct attributes
+sys.modules["utils.http_client"].get_webhook_client = MagicMock()
+sys.modules["utils.http_client"].get_maps_client = MagicMock()
+
+# Ensure log_sanitizer stubs have correct attributes
+sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
+sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
+
+# Ensure llms.memory stub has correct attributes
+sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=[])
 
 utils_apps = sys.modules["utils.apps"]
 utils_apps.get_available_apps = MagicMock(return_value=[])
@@ -103,6 +132,11 @@ llm_clients.generate_embedding = MagicMock(return_value=[0] * 3072)
 
 llm_proactive = sys.modules["utils.llm.proactive_notification"]
 llm_proactive.get_proactive_message = MagicMock(return_value="Test notification message here")
+llm_proactive.evaluate_relevance = MagicMock(return_value=0.0)
+llm_proactive.generate_notification = MagicMock(return_value="")
+llm_proactive.validate_notification = MagicMock(return_value=False)
+llm_proactive.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
+llm_proactive.MAX_DAILY_NOTIFICATIONS = 10
 
 mentor_mod = sys.modules["utils.mentor_notifications"]
 mentor_mod.process_mentor_notification = MagicMock(return_value=None)
@@ -121,7 +155,8 @@ def test_realtime_integrations_feature_constant_exists():
     assert usage_tracker.Features.REALTIME_INTEGRATIONS != usage_tracker.Features.NOTIFICATIONS
 
 
-def test_mentor_notification_tracked_under_realtime_integrations():
+@pytest.mark.asyncio
+async def test_mentor_notification_tracked_under_realtime_integrations():
     """Verify mentor notification LLM call is tracked under REALTIME_INTEGRATIONS."""
     captured_contexts = []
 
@@ -135,23 +170,21 @@ def test_mentor_notification_tracked_under_realtime_integrations():
         with original_track(uid, feature):
             yield
 
-    # Make mentor notification fire
-    mentor_mod.process_mentor_notification = MagicMock(return_value={'prompt': 'test prompt', 'params': []})
-
+    # Make mentor notification fire — patch on app_integrations since it's a top-level import
     with patch.object(app_integrations, "track_usage", spy_track_usage), patch.object(
-        app_integrations, "send_app_notification", MagicMock()
-    ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
-        app_integrations._trigger_realtime_integrations("user-rt-1", [{"text": "hello"}], "conv-1")
+        app_integrations, "process_mentor_notification", MagicMock(return_value={'prompt': 'test prompt', 'params': []})
+    ), patch.object(app_integrations, "send_app_notification", MagicMock()), patch.object(
+        app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})
+    ):
+        await app_integrations.trigger_realtime_integrations("user-rt-1", [{"text": "hello"}], "conv-1")
 
     # Should have tracked under REALTIME_INTEGRATIONS
     features_tracked = [f for _, f in captured_contexts]
     assert usage_tracker.Features.REALTIME_INTEGRATIONS in features_tracked
 
-    # Reset
-    mentor_mod.process_mentor_notification = MagicMock(return_value=None)
 
-
-def test_no_tracking_when_no_llm_calls():
+@pytest.mark.asyncio
+async def test_no_tracking_when_no_llm_calls():
     """Verify no tracking happens when mentor notification doesn't fire and no apps."""
     captured_contexts = []
 
@@ -170,31 +203,44 @@ def test_no_tracking_when_no_llm_calls():
     utils_apps.get_available_apps = MagicMock(return_value=[])
 
     with patch.object(app_integrations, "track_usage", spy_track_usage):
-        app_integrations._trigger_realtime_integrations("user-rt-2", [{"text": "hello"}], "conv-2")
+        await app_integrations.trigger_realtime_integrations("user-rt-2", [{"text": "hello"}], "conv-2")
 
     assert len(captured_contexts) == 0
 
 
-def test_track_usage_context_available_during_proactive_message():
-    """Verify the track_usage context is active when get_proactive_message is called."""
-    captured_ctx = {}
+@pytest.mark.asyncio
+async def test_track_usage_context_entered_around_proactive_message():
+    """Verify track_usage context manager is entered before _process_mentor_proactive_notification is called.
 
-    original_get_proactive = app_integrations.get_proactive_message
+    Uses a spy context manager to record entry/exit order without relying on ContextVar state,
+    making this test immune to module-level mutations from other test files.
+    """
+    from contextlib import contextmanager
 
-    def spy_get_proactive(*args, **kwargs):
-        captured_ctx["ctx"] = usage_tracker.get_current_context()
+    call_log = []
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        call_log.append(('enter', uid, feature))
+        yield
+        call_log.append(('exit', uid, feature))
+
+    def spy_process(*args, **kwargs):
+        call_log.append(('process_called',))
         return "Test notification"
 
-    mentor_mod.process_mentor_notification = MagicMock(return_value={'prompt': 'test', 'params': []})
-
-    with patch.object(app_integrations, "get_proactive_message", spy_get_proactive), patch.object(
+    with patch.object(app_integrations, "track_usage", spy_track_usage), patch.object(
+        app_integrations, "process_mentor_notification", MagicMock(return_value={'prompt': 'test', 'params': []})
+    ), patch.object(app_integrations, "_process_mentor_proactive_notification", spy_process), patch.object(
         app_integrations, "send_app_notification", MagicMock()
-    ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
-        app_integrations._trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
+    ), patch.object(
+        app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})
+    ):
+        await app_integrations.trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
 
-    assert captured_ctx.get("ctx") is not None
-    assert captured_ctx["ctx"].feature == usage_tracker.Features.REALTIME_INTEGRATIONS
-    assert captured_ctx["ctx"].uid == "user-rt-3"
-
-    # Reset
-    mentor_mod.process_mentor_notification = MagicMock(return_value=None)
+    # track_usage must be entered with correct args before spy_process is called
+    assert ('enter', 'user-rt-3', 'realtime_integrations') in call_log
+    process_idx = next(i for i, e in enumerate(call_log) if e == ('process_called',))
+    enter_idx = next(i for i, e in enumerate(call_log) if e == ('enter', 'user-rt-3', 'realtime_integrations'))
+    exit_idx = next(i for i, e in enumerate(call_log) if e == ('exit', 'user-rt-3', 'realtime_integrations'))
+    assert enter_idx < process_idx < exit_idx

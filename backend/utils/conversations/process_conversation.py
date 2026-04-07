@@ -1,6 +1,7 @@
 import os
 import random
 import re
+import concurrent.futures
 import threading
 import uuid
 import logging
@@ -41,7 +42,7 @@ from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
+from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -365,11 +366,8 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=execute_app, args=(app,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(filtered_apps), 1)) as executor:
+        executor.map(execute_app, filtered_apps)
 
 
 def _update_goal_progress(uid: str, conversation: Conversation):
@@ -614,12 +612,16 @@ def _update_personas_async(uid: str):
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
 
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_batch())
+        finally:
+            loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
