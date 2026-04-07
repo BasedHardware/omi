@@ -541,6 +541,55 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Floating Bar Sessions per User */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Floating Bar Sessions per User</h2>
+          {fbSummary && (
+            <span className="text-sm text-muted-foreground">
+              Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgSessionsPerUserPerDay ?? "—"}</span> sessions/user/day
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Times floating bar was opened and a question asked, per user per day (follow-ups don&apos;t count)
+        </p>
+        <div className="h-[300px]">
+          {fbUsageLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : fbUsageData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              No usage data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={fbUsageData}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                  }}
+                />
+                <Legend />
+                <Line dataKey="avg_sessions_per_user" name="Sessions/User" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
       {/* Message Ratings — macOS Floating Bar */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">

@@ -57,7 +57,21 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
-    const [totalRes, voiceRes] = await Promise.all([
+    // Query 3: Daily sessions (unique floating bar opens, not follow-ups)
+    const sessionsQuery = `
+      SELECT
+        toDate(timestamp) as day,
+        count() as sessions,
+        count(DISTINCT distinct_id) as session_users
+      FROM events
+      WHERE event = 'floating_bar_ask_omi_opened'
+        AND properties.$os_name = 'macOS'
+        AND timestamp >= now() - interval ${days} day
+      GROUP BY day
+      ORDER BY day
+    `;
+
+    const [totalRes, voiceRes, sessionsRes] = await Promise.all([
       fetch(`${host}/api/projects/${projectId}/query/`, {
         method: "POST",
         headers: {
@@ -74,10 +88,19 @@ export async function GET(request: NextRequest) {
         },
         body: JSON.stringify({ query: { kind: "HogQLQuery", query: voiceQuery } }),
       }),
+      fetch(`${host}/api/projects/${projectId}/query/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: { kind: "HogQLQuery", query: sessionsQuery } }),
+      }),
     ]);
 
-    if (!totalRes.ok || !voiceRes.ok) {
-      const text = !totalRes.ok ? await totalRes.text() : await voiceRes.text();
+    if (!totalRes.ok || !voiceRes.ok || !sessionsRes.ok) {
+      const failedRes = !totalRes.ok ? totalRes : !voiceRes.ok ? voiceRes : sessionsRes;
+      const text = await failedRes.text();
       console.error("PostHog query error:", text);
       return NextResponse.json(
         { error: "PostHog API error" },
@@ -87,14 +110,20 @@ export async function GET(request: NextRequest) {
 
     const totalResult = await totalRes.json();
     const voiceResult = await voiceRes.json();
+    const sessionsResult = await sessionsRes.json();
 
     const totalRows: [string, number, number][] = totalResult?.results ?? [];
     const voiceRows: [string, number][] = voiceResult?.results ?? [];
+    const sessionsRows: [string, number, number][] = sessionsResult?.results ?? [];
 
-    // Build voice lookup by date
+    // Build lookups by date
     const voiceByDate: Record<string, number> = {};
     for (const [date, count] of voiceRows) {
       voiceByDate[date.slice(0, 10)] = count;
+    }
+    const sessionsByDate: Record<string, { sessions: number; users: number }> = {};
+    for (const [date, sessions, users] of sessionsRows) {
+      sessionsByDate[date.slice(0, 10)] = { sessions, users };
     }
 
     // Combine into daily data
@@ -103,6 +132,8 @@ export async function GET(request: NextRequest) {
       const voice = voiceByDate[d] || 0;
       const text = totalQueries - voice;
       const avgPerUser = uniqueUsers > 0 ? Math.round((totalQueries / uniqueUsers) * 10) / 10 : 0;
+      const sess = sessionsByDate[d] || { sessions: 0, users: 0 };
+      const avgSessionsPerUser = sess.users > 0 ? Math.round((sess.sessions / sess.users) * 10) / 10 : 0;
       return {
         date: d,
         total_queries: totalQueries,
@@ -110,6 +141,8 @@ export async function GET(request: NextRequest) {
         voice_queries: voice,
         unique_users: uniqueUsers,
         avg_per_user: avgPerUser,
+        sessions: sess.sessions,
+        avg_sessions_per_user: avgSessionsPerUser,
       };
     });
 
@@ -118,10 +151,8 @@ export async function GET(request: NextRequest) {
     const totalAllVoice = daily.reduce((s, d) => s + d.voice_queries, 0);
     const totalAllText = daily.reduce((s, d) => s + d.text_queries, 0);
     const totalAllUsers = daily.reduce((s, d) => s + d.unique_users, 0);
+    const totalAllSessions = daily.reduce((s, d) => s + d.sessions, 0);
     const activeDays = daily.filter((d) => d.total_queries > 0).length;
-    const overallAvgPerUser = activeDays > 0 && totalAllUsers > 0
-      ? Math.round((totalAllQueries / (totalAllUsers / activeDays)) * 10) / 10
-      : 0;
 
     const result = {
       data: daily,
@@ -130,7 +161,9 @@ export async function GET(request: NextRequest) {
         totalQueries: totalAllQueries,
         totalVoice: totalAllVoice,
         totalText: totalAllText,
-        overallAvgPerUserPerDay: activeDays > 0 ? Math.round((totalAllQueries / totalAllUsers) * 10) / 10 : 0,
+        totalSessions: totalAllSessions,
+        overallAvgPerUserPerDay: totalAllUsers > 0 ? Math.round((totalAllQueries / totalAllUsers) * 10) / 10 : 0,
+        overallAvgSessionsPerUserPerDay: totalAllUsers > 0 ? Math.round((totalAllSessions / totalAllUsers) * 10) / 10 : 0,
         activeDays,
       },
     };
