@@ -215,7 +215,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
       await _cleanupPcmFile();
 
       // Split into chunks if the WAV is large, then transcribe
-      final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
       try {
         final transcript = await transcribeVoiceMessage(chunks);
         _transcript = transcript;
@@ -269,7 +269,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
       try {
         final transcript = await transcribeVoiceMessage(chunks);
         _transcript = transcript;
@@ -352,7 +352,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
   /// Split a WAV file into multiple chunk files if it exceeds [maxChunkPcmBytes].
   /// Each chunk is a standalone WAV file with its own header.
   /// Returns the original file in a single-element list if no splitting is needed.
-  static Future<List<File>> _splitWavFileIfNeeded(File wavFile, int sampleRate, int channels) async {
+  @visibleForTesting
+  static Future<List<File>> splitWavFileIfNeeded(File wavFile, int sampleRate, int channels) async {
     final fileLength = await wavFile.length();
     final pcmLength = fileLength - 44; // subtract WAV header
 
