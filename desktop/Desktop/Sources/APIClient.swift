@@ -1453,7 +1453,7 @@ struct ActionItemsListResponse: Codable {
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
-        case items
+        case items = "action_items"
         case hasMore = "has_more"
     }
 }
@@ -1945,10 +1945,10 @@ extension APIClient {
         if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
             return cache
         }
-        let response: GoalsListResponse = try await get("v1/goals/all")
-        goalsCache = response.goals
+        let goals: [Goal] = try await get("v1/goals/all")
+        goalsCache = goals
         goalsCacheTime = Date()
-        return response.goals
+        return goals
     }
 
     /// Creates a new goal
@@ -2046,8 +2046,8 @@ extension APIClient {
 
     /// Gets completed goals for history
     func getCompletedGoals() async throws -> [Goal] {
-        let response: GoalsListResponse = try await get("v1/goals/completed")
-        return response.goals
+        let goals: [Goal] = try await get("v1/goals/completed")
+        return goals
     }
 
     /// Completes a goal (marks as inactive with completed_at)
@@ -3020,7 +3020,7 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
