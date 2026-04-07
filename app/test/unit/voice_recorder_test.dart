@@ -217,4 +217,196 @@ void main() {
       expect(16001 < minAudioBytes, isFalse);
     });
   });
+
+  group('WAV file splitting', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('wav_split_test_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    /// Helper: create a WAV file with [pcmLength] bytes of PCM data.
+    Future<File> createWavFile(int pcmLength, {String name = 'test.wav'}) async {
+      final wavFile = File(path.join(tempDir.path, name));
+      final sink = wavFile.openWrite();
+      sink.add(WavBytesUtil.getWavHeader(pcmLength, 16000));
+      // Write PCM data in 64KB chunks to avoid huge single allocation
+      int written = 0;
+      while (written < pcmLength) {
+        final chunkSize = (pcmLength - written).clamp(0, 65536);
+        sink.add(Uint8List.fromList(List.generate(chunkSize, (i) => (written + i) % 256)));
+        written += chunkSize;
+      }
+      await sink.flush();
+      await sink.close();
+      return wavFile;
+    }
+
+    /// Helper: split a WAV file using the same algorithm as VoiceRecorderProvider.
+    Future<List<File>> splitWavFile(File wavFile, int maxChunkPcmBytes) async {
+      final fileLength = await wavFile.length();
+      final pcmLength = fileLength - 44;
+
+      if (pcmLength <= maxChunkPcmBytes) {
+        return [wavFile];
+      }
+
+      final chunks = <File>[];
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final reader = wavFile.openRead(44);
+
+      int chunkIndex = 0;
+      int pcmBytesRemaining = pcmLength;
+      final buffer = BytesBuilder(copy: false);
+
+      await for (final data in reader) {
+        buffer.add(data);
+
+        while (buffer.length >= maxChunkPcmBytes && pcmBytesRemaining > 0) {
+          final chunkBytes = buffer.takeBytes();
+          final chunkPcmSize = chunkBytes.length < maxChunkPcmBytes ? chunkBytes.length : maxChunkPcmBytes;
+
+          final chunkFile = File(path.join(tempDir.path, 'chunk_${timestamp}_$chunkIndex.wav'));
+          final sink = chunkFile.openWrite();
+          sink.add(WavBytesUtil.getWavHeader(chunkPcmSize, 16000));
+          sink.add(chunkBytes.sublist(0, chunkPcmSize));
+          await sink.flush();
+          await sink.close();
+
+          chunks.add(chunkFile);
+          pcmBytesRemaining -= chunkPcmSize;
+          chunkIndex++;
+
+          if (chunkBytes.length > chunkPcmSize) {
+            buffer.add(chunkBytes.sublist(chunkPcmSize));
+          }
+        }
+      }
+
+      if (buffer.length > 0) {
+        final remaining = buffer.takeBytes();
+        final chunkFile = File(path.join(tempDir.path, 'chunk_${timestamp}_$chunkIndex.wav'));
+        final sink = chunkFile.openWrite();
+        sink.add(WavBytesUtil.getWavHeader(remaining.length, 16000));
+        sink.add(remaining);
+        await sink.flush();
+        await sink.close();
+        chunks.add(chunkFile);
+      }
+
+      return chunks;
+    }
+
+    test('small WAV returns original file without splitting', () async {
+      // 1MB PCM — well under 10MB threshold
+      final wavFile = await createWavFile(1024 * 1024);
+      final chunks = await splitWavFile(wavFile, 10 * 1024 * 1024);
+
+      expect(chunks.length, equals(1));
+      expect(chunks[0].path, equals(wavFile.path));
+    });
+
+    test('WAV exactly at threshold returns original file', () async {
+      const maxChunk = 10 * 1024 * 1024;
+      final wavFile = await createWavFile(maxChunk);
+      final chunks = await splitWavFile(wavFile, maxChunk);
+
+      expect(chunks.length, equals(1));
+      expect(chunks[0].path, equals(wavFile.path));
+    });
+
+    test('WAV slightly over threshold splits into 2 chunks', () async {
+      const maxChunk = 10 * 1024 * 1024;
+      final pcmLength = maxChunk + 1000; // just over the limit
+      final wavFile = await createWavFile(pcmLength);
+      final chunks = await splitWavFile(wavFile, maxChunk);
+
+      expect(chunks.length, equals(2));
+
+      // First chunk should be maxChunk PCM bytes + 44-byte header
+      final chunk1Bytes = await chunks[0].readAsBytes();
+      expect(chunk1Bytes.length, equals(44 + maxChunk));
+
+      // Second chunk should be 1000 PCM bytes + 44-byte header
+      final chunk2Bytes = await chunks[1].readAsBytes();
+      expect(chunk2Bytes.length, equals(44 + 1000));
+
+      // Both should have valid WAV headers
+      expect(chunk1Bytes[0], equals(0x52)); // R
+      expect(chunk2Bytes[0], equals(0x52)); // R
+    });
+
+    test('large WAV splits into correct number of chunks', () async {
+      // Use a smaller chunk size for faster testing
+      const maxChunk = 100000; // 100KB chunks
+      const pcmLength = 350000; // should produce 4 chunks: 100K + 100K + 100K + 50K
+      final wavFile = await createWavFile(pcmLength);
+      final chunks = await splitWavFile(wavFile, maxChunk);
+
+      expect(chunks.length, equals(4));
+
+      // Verify total PCM bytes across all chunks equals original
+      int totalPcm = 0;
+      for (final chunk in chunks) {
+        final bytes = await chunk.readAsBytes();
+        expect(bytes.length, greaterThan(44)); // must have header + data
+        totalPcm += bytes.length - 44;
+
+        // Verify each chunk has valid RIFF header
+        expect(bytes[0], equals(0x52)); // R
+        expect(bytes[1], equals(0x49)); // I
+        expect(bytes[2], equals(0x46)); // F
+        expect(bytes[3], equals(0x46)); // F
+      }
+      expect(totalPcm, equals(pcmLength));
+    });
+
+    test('each chunk has correct subchunk2size in WAV header', () async {
+      const maxChunk = 50000;
+      const pcmLength = 120000; // 50K + 50K + 20K
+      final wavFile = await createWavFile(pcmLength);
+      final chunks = await splitWavFile(wavFile, maxChunk);
+
+      expect(chunks.length, equals(3));
+
+      for (final chunk in chunks) {
+        final bytes = await chunk.readAsBytes();
+        final subchunk2Size = bytes[40] | (bytes[41] << 8) | (bytes[42] << 16) | (bytes[43] << 24);
+        expect(subchunk2Size, equals(bytes.length - 44));
+      }
+    });
+
+    test('PCM data continuity across chunks preserves original data', () async {
+      const maxChunk = 100;
+      const pcmLength = 250;
+      final wavFile = await createWavFile(pcmLength);
+
+      // Read original PCM data
+      final originalBytes = await wavFile.readAsBytes();
+      final originalPcm = originalBytes.sublist(44);
+
+      final chunks = await splitWavFile(wavFile, maxChunk);
+
+      // Reconstruct PCM from chunks
+      final reconstructed = BytesBuilder();
+      for (final chunk in chunks) {
+        final bytes = await chunk.readAsBytes();
+        reconstructed.add(bytes.sublist(44));
+      }
+
+      final reconstructedPcm = reconstructed.takeBytes();
+      expect(reconstructedPcm.length, equals(pcmLength));
+
+      // Verify byte-for-byte match
+      for (int i = 0; i < pcmLength; i++) {
+        expect(reconstructedPcm[i], equals(originalPcm[i]), reason: 'Byte $i mismatch');
+      }
+    });
+  });
 }
