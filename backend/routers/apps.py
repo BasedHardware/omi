@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from fastapi.responses import HTMLResponse
 
 from utils.apps import fetch_app_chat_tools_from_manifest
+from utils.executors import storage_executor
 from utils.http_client import get_webhook_client
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -125,7 +126,7 @@ router = APIRouter()
 
 
 def _write_file(path: str, data: bytes):
-    """Write bytes to file — offloaded to thread via asyncio.to_thread."""
+    """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
         f.write(data)
 
@@ -566,7 +567,8 @@ async def create_persona(
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     contents = await file.read()
-    await asyncio.to_thread(_write_file, file_path, contents)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
     img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
@@ -606,7 +608,8 @@ async def update_persona(
         os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
         contents = await file.read()
-        await asyncio.to_thread(_write_file, file_path, contents)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
         img_url = upload_app_logo(file_path, persona_id)
         data['image'] = img_url
 
@@ -1901,7 +1904,8 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
     try:
         contents = await file.read()
-        await asyncio.to_thread(_write_file, temp_path, contents)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(storage_executor, _write_file, temp_path, contents)
 
         # Upload to cloud storage
         url = upload_app_thumbnail(temp_path, thumbnail_id)
