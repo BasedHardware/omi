@@ -94,7 +94,7 @@ for name in [
         sys.modules[name] = types.ModuleType(name)
 
 utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "sync_update_persona_prompt"]:
+for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt"]:
     setattr(utils_apps, attr, MagicMock())
 
 utils_analytics = sys.modules["utils.analytics"]
