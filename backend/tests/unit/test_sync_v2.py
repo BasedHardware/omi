@@ -454,7 +454,8 @@ class TestV1Unchanged:
         """v1 must process segments synchronously with asyncio.gather (no background)."""
         body = self._get_v1_body()
         assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
-        assert 'asyncio.to_thread' in body, "v1 must use asyncio.to_thread for blocking segment work"
+        assert 'run_in_executor' in body, "v1 must use run_in_executor for blocking segment work"
+        assert 'critical_executor' in body, "v1 must use critical_executor (Lane 2 architecture)"
 
     def test_v1_cleanup_in_finally(self):
         """v1 must still clean up files in finally block."""
