@@ -1037,7 +1037,7 @@ class FloatingControlBarManager {
     }
 
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
-    func openAIInputWithQuery(_ query: String) {
+    func openAIInputWithQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window else { return }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
@@ -1049,6 +1049,7 @@ class FloatingControlBarManager {
         // Provider session context remains intact; only the floating-bar UI is reset.
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation()
+        window.state.currentQueryFromVoice = fromVoice
 
         guard let provider = self.chatProvider else { return }
 
@@ -1094,12 +1095,13 @@ class FloatingControlBarManager {
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
-    func sendFollowUpQuery(_ query: String) {
+    func sendFollowUpQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window, window.state.showingAIResponse else {
             // No active conversation — fall back to new conversation
-            openAIInputWithQuery(query)
+            openAIInputWithQuery(query, fromVoice: fromVoice)
             return
         }
+        window.state.currentQueryFromVoice = fromVoice
 
         // Archive current exchange
         let currentQuery = window.state.displayedQuery
@@ -1200,7 +1202,10 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
-        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        }
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -1223,10 +1228,12 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
-                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-                    aiMessage,
-                    isFinal: !aiMessage.isStreaming
-                )
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1279,10 +1286,12 @@ class FloatingControlBarManager {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
 
-        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-            barWindow.state.currentAIMessage,
-            isFinal: true
-        )
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                barWindow.state.currentAIMessage,
+                isFinal: true
+            )
+        }
     }
 }
 
