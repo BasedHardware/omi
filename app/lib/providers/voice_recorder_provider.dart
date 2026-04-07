@@ -216,19 +216,22 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
       // Split into chunks if the WAV is large, then transcribe
       final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
-      final transcript = await transcribeVoiceMessage(chunks);
-      _cleanupChunkFiles(chunks);
-      _transcript = transcript;
-      _state = VoiceRecorderState.transcribeSuccess;
-      _isProcessing = false;
-      notifyListeners();
+      try {
+        final transcript = await transcribeVoiceMessage(chunks);
+        _transcript = transcript;
+        _state = VoiceRecorderState.transcribeSuccess;
+        _isProcessing = false;
+        notifyListeners();
 
-      if (transcript.isNotEmpty) {
-        _onTranscriptReady?.call(transcript);
-        close();
-      } else {
-        Logger.debug('Empty transcript received, closing without error');
-        close();
+        if (transcript.isNotEmpty) {
+          _onTranscriptReady?.call(transcript);
+          close();
+        } else {
+          Logger.debug('Empty transcript received, closing without error');
+          close();
+        }
+      } finally {
+        _cleanupChunkFiles(chunks);
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
@@ -267,19 +270,22 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
     try {
       final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
-      final transcript = await transcribeVoiceMessage(chunks);
-      _cleanupChunkFiles(chunks);
-      _transcript = transcript;
-      _state = VoiceRecorderState.transcribeSuccess;
-      _isProcessing = false;
-      notifyListeners();
+      try {
+        final transcript = await transcribeVoiceMessage(chunks);
+        _transcript = transcript;
+        _state = VoiceRecorderState.transcribeSuccess;
+        _isProcessing = false;
+        notifyListeners();
 
-      if (transcript.isNotEmpty) {
-        _onTranscriptReady?.call(transcript);
-        close();
-      } else {
-        Logger.debug('Empty transcript received on retry, closing without error');
-        close();
+        if (transcript.isNotEmpty) {
+          _onTranscriptReady?.call(transcript);
+          close();
+        } else {
+          Logger.debug('Empty transcript received on retry, closing without error');
+          close();
+        }
+      } finally {
+        _cleanupChunkFiles(chunks);
       }
     } catch (e) {
       Logger.debug('Error retrying transcription: $e');
