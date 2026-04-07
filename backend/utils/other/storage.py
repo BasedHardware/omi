@@ -22,14 +22,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Feature flag for Opus encoding in private cloud sync
+PRIVATE_CLOUD_OPUS_ENABLED = os.getenv('PRIVATE_CLOUD_OPUS_ENABLED', 'false').lower() == 'true'
+
 # Opus encoding constants
 OPUS_SAMPLE_RATE = 16000
 OPUS_CHANNELS = 1
 OPUS_FRAME_DURATION_MS = 20  # 20ms frames (standard for voice)
 OPUS_FRAME_SIZE = OPUS_SAMPLE_RATE * OPUS_FRAME_DURATION_MS // 1000  # 320 samples per frame
 
-# Valid private cloud sync extensions (longest first for correct matching)
-PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
+# Valid private cloud sync extensions
+PRIVATE_CLOUD_EXTENSIONS = ['.enc', '.bin', '.opus.enc', '.opus']
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -355,9 +358,8 @@ def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, cha
         encoded = encoder.encode(padded, frame_size)
         packets.append(encoded)
 
-    # Pack: [packet_count (4 bytes)] + [original_pcm_len (4 bytes)] + [len (2 bytes) + data] per packet
+    # Pack: [packet_count (4 bytes)] + [len (2 bytes) + data] per packet
     output = struct.pack('<I', len(packets))
-    output += struct.pack('<I', len(pcm_data))
     for pkt in packets:
         output += struct.pack('<H', len(pkt)) + pkt
 
@@ -375,51 +377,29 @@ def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, ch
 
     Returns:
         Raw PCM16 audio bytes
-
-    Raises:
-        ValueError: If opus_data is too short or has invalid header/packet structure
     """
-    if len(opus_data) < 8:
-        raise ValueError(f"Opus data too short: {len(opus_data)} bytes (need at least 8 for header)")
-
     decoder = opuslib.Decoder(sample_rate, channels)
     frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
 
     offset = 0
     packet_count = struct.unpack_from('<I', opus_data, offset)[0]
     offset += 4
-    original_pcm_len = struct.unpack_from('<I', opus_data, offset)[0]
-    offset += 4
 
     pcm_parts = []
-    for i in range(packet_count):
-        if offset + 2 > len(opus_data):
-            raise ValueError(f"Truncated Opus data: expected packet {i}/{packet_count} length at offset {offset}")
+    for _ in range(packet_count):
         pkt_len = struct.unpack_from('<H', opus_data, offset)[0]
         offset += 2
-        if offset + pkt_len > len(opus_data):
-            raise ValueError(
-                f"Truncated Opus data: packet {i} needs {pkt_len} bytes at offset {offset}, only {len(opus_data) - offset} available"
-            )
         pkt_data = opus_data[offset : offset + pkt_len]
         offset += pkt_len
         decoded = decoder.decode(pkt_data, frame_size)
         pcm_parts.append(decoded)
 
-    result = b''.join(pcm_parts)
-    # Trim to original PCM length to remove padding from partial final frame
-    if original_pcm_len > 0 and original_pcm_len < len(result):
-        result = result[:original_pcm_len]
-    return result
+    return b''.join(pcm_parts)
 
 
 def _get_extension_for_path(path: str) -> str:
     """Extract the private cloud sync extension from a GCS path."""
-    if path.endswith('.batch.enc'):
-        return 'batch.enc'
-    elif path.endswith('.batch.bin'):
-        return 'batch.bin'
-    elif path.endswith('.opus.enc'):
+    if path.endswith('.opus.enc'):
         return 'opus.enc'
     elif path.endswith('.opus'):
         return 'opus'
@@ -431,12 +411,8 @@ def _get_extension_for_path(path: str) -> str:
 
 
 def _strip_extension(filename: str) -> str:
-    """Strip private cloud sync extension to get the timestamp string.
-
-    Handles both single-chunk filenames (e.g. '1000.000.opus') and
-    batch filenames (e.g. '1000.000-1010.000.batch.bin').
-    """
-    for ext in ('.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin'):
+    """Strip private cloud sync extension to get the timestamp string."""
+    for ext in ('.opus.enc', '.opus', '.enc', '.bin'):
         if filename.endswith(ext):
             return filename[: -len(ext)]
     return filename.rsplit('.', 1)[0]
@@ -467,15 +443,23 @@ def upload_audio_chunk(
     # Format timestamp to 3 decimal places for cleaner filenames
     formatted_timestamp = f'{timestamp:.3f}'
 
-    upload_data = encode_pcm_to_opus(chunk_data)
+    # Opus encode if enabled
+    if PRIVATE_CLOUD_OPUS_ENABLED:
+        upload_data = encode_pcm_to_opus(chunk_data)
+    else:
+        upload_data = chunk_data
 
     if protection_level == 'enhanced':
+        # Encrypt as length-prefixed binary
         encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus.enc'
+        ext = 'opus.enc' if PRIVATE_CLOUD_OPUS_ENABLED else 'enc'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
         blob = bucket.blob(path)
         blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
     else:
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
+        # Standard - no encryption
+        ext = 'opus' if PRIVATE_CLOUD_OPUS_ENABLED else 'bin'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
         blob = bucket.blob(path)
         blob.upload_from_string(upload_data, content_type='application/octet-stream')
 
@@ -483,111 +467,18 @@ def upload_audio_chunk(
     return path
 
 
-def upload_audio_chunks_batch(
-    chunks: List[dict],
-    uid: str,
-    conversation_id: str,
-    data_protection_level: str = None,
-) -> List[str]:
-    """
-    Upload multiple audio chunks to GCS in a single streaming write.
-
-    Concatenates all chunk data into one GCS object (1 write op instead of N).
-
-    Args:
-        chunks: List of dicts with 'data' (bytes) and 'timestamp' (float).
-        uid: User ID.
-        conversation_id: Conversation ID.
-        data_protection_level: Optional cached protection level. When provided,
-            skips the Firestore read. Falls back to DB read when None.
-
-    Returns:
-        List of GCS paths for the uploaded batch.
-    """
-    if not chunks:
-        return []
-
-    # Sort by timestamp for consistent ordering
-    sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
-
-    # Resolve protection level once for the entire batch
-    protection_level = (
-        data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
-    )
-
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
-
-    # Build batch filename from first and last timestamps
-    first_ts = f'{sorted_chunks[0]["timestamp"]:.3f}'
-    last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
-    batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
-
-    if protection_level == 'enhanced':
-        # Encrypt each chunk individually (length-prefixed), stream to GCS
-        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
-        blob = bucket.blob(path)
-        with blob.open('wb', content_type='application/octet-stream') as f:
-            for chunk in sorted_chunks:
-                encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
-                f.write(encrypted_chunk)
-                del encrypted_chunk
-    else:
-        # Standard — stream raw PCM data to GCS
-        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
-        blob = bucket.blob(path)
-        with blob.open('wb', content_type='application/octet-stream') as f:
-            for chunk in sorted_chunks:
-                f.write(chunk['data'])
-
-    return [path]
-
-
 def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
-    """Delete audio chunks after they've been merged.
-
-    Handles both single-chunk blobs (per-timestamp lookup) and batch blobs
-    (listed and matched by start timestamp).
-    """
+    """Delete audio chunks after they've been merged."""
     bucket = storage_client.bucket(private_cloud_sync_bucket)
-    deleted_batch_paths = set()
-
     for timestamp in timestamps:
         # Format timestamp to match upload format (3 decimal places)
         formatted_timestamp = f'{timestamp:.3f}'
-
-        # Try single-chunk extensions first
+        # Try all possible extensions (opus + legacy)
         for extension in PRIVATE_CLOUD_EXTENSIONS:
-            if extension in ('.batch.enc', '.batch.bin'):
-                continue  # batch blobs handled separately below
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
                 blob.delete()
-
-        # Try batch blobs: exact single-timestamp batch (e.g. "1000.000.batch.bin")
-        for batch_ext in ('.batch.enc', '.batch.bin'):
-            batch_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{batch_ext}'
-            if batch_path not in deleted_batch_paths:
-                blob = bucket.blob(batch_path)
-                if blob.exists():
-                    blob.delete()
-                    deleted_batch_paths.add(batch_path)
-
-    # Scan for range-named batch blobs whose start timestamp matches any requested timestamp
-    ts_set = {f'{ts:.3f}' for ts in timestamps}
-    prefix = f'chunks/{uid}/{conversation_id}/'
-    for blob in bucket.list_blobs(prefix=prefix):
-        if blob.name in deleted_batch_paths:
-            continue
-        filename = blob.name.split('/')[-1]
-        if '.batch.' not in filename:
-            continue
-        timestamp_str = _strip_extension(filename)
-        if '-' in timestamp_str:
-            start_ts = timestamp_str.split('-', 1)[0]
-            if start_ts in ts_set:
-                blob.delete()
-                deleted_batch_paths.add(blob.name)
 
 
 def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
@@ -604,28 +495,19 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
     chunks = []
     for blob in blobs:
         # Extract timestamp from filename
-        # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
-        # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
+        # Supports: '1234567890.123.bin', '1234567890.123.enc',
+        #           '1234567890.123.opus', '1234567890.123.opus.enc'
         filename = blob.name.split('/')[-1]
         has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
         if has_valid_ext:
             try:
                 timestamp_str = _strip_extension(filename)
-                is_batch = '.batch.' in filename
-
-                if is_batch and '-' in timestamp_str:
-                    # Batch blob with timestamp range: "first_ts-last_ts"
-                    first_ts_str, last_ts_str = timestamp_str.split('-', 1)
-                    timestamp = float(first_ts_str)
-                else:
-                    timestamp = float(timestamp_str)
-
+                timestamp = float(timestamp_str)
                 chunks.append(
                     {
                         'timestamp': timestamp,
                         'path': blob.name,
                         'size': blob.size,
-                        'is_batch': is_batch,
                     }
                 )
             except ValueError:
@@ -660,7 +542,6 @@ def download_audio_chunks_and_merge(
     Download and merge audio chunks on-demand, handling mixed encryption states.
     Downloads chunks in parallel.
     Normalizes all chunks to unencrypted PCM format for consistent merging.
-    Supports both single-chunk blobs and batch blobs (from upload_audio_chunks_batch).
 
     Args:
         uid: User ID
@@ -676,70 +557,11 @@ def download_audio_chunks_and_merge(
 
     bucket = storage_client.bucket(private_cloud_sync_bucket)
 
-    # Resolve actual GCS paths — needed to find batch blobs whose filenames
-    # contain timestamp ranges instead of single timestamps
-    actual_chunks = list_audio_chunks(uid, conversation_id)
-    ts_set = {round(ts, 3) for ts in timestamps}
-
-    # Build batch blob map: for batch blobs, track which timestamps they cover
-    batch_paths = {}  # path -> chunk_info (deduplicate downloads)
-    ts_to_batch_path = {}  # timestamp -> batch_path (for timestamps inside batch range)
-    single_chunk_timestamps = []  # timestamps that have individual blobs
-
-    for chunk in actual_chunks:
-        if chunk.get('is_batch'):
-            path = chunk['path']
-            batch_paths[path] = chunk
-
-            # Parse batch range to determine covered timestamps
-            filename = path.split('/')[-1]
-            ts_str = _strip_extension(filename)
-            if '-' in ts_str:
-                start_str, end_str = ts_str.split('-', 1)
-                batch_start = float(start_str)
-                batch_end = float(end_str)
-            else:
-                batch_start = batch_end = float(ts_str)
-
-            # Map requested timestamps that fall within this batch's range
-            for ts in timestamps:
-                if batch_start <= round(ts, 3) <= batch_end:
-                    ts_to_batch_path[round(ts, 3)] = path
-        elif round(chunk['timestamp'], 3) in ts_set:
-            single_chunk_timestamps.append(chunk['timestamp'])
-
-    def _download_and_decode_blob(path: str) -> bytes | None:
-        """Download a blob and decode/decrypt based on extension."""
-        ext = _get_extension_for_path(path)
-        encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
-        is_opus = ext in ('opus.enc', 'opus')
-
-        try:
-            chunk_data = bucket.blob(path).download_as_bytes()
-        except NotFound:
-            return None
-
-        try:
-            if encrypted:
-                raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-            else:
-                raw_data = chunk_data
-
-            if is_opus:
-                pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                del raw_data
-            else:
-                pcm_data = raw_data
-
-            return pcm_data
-        except Exception as e:
-            logger.warning(f"Failed to decode/decrypt {path}: {e}")
-            return None
-
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
-        """Download a single-chunk blob by trying extensions in priority order."""
+        """Download a single chunk and return (timestamp, pcm_data)."""
         formatted_timestamp = f'{timestamp:.3f}'
 
+        # Try all extensions in priority order: opus.enc, enc, opus, bin
         extensions_to_try = [
             ('opus.enc', True, True),  # (ext, encrypted, opus)
             ('enc', True, False),
@@ -747,66 +569,49 @@ def download_audio_chunks_and_merge(
             ('bin', False, False),
         ]
 
+        chunk_data = None
+        is_encrypted = False
+        is_opus = False
+
         for ext, encrypted, opus in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             try:
                 chunk_data = bucket.blob(chunk_path).download_as_bytes()
+                is_encrypted = encrypted
+                is_opus = opus
+                break
             except NotFound:
                 continue
 
-            try:
-                if encrypted:
-                    raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-                else:
-                    raw_data = chunk_data
+        if chunk_data is None:
+            logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+            return (timestamp, None)
 
-                if opus:
-                    pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                    del raw_data
-                else:
-                    pcm_data = raw_data
+        # Normalize to PCM: decrypt if needed, then decode Opus if needed
+        if is_encrypted:
+            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
+        else:
+            raw_data = chunk_data
 
-                return (timestamp, pcm_data)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
-                )
-                continue
+        if is_opus:
+            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+            del raw_data
+        else:
+            pcm_data = raw_data
 
-        logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-        return (timestamp, None)
+        return (timestamp, pcm_data)
 
-    # Download all data in parallel
+    # Download chunks in parallel
     chunk_results = {}
-
-    # Determine which timestamps need individual downloads vs batch downloads
-    individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
-    unique_batch_paths = set(ts_to_batch_path.values())
-
-    max_workers = min(10, len(individual_timestamps) + len(unique_batch_paths))
-    if max_workers == 0:
-        max_workers = 1
+    max_workers = min(10, len(timestamps))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit individual chunk downloads
-        individual_futures = {executor.submit(download_single_chunk, ts): ts for ts in individual_timestamps}
+        future_to_timestamp = {executor.submit(download_single_chunk, ts): ts for ts in timestamps}
 
-        # Submit batch blob downloads (once per unique path)
-        batch_futures = {executor.submit(_download_and_decode_blob, path): path for path in unique_batch_paths}
-
-        # Collect individual results
-        for future in as_completed(individual_futures):
+        for future in as_completed(future_to_timestamp):
             timestamp, pcm_data = future.result()
             if pcm_data is not None:
                 chunk_results[timestamp] = pcm_data
-
-        # Collect batch results — assign full batch data at the batch's start timestamp
-        for future in as_completed(batch_futures):
-            path = batch_futures[future]
-            pcm_data = future.result()
-            if pcm_data is not None:
-                batch_info = batch_paths[path]
-                chunk_results[batch_info['timestamp']] = pcm_data
 
     # Merge chunks
     merged_data = bytearray()

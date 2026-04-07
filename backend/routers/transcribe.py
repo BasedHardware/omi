@@ -726,6 +726,9 @@ async def _stream_handler(
         if not request_conversation_processing:
             logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
             return
+        if not request_conversation_processing:
+            logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
+            return
 
         for conversation in processing:
             # Route to pusher — buffer if disconnected, send when connected (#6061)
