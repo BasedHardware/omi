@@ -61,6 +61,46 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(segment.personId, "person_abc")
   }
 
+  // MARK: - SpeakerSegment isUser Tests
+
+  func testSpeakerSegmentIsUserTrueWithNonZeroSpeaker() {
+    // Backend can return is_user=true with speaker_id != 0 (speech profile match)
+    let segment = SpeakerSegment(
+      speaker: 1,
+      text: "Hello from user",
+      start: 0,
+      end: 1,
+      isUser: true
+    )
+
+    XCTAssertTrue(segment.isUser, "Segment with isUser=true should be treated as user regardless of speaker ID")
+    XCTAssertEqual(segment.speaker, 1, "Speaker ID should remain 1")
+  }
+
+  func testSpeakerSegmentIsUserFalseWithZeroSpeaker() {
+    // A segment from speaker 0 that isn't the user (e.g., no speech profile match)
+    let segment = SpeakerSegment(
+      speaker: 0,
+      text: "Hello from someone else",
+      start: 0,
+      end: 1,
+      isUser: false
+    )
+
+    XCTAssertFalse(segment.isUser, "Segment with isUser=false should not be treated as user even with speaker 0")
+  }
+
+  func testSpeakerSegmentDefaultsIsUserToFalse() {
+    let segment = SpeakerSegment(
+      speaker: 0,
+      text: "Test",
+      start: 0,
+      end: 1
+    )
+
+    XCTAssertFalse(segment.isUser, "isUser should default to false")
+  }
+
   func testAssignmentMetadataPrefersBackendIdsAndFallsBackToIndices() {
     let segments = [
       TranscriptSegment(
