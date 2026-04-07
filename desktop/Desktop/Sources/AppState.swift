@@ -737,7 +737,11 @@ class AppState: ObservableObject {
 
   /// Check notification permission status and alert style
   func checkNotificationPermission() {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
+    // Dispatch async to avoid calling UNUserNotificationCenter.current() during
+    // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
       DispatchQueue.main.async {
         let isNowGranted = settings.authorizationStatus == .authorized
         self.hasNotificationPermission = isNowGranted
@@ -805,6 +809,7 @@ class AppState: ObservableObject {
 
       }
     }
+    }  // end DispatchQueue.main.async
   }
 
   /// Check screen recording permission status
