@@ -25,9 +25,9 @@ struct SpeakerBubbleView: View {
     }
 
     private var speakerLabel: String {
-        if isUser { return "You" }
+        if isUser { return String(localized: "You", comment: "Label for the current user in transcript") }
         if let name = personName { return name }
-        return "Speaker \(segment.speakerId)"
+        return String(localized: "Speaker \(segment.speakerId)", comment: "Label for other speakers in transcript")
     }
 
     private var avatarInitial: String {
