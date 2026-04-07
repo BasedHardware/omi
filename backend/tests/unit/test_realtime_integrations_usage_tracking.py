@@ -10,6 +10,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -41,6 +43,8 @@ for submodule in [
     "llm_usage",
     "_client",
     "chat",
+    "goals",
+    "auth",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -68,6 +72,15 @@ redis_mod.get_generic_cache = MagicMock(return_value=None)
 redis_mod.set_generic_cache = MagicMock()
 redis_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
 redis_mod.set_proactive_noti_sent_at = MagicMock()
+redis_mod.incr_daily_notification_count = MagicMock()
+redis_mod.get_daily_notification_count = MagicMock(return_value=0)
+redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
+
+goals_mod = sys.modules["database.goals"]
+goals_mod.get_user_goals = MagicMock(return_value=[])
+
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="Test User")
 
 chat_mod = sys.modules["database.chat"]
 chat_mod.add_app_message = MagicMock(return_value={"id": "msg-1"})
@@ -75,6 +88,7 @@ chat_mod.get_app_messages = MagicMock(return_value=[])
 
 notifications_mod = sys.modules["database.notifications"]
 notifications_mod.get_token_only = MagicMock(return_value=None)
+notifications_mod.get_mentor_notification_frequency = MagicMock(return_value=0)
 
 conversations_mod = sys.modules["database.conversations"]
 conversations_mod.get_conversations_by_id = MagicMock(return_value=[])
@@ -88,9 +102,24 @@ for name in [
     "utils.llm.clients",
     "utils.llm.proactive_notification",
     "utils.mentor_notifications",
+    "utils.http_client",
+    "utils.log_sanitizer",
+    "utils.llms",
+    "utils.llms.memory",
 ]:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
+
+# Ensure http_client stubs have correct attributes
+sys.modules["utils.http_client"].get_webhook_client = MagicMock()
+sys.modules["utils.http_client"].get_maps_client = MagicMock()
+
+# Ensure log_sanitizer stubs have correct attributes
+sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
+sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
+
+# Ensure llms.memory stub has correct attributes
+sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=[])
 
 utils_apps = sys.modules["utils.apps"]
 utils_apps.get_available_apps = MagicMock(return_value=[])
@@ -103,6 +132,11 @@ llm_clients.generate_embedding = MagicMock(return_value=[0] * 3072)
 
 llm_proactive = sys.modules["utils.llm.proactive_notification"]
 llm_proactive.get_proactive_message = MagicMock(return_value="Test notification message here")
+llm_proactive.evaluate_relevance = MagicMock(return_value=0.0)
+llm_proactive.generate_notification = MagicMock(return_value="")
+llm_proactive.validate_notification = MagicMock(return_value=False)
+llm_proactive.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
+llm_proactive.MAX_DAILY_NOTIFICATIONS = 10
 
 mentor_mod = sys.modules["utils.mentor_notifications"]
 mentor_mod.process_mentor_notification = MagicMock(return_value=None)
@@ -121,7 +155,8 @@ def test_realtime_integrations_feature_constant_exists():
     assert usage_tracker.Features.REALTIME_INTEGRATIONS != usage_tracker.Features.NOTIFICATIONS
 
 
-def test_mentor_notification_tracked_under_realtime_integrations():
+@pytest.mark.asyncio
+async def test_mentor_notification_tracked_under_realtime_integrations():
     """Verify mentor notification LLM call is tracked under REALTIME_INTEGRATIONS."""
     captured_contexts = []
 
@@ -141,7 +176,7 @@ def test_mentor_notification_tracked_under_realtime_integrations():
     with patch.object(app_integrations, "track_usage", spy_track_usage), patch.object(
         app_integrations, "send_app_notification", MagicMock()
     ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
-        app_integrations._trigger_realtime_integrations("user-rt-1", [{"text": "hello"}], "conv-1")
+        await app_integrations.trigger_realtime_integrations("user-rt-1", [{"text": "hello"}], "conv-1")
 
     # Should have tracked under REALTIME_INTEGRATIONS
     features_tracked = [f for _, f in captured_contexts]
@@ -151,7 +186,8 @@ def test_mentor_notification_tracked_under_realtime_integrations():
     mentor_mod.process_mentor_notification = MagicMock(return_value=None)
 
 
-def test_no_tracking_when_no_llm_calls():
+@pytest.mark.asyncio
+async def test_no_tracking_when_no_llm_calls():
     """Verify no tracking happens when mentor notification doesn't fire and no apps."""
     captured_contexts = []
 
@@ -170,27 +206,28 @@ def test_no_tracking_when_no_llm_calls():
     utils_apps.get_available_apps = MagicMock(return_value=[])
 
     with patch.object(app_integrations, "track_usage", spy_track_usage):
-        app_integrations._trigger_realtime_integrations("user-rt-2", [{"text": "hello"}], "conv-2")
+        await app_integrations.trigger_realtime_integrations("user-rt-2", [{"text": "hello"}], "conv-2")
 
     assert len(captured_contexts) == 0
 
 
-def test_track_usage_context_available_during_proactive_message():
-    """Verify the track_usage context is active when get_proactive_message is called."""
+@pytest.mark.asyncio
+async def test_track_usage_context_available_during_proactive_message():
+    """Verify the track_usage context is active when _process_mentor_proactive_notification is called."""
     captured_ctx = {}
 
-    original_get_proactive = app_integrations.get_proactive_message
+    original_process = app_integrations._process_mentor_proactive_notification
 
-    def spy_get_proactive(*args, **kwargs):
+    def spy_process(*args, **kwargs):
         captured_ctx["ctx"] = usage_tracker.get_current_context()
         return "Test notification"
 
     mentor_mod.process_mentor_notification = MagicMock(return_value={'prompt': 'test', 'params': []})
 
-    with patch.object(app_integrations, "get_proactive_message", spy_get_proactive), patch.object(
+    with patch.object(app_integrations, "_process_mentor_proactive_notification", spy_process), patch.object(
         app_integrations, "send_app_notification", MagicMock()
     ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
-        app_integrations._trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
+        await app_integrations.trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
 
     assert captured_ctx.get("ctx") is not None
     assert captured_ctx["ctx"].feature == usage_tracker.Features.REALTIME_INTEGRATIONS
