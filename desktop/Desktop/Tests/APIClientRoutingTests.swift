@@ -475,6 +475,32 @@ final class APIClientRoutingTests: XCTestCase {
                      pathContains: "v1/conversations/c5/segments/assign-bulk", method: "PATCH",
                      label: "assignSegmentsBulk")
     }
+
+    // -- Chat AI endpoints (migrated from Rust to Python) --
+
+    func testGetInitialMessageRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getInitialMessage(sessionId: "s1")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/chat/initial-message", method: "POST",
+                     label: "getInitialMessage")
+    }
+
+    func testGenerateSessionTitleRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/chat/generate-title", method: "POST",
+                     label: "generateSessionTitle")
+    }
+
+    func testGetChatMessageCountRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getChatMessageCount()
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/stats/chat-messages", method: "GET",
+                     label: "getChatMessageCount")
+    }
 }
 
 // MARK: - Helper extension to set testAuthHeader from async context
