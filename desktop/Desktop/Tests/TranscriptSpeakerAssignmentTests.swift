@@ -162,6 +162,68 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertTrue(transcript.contains("Speaker 0: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
   }
 
+  // MARK: - Translation Tests
+
+  func testTranscriptSegmentDecodesTranslations() throws {
+    let json = """
+      {
+        "id": "seg_trans_1",
+        "text": "こんにちは",
+        "speaker": "SPEAKER_00",
+        "is_user": false,
+        "start": 0.0,
+        "end": 1.5,
+        "translations": [
+          {"lang": "en", "text": "Hello"},
+          {"lang": "es", "text": "Hola"}
+        ]
+      }
+      """.data(using: .utf8)!
+
+    let segment = try JSONDecoder().decode(TranscriptSegment.self, from: json)
+
+    XCTAssertEqual(segment.translations.count, 2)
+    XCTAssertEqual(segment.translations[0].lang, "en")
+    XCTAssertEqual(segment.translations[0].text, "Hello")
+    XCTAssertEqual(segment.translations[1].lang, "es")
+    XCTAssertEqual(segment.translations[1].text, "Hola")
+  }
+
+  func testTranscriptSegmentDefaultsToEmptyTranslations() throws {
+    let json = """
+      {
+        "id": "seg_no_trans",
+        "text": "Hello",
+        "speaker": "SPEAKER_00",
+        "is_user": false,
+        "start": 0.0,
+        "end": 1.0
+      }
+      """.data(using: .utf8)!
+
+    let segment = try JSONDecoder().decode(TranscriptSegment.self, from: json)
+    XCTAssertTrue(segment.translations.isEmpty, "Translations should default to empty array when not present in JSON")
+  }
+
+  func testSpeakerSegmentTranslationsPreserved() {
+    let translations = [
+      SegmentTranslation(lang: "en", text: "Hello"),
+      SegmentTranslation(lang: "fr", text: "Bonjour")
+    ]
+    let segment = SpeakerSegment(
+      speaker: 0,
+      text: "こんにちは",
+      start: 0,
+      end: 1,
+      isUser: false,
+      translations: translations
+    )
+
+    XCTAssertEqual(segment.translations.count, 2)
+    XCTAssertEqual(segment.translations[0].lang, "en")
+    XCTAssertEqual(segment.translations[1].text, "Bonjour")
+  }
+
   // MARK: - Assignment Metadata Tests
 
   func testAssignmentMetadataPrefersBackendIdsAndFallsBackToIndices() {
