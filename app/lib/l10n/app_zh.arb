@@ -2947,5 +2947,6 @@
             }
         }
     },
-    "willSyncAutomatically": "将自动同步"
+    "willSyncAutomatically": "将自动同步",
+    "voiceRecordingFound": "找到录音"
 }

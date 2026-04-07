@@ -2960,5 +2960,6 @@
             }
         }
     },
-    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek",
+    "voiceRecordingFound": "Kayıt bulundu"
 }

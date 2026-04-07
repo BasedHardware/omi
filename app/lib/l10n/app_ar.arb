@@ -2892,5 +2892,6 @@
             }
         }
     },
-    "willSyncAutomatically": "ستتم المزامنة تلقائيًا"
+    "willSyncAutomatically": "ستتم المزامنة تلقائيًا",
+    "voiceRecordingFound": "تسجيل موجود"
 }

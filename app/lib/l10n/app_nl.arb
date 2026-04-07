@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
+    "voiceRecordingFound": "Opname gevonden"
 }

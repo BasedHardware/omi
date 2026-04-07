@@ -2894,5 +2894,6 @@
             }
         }
     },
-    "willSyncAutomatically": "es sincronitzarà automàticament"
+    "willSyncAutomatically": "es sincronitzarà automàticament",
+    "voiceRecordingFound": "Gravació trobada"
 }

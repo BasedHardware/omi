@@ -2960,5 +2960,6 @@
             }
         }
     },
-    "willSyncAutomatically": "синхронизируется автоматически"
+    "willSyncAutomatically": "синхронизируется автоматически",
+    "voiceRecordingFound": "Запись найдена"
 }

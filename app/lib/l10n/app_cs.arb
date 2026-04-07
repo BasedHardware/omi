@@ -2894,5 +2894,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synchronizuje se automaticky"
+    "willSyncAutomatically": "synchronizuje se automaticky",
+    "voiceRecordingFound": "Nalezena nahrávka"
 }

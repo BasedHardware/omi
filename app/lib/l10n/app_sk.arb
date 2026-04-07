@@ -2930,5 +2930,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synchronizuje sa automaticky"
+    "willSyncAutomatically": "synchronizuje sa automaticky",
+    "voiceRecordingFound": "Nahrávka nájdená"
 }

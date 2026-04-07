@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ"
+    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ",
+    "voiceRecordingFound": "พบการบันทึก"
 }

@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt",
+    "voiceRecordingFound": "Salvestis leitud"
 }

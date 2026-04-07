@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "se va sincroniza automat"
+    "willSyncAutomatically": "se va sincroniza automat",
+    "voiceRecordingFound": "Înregistrare găsită"
 }

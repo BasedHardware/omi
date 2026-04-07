@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseras automatiskt"
+    "willSyncAutomatically": "synkroniseras automatiskt",
+    "voiceRecordingFound": "Inspelning hittad"
 }

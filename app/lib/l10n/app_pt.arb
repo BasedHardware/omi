@@ -2961,5 +2961,6 @@
             }
         }
     },
-    "willSyncAutomatically": "será sincronizado automaticamente"
+    "willSyncAutomatically": "será sincronizado automaticamente",
+    "voiceRecordingFound": "Gravação encontrada"
 }

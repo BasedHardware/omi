@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "bus sinchronizuota automatiškai"
+    "willSyncAutomatically": "bus sinchronizuota automatiškai",
+    "voiceRecordingFound": "Rastas įrašas"
 }

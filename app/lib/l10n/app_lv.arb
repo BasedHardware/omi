@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "tiks sinhronizēts automātiski"
+    "willSyncAutomatically": "tiks sinhronizēts automātiski",
+    "voiceRecordingFound": "Ieraksts atrasts"
 }

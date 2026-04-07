@@ -10729,5 +10729,6 @@
     },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
-    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+    "voiceRecordingFound": "Recording found"
 }

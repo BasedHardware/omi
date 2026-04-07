@@ -2930,5 +2930,6 @@
             }
         }
     },
-    "willSyncAutomatically": "sẽ tự động đồng bộ"
+    "willSyncAutomatically": "sẽ tự động đồng bộ",
+    "voiceRecordingFound": "Đã tìm thấy bản ghi"
 }

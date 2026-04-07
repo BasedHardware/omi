@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "буде синхронізовано автоматично"
+    "willSyncAutomatically": "буде синхронізовано автоматично",
+    "voiceRecordingFound": "Запис знайдено"
 }

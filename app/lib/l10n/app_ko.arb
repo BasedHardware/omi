@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "자동으로 동기화됩니다"
+    "willSyncAutomatically": "자동으로 동기화됩니다",
+    "voiceRecordingFound": "녹음 발견됨"
 }

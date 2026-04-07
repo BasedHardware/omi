@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα"
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα",
+    "voiceRecordingFound": "Βρέθηκε εγγραφή"
 }

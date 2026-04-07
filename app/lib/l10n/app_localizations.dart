@@ -156,7 +156,7 @@ abstract class AppLocalizations {
     Locale('tr'),
     Locale('uk'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -16766,6 +16766,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Location permission is needed to find nearby Bluetooth devices.'**
   String get enableLocationDescription;
+
+  /// No description provided for @voiceRecordingFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording found'**
+  String get voiceRecordingFound;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16778,41 +16784,41 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'bg',
-    'ca',
-    'cs',
-    'da',
-    'de',
-    'el',
-    'en',
-    'es',
-    'et',
-    'fi',
-    'fr',
-    'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'ko',
-    'lt',
-    'lv',
-    'ms',
-    'nl',
-    'no',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sv',
-    'th',
-    'tr',
-    'uk',
-    'vi',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'bg',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fi',
+        'fr',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'ko',
+        'lt',
+        'lv',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sv',
+        'th',
+        'tr',
+        'uk',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16891,10 +16897,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

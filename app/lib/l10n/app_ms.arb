@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "akan disegerakkan secara automatik"
+    "willSyncAutomatically": "akan disegerakkan secara automatik",
+    "voiceRecordingFound": "Rakaman ditemui"
 }

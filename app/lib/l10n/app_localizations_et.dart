@@ -1708,7 +1708,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8976,4 +8981,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Salvestis leitud';
 }

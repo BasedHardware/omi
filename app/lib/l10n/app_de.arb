@@ -2893,5 +2893,6 @@
             }
         }
     },
-    "willSyncAutomatically": "wird automatisch synchronisiert"
+    "willSyncAutomatically": "wird automatisch synchronisiert",
+    "voiceRecordingFound": "Aufnahme gefunden"
 }

@@ -2894,5 +2894,6 @@
             }
         }
     },
-    "willSyncAutomatically": "ще се синхронизира автоматично"
+    "willSyncAutomatically": "ще се синхронизира автоматично",
+    "voiceRecordingFound": "Намерен запис"
 }

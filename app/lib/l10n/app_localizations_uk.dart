@@ -1711,7 +1711,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ПРИСТРОЇВ', one: 'ПРИСТРІЙ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ПРИСТРОЇВ',
+      one: 'ПРИСТРІЙ',
+    );
     return '$count $_temp0 ЗНАЙДЕНО ПОБЛИЗУ';
   }
 
@@ -8992,4 +8997,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Запис знайдено';
 }

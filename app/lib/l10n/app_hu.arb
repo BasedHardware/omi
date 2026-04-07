@@ -3021,5 +3021,6 @@
             }
         }
     },
-    "willSyncAutomatically": "automatikusan szinkronizálódik"
+    "willSyncAutomatically": "automatikusan szinkronizálódik",
+    "voiceRecordingFound": "Felvétel találva"
 }

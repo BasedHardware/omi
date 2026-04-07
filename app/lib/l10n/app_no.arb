@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
+    "willSyncAutomatically": "synkroniseres automatisk",
+    "voiceRecordingFound": "Opptak funnet"
 }

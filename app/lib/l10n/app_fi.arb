@@ -2925,5 +2925,6 @@
             }
         }
     },
-    "willSyncAutomatically": "synkronoidaan automaattisesti"
+    "willSyncAutomatically": "synkronoidaan automaattisesti",
+    "voiceRecordingFound": "Tallenne löytyi"
 }

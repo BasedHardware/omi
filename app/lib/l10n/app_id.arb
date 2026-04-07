@@ -2967,5 +2967,6 @@
             }
         }
     },
-    "willSyncAutomatically": "akan disinkronkan secara otomatis"
+    "willSyncAutomatically": "akan disinkronkan secara otomatis",
+    "voiceRecordingFound": "Rekaman ditemukan"
 }

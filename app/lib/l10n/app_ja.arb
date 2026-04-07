@@ -2926,5 +2926,6 @@
             }
         }
     },
-    "willSyncAutomatically": "自動的に同期されます"
+    "willSyncAutomatically": "自動的に同期されます",
+    "voiceRecordingFound": "録音が見つかりました"
 }

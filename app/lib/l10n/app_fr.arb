@@ -2960,5 +2960,6 @@
             }
         }
     },
-    "willSyncAutomatically": "sera synchronisé automatiquement"
+    "willSyncAutomatically": "sera synchronisé automatiquement",
+    "voiceRecordingFound": "Enregistrement trouvé"
 }
