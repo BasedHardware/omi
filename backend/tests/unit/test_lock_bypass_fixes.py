@@ -487,6 +487,8 @@ class TestWebhookLockEnforcement:
 
     def test_external_integrations_skips_locked(self):
         """trigger_external_integrations must return [] for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -494,11 +496,13 @@ class TestWebhookLockEnforcement:
 
         from utils.app_integrations import trigger_external_integrations
 
-        result = trigger_external_integrations('test-uid', conv)
+        result = asyncio.run(trigger_external_integrations('test-uid', conv))
         assert result == []
 
     def test_external_integrations_does_not_skip_unlocked(self):
         """trigger_external_integrations must call get_available_apps for unlocked."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -508,13 +512,15 @@ class TestWebhookLockEnforcement:
         with patch('utils.app_integrations.get_available_apps', mock_get_apps):
             from utils.app_integrations import trigger_external_integrations
 
-            result = trigger_external_integrations('test-uid', conv)
+            result = asyncio.run(trigger_external_integrations('test-uid', conv))
         # Verify downstream work was attempted (not short-circuited by lock check)
         mock_get_apps.assert_called_once()
         assert result == []
 
     def test_developer_webhook_skips_locked(self):
         """conversation_created_webhook must return early for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -524,12 +530,14 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # If lock check works, user_webhook_status_db is never called
         mock_status.assert_not_called()
 
     def test_developer_webhook_proceeds_for_unlocked(self):
         """conversation_created_webhook must proceed for unlocked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -539,7 +547,7 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # For unlocked, user_webhook_status_db IS called
         mock_status.assert_called_once()
 
