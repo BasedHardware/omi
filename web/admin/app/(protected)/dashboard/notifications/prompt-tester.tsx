@@ -215,7 +215,7 @@ export default function PromptTester() {
   const { token } = useAuthToken();
 
   const loadNotifications = async () => {
-    if (!uid.trim()) return;
+    if (!uid.trim() || !token) return;
     setLoading(true);
     setError("");
     setNotifications([]);
@@ -224,7 +224,7 @@ export default function PromptTester() {
 
     try {
       const res = await fetch(`/api/omi/notifications/user-notifications?uid=${encodeURIComponent(uid.trim())}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load");
@@ -239,7 +239,7 @@ export default function PromptTester() {
   };
 
   const regenerateAll = async () => {
-    if (!userContext || notifications.length === 0) return;
+    if (!userContext || notifications.length === 0 || !token) return;
     setRegenerating(true);
     setProgress(0);
 
@@ -273,7 +273,7 @@ export default function PromptTester() {
     try {
       const res = await fetch("/api/omi/notifications/regenerate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           prompt_template: prompt,
           user_name: userContext.user_name,
