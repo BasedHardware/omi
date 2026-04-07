@@ -25,6 +25,7 @@ from utils.http_client import (
     get_stt_semaphore,
     _webhook_circuit_breakers,
     _latest_wins_versions,
+    _semaphores,
     _CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     _CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
 )
@@ -122,10 +123,20 @@ class TestCircuitBreakerRegistry:
     def setup_method(self):
         _webhook_circuit_breakers.clear()
 
-    def test_same_host_returns_same_instance(self):
+    def test_same_url_returns_same_instance(self):
+        cb1 = get_webhook_circuit_breaker("https://example.com/path1")
+        cb2 = get_webhook_circuit_breaker("https://example.com/path1")
+        assert cb1 is cb2
+
+    def test_same_url_ignores_query_params(self):
+        cb1 = get_webhook_circuit_breaker("https://example.com/hook?key=1")
+        cb2 = get_webhook_circuit_breaker("https://example.com/hook?key=2")
+        assert cb1 is cb2
+
+    def test_different_paths_return_different_instances(self):
         cb1 = get_webhook_circuit_breaker("https://example.com/path1")
         cb2 = get_webhook_circuit_breaker("https://example.com/path2")
-        assert cb1 is cb2
+        assert cb1 is not cb2
 
     def test_different_hosts_return_different_instances(self):
         cb1 = get_webhook_circuit_breaker("https://foo.com/hook")
@@ -179,25 +190,42 @@ class TestLatestWins:
 
 
 class TestSemaphoreGetters:
-    """Verify semaphore lazy creation and correct limits."""
+    """Verify semaphore creation and per-loop isolation."""
 
-    def test_webhook_semaphore_limit(self):
+    def test_webhook_semaphore_returns_semaphore(self):
         sem = get_webhook_semaphore()
         assert isinstance(sem, asyncio.Semaphore)
-        # Calling again returns same instance
-        assert get_webhook_semaphore() is sem
 
-    def test_maps_semaphore_limit(self):
+    def test_maps_semaphore_returns_semaphore(self):
         sem = get_maps_semaphore()
         assert isinstance(sem, asyncio.Semaphore)
 
-    def test_auth_semaphore_limit(self):
+    def test_auth_semaphore_returns_semaphore(self):
         sem = get_auth_semaphore()
         assert isinstance(sem, asyncio.Semaphore)
 
-    def test_stt_semaphore_limit(self):
+    def test_stt_semaphore_returns_semaphore(self):
         sem = get_stt_semaphore()
         assert isinstance(sem, asyncio.Semaphore)
+
+    @pytest.mark.asyncio
+    async def test_same_loop_returns_same_instance(self):
+        """Within the same event loop, getter returns the same semaphore."""
+        sem1 = get_webhook_semaphore()
+        sem2 = get_webhook_semaphore()
+        assert sem1 is sem2
+
+    def test_different_loops_return_different_instances(self):
+        """Different asyncio.run() calls get isolated semaphores."""
+        sems = []
+
+        async def _get():
+            return get_webhook_semaphore()
+
+        sems.append(asyncio.run(_get()))
+        _semaphores.clear()  # Ensure no stale entries from the destroyed loop
+        sems.append(asyncio.run(_get()))
+        assert sems[0] is not sems[1]
 
 
 # ============================================================================
