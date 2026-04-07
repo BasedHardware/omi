@@ -1,6 +1,13 @@
 {
-  "unreleased": ["Migrated data APIs to production backend for improved reliability and feature parity"],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.239",
+      "date": "2026-04-07",
+      "changes": [
+        "Migrated data APIs to production backend for improved reliability and feature parity"
+      ]
+    },
     {
       "version": "0.11.238",
       "date": "2026-04-07",
