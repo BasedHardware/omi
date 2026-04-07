@@ -18,6 +18,9 @@ struct OnboardingFloatingBarShortcutStepView: View {
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
 
+    /// Stashed main menu so we can restore it when leaving this step.
+    static var savedMenu: NSMenu?
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -256,6 +259,13 @@ struct OnboardingFloatingBarShortcutStepView: View {
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
             _ = handleShortcutEvent(event)
         }
+
+        // Temporarily strip the main menu so ⌘-key combos (⌘O, ⌘J, ⌘Return, etc.) aren't
+        // swallowed by NSMenu's performKeyEquivalent before our monitor sees them.
+        DispatchQueue.main.async {
+            Self.savedMenu = NSApp.mainMenu
+            NSApp.mainMenu = nil
+        }
     }
 
     private func removeKeyMonitors() {
@@ -266,6 +276,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
         if let monitor = globalKeyMonitor {
             NSEvent.removeMonitor(monitor)
             globalKeyMonitor = nil
+        }
+        if let menu = Self.savedMenu {
+            NSApp.mainMenu = menu
+            Self.savedMenu = nil
         }
     }
 
