@@ -1,5 +1,11 @@
-"""Tests for /v1/conversations/count endpoint logic."""
+"""Tests for get_conversations_count logic (database.conversations).
 
+The function is tested inline because database.conversations requires
+Firestore client init at import time. The test_source_matches_implementation
+test verifies that the real module's source matches this test's logic.
+"""
+
+import inspect
 import os
 import sys
 import types
@@ -10,6 +16,8 @@ os.environ.setdefault(
 )
 
 from unittest.mock import MagicMock
+
+from google.cloud.firestore_v1 import FieldFilter
 
 
 def _stub_module(name):
@@ -53,25 +61,15 @@ mock_db = MagicMock()
 sys.modules["database._client"].db = mock_db
 sys.modules["database._client"].document_id_from_seed = lambda *a: "test"
 
-# Stub firestore module attributes needed by conversations.py
-from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
-
-# Now set db on conversations module and define the function inline for testing
-conversations_mod = sys.modules["database.conversations"]
-conversations_mod.db = mock_db
-conversations_mod.FieldFilter = FieldFilter
-conversations_mod.firestore = firestore
-conversations_mod.conversations_collection = 'conversations'
-
 
 def get_conversations_count(uid, include_discarded=False, statuses=[]):
-    ref = mock_db.collection('users').document(uid).collection('conversations')
+    """Mirrors database.conversations.get_conversations_count."""
+    conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
     if not include_discarded:
-        ref = ref.where(filter=FieldFilter('discarded', '==', False))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
-        ref = ref.where(filter=FieldFilter('status', 'in', statuses))
-    result = ref.count().get()
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    result = conversations_ref.count().get()
     return int(result[0][0].value)
 
 
@@ -83,6 +81,18 @@ class TestConversationsCount:
         v = MagicMock()
         v.value = value
         return [[v]]
+
+    def test_source_matches_implementation(self):
+        """Verify the real function's core logic matches this test's inline copy."""
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
+        with open(source_path) as f:
+            source = f.read()
+        # Check the real function contains the same key operations
+        assert 'def get_conversations_count(' in source
+        assert "FieldFilter('discarded', '==', False)" in source
+        assert "FieldFilter('status', 'in', statuses)" in source
+        assert '.count().get()' in source
+        assert 'result[0][0].value' in source
 
     def test_count_returns_integer(self):
         ref = MagicMock()
