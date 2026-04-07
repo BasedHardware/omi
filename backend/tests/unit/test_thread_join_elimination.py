@@ -92,6 +92,66 @@ class TestThreadPoolExecutorUsed:
         )
 
 
+class TestAsyncGatherInBackgroundThread:
+    """Verify asyncio.gather _batch() wrapper pattern works in background threads."""
+
+    def test_apps_update_personas_async_uses_batch_wrapper(self):
+        """apps.py update_personas_async must use async _batch() wrapper for gather."""
+        filepath = os.path.join(BACKEND_DIR, 'utils', 'apps.py')
+        with open(filepath) as f:
+            source = f.read()
+        assert 'async def _batch()' in source, (
+            "update_personas_async must wrap asyncio.gather in async _batch() helper"
+        )
+        assert 'set_event_loop' in source, (
+            "update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        )
+
+    def test_process_conversation_uses_batch_wrapper(self):
+        """process_conversation.py _update_personas_async must use async _batch() wrapper."""
+        filepath = os.path.join(BACKEND_DIR, 'utils', 'conversations', 'process_conversation.py')
+        with open(filepath) as f:
+            source = f.read()
+        assert 'async def _batch()' in source, (
+            "_update_personas_async must wrap asyncio.gather in async _batch() helper"
+        )
+        assert 'set_event_loop' in source, (
+            "_update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
+        )
+
+    def test_gather_batch_pattern_works_in_thread(self):
+        """Runtime test: asyncio.gather inside _batch() wrapper works from a background thread."""
+        import asyncio
+        import threading
+
+        results = []
+        errors = []
+
+        async def fake_coro(x):
+            await asyncio.sleep(0.001)
+            return x * 2
+
+        def worker():
+            async def _batch():
+                return await asyncio.gather(*[fake_coro(i) for i in range(5)])
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                results.extend(loop.run_until_complete(_batch()))
+            except Exception as e:
+                errors.append(e)
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join(timeout=5)
+
+        assert not errors, f"_batch() pattern raised in thread: {errors}"
+        assert results == [0, 2, 4, 6, 8], f"Unexpected results: {results}"
+
+
 class TestAsyncSTTVariants:
     """Phase 4: verify async STT variants exist."""
 
