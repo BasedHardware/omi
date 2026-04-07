@@ -117,6 +117,14 @@ class TestAsyncSTTVariants:
                 source = f.read()
             assert 'get_stt_client' in source, f"{filename} should use shared get_stt_client()"
 
+    def test_stt_async_offloads_file_io(self):
+        """Async STT variants should offload file reads via asyncio.to_thread."""
+        for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
+            filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
+            with open(filepath) as f:
+                source = f.read()
+            assert 'asyncio.to_thread' in source, f"{filename} should offload file I/O via asyncio.to_thread"
+
 
 class TestLintScript:
     """Phase 6: verify lint script exists and is functional."""
