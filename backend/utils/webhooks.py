@@ -16,6 +16,7 @@ from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
 import database.users as users_db
+from utils.http_client import get_webhook_client
 from utils.notifications import send_notification
 import logging
 
@@ -117,12 +118,11 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
             return
         webhook_url += f'?uid={uid}'
         try:
-            response = await asyncio.to_thread(
-                requests.post,
+            client = get_webhook_client()
+            response = await client.post(
                 webhook_url,
                 json={'segments': segments, 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
-                timeout=15,
             )
             logger.info(f'realtime_transcript_webhook: {webhook_url} {response.status_code}')
             if response.status_code == 200:
@@ -166,8 +166,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             return
         webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
-            response = await asyncio.to_thread(
-                requests.post, webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
+            client = get_webhook_client()
+            response = await client.post(
+                webhook_url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
             )
             logger.info(f'send_audio_bytes_developer_webhook: {webhook_url} {response.status_code}')
         except Exception as e:
