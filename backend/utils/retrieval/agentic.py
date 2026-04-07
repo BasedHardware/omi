@@ -532,6 +532,23 @@ async def execute_agentic_chat_stream(
     except Exception as e:
         logger.error(f"Error loading app tools: {e}")
 
+    # Append app tool awareness to system prompt so Claude knows to search for them
+    if app_tools:
+        app_names = set()
+        for t in app_tools:
+            # Tool names are prefixed with app_id; extract the human-readable app name from description
+            app_names.add(t.name)
+        app_tool_names = ", ".join(sorted(app_names))
+        system_prompt += f"""
+
+<available_app_tools>
+You have access to additional tools from the user's connected apps. These tools are discoverable via the tool_search_tool_regex tool. When the user asks you to do something related to an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.), search for the relevant tool using tool_search_tool_regex with a keyword like "github", "issue", "tweet", etc.
+
+Available app tool names: {app_tool_names}
+
+IMPORTANT: Always search for and use these tools when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
+</available_app_tools>"""
+
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
