@@ -7,7 +7,7 @@ import requests
 
 from database.redis_db import r
 from models.geolocation import Geolocation
-from utils.http_client import get_maps_client
+from utils.http_client import get_maps_client, get_maps_semaphore
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +74,13 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
     try:
-        client = get_maps_client()
-        response = await client.get(
-            "https://maps.googleapis.com/maps/api/geocode/json",
-            params={"latlng": f"{latitude},{longitude}", "key": key},
-        )
-        data = response.json()
+        async with get_maps_semaphore():
+            client = get_maps_client()
+            response = await client.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"latlng": f"{latitude},{longitude}", "key": key},
+            )
+            data = response.json()
     except Exception as e:
         logger.error(f'async_get_google_maps_location error: {e}')
         return None
