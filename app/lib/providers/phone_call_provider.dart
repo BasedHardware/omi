@@ -405,7 +405,7 @@ class PhoneCallProvider extends ChangeNotifier {
         _scheduleTokenRefresh(token.ttl);
       } else {
         Logger.error('PhoneCallProvider: token refresh failed, retrying in 30s');
-        _scheduleTokenRefresh(30);
+        _scheduleTokenRefresh(60);
       }
     });
   }
