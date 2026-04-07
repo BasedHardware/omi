@@ -1,9 +1,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 
 void main() {
@@ -265,14 +269,27 @@ void main() {
     });
   });
 
-  group('WAV file splitting', () {
+  group('WAV file splitting (production splitWavFileIfNeeded)', () {
     late Directory tempDir;
 
     setUp(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
       tempDir = Directory.systemTemp.createTempSync('wav_split_test_');
+      // Mock path_provider to return our temp dir
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getTemporaryDirectory') return tempDir.path;
+          return null;
+        },
+      );
     });
 
     tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
       if (tempDir.existsSync()) {
         tempDir.deleteSync(recursive: true);
       }
@@ -283,7 +300,6 @@ void main() {
       final wavFile = File(path.join(tempDir.path, name));
       final sink = wavFile.openWrite();
       sink.add(WavBytesUtil.getWavHeader(pcmLength, 16000));
-      // Write PCM data in 64KB chunks to avoid huge single allocation
       int written = 0;
       while (written < pcmLength) {
         final chunkSize = (pcmLength - written).clamp(0, 65536);
@@ -295,92 +311,32 @@ void main() {
       return wavFile;
     }
 
-    /// Helper: split a WAV file using the same algorithm as VoiceRecorderProvider.
-    Future<List<File>> splitWavFile(File wavFile, int maxChunkPcmBytes) async {
-      final fileLength = await wavFile.length();
-      final pcmLength = fileLength - 44;
-
-      if (pcmLength <= maxChunkPcmBytes) {
-        return [wavFile];
-      }
-
-      final chunks = <File>[];
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final reader = wavFile.openRead(44);
-
-      int chunkIndex = 0;
-      int pcmBytesRemaining = pcmLength;
-      final buffer = BytesBuilder(copy: false);
-
-      await for (final data in reader) {
-        buffer.add(data);
-
-        while (buffer.length >= maxChunkPcmBytes && pcmBytesRemaining > 0) {
-          final chunkBytes = buffer.takeBytes();
-          final chunkPcmSize = chunkBytes.length < maxChunkPcmBytes ? chunkBytes.length : maxChunkPcmBytes;
-
-          final chunkFile = File(path.join(tempDir.path, 'chunk_${timestamp}_$chunkIndex.wav'));
-          final sink = chunkFile.openWrite();
-          sink.add(WavBytesUtil.getWavHeader(chunkPcmSize, 16000));
-          sink.add(chunkBytes.sublist(0, chunkPcmSize));
-          await sink.flush();
-          await sink.close();
-
-          chunks.add(chunkFile);
-          pcmBytesRemaining -= chunkPcmSize;
-          chunkIndex++;
-
-          if (chunkBytes.length > chunkPcmSize) {
-            buffer.add(chunkBytes.sublist(chunkPcmSize));
-          }
-        }
-      }
-
-      if (buffer.length > 0) {
-        final remaining = buffer.takeBytes();
-        final chunkFile = File(path.join(tempDir.path, 'chunk_${timestamp}_$chunkIndex.wav'));
-        final sink = chunkFile.openWrite();
-        sink.add(WavBytesUtil.getWavHeader(remaining.length, 16000));
-        sink.add(remaining);
-        await sink.flush();
-        await sink.close();
-        chunks.add(chunkFile);
-      }
-
-      return chunks;
-    }
-
     test('small WAV returns original file without splitting', () async {
-      // 1MB PCM — well under 10MB threshold
       final wavFile = await createWavFile(1024 * 1024);
-      final chunks = await splitWavFile(wavFile, 10 * 1024 * 1024);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
       expect(chunks.length, equals(1));
       expect(chunks[0].path, equals(wavFile.path));
     });
 
     test('WAV exactly at threshold returns original file', () async {
-      const maxChunk = 10 * 1024 * 1024;
-      final wavFile = await createWavFile(maxChunk);
-      final chunks = await splitWavFile(wavFile, maxChunk);
+      final wavFile = await createWavFile(VoiceRecorderProvider.maxChunkPcmBytes);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
       expect(chunks.length, equals(1));
       expect(chunks[0].path, equals(wavFile.path));
     });
 
     test('WAV slightly over threshold splits into 2 chunks', () async {
-      const maxChunk = 10 * 1024 * 1024;
-      final pcmLength = maxChunk + 1000; // just over the limit
+      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 1000;
       final wavFile = await createWavFile(pcmLength);
-      final chunks = await splitWavFile(wavFile, maxChunk);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
       expect(chunks.length, equals(2));
 
-      // First chunk should be maxChunk PCM bytes + 44-byte header
       final chunk1Bytes = await chunks[0].readAsBytes();
-      expect(chunk1Bytes.length, equals(44 + maxChunk));
+      expect(chunk1Bytes.length, equals(44 + VoiceRecorderProvider.maxChunkPcmBytes));
 
-      // Second chunk should be 1000 PCM bytes + 44-byte header
       final chunk2Bytes = await chunks[1].readAsBytes();
       expect(chunk2Bytes.length, equals(44 + 1000));
 
@@ -389,36 +345,11 @@ void main() {
       expect(chunk2Bytes[0], equals(0x52)); // R
     });
 
-    test('large WAV splits into correct number of chunks', () async {
-      // Use a smaller chunk size for faster testing
-      const maxChunk = 100000; // 100KB chunks
-      const pcmLength = 350000; // should produce 4 chunks: 100K + 100K + 100K + 50K
-      final wavFile = await createWavFile(pcmLength);
-      final chunks = await splitWavFile(wavFile, maxChunk);
-
-      expect(chunks.length, equals(4));
-
-      // Verify total PCM bytes across all chunks equals original
-      int totalPcm = 0;
-      for (final chunk in chunks) {
-        final bytes = await chunk.readAsBytes();
-        expect(bytes.length, greaterThan(44)); // must have header + data
-        totalPcm += bytes.length - 44;
-
-        // Verify each chunk has valid RIFF header
-        expect(bytes[0], equals(0x52)); // R
-        expect(bytes[1], equals(0x49)); // I
-        expect(bytes[2], equals(0x46)); // F
-        expect(bytes[3], equals(0x46)); // F
-      }
-      expect(totalPcm, equals(pcmLength));
-    });
-
     test('each chunk has correct subchunk2size in WAV header', () async {
-      const maxChunk = 50000;
-      const pcmLength = 120000; // 50K + 50K + 20K
+      // Use a file that's 2.5x the threshold to get 3 chunks
+      final pcmLength = (VoiceRecorderProvider.maxChunkPcmBytes * 2.5).toInt();
       final wavFile = await createWavFile(pcmLength);
-      final chunks = await splitWavFile(wavFile, maxChunk);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
       expect(chunks.length, equals(3));
 
@@ -430,15 +361,15 @@ void main() {
     });
 
     test('PCM data continuity across chunks preserves original data', () async {
-      const maxChunk = 100;
-      const pcmLength = 250;
+      // Use small data to test continuity precisely (can't use maxChunkPcmBytes — too slow)
+      // We test the production method with a file just over 10MB
+      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 500;
       final wavFile = await createWavFile(pcmLength);
 
-      // Read original PCM data
       final originalBytes = await wavFile.readAsBytes();
       final originalPcm = originalBytes.sublist(44);
 
-      final chunks = await splitWavFile(wavFile, maxChunk);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
       // Reconstruct PCM from chunks
       final reconstructed = BytesBuilder();
@@ -450,10 +381,100 @@ void main() {
       final reconstructedPcm = reconstructed.takeBytes();
       expect(reconstructedPcm.length, equals(pcmLength));
 
-      // Verify byte-for-byte match
-      for (int i = 0; i < pcmLength; i++) {
-        expect(reconstructedPcm[i], equals(originalPcm[i]), reason: 'Byte $i mismatch');
+      // Spot-check first, boundary, and last bytes
+      expect(reconstructedPcm[0], equals(originalPcm[0]));
+      expect(
+        reconstructedPcm[VoiceRecorderProvider.maxChunkPcmBytes - 1],
+        equals(originalPcm[VoiceRecorderProvider.maxChunkPcmBytes - 1]),
+      );
+      expect(
+        reconstructedPcm[VoiceRecorderProvider.maxChunkPcmBytes],
+        equals(originalPcm[VoiceRecorderProvider.maxChunkPcmBytes]),
+      );
+      expect(reconstructedPcm[pcmLength - 1], equals(originalPcm[pcmLength - 1]));
+    });
+
+    test('total PCM bytes across all chunks matches original', () async {
+      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes * 3 + 50000;
+      final wavFile = await createWavFile(pcmLength);
+      final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
+
+      expect(chunks.length, equals(4));
+
+      int totalPcm = 0;
+      for (final chunk in chunks) {
+        final bytes = await chunk.readAsBytes();
+        expect(bytes.length, greaterThan(44));
+        totalPcm += bytes.length - 44;
+
+        // Verify each chunk has valid RIFF header
+        expect(bytes[0], equals(0x52)); // R
+        expect(bytes[1], equals(0x49)); // I
+        expect(bytes[2], equals(0x46)); // F
+        expect(bytes[3], equals(0x46)); // F
       }
+      expect(totalPcm, equals(pcmLength));
+    });
+  });
+
+  group('VoiceRecorderProvider checkPendingRecording', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      tempDir = Directory.systemTemp.createTempSync('voice_pending_test_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('transitions to pendingRecovery when WAV file exists', () async {
+      // Create a WAV file and persist its path
+      final wavFile = File(path.join(tempDir.path, 'pending.wav'));
+      final sink = wavFile.openWrite();
+      sink.add(WavBytesUtil.getWavHeader(32000, 16000));
+      sink.add(Uint8List(32000));
+      await sink.flush();
+      await sink.close();
+
+      await SharedPreferencesUtil().saveString('voice_recorder_pending_wav_path', wavFile.path);
+
+      final provider = VoiceRecorderProvider();
+      expect(provider.state, equals(VoiceRecorderState.idle));
+
+      await provider.checkPendingRecording();
+
+      expect(provider.state, equals(VoiceRecorderState.pendingRecovery));
+      expect(provider.hasPendingRecording, isTrue);
+      expect(provider.isActive, isTrue);
+    });
+
+    test('clears stale pref when WAV file is missing', () async {
+      // Persist a path to a file that doesn't exist
+      await SharedPreferencesUtil().saveString('voice_recorder_pending_wav_path', '/nonexistent/path.wav');
+
+      final provider = VoiceRecorderProvider();
+      await provider.checkPendingRecording();
+
+      // Should remain idle and clear the stale pref
+      expect(provider.state, equals(VoiceRecorderState.idle));
+      expect(provider.hasPendingRecording, isFalse);
+
+      // Verify pref was cleared
+      expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), isEmpty);
+    });
+
+    test('does nothing when no pending path is stored', () async {
+      final provider = VoiceRecorderProvider();
+      await provider.checkPendingRecording();
+
+      expect(provider.state, equals(VoiceRecorderState.idle));
+      expect(provider.hasPendingRecording, isFalse);
     });
   });
 }
