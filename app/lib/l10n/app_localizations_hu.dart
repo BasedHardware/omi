@@ -1720,12 +1720,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ESZKÖZ',
-      one: 'ESZKÖZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -9034,18 +9029,4 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get audioOutput => 'Hangkimenet';
-
-  @override
-  String get tasksClearCompleted => 'Clear Completed';
-
-  @override
-  String get tasksSelectAll => 'Select All';
-
-  @override
-  String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
-  }
-
-  @override
-  String get tasksMarkComplete => 'Marked as complete';
 }

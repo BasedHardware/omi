@@ -8534,12 +8534,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の会話を作成',
-      one: '1件の会話を作成',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
     return '$_temp0';
   }
 
@@ -8846,18 +8841,4 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioOutput => 'オーディオ出力';
-
-  @override
-  String get tasksClearCompleted => 'Clear Completed';
-
-  @override
-  String get tasksSelectAll => 'Select All';
-
-  @override
-  String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
-  }
-
-  @override
-  String get tasksMarkComplete => 'Marked as complete';
 }

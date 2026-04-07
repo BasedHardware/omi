@@ -42,9 +42,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // Overdue section collapsed by default
   bool _overdueExpanded = false;
 
-  // Selected goal IDs (used alongside task selection mode)
-  final Set<String> _selectedGoalIds = {};
-
   @override
   bool get wantKeepAlive => true;
 
@@ -185,110 +182,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildFab() {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, _) {
-        if (provider.isSelectionMode) {
-          return _buildSelectionToolbar(provider);
-        }
-        return Positioned(
-          right: 20,
-          bottom: 100,
-          child: FloatingActionButton(
-            heroTag: 'action_items_fab',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
-            },
-            backgroundColor: Colors.deepPurple,
-            child: const Icon(Icons.add, color: Colors.white),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSelectionToolbar(ActionItemsProvider provider) {
-    final hasAnything = provider.hasSelection || _selectedGoalIds.isNotEmpty;
     return Positioned(
-      left: 16,
-      right: 16,
+      right: 20,
       bottom: 100,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Cancel
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                setState(() => _selectedGoalIds.clear());
-                provider.endSelection();
-              },
-              child: const Icon(Icons.close, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 12),
-            // Count (tasks + goals)
-            Expanded(
-              child: Text(
-                context.l10n.selectedCount(
-                  provider.selectedCount + _selectedGoalIds.length,
-                  provider.selectedCount + _selectedGoalIds.length,
-                ),
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
-              ),
-            ),
-            // Select All
-            TextButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                provider.selectAllItems();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.deepPurple[300],
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 36),
-              ),
-              child: Text(context.l10n.tasksSelectAll, style: const TextStyle(fontSize: 14)),
-            ),
-            const SizedBox(width: 4),
-            // Delete
-            GestureDetector(
-              onTap: hasAnything
-                  ? () async {
-                      HapticFeedback.mediumImpact();
-                      final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-                      for (final goalId in List<String>.from(_selectedGoalIds)) {
-                        await goalsProvider.deleteGoal(goalId);
-                      }
-                      setState(() => _selectedGoalIds.clear());
-                      await provider.deleteSelectedItems();
-                    }
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: provider.hasSelection ? Colors.red : Colors.grey[700],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  context.l10n.delete,
-                  style: TextStyle(
-                    color: provider.hasSelection ? Colors.white : Colors.grey[500],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: FloatingActionButton(
+        heroTag: 'action_items_fab',
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
+        },
+        backgroundColor: Colors.deepPurple,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -381,14 +285,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     provider.updateActionItemDueDate(item, newDueDate);
   }
 
-  Future<void> _confirmClearCompleted(ActionItemsProvider provider) async {
+  Future<void> _confirmCleanTodayTasks(ActionItemsProvider provider) async {
     HapticFeedback.lightImpact();
-    final shouldClear = await showDialog<bool>(
+    final shouldClean = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F22),
-        title: Text(context.l10n.tasksClearCompleted,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.tasksCleanTodayTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         content: Text(context.l10n.tasksCleanTodayMessage, style: TextStyle(color: Colors.grey[300], fontSize: 14)),
         actions: [
           TextButton(
@@ -397,15 +303,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(context.l10n.delete, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
 
-    if (shouldClear != true) return;
-    await provider.clearCompletedItems();
+    if (shouldClean != true) return;
+
+    await provider.clearTodayDeadlinesForIncompleteTasks();
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -522,8 +428,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               _buildFab(),
@@ -619,12 +525,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildGoalsRow() {
-    return Consumer2<GoalsProvider, ActionItemsProvider>(
-      builder: (context, goalsProvider, actionProvider, child) {
-        if (goalsProvider.isLoading) return const SizedBox.shrink();
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        if (goalsProvider.isLoading) {
+          return const SizedBox.shrink();
+        }
 
         final goals = goalsProvider.goals;
-        if (goals.isEmpty) return const SizedBox.shrink();
+
+        // If no goals, don't show anything
+        if (goals.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -641,36 +553,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
-                    if (!actionProvider.isSelectionMode) ...[
-                      if (goals.length < 4)
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            MixpanelManager().track('Add Goal Clicked from Tasks Page');
-                            _showCreateGoalSheet();
-                          },
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration:
-                                BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-                            child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
-                          ),
-                        ),
-                      const SizedBox(width: 10),
+                    if (goals.length < 4)
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.lightImpact();
-                          actionProvider.startSelection();
+                          MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                          _showCreateGoalSheet();
                         },
-                        child: Text('Select', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
+                          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                        ),
                       ),
-                    ],
                   ],
                 ),
               ),
               // Goal items
-              ...goals.map((goal) => _buildGoalItem(goal, actionProvider)),
+              ...goals.map((goal) => _buildGoalItem(goal)),
+              // Spacing after section
               const SizedBox(height: 8),
             ],
           ),
@@ -758,27 +660,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
-                      if (provider.showCompletedView && orderedItems.isNotEmpty)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _confirmClearCompleted(provider),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  context.l10n.tasksClearCompleted,
-                                  style: TextStyle(color: Colors.red[400], fontSize: 12, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ),
-                          ],
+                      if (category == TaskCategory.today && !provider.showCompletedView)
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            splashRadius: 10,
+                            onPressed: () => _confirmCleanTodayTasks(provider),
+                            icon: Icon(Icons.close, size: 12, color: Colors.grey[600]),
+                          ),
                         )
                       else if (orderedItems.isNotEmpty)
                         Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
@@ -812,31 +704,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _overdueExpanded = !_overdueExpanded;
-                    });
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 20),
-                      const SizedBox(width: 4),
-                      Text(
-                        context.l10n.tasksOverdue,
-                        style: TextStyle(color: Colors.grey[500], fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                    ],
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _overdueExpanded = !_overdueExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+              child: Row(
+                children: [
+                  Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 20),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.tasksOverdue,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                ],
+              ),
             ),
           ),
           if (_overdueExpanded) ...[
@@ -1009,13 +896,89 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
-    // In selection mode: no drag, no swipe — just tappable content.
-    if (provider.isSelectionMode) {
-      return taskContent;
+    // If at indent 0, allow swipe-right to indent and swipe-left to delete.
+    if (indentLevel == 0) {
+      return Dismissible(
+        key: Key('dismiss_${item.id}'),
+        direction: DismissDirection.horizontal,
+        dismissThresholds: const {DismissDirection.startToEnd: 0.25, DismissDirection.endToStart: 0.3},
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.startToEnd) {
+            _incrementIndent(item.id);
+            return false;
+          }
+          return true;
+        },
+        background: Container(color: Colors.transparent),
+        secondaryBackground: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20.0),
+          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        onDismissed: (direction) {
+          if (direction == DismissDirection.endToStart) {
+            _deleteTask(item);
+          }
+        },
+        child: LongPressDraggable<ActionItemWithMetadata>(
+          data: item,
+          delay: const Duration(milliseconds: 150),
+          hapticFeedbackOnStart: true,
+          onDragStarted: () {
+            HapticFeedback.mediumImpact();
+          },
+          onDragEnd: (details) {
+            setState(() {
+              _hoveredItemId = null;
+            });
+          },
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width - 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Row(
+                children: [
+                  _buildCheckbox(item.completed),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.description,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: taskContent),
+          child: taskContent,
+        ),
+      );
     }
 
-    Widget makeDraggable(Widget child) {
-      return LongPressDraggable<ActionItemWithMetadata>(
+    // If indented, use GestureDetector for indent changes + draggable
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity != null) {
+          if (details.primaryVelocity! > 200) {
+            _incrementIndent(item.id);
+          } else if (details.primaryVelocity! < -200) {
+            _decrementIndent(item.id);
+          }
+        }
+      },
+      child: LongPressDraggable<ActionItemWithMetadata>(
         data: item,
         delay: const Duration(milliseconds: 150),
         hapticFeedbackOnStart: true,
@@ -1035,9 +998,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             decoration: BoxDecoration(
               color: const Color(0xFF2C2C2E),
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: Row(
               children: [
@@ -1055,64 +1016,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
           ),
         ),
-        childWhenDragging: Opacity(opacity: 0.3, child: child),
-        child: child,
-      );
-    }
-
-    // If at indent 0, allow swipe-right to mark complete and swipe-left to delete.
-    if (indentLevel == 0) {
-      return Dismissible(
-        key: Key('dismiss_${item.id}'),
-        direction: provider.isSelectionMode ? DismissDirection.none : DismissDirection.horizontal,
-        dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
-        confirmDismiss: (direction) async {
-          if (direction == DismissDirection.startToEnd) {
-            HapticFeedback.lightImpact();
-            await provider.updateActionItemState(item, !item.completed);
-            if (!item.completed) _onActionItemCompleted();
-            return false;
-          }
-          return true;
-        },
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.only(left: 20.0),
-          decoration: BoxDecoration(
-            color: item.completed ? Colors.grey[700] : Colors.green[700],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(item.completed ? Icons.undo : Icons.check, color: Colors.white),
-        ),
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20.0),
-          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
-          child: const Icon(Icons.delete, color: Colors.white),
-        ),
-        onDismissed: (direction) {
-          if (direction == DismissDirection.endToStart) {
-            _deleteTask(item);
-          }
-        },
-        child: provider.isSelectionMode ? taskContent : makeDraggable(taskContent),
-      );
-    }
-
-    // If indented, use GestureDetector for indent changes + draggable
-    return GestureDetector(
-      onHorizontalDragEnd: provider.isSelectionMode
-          ? null
-          : (details) {
-              if (details.primaryVelocity != null) {
-                if (details.primaryVelocity! > 200) {
-                  _incrementIndent(item.id);
-                } else if (details.primaryVelocity! < -200) {
-                  _decrementIndent(item.id);
-                }
-              }
-            },
-      child: provider.isSelectionMode ? taskContent : makeDraggable(taskContent),
+        childWhenDragging: Opacity(opacity: 0.3, child: taskContent),
+        child: taskContent,
+      ),
     );
   }
 
@@ -1144,31 +1050,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Widget _buildTaskItemContent(ActionItemWithMetadata item, ActionItemsProvider provider, double indentWidth) {
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
-    final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
 
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (provider.isSelectionMode) {
-          HapticFeedback.selectionClick();
-          provider.toggleItemSelection(item.id);
-        } else {
-          _showEditSheet(item);
-        }
-      },
-      onLongPress: () {
-        if (!provider.isSelectionMode) {
-          HapticFeedback.mediumImpact();
-          provider.startSelectionWithItem(item.id);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      onTap: () => _showEditSheet(item),
+      child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
         child: Padding(
           padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
           child: Row(
@@ -1184,28 +1070,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(1)),
                   ),
                 ),
-              // Checkbox — 44×44 tap target
+              // Checkbox
               GestureDetector(
-                behavior: HitTestBehavior.opaque,
                 onTap: () async {
-                  if (provider.isSelectionMode) {
-                    HapticFeedback.selectionClick();
-                    provider.toggleItemSelection(item.id);
-                  } else {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  }
+                  HapticFeedback.lightImpact();
+                  await provider.updateActionItemState(item, !item.completed);
+                  if (!item.completed) _onActionItemCompleted();
                 },
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Center(
-                    child:
-                        provider.isSelectionMode ? _buildSelectionCheckbox(isSelected) : _buildCheckbox(item.completed),
-                  ),
-                ),
+                child: _buildCheckbox(item.completed),
               ),
+              const SizedBox(width: 12),
               // Task text
               Expanded(
                 child: Column(
@@ -1230,20 +1104,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSelectionCheckbox(bool isSelected) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: isSelected ? Colors.deepPurple : Colors.grey[500]!, width: 2),
-        color: isSelected ? Colors.deepPurple : Colors.transparent,
-      ),
-      child: isSelected ? const Icon(Icons.check, size: 13, color: Colors.white) : null,
     );
   }
 
@@ -1274,75 +1134,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildGoalItem(Goal goal, ActionItemsProvider provider) {
+  Widget _buildGoalItem(Goal goal) {
     final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
     final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
     final displayTitle = '${goal.title} $progressText';
-    final isSelected = _selectedGoalIds.contains(goal.id);
-
-    final goalContent = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (provider.isSelectionMode) {
-          HapticFeedback.selectionClick();
-          setState(() {
-            if (isSelected) {
-              _selectedGoalIds.remove(goal.id);
-            } else {
-              _selectedGoalIds.add(goal.id);
-            }
-          });
-        } else {
-          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
-          _showEditGoalSheet(goal);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        color: isSelected ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        margin: const EdgeInsets.only(left: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: provider.isSelectionMode
-                    ? _buildSelectionCheckbox(isSelected)
-                    : SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CustomPaint(
-                          painter: _CircularProgressPainter(
-                            progress: progress.clamp(0.0, 1.0),
-                            color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                displayTitle,
-                style: TextStyle(
-                  color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
-                  fontSize: 15,
-                  decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
-                  height: 1.4,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (provider.isSelectionMode) return goalContent;
 
     return Dismissible(
       key: Key('goal_${goal.id}'),
@@ -1378,7 +1173,48 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
-      child: goalContent,
+      child: GestureDetector(
+        onTap: () {
+          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+          _showEditGoalSheet(goal);
+        },
+        child: Container(
+          color: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          margin: const EdgeInsets.only(left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Circular progress indicator
+              Container(
+                width: 22,
+                height: 22,
+                child: CustomPaint(
+                  painter: _CircularProgressPainter(
+                    progress: progress.clamp(0.0, 1.0),
+                    color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Goal title with progress
+              Expanded(
+                child: Text(
+                  displayTitle,
+                  style: TextStyle(
+                    color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
+                    fontSize: 15,
+                    decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

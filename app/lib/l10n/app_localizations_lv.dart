@@ -1712,12 +1712,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'IERĪCES',
-      one: 'IERĪCE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -9013,18 +9008,4 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio izvade';
-
-  @override
-  String get tasksClearCompleted => 'Clear Completed';
-
-  @override
-  String get tasksSelectAll => 'Select All';
-
-  @override
-  String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
-  }
-
-  @override
-  String get tasksMarkComplete => 'Marked as complete';
 }

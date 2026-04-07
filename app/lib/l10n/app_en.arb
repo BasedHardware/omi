@@ -10730,7 +10730,7 @@
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
     "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
-  "transcriptionConnecting": "Connecting transcription...",
+    "transcriptionConnecting": "Connecting transcription...",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
@@ -10745,14 +10745,5 @@
     "audioOutput": "Audio Output",
     "@audioOutput": {
         "description": "Title for audio route picker bottom sheet"
-    },
-  "tasksClearCompleted": "Clear Completed",
-  "tasksSelectAll": "Select All",
-  "tasksDeleteSelected": "Delete {count} task(s)",
-  "@tasksDeleteSelected": {
-    "placeholders": {
-      "count": {"type": "int"}
     }
-  },
-  "tasksMarkComplete": "Marked as complete"
 }
