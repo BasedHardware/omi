@@ -3,16 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesEighteenSteps() {
+  func testMergedFlowUsesNineteenSteps() {
     XCTAssertEqual(
       OnboardingFlow.steps,
       [
         "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
         "FullDiskAccess", "FileScan", "Microphone", "Notifications", "Accessibility",
         "Automation", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo",
-        "DataSources", "Goal", "Tasks",
+        "DataSources", "Exports", "Goal", "Tasks",
       ])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 18)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -26,6 +26,7 @@ final class OnboardingFlowTests: XCTestCase {
       hasMigratedPagedIntro: true,
       hasReorderedTrustStep: true,
       hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
       hasInsertedSecondBrainStep: false,
       hasRemovedResearchStep: true
     )
@@ -44,6 +45,7 @@ final class OnboardingFlowTests: XCTestCase {
       hasMigratedPagedIntro: true,
       hasReorderedTrustStep: true,
       hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
       hasInsertedSecondBrainStep: false,
       hasRemovedResearchStep: true
     )
@@ -63,12 +65,13 @@ final class OnboardingFlowTests: XCTestCase {
       hasReorderedTrustStep: true,
       hasInsertedHowDidYouHearStep: true,
       hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
       hasInsertedSecondBrainStep: false,
       hasRemovedResearchStep: false
     )
 
-    let migratedGoal = OnboardingFlow.migratedStep(
-      currentStep: 17,
+    let migratedLegacyGoalAfterExportInsert = OnboardingFlow.migratedStep(
+      currentStep: 16,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
       hasMergedVoiceInputStep: true,
@@ -78,11 +81,12 @@ final class OnboardingFlowTests: XCTestCase {
       hasReorderedTrustStep: true,
       hasInsertedHowDidYouHearStep: true,
       hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: false,
       hasInsertedSecondBrainStep: false,
-      hasRemovedResearchStep: false
+      hasRemovedResearchStep: true
     )
 
-    let migratedTasks = OnboardingFlow.migratedStep(
+    let migratedGoal = OnboardingFlow.migratedStep(
       currentStep: 18,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
@@ -93,13 +97,31 @@ final class OnboardingFlowTests: XCTestCase {
       hasReorderedTrustStep: true,
       hasInsertedHowDidYouHearStep: true,
       hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    let migratedTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
       hasInsertedSecondBrainStep: false,
       hasRemovedResearchStep: false
     )
 
     XCTAssertEqual(migratedResearch, 15)
-    XCTAssertEqual(migratedGoal, 16)
-    XCTAssertEqual(migratedTasks, 17)
+    XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
+    XCTAssertEqual(migratedGoal, 17)
+    XCTAssertEqual(migratedTasks, 18)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
