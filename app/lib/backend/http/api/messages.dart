@@ -174,23 +174,36 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
+/// Transcribe audio files sequentially (one request per file) to stay under
+/// Cloud Run's 32 MB request-body limit.  Transcripts are concatenated
+/// client-side with a space separator — same behaviour as the backend's
+/// multi-file mode but without a single oversized upload.
 Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language}) async {
-  try {
-    var response = await makeMultipartApiCallUnpooled(
-      url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
-      files: audioFiles,
-      fields: language != null ? {'language': language} : {},
-    );
+  final transcripts = <String>[];
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['transcript'] ?? '';
-    } else {
-      Logger.debug('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
-      throw Exception('Failed to transcribe voice message');
+  for (final file in audioFiles) {
+    try {
+      var response = await makeMultipartApiCallUnpooled(
+        url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
+        files: [file],
+        fields: language != null ? {'language': language} : {},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final transcript = data['transcript'] ?? '';
+        if (transcript.isNotEmpty) {
+          transcripts.add(transcript);
+        }
+      } else {
+        Logger.debug('Failed to transcribe voice message chunk: ${response.statusCode} ${response.body}');
+        throw Exception('Failed to transcribe voice message');
+      }
+    } catch (e) {
+      Logger.debug('Error transcribing voice message chunk: $e');
+      throw Exception('Error transcribing voice message: $e');
     }
-  } catch (e) {
-    Logger.debug('Error transcribing voice message: $e');
-    throw Exception('Error transcribing voice message: $e');
   }
+
+  return transcripts.join(' ');
 }
