@@ -394,6 +394,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // Fetch API keys from backend (keys are not bundled in the app)
       APIKeyService.shared.startFetchingKeys()
 
+      // Fetch subscription plan for floating bar usage limits
+      Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+
       // Check tier eligibility (at most once per day)
       Task {
         await TierManager.shared.checkTierIfNeeded()
