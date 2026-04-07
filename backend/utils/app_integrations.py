@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -185,13 +186,13 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    _trigger_realtime_integrations(uid, segments, conversation_id)
+    await asyncio.to_thread(_trigger_realtime_integrations, uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
-    _trigger_realtime_audio_bytes(uid, sample_rate, data)
+    await asyncio.to_thread(_trigger_realtime_audio_bytes, uid, sample_rate, data)
 
 
 # proactive notification

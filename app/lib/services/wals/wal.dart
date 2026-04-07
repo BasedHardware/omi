@@ -86,6 +86,16 @@ class Wal {
 
   WalStorage? originalStorage;
 
+  /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
+  /// arrives so WALs survive app kill and can be recovered on startup.
+  String? conversationId;
+
+  /// Number of sync retry attempts for this WAL.
+  int retryCount;
+
+  /// Unix timestamp (seconds) of the last sync retry attempt.
+  int lastRetryAt;
+
   String get id => '${device}_$timerStart';
 
   Wal({
@@ -106,6 +116,9 @@ class Wal {
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
+    this.conversationId,
+    this.retryCount = 0,
+    this.lastRetryAt = 0,
   }) {
     frameSize = codec.getFrameSize();
   }
@@ -127,9 +140,11 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage: json['original_storage'] != null
-          ? WalStorage.values.asNameMap()[json['original_storage']]
-          : null,
+      originalStorage:
+          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      conversationId: json['conversation_id'],
+      retryCount: json['retry_count'] ?? 0,
+      lastRetryAt: json['last_retry_at'] ?? 0,
     );
   }
 
@@ -151,6 +166,9 @@ class Wal {
       'total_frames': totalFrames,
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
+      'conversation_id': conversationId,
+      'retry_count': retryCount,
+      'last_retry_at': lastRetryAt,
     };
   }
 
