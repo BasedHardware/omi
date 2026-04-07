@@ -85,14 +85,19 @@ _webhook_circuit_breakers: dict[str, WebhookCircuitBreaker] = {}
 
 
 def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
-    """Get or create a circuit breaker for a webhook target URL (keyed by host)."""
+    """Get or create a circuit breaker for a webhook target URL.
+
+    Keyed by the URL path (scheme + host + path, without query params) so that
+    different webhook endpoints on the same host are isolated from each other.
+    """
     try:
-        host = url.split('/')[2]
+        # Strip query params but keep scheme + host + path
+        key = url.split('?')[0].split('#')[0]
     except (IndexError, AttributeError):
-        host = url
-    if host not in _webhook_circuit_breakers:
-        _webhook_circuit_breakers[host] = WebhookCircuitBreaker(host)
-    return _webhook_circuit_breakers[host]
+        key = url
+    if key not in _webhook_circuit_breakers:
+        _webhook_circuit_breakers[key] = WebhookCircuitBreaker(key)
+    return _webhook_circuit_breakers[key]
 
 
 # ---------------------------------------------------------------------------
@@ -116,39 +121,41 @@ def latest_wins_check(uid: str, version: int) -> bool:
 # ---------------------------------------------------------------------------
 # Semaphores for bounded concurrency per client type
 # ---------------------------------------------------------------------------
+# Semaphores are event-loop-bound in Python's asyncio. Since sync FastAPI
+# endpoints use asyncio.run() which creates a new event loop each call,
+# we key semaphores by event loop ID so each loop gets its own instance.
+# The main FastAPI event loop (used by async endpoints) shares one set.
 
-_webhook_semaphore: asyncio.Semaphore | None = None
-_maps_semaphore: asyncio.Semaphore | None = None
-_auth_semaphore: asyncio.Semaphore | None = None
-_stt_semaphore: asyncio.Semaphore | None = None
+_semaphores: dict[tuple[int, str], asyncio.Semaphore] = {}
+
+
+def _get_semaphore(name: str, limit: int) -> asyncio.Semaphore:
+    """Get or create a semaphore for the current event loop."""
+    try:
+        loop = asyncio.get_running_loop()
+        key = (id(loop), name)
+    except RuntimeError:
+        # No running loop — create unbound semaphore (will bind on first acquire)
+        return asyncio.Semaphore(limit)
+    if key not in _semaphores:
+        _semaphores[key] = asyncio.Semaphore(limit)
+    return _semaphores[key]
 
 
 def get_webhook_semaphore() -> asyncio.Semaphore:
-    global _webhook_semaphore
-    if _webhook_semaphore is None:
-        _webhook_semaphore = asyncio.Semaphore(64)
-    return _webhook_semaphore
+    return _get_semaphore('webhook', 64)
 
 
 def get_maps_semaphore() -> asyncio.Semaphore:
-    global _maps_semaphore
-    if _maps_semaphore is None:
-        _maps_semaphore = asyncio.Semaphore(8)
-    return _maps_semaphore
+    return _get_semaphore('maps', 8)
 
 
 def get_auth_semaphore() -> asyncio.Semaphore:
-    global _auth_semaphore
-    if _auth_semaphore is None:
-        _auth_semaphore = asyncio.Semaphore(20)
-    return _auth_semaphore
+    return _get_semaphore('auth', 20)
 
 
 def get_stt_semaphore() -> asyncio.Semaphore:
-    global _stt_semaphore
-    if _stt_semaphore is None:
-        _stt_semaphore = asyncio.Semaphore(8)
-    return _stt_semaphore
+    return _get_semaphore('stt', 8)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +219,6 @@ def get_stt_client() -> httpx.AsyncClient:
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
     global _webhook_client, _maps_client, _auth_client, _stt_client
-    global _webhook_semaphore, _maps_semaphore, _auth_semaphore, _stt_semaphore
     for client in (_webhook_client, _maps_client, _auth_client, _stt_client):
         if client is not None:
             try:
@@ -223,8 +229,5 @@ async def close_all_clients():
     _maps_client = None
     _auth_client = None
     _stt_client = None
-    # Reset semaphores (they are event-loop-bound)
-    _webhook_semaphore = None
-    _maps_semaphore = None
-    _auth_semaphore = None
-    _stt_semaphore = None
+    # Reset semaphores (keyed by event loop)
+    _semaphores.clear()
