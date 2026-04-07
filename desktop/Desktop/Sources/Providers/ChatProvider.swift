@@ -281,10 +281,12 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
+ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
 If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
-Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
+Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 ================================================================================
 """

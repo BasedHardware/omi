@@ -17,6 +17,8 @@ struct OnboardingVoiceShortcutStepView: View {
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
 
+    static var savedMenu: NSMenu?
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -268,6 +270,11 @@ struct OnboardingVoiceShortcutStepView: View {
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
             _ = handleShortcutEvent(event)
         }
+
+        DispatchQueue.main.async {
+            Self.savedMenu = NSApp.mainMenu
+            NSApp.mainMenu = nil
+        }
     }
 
     private func removeKeyMonitors() {
@@ -278,6 +285,10 @@ struct OnboardingVoiceShortcutStepView: View {
         if let monitor = globalKeyMonitor {
             NSEvent.removeMonitor(monitor)
             globalKeyMonitor = nil
+        }
+        if let menu = Self.savedMenu {
+            NSApp.mainMenu = menu
+            Self.savedMenu = nil
         }
     }
 
