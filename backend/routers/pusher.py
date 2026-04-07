@@ -20,7 +20,7 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
     trigger_external_integrations,
 )
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import async_get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
@@ -82,8 +82,8 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await asyncio.to_thread(
-                    get_google_maps_location, geolocation.latitude, geolocation.longitude
+                conversation.geolocation = await async_get_google_maps_location(
+                    geolocation.latitude, geolocation.longitude
                 )
 
             # Run blocking operations in thread pool to avoid blocking event loop
