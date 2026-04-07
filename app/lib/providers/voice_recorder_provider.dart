@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -17,9 +18,15 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed }
+enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed, pendingRecovery }
 
 class VoiceRecorderProvider extends ChangeNotifier {
+  static const _wavPathKey = 'voice_recorder_pending_wav_path';
+
+  /// Maximum WAV chunk size in bytes (10 MB of PCM data per chunk).
+  /// Each chunk gets its own 44-byte WAV header so the backend can decode it independently.
+  static const maxChunkPcmBytes = 10 * 1024 * 1024;
+
   VoiceRecorderState _state = VoiceRecorderState.idle;
   String _transcript = '';
   bool _isProcessing = false;
@@ -46,6 +53,24 @@ class VoiceRecorderProvider extends ChangeNotifier {
   List<double> get audioLevels => List.unmodifiable(_audioLevels);
   bool get isRecording => _state == VoiceRecorderState.recording;
   bool get isActive => _state != VoiceRecorderState.idle;
+  bool get hasPendingRecording => _state == VoiceRecorderState.pendingRecovery;
+
+  /// Check for a WAV file persisted from a previous session.
+  /// Call this on app startup to recover interrupted recordings.
+  Future<void> checkPendingRecording() async {
+    final path = SharedPreferencesUtil().getString(_wavPathKey);
+    if (path.isEmpty) return;
+
+    final file = File(path);
+    if (file.existsSync()) {
+      _wavFile = file;
+      _state = VoiceRecorderState.pendingRecovery;
+      notifyListeners();
+    } else {
+      // File was cleaned up externally — clear the stale preference
+      await SharedPreferencesUtil().remove(_wavPathKey);
+    }
+  }
 
   void setCallbacks({Function(String transcript)? onTranscriptReady, VoidCallback? onClose}) {
     _onTranscriptReady = onTranscriptReady;
@@ -183,10 +208,16 @@ class VoiceRecorderProvider extends ChangeNotifier {
       // Keep PCM file until WAV is confirmed on disk — if conversion fails, PCM is the only copy
       _wavFile = await _convertPcmFileToWavFile(_pcmFile!, 16000, 1);
 
+      // Persist WAV path so user can retry if the app is closed
+      await SharedPreferencesUtil().saveString(_wavPathKey, _wavFile!.path);
+
       // WAV conversion succeeded — safe to delete PCM file now
       await _cleanupPcmFile();
 
-      final transcript = await transcribeVoiceMessage(_wavFile!);
+      // Split into chunks if the WAV is large, then transcribe
+      final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final transcript = await transcribeVoiceMessage(chunks);
+      _cleanupChunkFiles(chunks);
       _transcript = transcript;
       _state = VoiceRecorderState.transcribeSuccess;
       _isProcessing = false;
@@ -235,7 +266,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final transcript = await transcribeVoiceMessage(_wavFile!);
+      final chunks = await _splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final transcript = await transcribeVoiceMessage(chunks);
+      _cleanupChunkFiles(chunks);
       _transcript = transcript;
       _state = VoiceRecorderState.transcribeSuccess;
       _isProcessing = false;
@@ -307,6 +340,82 @@ class VoiceRecorderProvider extends ChangeNotifier {
       Logger.debug('Error cleaning up WAV file: $e');
     }
     _wavFile = null;
+    await SharedPreferencesUtil().remove(_wavPathKey);
+  }
+
+  /// Split a WAV file into multiple chunk files if it exceeds [maxChunkPcmBytes].
+  /// Each chunk is a standalone WAV file with its own header.
+  /// Returns the original file in a single-element list if no splitting is needed.
+  static Future<List<File>> _splitWavFileIfNeeded(File wavFile, int sampleRate, int channels) async {
+    final fileLength = await wavFile.length();
+    final pcmLength = fileLength - 44; // subtract WAV header
+
+    if (pcmLength <= maxChunkPcmBytes) {
+      return [wavFile];
+    }
+
+    final chunks = <File>[];
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final reader = wavFile.openRead(44); // skip the original WAV header
+
+    int chunkIndex = 0;
+    int pcmBytesRemaining = pcmLength;
+    final buffer = BytesBuilder(copy: false);
+
+    await for (final data in reader) {
+      buffer.add(data);
+
+      while (buffer.length >= maxChunkPcmBytes && pcmBytesRemaining > 0) {
+        final chunkBytes = buffer.takeBytes();
+        final chunkPcmSize = chunkBytes.length < maxChunkPcmBytes ? chunkBytes.length : maxChunkPcmBytes;
+
+        final chunkFile = File('${tempDir.path}/voice_chunk_${timestamp}_$chunkIndex.wav');
+        final sink = chunkFile.openWrite();
+        sink.add(WavBytesUtil.getWavHeader(chunkPcmSize, sampleRate, channelCount: channels));
+        sink.add(chunkBytes.sublist(0, chunkPcmSize));
+        await sink.flush();
+        await sink.close();
+
+        chunks.add(chunkFile);
+        pcmBytesRemaining -= chunkPcmSize;
+        chunkIndex++;
+
+        // Put leftover bytes back
+        if (chunkBytes.length > chunkPcmSize) {
+          buffer.add(chunkBytes.sublist(chunkPcmSize));
+        }
+      }
+    }
+
+    // Write remaining bytes as the final chunk
+    if (buffer.length > 0) {
+      final remaining = buffer.takeBytes();
+      final chunkFile = File('${tempDir.path}/voice_chunk_${timestamp}_$chunkIndex.wav');
+      final sink = chunkFile.openWrite();
+      sink.add(WavBytesUtil.getWavHeader(remaining.length, sampleRate, channelCount: channels));
+      sink.add(remaining);
+      await sink.flush();
+      await sink.close();
+      chunks.add(chunkFile);
+    }
+
+    Logger.debug('Split WAV into ${chunks.length} chunks from $pcmLength PCM bytes');
+    return chunks;
+  }
+
+  /// Clean up chunk files after transcription (but not the original WAV).
+  void _cleanupChunkFiles(List<File> chunks) {
+    for (final chunk in chunks) {
+      // Don't delete the original WAV file — only delete split chunks
+      if (chunk.path != _wavFile?.path) {
+        try {
+          if (chunk.existsSync()) chunk.deleteSync();
+        } catch (e) {
+          Logger.debug('Error cleaning up chunk file: $e');
+        }
+      }
+    }
   }
 
   void close() {
