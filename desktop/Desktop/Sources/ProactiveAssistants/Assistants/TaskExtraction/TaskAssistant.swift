@@ -23,6 +23,9 @@ actor TaskAssistant: ProactiveAssistant {
     /// gRPC client for server-side Gemini tool loop (nil = use local Gemini via proxy)
     private(set) var grpcClient: ProactiveGRPCClient?
 
+    /// Called when the gRPC stream disconnects mid-session so the plugin can reconnect.
+    var onGRPCDisconnect: (() -> Void)?
+
     /// Set the gRPC client for server-side analysis (called from ProactiveAssistantsPlugin)
     func setGRPCClient(_ client: ProactiveGRPCClient?) {
         grpcClient = client
@@ -623,6 +626,7 @@ actor TaskAssistant: ProactiveAssistant {
         } catch {
             logError("Task extraction stream error — clearing gRPC client for reconnect", error: error)
             self.grpcClient = nil
+            onGRPCDisconnect?()
         }
     }
 
