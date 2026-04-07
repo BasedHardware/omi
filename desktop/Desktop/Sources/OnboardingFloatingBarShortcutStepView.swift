@@ -41,7 +41,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
             Spacer()
 
             VStack(spacing: 24) {
-                Text("Press this shortcut.\nDo the buttons light up?")
+                Text("Let's set \"Ask a question\" shortcut.\nPress this shortcut. Do the buttons light up?")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
                     .multilineTextAlignment(.center)
