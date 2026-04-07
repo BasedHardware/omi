@@ -10729,5 +10729,14 @@
     },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
-    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+  "tasksClearCompleted": "Clear Completed",
+  "tasksSelectAll": "Select All",
+  "tasksDeleteSelected": "Delete {count} task(s)",
+  "@tasksDeleteSelected": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "tasksMarkComplete": "Marked as complete"
 }
