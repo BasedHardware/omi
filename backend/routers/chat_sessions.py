@@ -193,7 +193,7 @@ def create_initial_message(
     """
     from routers.chat import initial_message_util
 
-    ai_message = initial_message_util(uid, request.app_id)
+    ai_message = initial_message_util(uid, request.app_id, chat_session_id=request.session_id)
     return {'message': ai_message.text, 'message_id': ai_message.id}
 
 
