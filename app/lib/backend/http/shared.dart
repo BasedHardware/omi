@@ -340,6 +340,21 @@ Future<http.Response> makeMultipartApiCallUnpooled({
         streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
         response = await http.Response.fromStream(streamedResponse);
         Logger.log('Token refreshed and unpooled multipart request retried');
+        if (response.statusCode == 401) {
+          await AuthService.instance.signOut();
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
+        }
+      } else {
+        await AuthService.instance.signOut();
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
       }
     }
 
