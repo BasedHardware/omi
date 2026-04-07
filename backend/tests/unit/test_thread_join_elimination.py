@@ -181,12 +181,12 @@ class TestAsyncSTTVariants:
             assert 'get_stt_client' in source, f"{filename} should use shared get_stt_client()"
 
     def test_stt_async_offloads_file_io(self):
-        """Async STT variants should offload file reads via asyncio.to_thread."""
+        """Async STT variants should offload file reads via run_in_executor."""
         for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
             with open(filepath) as f:
                 source = f.read()
-            assert 'asyncio.to_thread' in source, f"{filename} should offload file I/O via asyncio.to_thread"
+            assert 'run_in_executor' in source, f"{filename} should offload file I/O via run_in_executor"
 
 
 class TestAsyncSTTBehavior:
@@ -222,7 +222,7 @@ class TestAsyncSTTBehavior:
             import importlib
 
             mod = importlib.import_module('utils.stt.vad')
-            # _local_vad should be called via asyncio.to_thread
+            # _local_vad should be called via run_in_executor(critical_executor, ...)
             with patch.object(mod, '_local_vad', return_value=[]) as mock_local:
                 result = await mod.async_vad_is_empty('/tmp/nonexistent.wav')
                 mock_local.assert_called_once_with('/tmp/nonexistent.wav')
