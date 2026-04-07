@@ -685,7 +685,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     /// Full transcript as a single string
     var transcript: String {
         transcriptSegments.map { segment in
-            let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
+            let speaker = segment.isUser ? String(localized: "You", comment: "Label for the current user in transcript") : String(localized: "Speaker \(segment.speakerId)", comment: "Label for other speakers in transcript")
             return "\(speaker): \(segment.text)"
         }.joined(separator: "\n\n")
     }
