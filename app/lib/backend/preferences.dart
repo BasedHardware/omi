@@ -196,6 +196,12 @@ class SharedPreferencesUtil {
 
   bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
 
+  // Voice responses — when enabled, AI responses to voice questions are spoken aloud via TTS.
+  // Enabled by default for all users.
+  set voiceResponseEnabled(bool value) => saveBool('voiceResponseEnabled', value);
+
+  bool get voiceResponseEnabled => getBool('voiceResponseEnabled', defaultValue: true);
+
   // Daily reflection notification at 9 PM - default is true (enabled)
   set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
 
