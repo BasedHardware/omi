@@ -176,7 +176,7 @@ Future reportMessageServer(String messageId) async {
 
 Future<String> transcribeVoiceMessage(File audioFile, {String? language}) async {
   try {
-    var response = await makeMultipartApiCall(
+    var response = await makeMultipartApiCallUnpooled(
       url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
       files: [audioFile],
       fields: language != null ? {'language': language} : {},
