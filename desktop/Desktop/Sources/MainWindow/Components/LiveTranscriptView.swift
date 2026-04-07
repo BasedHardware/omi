@@ -133,7 +133,7 @@ struct LiveTranscriptView: View {
                             segment: segment,
                             formatTime: formatTime,
                             personName: speakerNames[segment.speaker],
-                            onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
+                            onSpeakerTapped: !segment.isUser ? { onSpeakerTapped?(segment) } : nil
                         )
                     }
 
@@ -162,13 +162,13 @@ private struct LiveSegmentView: View {
     @State private var isHovered = false
 
     private var isUser: Bool {
-        segment.speaker == 0
+        segment.isUser
     }
 
     private var speakerLabel: String {
-        if isUser { return "You" }
+        if isUser { return String(localized: "You", comment: "Label for the current user in transcript") }
         if let name = personName { return name }
-        return "Speaker \(segment.speaker)"
+        return String(localized: "Speaker \(segment.speaker)", comment: "Label for other speakers in transcript")
     }
 
     private var bubbleColor: Color {
