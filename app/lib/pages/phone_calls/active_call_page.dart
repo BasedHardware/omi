@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -58,6 +59,23 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
     );
   }
 
+  void _showAudioRoutePicker(BuildContext context, PhoneCallProvider provider) async {
+    await provider.loadAudioRoutes();
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AudioRouteSheet(
+        routes: provider.availableRoutes,
+        selectedRoute: provider.selectedRoute,
+        onRouteSelected: (route) {
+          provider.selectAudioRoute(route);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
@@ -100,6 +118,9 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                   state: provider.callState,
                 ),
                 const SizedBox(height: 16),
+                // Transcription status indicator
+                if (provider.callState == PhoneCallState.active)
+                  _TranscriptionStatusIndicator(status: provider.transcriptionStatus),
                 Expanded(
                   child: _LiveTranscriptView(
                     segments: provider.transcriptSegments,
@@ -114,6 +135,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                   onSpeakerToggle: provider.toggleSpeaker,
                   onEndCall: () => provider.endCall(),
                   onKeypad: () => _showDtmfDialpad(context, provider),
+                  onAudioRoute: () => _showAudioRoutePicker(context, provider),
                 ),
                 const SizedBox(height: 32),
               ],
@@ -157,7 +179,8 @@ class _CallInfoHeader extends StatelessWidget {
       case PhoneCallState.ended:
         return context.l10n.callStateEnded;
       case PhoneCallState.failed:
-        return context.l10n.callStateFailed;
+        final provider = context.read<PhoneCallProvider>();
+        return provider.lastError?.message ?? context.l10n.callStateFailed;
       default:
         return '';
     }
@@ -307,6 +330,7 @@ class _CallControls extends StatelessWidget {
   final VoidCallback onSpeakerToggle;
   final VoidCallback onEndCall;
   final VoidCallback onKeypad;
+  final VoidCallback? onAudioRoute;
 
   const _CallControls({
     required this.state,
@@ -316,6 +340,7 @@ class _CallControls extends StatelessWidget {
     required this.onSpeakerToggle,
     required this.onEndCall,
     required this.onKeypad,
+    this.onAudioRoute,
   });
 
   @override
@@ -335,11 +360,28 @@ class _CallControls extends StatelessWidget {
           ),
           _ControlButton(icon: Icons.dialpad, label: context.l10n.phoneKeypad, onTap: isActive ? onKeypad : null),
           _EndCallButton(onTap: state != PhoneCallState.ended ? onEndCall : null),
-          _ControlButton(
-            icon: isSpeakerOn ? Icons.volume_up : Icons.volume_down,
-            label: context.l10n.phoneSpeaker,
-            isActive: isSpeakerOn,
+          GestureDetector(
             onTap: isActive ? onSpeakerToggle : null,
+            onLongPress: isActive ? onAudioRoute : null,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: isSpeakerOn ? Colors.white : Colors.grey[800]),
+                  child: Icon(
+                    isSpeakerOn ? Icons.volume_up : Icons.volume_down,
+                    color: isSpeakerOn ? Colors.black : (isActive ? Colors.white : Colors.grey[600]),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(context.l10n.phoneSpeaker,
+                    style: TextStyle(fontSize: 12, color: isActive ? Colors.white : Colors.grey[600])),
+              ],
+            ),
           ),
         ],
       ),
@@ -534,6 +576,120 @@ class _DtmfKey extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TranscriptionStatusIndicator extends StatelessWidget {
+  final TranscriptionStatus status;
+
+  const _TranscriptionStatusIndicator({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    if (status == TranscriptionStatus.idle || status == TranscriptionStatus.active) {
+      return const SizedBox.shrink();
+    }
+
+    Color dotColor;
+    String label;
+
+    switch (status) {
+      case TranscriptionStatus.connecting:
+        dotColor = Colors.yellow;
+        label = context.l10n.transcriptionConnecting;
+        break;
+      case TranscriptionStatus.reconnecting:
+        dotColor = Colors.orange;
+        label = context.l10n.transcriptionReconnecting;
+        break;
+      case TranscriptionStatus.failed:
+        dotColor = Colors.red;
+        label = context.l10n.transcriptionUnavailable;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        ],
+      ),
+    );
+  }
+}
+
+class _AudioRouteSheet extends StatelessWidget {
+  final List<AudioRoute> routes;
+  final AudioRoute? selectedRoute;
+  final void Function(AudioRoute route) onRouteSelected;
+
+  const _AudioRouteSheet({
+    required this.routes,
+    required this.selectedRoute,
+    required this.onRouteSelected,
+  });
+
+  IconData _iconForType(AudioRouteType type) {
+    switch (type) {
+      case AudioRouteType.iPhone:
+        return Icons.phone_android;
+      case AudioRouteType.speaker:
+        return Icons.volume_up;
+      case AudioRouteType.airPods:
+        return Icons.headphones;
+      case AudioRouteType.bluetoothHeadset:
+        return Icons.bluetooth_audio;
+      case AudioRouteType.headphones:
+        return Icons.headset;
+      case AudioRouteType.carPlay:
+        return Icons.directions_car;
+      default:
+        return Icons.speaker;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.only(top: 12, bottom: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Text(context.l10n.audioOutput,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
+          const SizedBox(height: 12),
+          ...routes.map((route) {
+            bool isSelected = selectedRoute?.id == route.id;
+            return ListTile(
+              leading: Icon(_iconForType(route.type), color: isSelected ? Colors.blue : Colors.white, size: 24),
+              title: Text(route.name, style: TextStyle(color: isSelected ? Colors.blue : Colors.white, fontSize: 16)),
+              trailing: isSelected ? const Icon(Icons.check, color: Colors.blue, size: 20) : null,
+              onTap: () => onRouteSelected(route),
+            );
+          }),
+        ],
       ),
     );
   }

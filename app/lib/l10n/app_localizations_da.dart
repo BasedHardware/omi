@@ -8969,4 +8969,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Forbinder transskription...';
+
+  @override
+  String get transcriptionReconnecting => 'Genopretter transskription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transskription ikke tilgængelig';
+
+  @override
+  String get audioOutput => 'Lydudgang';
 }

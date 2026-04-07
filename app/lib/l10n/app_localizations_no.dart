@@ -8974,4 +8974,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Kobler til transkripsjon...';
+
+  @override
+  String get transcriptionReconnecting => 'Kobler til transkripsjon på nytt...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsjon utilgjengelig';
+
+  @override
+  String get audioOutput => 'Lydutgang';
 }

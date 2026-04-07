@@ -2960,5 +2960,9 @@
             }
         }
     },
-    "willSyncAutomatically": "otomatik olarak senkronize edilecek"
+    "willSyncAutomatically": "otomatik olarak senkronize edilecek",
+    "transcriptionConnecting": "Transkripsiyon bağlanıyor...",
+    "transcriptionReconnecting": "Transkripsiyon yeniden bağlanıyor...",
+    "transcriptionUnavailable": "Transkripsiyon kullanılamıyor",
+    "audioOutput": "Ses çıkışı"
 }

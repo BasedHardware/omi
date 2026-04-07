@@ -8817,4 +8817,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => '正在连接转录...';
+
+  @override
+  String get transcriptionReconnecting => '正在重新连接转录...';
+
+  @override
+  String get transcriptionUnavailable => '转录不可用';
+
+  @override
+  String get audioOutput => '音频输出';
 }

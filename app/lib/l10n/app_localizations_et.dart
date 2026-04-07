@@ -8976,4 +8976,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Transkriptsiooni ühendamine...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkriptsiooni uuesti ühendamine...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkriptsioon pole saadaval';
+
+  @override
+  String get audioOutput => 'Heliväljund';
 }

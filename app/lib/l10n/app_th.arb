@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ"
+    "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ",
+    "transcriptionConnecting": "กำลังเชื่อมต่อการถอดเสียง...",
+    "transcriptionReconnecting": "กำลังเชื่อมต่อการถอดเสียงใหม่...",
+    "transcriptionUnavailable": "การถอดเสียงไม่พร้อมใช้งาน",
+    "audioOutput": "เอาต์พุตเสียง"
 }

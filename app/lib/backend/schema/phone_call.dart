@@ -32,8 +32,10 @@ class PhoneCallToken {
   final String accessToken;
   final int ttl;
   final String identity;
+  final DateTime expiresAt;
 
-  PhoneCallToken({required this.accessToken, required this.ttl, required this.identity});
+  PhoneCallToken({required this.accessToken, required this.ttl, required this.identity})
+      : expiresAt = DateTime.now().add(Duration(seconds: ttl));
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
     return PhoneCallToken(
@@ -42,4 +44,21 @@ class PhoneCallToken {
       identity: json['identity'] as String,
     );
   }
+}
+
+class PhoneCallError {
+  final String code;
+  final String message;
+
+  PhoneCallError({required this.code, required this.message});
+
+  factory PhoneCallError.fromEvent(Map event) {
+    return PhoneCallError(
+      code: event['code'] as String? ?? 'UNKNOWN',
+      message: event['message'] as String? ?? 'An unknown error occurred',
+    );
+  }
+
+  @override
+  String toString() => 'PhoneCallError($code: $message)';
 }

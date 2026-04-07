@@ -8978,4 +8978,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Yhdistetään litterointia...';
+
+  @override
+  String get transcriptionReconnecting => 'Yhdistetään litterointia uudelleen...';
+
+  @override
+  String get transcriptionUnavailable => 'Litterointi ei ole käytettävissä';
+
+  @override
+  String get audioOutput => 'Äänilähtö';
 }

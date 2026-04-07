@@ -9014,4 +9014,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Свързване на транскрипция...';
+
+  @override
+  String get transcriptionReconnecting => 'Повторно свързване на транскрипция...';
+
+  @override
+  String get transcriptionUnavailable => 'Транскрипцията не е налична';
+
+  @override
+  String get audioOutput => 'Аудио изход';
 }

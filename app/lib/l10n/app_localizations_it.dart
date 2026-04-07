@@ -9032,4 +9032,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Connessione trascrizione...';
+
+  @override
+  String get transcriptionReconnecting => 'Riconnessione trascrizione...';
+
+  @override
+  String get transcriptionUnavailable => 'Trascrizione non disponibile';
+
+  @override
+  String get audioOutput => 'Uscita audio';
 }

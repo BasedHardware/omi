@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
+    "willSyncAutomatically": "synkroniseres automatisk",
+    "transcriptionConnecting": "Kobler til transkripsjon...",
+    "transcriptionReconnecting": "Kobler til transkripsjon på nytt...",
+    "transcriptionUnavailable": "Transkripsjon utilgjengelig",
+    "audioOutput": "Lydutgang"
 }

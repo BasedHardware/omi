@@ -8983,4 +8983,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Ansluter transkription...';
+
+  @override
+  String get transcriptionReconnecting => 'Återansluter transkription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkription otillgänglig';
+
+  @override
+  String get audioOutput => 'Ljudutgång';
 }

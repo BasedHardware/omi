@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "tiks sinhronizēts automātiski"
+    "willSyncAutomatically": "tiks sinhronizēts automātiski",
+    "transcriptionConnecting": "Savienošanās ar transkripciju...",
+    "transcriptionReconnecting": "Atkārtota savienošanās ar transkripciju...",
+    "transcriptionUnavailable": "Transkripcija nav pieejama",
+    "audioOutput": "Audio izvade"
 }
