@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/auth-provider';
 
 /**
@@ -60,18 +60,24 @@ export const authenticatedFetcher = async ([url, token]: [string, string]) => {
 };
 
 /**
- * Returns a fetch wrapper that adds the Bearer token to every request.
- * Use for hooks that call fetch() directly (not SWR).
+ * Hook that returns a stable fetch wrapper adding the Bearer token.
+ * Uses a ref so the callback identity never changes — safe for useEffect deps.
  */
-export function authFetch(token: string | null) {
-  return async (url: string, init?: RequestInit) => {
+export function useAuthFetch() {
+  const { token } = useAuthToken();
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+
+  const fetchWithAuth = useCallback(async (url: string, init?: RequestInit) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(init?.headers as Record<string, string>),
     };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (tokenRef.current) {
+      headers['Authorization'] = `Bearer ${tokenRef.current}`;
     }
     return fetch(url, { ...init, headers });
-  };
+  }, []);
+
+  return { fetchWithAuth, token };
 }
