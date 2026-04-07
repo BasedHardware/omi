@@ -12,6 +12,12 @@ from proactive.v1 import proactive_pb2 as pb2
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_uid(uid: str) -> str:
+    """Truncate UID for log safety — show first 8 chars only."""
+    return uid[:8] + '...' if len(uid) > 8 else uid
+
+
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_MODEL = 'gemini-2.0-flash'
 GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -202,6 +208,7 @@ class ServerTaskAssistant:
         receive_tool_result() to get the desktop's response. The result is
         injected back into the Gemini conversation and the loop continues.
         """
+        safe_uid = _sanitize_uid(uid)
         prompt = _build_prompt(session_context, frame.app_name)
 
         # Build initial Gemini contents with image
@@ -224,7 +231,11 @@ class ServerTaskAssistant:
                 # Sanitize error — httpx includes full URL (with API key) in HTTPStatusError
                 error_type = type(e).__name__
                 logger.error(
-                    'Gemini call failed: uid=%s frame=%s iter=%d error_type=%s', uid, frame_id, iteration, error_type
+                    'Gemini call failed: uid=%s frame=%s iter=%d error_type=%s',
+                    safe_uid,
+                    frame_id,
+                    iteration,
+                    error_type,
                 )
                 yield pb2.ServerEvent(
                     server_error=pb2.ServerError(
@@ -238,7 +249,7 @@ class ServerTaskAssistant:
 
             func_name, func_args = _parse_function_call(response)
             if not func_name:
-                logger.warning('No function call in Gemini response: uid=%s frame=%s', uid, frame_id)
+                logger.warning('No function call in Gemini response: uid=%s frame=%s', safe_uid, frame_id)
                 yield pb2.ServerEvent(
                     analysis_outcome=pb2.AnalysisOutcome(
                         outcome_kind=pb2.NO_TASK_FOUND,
@@ -318,7 +329,10 @@ class ServerTaskAssistant:
                     tool_result = await receive_tool_result(request_id, 10000)
                 except Exception as e:
                     logger.warning(
-                        'Tool result timeout/error: uid=%s request_id=%s error=%s', uid, request_id, type(e).__name__
+                        'Tool result timeout/error: uid=%s request_id=%s error=%s',
+                        safe_uid,
+                        request_id,
+                        type(e).__name__,
                     )
                     yield pb2.ServerEvent(
                         analysis_outcome=pb2.AnalysisOutcome(
@@ -349,7 +363,7 @@ class ServerTaskAssistant:
                 continue  # Re-enter the loop — Gemini will now decide extract/reject/no_task
 
             # Unknown function
-            logger.warning('Unknown function call: %s uid=%s', func_name, uid)
+            logger.warning('Unknown function call: %s uid=%s', func_name, safe_uid)
             yield pb2.ServerEvent(
                 analysis_outcome=pb2.AnalysisOutcome(
                     outcome_kind=pb2.NO_TASK_FOUND,
@@ -361,7 +375,7 @@ class ServerTaskAssistant:
             return
 
         # Max iterations reached
-        logger.warning('Max iterations reached: uid=%s frame=%s', uid, frame_id)
+        logger.warning('Max iterations reached: uid=%s frame=%s', safe_uid, frame_id)
         yield pb2.ServerEvent(
             analysis_outcome=pb2.AnalysisOutcome(
                 outcome_kind=pb2.NO_TASK_FOUND,
