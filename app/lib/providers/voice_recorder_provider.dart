@@ -6,13 +6,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/file.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -20,9 +21,16 @@ enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, tran
 
 class VoiceRecorderProvider extends ChangeNotifier {
   VoiceRecorderState _state = VoiceRecorderState.idle;
-  List<List<int>> _audioChunks = [];
   String _transcript = '';
   bool _isProcessing = false;
+
+  // Disk-based recording: PCM chunks stream to a temp file instead of RAM
+  IOSink? _pcmSink;
+  File? _pcmFile;
+  int _pcmBytesWritten = 0;
+
+  // Persisted WAV file for retry (kept until transcription succeeds or user closes)
+  File? _wavFile;
 
   // Audio visualization
   final List<double> _audioLevels = List.generate(20, (_) => 0.1);
@@ -55,8 +63,16 @@ class VoiceRecorderProvider extends ChangeNotifier {
     if (_state == VoiceRecorderState.recording) return;
 
     _state = VoiceRecorderState.recording;
-    _audioChunks = [];
     _transcript = '';
+    _pcmBytesWritten = 0;
+
+    // Clean up any previous WAV file
+    await _cleanupWavFile();
+
+    // Create temp PCM file for streaming audio to disk
+    final tempDir = await getTemporaryDirectory();
+    _pcmFile = File('${tempDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.pcm');
+    _pcmSink = _pcmFile!.openWrite();
 
     // Reset audio levels
     for (int i = 0; i < _audioLevels.length; i++) {
@@ -67,9 +83,6 @@ class VoiceRecorderProvider extends ChangeNotifier {
     await Permission.microphone.request();
 
     // Configure audio session for Bluetooth before starting recorder.
-    // This must happen before flutter_sound's startRecorder() which sets
-    // AVAudioSessionCategoryPlayAndRecord without Bluetooth options —
-    // but skips if the category is already PlayAndRecord.
     if (Platform.isIOS) {
       try {
         await _audioSessionChannel.invokeMethod('configureForBluetooth');
@@ -88,30 +101,21 @@ class VoiceRecorderProvider extends ChangeNotifier {
     await ServiceManager.instance().mic.start(
       onByteReceived: (bytes) {
         if (_state == VoiceRecorderState.recording) {
-          _audioChunks.add(bytes.toList());
+          // Write to disk instead of accumulating in RAM
+          _pcmSink?.add(bytes);
+          _pcmBytesWritten += bytes.length;
 
           // Update audio visualization based on actual audio levels
           if (bytes.isNotEmpty) {
-            // Calculate RMS (Root Mean Square) for PCM16 audio data
             double rms = 0;
-
-            // Process bytes as 16-bit samples (2 bytes per sample)
             for (int i = 0; i < bytes.length - 1; i += 2) {
-              // Convert two bytes to a 16-bit signed integer
-              // PCM16 is little-endian: LSB first, then MSB
               int sample = bytes[i] | (bytes[i + 1] << 8);
-
-              // Convert to signed value (if high bit is set)
               if (sample > 32767) {
                 sample = sample - 65536;
               }
-
-              // Square the sample and add to sum
               rms += sample * sample;
             }
 
-            // Calculate RMS and normalize to 0.0-1.0 range
-            // 32768 is max absolute value for 16-bit audio
             int sampleCount = bytes.length ~/ 2;
             if (sampleCount > 0) {
               rms = math.sqrt(rms / sampleCount) / 32768.0;
@@ -119,16 +123,11 @@ class VoiceRecorderProvider extends ChangeNotifier {
               rms = 0;
             }
 
-            // Apply non-linear scaling to make quiet sounds more visible
-            // and loud sounds more dramatic
             final level = math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
 
-            // Shift all values left
             for (int i = 0; i < _audioLevels.length - 1; i++) {
               _audioLevels[i] = _audioLevels[i + 1];
             }
-
-            // Add new level at the end
             _audioLevels[_audioLevels.length - 1] = level;
           }
         }
@@ -136,7 +135,6 @@ class VoiceRecorderProvider extends ChangeNotifier {
       onRecording: () {
         Logger.debug('VoiceRecorderProvider: Recording started');
         _state = VoiceRecorderState.recording;
-        _audioChunks = [];
         // Reset audio levels
         for (int i = 0; i < _audioLevels.length; i++) {
           _audioLevels[i] = 0.1;
@@ -160,40 +158,33 @@ class VoiceRecorderProvider extends ChangeNotifier {
   Future<void> processRecording() async {
     if (_isProcessing) return;
 
-    if (_audioChunks.isEmpty) {
-      close();
-      return;
-    }
-
     _state = VoiceRecorderState.transcribing;
     _isProcessing = true;
     notifyListeners();
 
     stopRecording();
 
-    // Flatten audio chunks into a single list
-    List<int> flattenedBytes = [];
-    for (var chunk in _audioChunks) {
-      flattenedBytes.addAll(chunk);
-    }
-
-    // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
-    const int minAudioBytes = 16000;
-    if (flattenedBytes.length < minAudioBytes) {
-      Logger.debug('Audio too short (${flattenedBytes.length} bytes), closing without error');
-      close();
-      return;
-    }
-
-    // Convert PCM to WAV file
-    final audioFile = await FileUtils.convertPcmToWavFile(
-      Uint8List.fromList(flattenedBytes),
-      16000, // Sample rate
-      1, // Mono channel
-    );
-
     try {
-      final transcript = await transcribeVoiceMessage(audioFile);
+      // Flush and close the PCM sink
+      await _pcmSink?.flush();
+      await _pcmSink?.close();
+      _pcmSink = null;
+
+      // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
+      const int minAudioBytes = 16000;
+      if (_pcmBytesWritten < minAudioBytes) {
+        Logger.debug('Audio too short ($_pcmBytesWritten bytes), closing without error');
+        close();
+        return;
+      }
+
+      // Convert PCM file to WAV file (reads from disk, writes to disk — no full-file RAM copy)
+      _wavFile = await _convertPcmFileToWavFile(_pcmFile!, 16000, 1);
+
+      // Clean up the raw PCM file
+      await _cleanupPcmFile();
+
+      final transcript = await transcribeVoiceMessage(_wavFile!);
       _transcript = transcript;
       _state = VoiceRecorderState.transcribeSuccess;
       _isProcessing = false;
@@ -201,15 +192,15 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
       if (transcript.isNotEmpty) {
         _onTranscriptReady?.call(transcript);
-        // Auto-close after successful transcription
         close();
       } else {
-        // Empty transcript - close gracefully without error
         Logger.debug('Empty transcript received, closing without error');
         close();
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
+      // Clean up PCM file on error (WAV file kept for retry)
+      await _cleanupPcmFile();
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
@@ -220,12 +211,94 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   void retry() {
-    if (_audioChunks.isEmpty) {
-      startRecording();
+    if (_wavFile != null && _wavFile!.existsSync()) {
+      // Retry transcription with existing WAV file on disk (no re-encoding needed)
+      _retryTranscription();
     } else {
-      // Retry transcription with existing audio data
-      processRecording();
+      startRecording();
     }
+  }
+
+  Future<void> _retryTranscription() async {
+    if (_isProcessing) return;
+
+    _state = VoiceRecorderState.transcribing;
+    _isProcessing = true;
+    notifyListeners();
+
+    try {
+      final transcript = await transcribeVoiceMessage(_wavFile!);
+      _transcript = transcript;
+      _state = VoiceRecorderState.transcribeSuccess;
+      _isProcessing = false;
+      notifyListeners();
+
+      if (transcript.isNotEmpty) {
+        _onTranscriptReady?.call(transcript);
+        close();
+      } else {
+        Logger.debug('Empty transcript received on retry, closing without error');
+        close();
+      }
+    } catch (e) {
+      Logger.debug('Error retrying transcription: $e');
+      _state = VoiceRecorderState.transcribeFailed;
+      _isProcessing = false;
+      notifyListeners();
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio',
+      );
+    }
+  }
+
+  /// Convert a PCM file on disk to a WAV file on disk.
+  /// Reads and writes in chunks to avoid loading the entire file into memory.
+  static Future<File> _convertPcmFileToWavFile(File pcmFile, int sampleRate, int channels) async {
+    final pcmLength = await pcmFile.length();
+    final wavHeader = WavBytesUtil.getWavHeader(pcmLength, sampleRate, channelCount: channels);
+
+    final tempDir = await getTemporaryDirectory();
+    final wavPath = '${tempDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.wav';
+    final wavFile = File(wavPath);
+    final sink = wavFile.openWrite();
+
+    // Write 44-byte WAV header
+    sink.add(wavHeader);
+
+    // Stream PCM data in chunks (64KB) — never loads entire file into RAM
+    const chunkSize = 65536;
+    final reader = pcmFile.openRead();
+    await for (final chunk in reader) {
+      sink.add(chunk);
+    }
+
+    await sink.flush();
+    await sink.close();
+
+    Logger.debug('WAV file created: $wavPath (${pcmLength + 44} bytes from $pcmLength PCM bytes)');
+    return wavFile;
+  }
+
+  Future<void> _cleanupPcmFile() async {
+    try {
+      if (_pcmFile != null && _pcmFile!.existsSync()) {
+        await _pcmFile!.delete();
+      }
+    } catch (e) {
+      Logger.debug('Error cleaning up PCM file: $e');
+    }
+    _pcmFile = null;
+  }
+
+  Future<void> _cleanupWavFile() async {
+    try {
+      if (_wavFile != null && _wavFile!.existsSync()) {
+        await _wavFile!.delete();
+      }
+    } catch (e) {
+      Logger.debug('Error cleaning up WAV file: $e');
+    }
+    _wavFile = null;
   }
 
   void close() {
@@ -238,9 +311,17 @@ class VoiceRecorderProvider extends ChangeNotifier {
     }
     _waveformTimer?.cancel();
     _state = VoiceRecorderState.idle;
-    _audioChunks = [];
     _transcript = '';
     _isProcessing = false;
+    _pcmBytesWritten = 0;
+
+    // Close PCM sink if still open
+    _pcmSink?.close();
+    _pcmSink = null;
+
+    // Clean up temp files
+    _cleanupPcmFile();
+    _cleanupWavFile();
 
     // Reset audio levels
     for (int i = 0; i < _audioLevels.length; i++) {
@@ -254,6 +335,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   @override
   void dispose() {
     _waveformTimer?.cancel();
+    _pcmSink?.close();
     if (_state == VoiceRecorderState.recording) {
       ServiceManager.instance().mic.stop();
     }
