@@ -28,6 +28,7 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_conversations_to_string.py -v
+pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_task_sharing.py -v
