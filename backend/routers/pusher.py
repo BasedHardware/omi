@@ -25,7 +25,7 @@ from utils.app_integrations import (
 )
 from utils.conversations.location import async_get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import critical_executor, storage_executor
+from utils.executors import storage_executor
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -90,11 +90,11 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
                     geolocation.latitude, geolocation.longitude
                 )
 
-            # Run blocking operations in critical executor to avoid blocking event loop
+            # Run in default executor (not critical_executor) because process_conversation
+            # is a coordinator that submits child tasks to critical_executor — nesting both
+            # in the same pool causes deadlock under concurrent load.
             loop = asyncio.get_running_loop()
-            conversation = await loop.run_in_executor(
-                critical_executor, process_conversation, uid, language, conversation
-            )
+            conversation = await loop.run_in_executor(None, process_conversation, uid, language, conversation)
             messages = await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
