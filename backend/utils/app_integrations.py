@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -109,7 +110,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 
 
 def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED"""
+    """ON CONVERSATION CREATED — uses ThreadPoolExecutor instead of raw Thread+join."""
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -120,7 +121,6 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     if not filtered_apps:
         return []
 
-    threads = []
     results = {}
 
     def _single(app: App):
@@ -145,7 +145,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
                 url,
                 json=payload,
                 timeout=30,
-            )  # TODO: failing?
+            )
             if response.status_code != 200:
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
@@ -165,18 +165,14 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
                     uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
                 )
 
-            # print('response', response.json())
             if message := response.json().get('message', ''):
                 results[app.id] = message
         except Exception as e:
             logger.error(f"Plugin integration error: {e}")
             return
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=_single, args=(app,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(filtered_apps)) as executor:
+        executor.map(_single, filtered_apps)
 
     messages = []
     for key, message in results.items():
