@@ -2268,6 +2268,7 @@ class AppState: ObservableObject {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,
+            backendId: old.backendId,
             text: old.text,
             speaker: old.speaker,
             isUser: isUser,
