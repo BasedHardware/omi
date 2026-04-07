@@ -1198,25 +1198,24 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    conversation_id,
-                ),
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            list(
+                executor.map(
+                    lambda path: process_segment(
+                        path,
+                        uid,
+                        response,
+                        segment_lock,
+                        segment_errors,
+                        source,
+                        is_locked,
+                        transcription_prefs,
+                        person_embeddings_cache,
+                        conversation_id,
+                    ),
+                    segmented_paths,
+                )
             )
-            for path in segmented_paths
-        ]
-        chunk_threads(threads)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
