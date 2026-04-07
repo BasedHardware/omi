@@ -537,7 +537,8 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
     # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
-    conversation_messages = await asyncio.to_thread(process_mentor_notification, uid, segments)
+    loop = asyncio.get_running_loop()
+    conversation_messages = await loop.run_in_executor(critical_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
             mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
