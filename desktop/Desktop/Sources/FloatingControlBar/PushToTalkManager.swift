@@ -411,10 +411,10 @@ class PushToTalkManager: ObservableObject {
 
     if wasFollowUp {
       log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.sendFollowUpQuery(query)
+      FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
     } else {
       log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.openAIInputWithQuery(query)
+      FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
     }
   }
 

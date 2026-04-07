@@ -394,7 +394,7 @@ class ShortcutSettings: ObservableObject {
             self.pttTranscriptionMode = .live
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
-        self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? false
+        self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? true
     }
 
     private func persistShortcut(_ shortcut: KeyboardShortcut, forKey key: String) {
