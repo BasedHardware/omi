@@ -244,6 +244,13 @@ def get_messages(
     return messages
 
 
+def get_message_count(uid: str) -> int:
+    """Return the total number of chat messages for a user."""
+    user_ref = db.collection('users').document(uid)
+    docs = user_ref.collection('messages').count().get()
+    return docs[0][0].value if docs and docs[0] else 0
+
+
 def iter_all_messages(uid: str, batch_size: int = 1000):
     """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
     user_ref = db.collection('users').document(uid)
