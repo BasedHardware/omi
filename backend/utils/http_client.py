@@ -1,13 +1,159 @@
 """Shared httpx.AsyncClient instances for outbound HTTP.
 
+Implements Lane 1 of the 3-lane async architecture (issue #6369):
+- Connection pooling per service (4 clients)
+- Bounded concurrency via asyncio.Semaphore
+- Per-target circuit breakers for webhooks
+- Latest-wins dropping for audio-byte-level calls
+
 Lifecycle: clients are lazily created on first use and should be closed
 at application shutdown via ``close_all_clients()``.
 """
 
-import httpx
+import asyncio
 import logging
+import time
+from collections import defaultdict
+
+import httpx
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Circuit breaker for webhook targets
+# ---------------------------------------------------------------------------
+
+_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
+_CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 30  # seconds
+_CIRCUIT_BREAKER_HALF_OPEN_MAX = 1  # probes allowed in half-open
+
+
+class WebhookCircuitBreaker:
+    """Per-target circuit breaker for outbound webhook HTTP calls.
+
+    States:
+      CLOSED  — normal operation, failures counted
+      OPEN    — target is down, calls short-circuited
+      HALF_OPEN — recovery probe allowed (single request)
+
+    Thread-safe via asyncio — all callers are on the same event loop.
+    """
+
+    __slots__ = ('_failures', '_last_failure_time', '_state', '_half_open_in_flight', '_url')
+
+    def __init__(self, url: str):
+        self._url = url
+        self._failures = 0
+        self._last_failure_time = 0.0
+        self._state = 'closed'
+        self._half_open_in_flight = 0
+
+    @property
+    def state(self) -> str:
+        if self._state == 'open':
+            if time.monotonic() - self._last_failure_time >= _CIRCUIT_BREAKER_RECOVERY_TIMEOUT:
+                self._state = 'half_open'
+                self._half_open_in_flight = 0
+        return self._state
+
+    def allow_request(self) -> bool:
+        s = self.state
+        if s == 'closed':
+            return True
+        if s == 'half_open':
+            if self._half_open_in_flight < _CIRCUIT_BREAKER_HALF_OPEN_MAX:
+                self._half_open_in_flight += 1
+                return True
+            return False
+        return False  # open
+
+    def record_success(self):
+        self._failures = 0
+        self._state = 'closed'
+        self._half_open_in_flight = 0
+
+    def record_failure(self):
+        self._failures += 1
+        self._last_failure_time = time.monotonic()
+        if self._failures >= _CIRCUIT_BREAKER_FAILURE_THRESHOLD:
+            self._state = 'open'
+            logger.warning(f'Circuit breaker OPEN for webhook: {self._url[:80]}')
+
+
+# Global registry of per-target circuit breakers
+_webhook_circuit_breakers: dict[str, WebhookCircuitBreaker] = {}
+
+
+def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
+    """Get or create a circuit breaker for a webhook target URL (keyed by host)."""
+    try:
+        host = url.split('/')[2]
+    except (IndexError, AttributeError):
+        host = url
+    if host not in _webhook_circuit_breakers:
+        _webhook_circuit_breakers[host] = WebhookCircuitBreaker(host)
+    return _webhook_circuit_breakers[host]
+
+
+# ---------------------------------------------------------------------------
+# Latest-wins tracking for audio byte webhook calls
+# ---------------------------------------------------------------------------
+
+_latest_wins_versions: dict[str, int] = defaultdict(int)
+
+
+def latest_wins_start(uid: str) -> int:
+    """Increment and return the current version for a uid's audio byte call."""
+    _latest_wins_versions[uid] += 1
+    return _latest_wins_versions[uid]
+
+
+def latest_wins_check(uid: str, version: int) -> bool:
+    """Return True if this version is still the latest for the uid."""
+    return _latest_wins_versions.get(uid, 0) == version
+
+
+# ---------------------------------------------------------------------------
+# Semaphores for bounded concurrency per client type
+# ---------------------------------------------------------------------------
+
+_webhook_semaphore: asyncio.Semaphore | None = None
+_maps_semaphore: asyncio.Semaphore | None = None
+_auth_semaphore: asyncio.Semaphore | None = None
+_stt_semaphore: asyncio.Semaphore | None = None
+
+
+def get_webhook_semaphore() -> asyncio.Semaphore:
+    global _webhook_semaphore
+    if _webhook_semaphore is None:
+        _webhook_semaphore = asyncio.Semaphore(64)
+    return _webhook_semaphore
+
+
+def get_maps_semaphore() -> asyncio.Semaphore:
+    global _maps_semaphore
+    if _maps_semaphore is None:
+        _maps_semaphore = asyncio.Semaphore(8)
+    return _maps_semaphore
+
+
+def get_auth_semaphore() -> asyncio.Semaphore:
+    global _auth_semaphore
+    if _auth_semaphore is None:
+        _auth_semaphore = asyncio.Semaphore(20)
+    return _auth_semaphore
+
+
+def get_stt_semaphore() -> asyncio.Semaphore:
+    global _stt_semaphore
+    if _stt_semaphore is None:
+        _stt_semaphore = asyncio.Semaphore(8)
+    return _stt_semaphore
+
+
+# ---------------------------------------------------------------------------
+# Shared httpx.AsyncClient instances
+# ---------------------------------------------------------------------------
 
 _webhook_client: httpx.AsyncClient | None = None
 _maps_client: httpx.AsyncClient | None = None
@@ -66,6 +212,7 @@ def get_stt_client() -> httpx.AsyncClient:
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
     global _webhook_client, _maps_client, _auth_client, _stt_client
+    global _webhook_semaphore, _maps_semaphore, _auth_semaphore, _stt_semaphore
     for client in (_webhook_client, _maps_client, _auth_client, _stt_client):
         if client is not None:
             try:
@@ -76,3 +223,8 @@ async def close_all_clients():
     _maps_client = None
     _auth_client = None
     _stt_client = None
+    # Reset semaphores (they are event-loop-bound)
+    _webhook_semaphore = None
+    _maps_semaphore = None
+    _auth_semaphore = None
+    _stt_semaphore = None
