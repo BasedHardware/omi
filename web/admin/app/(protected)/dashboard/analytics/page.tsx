@@ -547,7 +547,7 @@ export default function AnalyticsPage() {
           <h2 className="text-lg font-semibold">Floating Bar Sessions per User</h2>
           {fbSummary && (
             <span className="text-sm text-muted-foreground">
-              Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgSessionsPerUserPerDay ?? "—"}</span> sessions/user/day
+              Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay ?? "—"}</span> sessions/user/day
             </span>
           )}
         </div>
