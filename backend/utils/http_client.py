@@ -127,10 +127,21 @@ def latest_wins_check(uid: str, version: int) -> bool:
 # The main FastAPI event loop (used by async endpoints) shares one set.
 
 _semaphores: dict[tuple[int, str], asyncio.Semaphore] = {}
+_SEMAPHORE_CACHE_MAX = 100  # Prune when cache exceeds this size
 
 
 def _get_semaphore(name: str, limit: int) -> asyncio.Semaphore:
-    """Get or create a semaphore for the current event loop."""
+    """Get or create a semaphore for the current event loop.
+
+    Keyed by (loop_id, name) so each event loop gets its own set. This is
+    necessary because asyncio.run() in sync FastAPI endpoints creates a
+    fresh event loop per call, and semaphores are loop-bound.
+
+    The main FastAPI event loop (used by async endpoints) reuses the same
+    loop_id for the lifetime of the process, so its semaphores are stable.
+    Entries from short-lived asyncio.run() loops are pruned when the cache
+    grows beyond _SEMAPHORE_CACHE_MAX to prevent unbounded growth.
+    """
     try:
         loop = asyncio.get_running_loop()
         key = (id(loop), name)
@@ -138,6 +149,9 @@ def _get_semaphore(name: str, limit: int) -> asyncio.Semaphore:
         # No running loop — create unbound semaphore (will bind on first acquire)
         return asyncio.Semaphore(limit)
     if key not in _semaphores:
+        # Prune stale entries from destroyed loops when cache grows large
+        if len(_semaphores) > _SEMAPHORE_CACHE_MAX:
+            _semaphores.clear()
         _semaphores[key] = asyncio.Semaphore(limit)
     return _semaphores[key]
 
