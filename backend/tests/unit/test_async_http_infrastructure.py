@@ -111,6 +111,34 @@ class TestWebhookCircuitBreaker:
             cb.record_failure()
         assert cb.state == 'open'
 
+    def test_half_open_single_failed_probe_reopens_immediately(self):
+        """A single failure during HALF_OPEN must reopen the breaker immediately.
+
+        This tests the strict probe semantics: the breaker grants exactly one
+        request in HALF_OPEN; if that probe fails, it must reopen without
+        requiring the full failure threshold to be reached again.
+        """
+        cb = WebhookCircuitBreaker("test-host")
+        # Drive to OPEN
+        for _ in range(_CIRCUIT_BREAKER_FAILURE_THRESHOLD):
+            cb.record_failure()
+        assert cb.state == 'open'
+
+        # Age the breaker past recovery timeout → HALF_OPEN
+        cb._last_failure_time = time.monotonic() - _CIRCUIT_BREAKER_RECOVERY_TIMEOUT - 1
+        assert cb.state == 'half_open'
+
+        # Allow the single probe
+        assert cb.allow_request() is True
+
+        # One failure — must reopen without needing additional failures
+        cb.record_failure()
+        assert cb.state == 'open', (
+            "A single probe failure in HALF_OPEN must immediately reopen the breaker, "
+            "not wait for the full failure threshold"
+        )
+        assert cb.allow_request() is False, "Breaker must block requests after single probe failure"
+
 
 # ============================================================================
 # Circuit breaker registry
