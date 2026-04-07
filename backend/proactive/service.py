@@ -14,6 +14,12 @@ from proactive.task_assistant import ServerTaskAssistant
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_uid(uid: str) -> str:
+    """Truncate UID for log safety — show first 8 chars only."""
+    return uid[:8] + '...' if len(uid) > 8 else uid
+
+
 PROTOCOL_VERSION = '1.0'
 MAX_MODEL_ITERATIONS = 5
 
@@ -35,7 +41,8 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
 
         current_uid.set(uid)
         session_id = str(uuid.uuid4())
-        logger.info('Session opened: uid=%s session=%s', uid, session_id)
+        safe_uid = _sanitize_uid(uid)
+        logger.info('Session opened: uid=%s session=%s', safe_uid, session_id)
 
         # Session state
         cached_context = None
@@ -76,7 +83,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     'ToolResult request_id mismatch: expected=%s got=%s uid=%s — discarding',
                     request_id,
                     result.request_id,
-                    uid,
+                    safe_uid,
                 )
 
         try:
@@ -93,7 +100,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     context_version = hello.context_version
                     logger.info(
                         'ClientHello: uid=%s session=%s version=%s app=%s tasks=%d goals=%d',
-                        uid,
+                        safe_uid,
                         session_id,
                         hello.app_version,
                         hello.os_version,
@@ -117,7 +124,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                     if frame.HasField('session_context') and frame.context_version != context_version:
                         cached_context = frame.session_context
                         context_version = frame.context_version
-                        logger.info('Context refreshed: uid=%s version=%s', uid, context_version)
+                        logger.info('Context refreshed: uid=%s version=%s', safe_uid, context_version)
 
                     if not cached_context:
                         yield pb2.ServerEvent(
@@ -154,7 +161,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                             if not done:
                                 for p in pending:
                                     p.cancel()
-                                logger.warning('Both output and client read timed out: uid=%s', uid)
+                                logger.warning('Both output and client read timed out: uid=%s', safe_uid)
                                 gen_task.cancel()
                                 break
 
@@ -164,7 +171,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                             if client_read in done:
                                 next_msg = client_read.result()
                                 if next_msg is _STREAM_END:
-                                    logger.warning('Client disconnected during tool wait: uid=%s', uid)
+                                    logger.warning('Client disconnected during tool wait: uid=%s', safe_uid)
                                     gen_task.cancel()
                                     break
                                 msg_type = next_msg.WhichOneof('event')
@@ -173,7 +180,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                                 elif msg_type == 'heartbeat':
                                     pass
                                 else:
-                                    logger.warning('Unexpected %s during tool wait: uid=%s', msg_type, uid)
+                                    logger.warning('Unexpected %s during tool wait: uid=%s', msg_type, safe_uid)
 
                             if output_get in done:
                                 event = output_get.result()
@@ -185,7 +192,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                             try:
                                 event = await asyncio.wait_for(output_queue.get(), timeout=60.0)
                             except asyncio.TimeoutError:
-                                logger.warning('Analysis timed out: uid=%s frame=%s', uid, frame_id)
+                                logger.warning('Analysis timed out: uid=%s frame=%s', safe_uid, frame_id)
                                 gen_task.cancel()
                                 break
                             if event is None:
@@ -212,9 +219,9 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
                         )
 
         except asyncio.CancelledError:
-            logger.info('Session cancelled: uid=%s session=%s', uid, session_id)
+            logger.info('Session cancelled: uid=%s session=%s', safe_uid, session_id)
         except Exception:
-            logger.exception('Session error: uid=%s session=%s', uid, session_id)
+            logger.exception('Session error: uid=%s session=%s', safe_uid, session_id)
             yield pb2.ServerEvent(
                 server_error=pb2.ServerError(
                     code='INTERNAL',
@@ -224,7 +231,7 @@ class ProactiveAIServicer(pb2_grpc.ProactiveAIServicer):
             )
         finally:
             pump_task.cancel()
-            logger.info('Session closed: uid=%s session=%s', uid, session_id)
+            logger.info('Session closed: uid=%s session=%s', safe_uid, session_id)
 
     @staticmethod
     async def _run_generator(gen, output_queue: asyncio.Queue):
