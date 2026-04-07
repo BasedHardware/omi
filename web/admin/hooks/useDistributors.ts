@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Distributor, ShopifyLocation } from '@/types/distributor'
-import { useAuthToken, authFetch } from '@/hooks/useAuthToken'
+import { useAuthFetch } from '@/hooks/useAuthToken'
 
 export interface CreateDistributorData {
   email: string
@@ -21,10 +21,9 @@ export const useDistributors = () => {
   const [locations, setLocations] = useState<ShopifyLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { token, loading: authTokenLoading } = useAuthToken()
-  const fetchWithAuth = authFetch(token)
+  const { fetchWithAuth, token } = useAuthFetch()
 
-  const fetchDistributors = useCallback(async () => {
+  const fetchDistributors = async () => {
     if (!token) return
     try {
       setLoading(true)
@@ -50,7 +49,7 @@ export const useDistributors = () => {
     } finally {
       setLoading(false)
     }
-  }, [token, fetchWithAuth])
+  }
 
   const createDistributor = async (data: CreateDistributorData) => {
     try {
@@ -97,10 +96,11 @@ export const useDistributors = () => {
   }
 
   useEffect(() => {
-    if (!authTokenLoading && token) {
+    if (token) {
       fetchDistributors()
     }
-  }, [token, authTokenLoading, fetchDistributors])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   return {
     distributors,
