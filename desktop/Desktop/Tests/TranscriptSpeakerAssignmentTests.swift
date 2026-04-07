@@ -224,6 +224,67 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(segment.translations[1].text, "Bonjour")
   }
 
+  func testTranslationsPreservedDuringReassignment() {
+    // Simulates the code path in ConversationDetailView.updateDisplayedConversation
+    // and AppState.assignSpeakerToSegments where TranscriptSegment is rebuilt
+    let original = TranscriptSegment(
+      id: "seg1",
+      backendId: "backend_seg1",
+      text: "こんにちは",
+      speaker: "SPEAKER_00",
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1,
+      translations: [
+        TranscriptTranslation(lang: "en", text: "Hello"),
+        TranscriptTranslation(lang: "fr", text: "Bonjour")
+      ]
+    )
+
+    // Rebuild like ConversationDetailView does during speaker reassignment
+    let reassigned = TranscriptSegment(
+      id: original.id,
+      backendId: original.backendId,
+      text: original.text,
+      speaker: original.speaker,
+      isUser: true,
+      personId: nil,
+      start: original.start,
+      end: original.end,
+      translations: original.translations
+    )
+
+    XCTAssertEqual(reassigned.translations.count, 2, "Translations must survive reassignment")
+    XCTAssertEqual(reassigned.translations[0].lang, "en")
+    XCTAssertEqual(reassigned.translations[0].text, "Hello")
+    XCTAssertEqual(reassigned.backendId, "backend_seg1", "backendId must survive reassignment")
+    XCTAssertTrue(reassigned.isUser)
+  }
+
+  func testBackendSegmentDecodesTranslations() throws {
+    let json = """
+      {
+        "id": "seg_1",
+        "text": "テスト",
+        "speaker": "SPEAKER_00",
+        "speaker_id": 0,
+        "is_user": false,
+        "start": 0.0,
+        "end": 1.5,
+        "translations": [
+          {"lang": "en", "text": "Test"}
+        ]
+      }
+      """.data(using: .utf8)!
+
+    let segment = try JSONDecoder().decode(TranscriptionService.BackendSegment.self, from: json)
+
+    XCTAssertEqual(segment.translations?.count, 1)
+    XCTAssertEqual(segment.translations?[0].lang, "en")
+    XCTAssertEqual(segment.translations?[0].text, "Test")
+  }
+
   // MARK: - Assignment Metadata Tests
 
   func testAssignmentMetadataPrefersBackendIdsAndFallsBackToIndices() {
