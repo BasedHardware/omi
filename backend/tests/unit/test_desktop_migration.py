@@ -1663,7 +1663,19 @@ class TestInitialMessageEndpoint:
 
         with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
             create_initial_message(InitialMessageRequest(session_id='s1'), uid='u1')
-            mock_util.assert_called_once_with('u1', None)
+            mock_util.assert_called_once_with('u1', None, chat_session_id='s1')
+
+    def test_session_id_passed_to_util(self):
+        from routers.chat_sessions import create_initial_message, InitialMessageRequest
+
+        mock_msg = MagicMock()
+        mock_msg.text = 'Hi'
+        mock_msg.id = 'msg-789'
+        mock_util = MagicMock(return_value=mock_msg)
+
+        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+            create_initial_message(InitialMessageRequest(session_id='sess-42', app_id='myapp'), uid='u1')
+            mock_util.assert_called_once_with('u1', 'myapp', chat_session_id='sess-42')
 
 
 class TestGenerateTitleEndpoint:
