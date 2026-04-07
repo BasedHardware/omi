@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { sendOrganizationInvitation } from '@/lib/services/invitation';
-import { useAuthToken, authFetch } from '@/hooks/useAuthToken';
+import { useAuthFetch } from '@/hooks/useAuthToken';
 
 export interface Employee {
   email: string;
@@ -61,10 +61,9 @@ export const useOrganizations = () => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { token, loading: authTokenLoading } = useAuthToken();
-  const fetchWithAuth = authFetch(token);
+  const { fetchWithAuth, token } = useAuthFetch();
 
-  const fetchOrganizations = useCallback(async () => {
+  const fetchOrganizations = async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -74,7 +73,7 @@ export const useOrganizations = () => {
       if (!response.ok) {
         throw new Error('Failed to fetch organizations');
       }
-      
+
       const data = await response.json();
       setOrganizations(data.organizations);
     } catch (err) {
@@ -82,7 +81,7 @@ export const useOrganizations = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, fetchWithAuth]);
+  };
 
   const createOrganization = async (organizationData: CreateOrganizationData) => {
     try {
@@ -94,7 +93,7 @@ export const useOrganizations = () => {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create organization');
       }
@@ -105,18 +104,14 @@ export const useOrganizations = () => {
           email: organizationData.admin_email,
           role: 'admin',
           isResend: false,
-          organisationId: data.organization.id, // Pass the newly created org ID
+          organisationId: data.organization.id,
         });
         console.log(`Invitation sent to ${organizationData.admin_email} for organization ${data.organization.id}`);
       } catch (inviteError) {
         console.error('Failed to send invitation:', inviteError);
-        // Don't fail the entire operation if invitation fails
-        // The org is created, we can resend the invitation later
       }
 
-      // Refresh the organizations list
       await fetchOrganizations();
-      
       return data.organization;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -135,20 +130,15 @@ export const useOrganizations = () => {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update organization');
       }
 
-      // Update the local state
-      setOrganizations(prev => 
-        prev.map(org => 
-          org.id === organizationId 
-            ? { ...org, is_active: isActive }
-            : org
-        )
+      setOrganizations((prev) =>
+        prev.map((org) => (org.id === organizationId ? { ...org, is_active: isActive } : org)),
       );
-      
+
       return data.organization;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -167,20 +157,15 @@ export const useOrganizations = () => {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update max seats');
       }
 
-      // Update the local state
-      setOrganizations(prev => 
-        prev.map(org => 
-          org.id === organizationId 
-            ? { ...org, max_seats: maxSeats }
-            : org
-        )
+      setOrganizations((prev) =>
+        prev.map((org) => (org.id === organizationId ? { ...org, max_seats: maxSeats } : org)),
       );
-      
+
       return data.organization;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -199,20 +184,15 @@ export const useOrganizations = () => {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update organization');
       }
 
-      // Update the local state
-      setOrganizations(prev => 
-        prev.map(org => 
-          org.id === organizationId 
-            ? { ...org, ...updateData }
-            : org
-        )
+      setOrganizations((prev) =>
+        prev.map((org) => (org.id === organizationId ? { ...org, ...updateData } : org)),
       );
-      
+
       return data.organization;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -224,14 +204,14 @@ export const useOrganizations = () => {
   const resendInvitation = async (email: string, role: 'admin' | 'member' = 'member', organisationId?: string) => {
     try {
       setError(null);
-      
+
       await sendOrganizationInvitation({
         email,
         role,
         isResend: true,
         organisationId,
       });
-      
+
       console.log(`Invitation resent to ${email}`);
       return { success: true, message: 'Invitation sent successfully' };
     } catch (err) {
@@ -241,28 +221,26 @@ export const useOrganizations = () => {
     }
   };
 
-  // Computed property for current seat count
   const getCurrentSeatCount = (organization: Organization): number => {
     return organization.employees?.length || 0;
   };
 
-  // Check if organization can add more employees
   const canAddEmployee = (organization: Organization): boolean => {
     const currentSeats = getCurrentSeatCount(organization);
     const maxSeats = organization.max_seats;
     return !maxSeats || currentSeats < maxSeats;
   };
 
-  // Check if employee is pending (hasn't accepted invitation yet)
   const isEmployeePending = (employee: Employee): boolean => {
     return !employee.uid || employee.uid === '';
   };
 
   useEffect(() => {
-    if (!authTokenLoading && token) {
+    if (token) {
       fetchOrganizations();
     }
-  }, [token, authTokenLoading, fetchOrganizations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   return {
     organizations,
