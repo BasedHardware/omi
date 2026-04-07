@@ -101,6 +101,69 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertFalse(segment.isUser, "isUser should default to false")
   }
 
+  // MARK: - Transcript Export isUser Tests
+
+  func testTranscriptExportUsesIsUserForSpeakerLabel() {
+    let segments = [
+      TranscriptSegment(
+        id: "seg1",
+        text: "Hello from user",
+        speaker: "SPEAKER_01",
+        isUser: true,
+        personId: nil,
+        start: 0,
+        end: 1
+      ),
+      TranscriptSegment(
+        id: "seg2",
+        text: "Hello from other",
+        speaker: "SPEAKER_00",
+        isUser: false,
+        personId: nil,
+        start: 1,
+        end: 2
+      ),
+    ]
+
+    let conversation = ServerConversation(
+      id: "test",
+      createdAt: Date(),
+      startedAt: nil,
+      finishedAt: nil,
+      structured: Structured(
+        title: "Test",
+        overview: "",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: segments,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: nil,
+      language: nil,
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil
+    )
+
+    let transcript = conversation.transcript
+
+    // isUser=true speaker 1 should show "You", not "Speaker 1"
+    XCTAssertTrue(transcript.contains("You: Hello from user"), "User segment should use 'You' label based on isUser, not speaker ID")
+
+    // isUser=false speaker 0 should show "Speaker 0", not "You"
+    XCTAssertTrue(transcript.contains("Speaker 0: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
+  }
+
+  // MARK: - Assignment Metadata Tests
+
   func testAssignmentMetadataPrefersBackendIdsAndFallsBackToIndices() {
     let segments = [
       TranscriptSegment(
