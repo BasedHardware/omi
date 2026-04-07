@@ -31,6 +31,7 @@ class AsyncBlockerVisitor(ast.NodeVisitor):
         self.filepath = filepath
         self.violations = []
         self._in_async = False
+        self._thread_join_lines: list[int] = []
 
     def visit_AsyncFunctionDef(self, node):
         old = self._in_async
@@ -69,6 +70,18 @@ class AsyncBlockerVisitor(ast.NodeVisitor):
                     self.violations.append(
                         (node.lineno, f'sync {call_str}() in async function — use httpx.AsyncClient')
                     )
+            # Thread().start() + .join() — detect .join() on any call chain containing Thread
+            if isinstance(node.func, ast.Attribute) and node.func.attr == 'join':
+                self._thread_join_lines.append(node.lineno)
+            # Detect Thread(...).start() pattern
+            if isinstance(node.func, ast.Attribute) and node.func.attr == 'start':
+                inner = node.func.value
+                if isinstance(inner, ast.Call):
+                    inner_name = _get_call_name(inner)
+                    if inner_name in ('Thread', 'threading.Thread'):
+                        self.violations.append(
+                            (node.lineno, 'Thread().start() in async function — use run_in_executor()')
+                        )
         self.generic_visit(node)
 
 
