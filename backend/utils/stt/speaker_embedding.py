@@ -10,6 +10,7 @@ import numpy as np
 import requests
 from scipy.spatial.distance import cdist
 
+from utils.executors import storage_executor
 from utils.http_client import get_stt_client
 
 logger = logging.getLogger(__name__)
@@ -124,7 +125,8 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray:
     api_url = _get_api_url()
     client = get_stt_client()
 
-    file_data = await asyncio.to_thread(_read_file, audio_path)
+    loop = asyncio.get_running_loop()
+    file_data = await loop.run_in_executor(storage_executor, _read_file, audio_path)
 
     files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
     try:
