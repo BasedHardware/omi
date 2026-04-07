@@ -4,6 +4,7 @@ Verifies that the async geocoding function uses httpx.AsyncClient
 instead of blocking requests.get.
 """
 
+import asyncio
 import json
 import sys
 import types
@@ -27,6 +28,7 @@ if "utils.http_client" not in sys.modules:
     _http_mod = types.ModuleType("utils.http_client")
     _http_mod.get_maps_client = MagicMock()
     _http_mod.get_webhook_client = MagicMock()
+    _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
     sys.modules["utils.http_client"] = _http_mod
 
 from models.conversation import Geolocation
