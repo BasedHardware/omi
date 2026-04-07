@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
+from utils.executors import critical_executor, storage_executor
 from utils.http_client import get_stt_client
 import logging
 
@@ -196,7 +197,8 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
-            file_data = await asyncio.to_thread(_read_file, file_path)
+            loop = asyncio.get_running_loop()
+            file_data = await loop.run_in_executor(storage_executor, _read_file, file_path)
             files = {'file': (file_path.split('/')[-1], file_data, 'audio/wav')}
             client = get_stt_client()
             response = await client.post(hosted_vad_url, files=files)
@@ -206,7 +208,8 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:
-        segments = await asyncio.to_thread(_run_file_vad, file_path)
+        loop = asyncio.get_running_loop()
+        segments = await loop.run_in_executor(critical_executor, _run_file_vad, file_path)
 
     if cache:
         redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
