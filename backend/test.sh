@@ -79,6 +79,8 @@ pytest tests/unit/test_desktop_transcribe.py -v
 pytest tests/unit/test_async_webhooks.py -v
 pytest tests/unit/test_async_app_integrations.py -v
 pytest tests/unit/test_async_geocoding.py -v
+pytest tests/unit/test_geocoding_cache.py -v
+pytest tests/unit/test_realtime_integrations_usage_tracking.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
