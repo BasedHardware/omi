@@ -65,8 +65,10 @@ struct OnboardingExportsStepView: View {
   }
 
   private func exportRow(destination: MemoryExportDestination) -> some View {
-    let status = statuses[destination] ?? MemoryExportStatus(
-      exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
+    let status =
+      statuses[destination]
+      ?? MemoryExportStatus(
+        exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
     let metrics = exportMetrics(for: destination, status: status)
 
     return HStack(alignment: .center, spacing: 12) {
@@ -122,7 +124,10 @@ struct OnboardingExportsStepView: View {
     if destination.isAutomated {
       return "Automatic export"
     }
-    return "Manual memory pack"
+    if destination == .notion {
+      return "Copy-ready page"
+    }
+    return "Prompt + memory pack"
   }
 }
 
@@ -141,30 +146,32 @@ private struct OnboardingInlineExportPanel: View {
 
       switch destination {
       case .notion:
-        inlineTextField("Notion integration token", text: $model.notionToken, secure: true)
-        inlineTextField("Parent page ID", text: $model.notionParentPageID)
+        inlineInfoCard(
+          "Omi copies a ready-to-paste memory page, saves a backup in Downloads, and opens Notion."
+        )
 
       case .obsidian:
-        inlineTextField("Vault path", text: $model.obsidianVaultPath, secure: false)
+        inlineInfoCard(
+          model.obsidianVaultPath.isEmpty
+            ? "Pick your Obsidian vault once. Omi will keep refreshing `Omi/Memories.md` there."
+            : model.obsidianVaultPath
+        )
+
+        Button(model.obsidianVaultPath.isEmpty ? "Choose vault" : "Change vault") {
+          model.pickObsidianVault()
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(OmiColors.textSecondary)
+        .font(.system(size: 12, weight: .medium))
 
       case .chatgpt, .claude, .gemini:
-        Text(destination.manualPrompt)
-          .font(.system(size: 12))
-          .foregroundColor(OmiColors.textTertiary)
-          .padding(14)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-              .fill(OmiColors.backgroundSecondary)
-              .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                  .stroke(Color.white.opacity(0.08), lineWidth: 1)
-              )
-          )
+        inlineInfoCard(
+          "Omi copies the prompt and memory pack together, saves a Markdown backup, and opens \(destination.title)."
+        )
       }
 
       HStack(spacing: 12) {
-        Button(model.isRunning ? runningLabel : "Connect") {
+        Button(model.isRunning ? runningLabel : idleLabel) {
           Task {
             if let updatedStatus = await model.run(destination: destination) {
               statuses[destination] = updatedStatus
@@ -210,9 +217,20 @@ private struct OnboardingInlineExportPanel: View {
 
   private var runningLabel: String {
     switch destination {
-    case .notion: return "Syncing…"
+    case .notion: return "Preparing…"
     case .obsidian: return "Exporting…"
     case .chatgpt, .claude, .gemini: return "Preparing…"
+    }
+  }
+
+  private var idleLabel: String {
+    switch destination {
+    case .notion:
+      return "Copy & open"
+    case .obsidian:
+      return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
+    case .chatgpt, .claude, .gemini:
+      return "Copy & open"
     }
   }
 
@@ -241,5 +259,21 @@ private struct OnboardingInlineExportPanel: View {
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     )
+  }
+
+  private func inlineInfoCard(_ text: String) -> some View {
+    Text(text)
+      .font(.system(size: 12))
+      .foregroundColor(OmiColors.textTertiary)
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1)
+          )
+      )
   }
 }

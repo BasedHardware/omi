@@ -29,12 +29,23 @@ enum ConnectorBrand: String, Sendable {
     }
   }
 
+  var installedApplicationURL: URL? {
+    guard let appPath, FileManager.default.fileExists(atPath: appPath) else {
+      return nil
+    }
+    return URL(fileURLWithPath: appPath)
+  }
+
   fileprivate var bundledResourceName: String? {
     switch self {
     case .calendar:
       return "google_calendar_logo"
     case .gmail:
       return "gmail_logo"
+    case .obsidian:
+      return "obsidian_logo"
+    case .gemini:
+      return "gemini_logo"
     default:
       return nil
     }
@@ -133,7 +144,8 @@ private enum ConnectorBrandImageLoader {
 
     let fm = FileManager.default
     let documentsPath = fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents").path
-    let path = fm.fileExists(atPath: documentsPath)
+    let path =
+      fm.fileExists(atPath: documentsPath)
       ? documentsPath : fm.homeDirectoryForCurrentUser.path
     return NSWorkspace.shared.icon(forFile: path)
   }

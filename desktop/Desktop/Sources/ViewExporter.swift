@@ -167,9 +167,10 @@ enum ViewExporter {
     ("13-floating-bar", 12),
     ("14-voice-shortcut", 13),
     ("15-voice-demo", 14),
-    ("16-research", 15),
-    ("17-goal", 16),
-    ("18-tasks", 17),
+    ("16-data-sources", 15),
+    ("17-exports", 16),
+    ("18-goal", 17),
+    ("19-tasks", 18),
   ]
 
   static func onboardingViewAt(_ index: Int) -> (String, AnyView, CGSize)? {

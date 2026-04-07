@@ -12,14 +12,17 @@ struct ExportsSection: View {
         .scaledFont(size: 18, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      LazyVGrid(columns: [
-        GridItem(.adaptive(minimum: 220), spacing: 16)
-      ], spacing: 16) {
+      LazyVGrid(
+        columns: [
+          GridItem(.adaptive(minimum: 220), spacing: 16)
+        ], spacing: 16
+      ) {
         ForEach(destinations) { destination in
           MemoryExportCard(
             destination: destination,
-            status: statuses[destination] ?? MemoryExportStatus(
-              exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
+            status: statuses[destination]
+              ?? MemoryExportStatus(
+                exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
           ) {
             onSelectDestination(destination)
           }
@@ -43,12 +46,13 @@ private struct MemoryExportCard: View {
     if let detail = status.detailText, !detail.isEmpty {
       return detail
     }
-    return "Not connected"
+    return destination.isAutomated ? "Not connected" : "Ready to export"
   }
 
   private var secondaryText: String? {
     if let lastExportedAt = status.lastExportedAt {
-      return "Updated \(RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date()))"
+      return
+        "Updated \(RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date()))"
     }
     if let detail = status.detailText, !detail.isEmpty, detail != primaryText {
       return detail
@@ -57,10 +61,12 @@ private struct MemoryExportCard: View {
   }
 
   private var actionTitle: String {
-    if destination.isAutomated {
+    switch destination {
+    case .obsidian:
       return status.isConfigured ? "Sync now" : "Connect"
+    case .notion, .chatgpt, .claude, .gemini:
+      return "Open"
     }
-    return "Connect"
   }
 
   var body: some View {
@@ -94,7 +100,8 @@ private struct MemoryExportCard: View {
           VStack(alignment: .leading, spacing: 3) {
             Text(primaryText)
               .scaledFont(size: 11, weight: .medium)
-              .foregroundColor(status.exportedCount > 0 ? OmiColors.textSecondary : OmiColors.textTertiary)
+              .foregroundColor(
+                status.exportedCount > 0 ? OmiColors.textSecondary : OmiColors.textTertiary)
 
             if let secondaryText {
               Text(secondaryText)
@@ -106,7 +113,8 @@ private struct MemoryExportCard: View {
 
           Spacer()
 
-          ImportConnectorActionButton(title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
+          ImportConnectorActionButton(
+            title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
         }
       }
       .padding(14)
@@ -132,9 +140,6 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var obsidianVaultPath = ""
 
   func loadConfiguration() async {
-    let notion = await MemoryExportService.shared.notionConfiguration()
-    notionToken = notion.token
-    notionParentPageID = notion.parentPageID
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
   }
 
@@ -147,16 +152,13 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     do {
       switch destination {
       case .notion:
-        let result = try await MemoryExportService.shared.exportToNotion(
-          token: notionToken,
-          parentPageID: notionParentPageID
-        )
+        let result = try await MemoryExportService.shared.prepareManualExport(for: destination)
         await MainActor.run {
-          if let url = result.destinationURL {
-            NSWorkspace.shared.open(url)
-          }
+          applyClipboard(from: result)
+          revealExportFile(from: result)
+          openDestination(for: destination, url: result.destinationURL)
         }
-        statusMessage = "Exported \(result.memoryCount.formatted()) memories to Notion."
+        statusMessage = "Copied \(result.memoryCount.formatted()) memories for Notion."
 
       case .obsidian:
         let vaultURL: URL
@@ -172,27 +174,19 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
         let result = try await MemoryExportService.shared.exportToObsidian(vaultURL: vaultURL)
         await MainActor.run {
-          if let openURL = result.destinationURL {
-            NSWorkspace.shared.open(openURL)
-          } else if let fileURL = result.fileURL {
-            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-          }
+          revealExportFile(from: result)
+          openDestination(for: destination, url: result.destinationURL)
         }
         statusMessage = "Wrote \(result.memoryCount.formatted()) memories into Obsidian."
 
       case .chatgpt, .claude, .gemini:
         let result = try await MemoryExportService.shared.prepareManualExport(for: destination)
         await MainActor.run {
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(destination.manualPrompt, forType: .string)
-          if let fileURL = result.fileURL {
-            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-          }
-          if let openURL = result.destinationURL {
-            NSWorkspace.shared.open(openURL)
-          }
+          applyClipboard(from: result)
+          revealExportFile(from: result)
+          openDestination(for: destination, url: result.destinationURL)
         }
-        statusMessage = "Memory pack ready for \(destination.title). Prompt copied."
+        statusMessage = "Memory pack ready for \(destination.title). Prompt and export copied."
       }
 
       return await MemoryExportService.shared.status(for: destination)
@@ -216,6 +210,61 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     panel.canChooseDirectories = true
     panel.allowsMultipleSelection = false
     return panel.runModal() == .OK ? panel.url : nil
+  }
+
+  private func applyClipboard(from result: MemoryExportResult) {
+    guard let clipboardText = result.clipboardText, !clipboardText.isEmpty else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(clipboardText, forType: .string)
+  }
+
+  private func revealExportFile(from result: MemoryExportResult) {
+    guard let fileURL = result.fileURL else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+  }
+
+  private func openDestination(for destination: MemoryExportDestination, url: URL?) {
+    guard let url else { return }
+
+    if let appURL = destination.brand.installedApplicationURL {
+      let configuration = NSWorkspace.OpenConfiguration()
+      configuration.activates = true
+
+      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
+        _, error in
+        if let error {
+          log(
+            "MemoryExportDestinationSheetModel: Failed opening \(destination.title) with installed app: \(error.localizedDescription)"
+          )
+          Task { @MainActor in
+            self.openInDefaultHandler(url)
+          }
+        }
+      }
+      return
+    }
+
+    openInDefaultHandler(url)
+  }
+
+  private func openInDefaultHandler(_ url: URL) {
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+
+    if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
+      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
+        _, error in
+        if let error {
+          log(
+            "MemoryExportDestinationSheetModel: Failed opening \(url.absoluteString): \(error.localizedDescription)"
+          )
+          NSWorkspace.shared.open(url)
+        }
+      }
+      return
+    }
+
+    NSWorkspace.shared.open(url)
   }
 }
 
@@ -279,18 +328,23 @@ struct MemoryExportDestinationSheet: View {
     switch destination {
     case .notion:
       VStack(alignment: .leading, spacing: 12) {
-        textField("Notion integration token", text: $model.notionToken, isSecure: true)
-        textField("Parent page ID", text: $model.notionParentPageID)
-        Text("Omi creates a child page under this parent and writes your latest memories into it.")
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+        Text(
+          "Omi copies a ready-to-paste Markdown page, saves a local backup, and opens Notion so you can drop it where you want."
+        )
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
       }
 
     case .obsidian:
       VStack(alignment: .leading, spacing: 12) {
-        textField("Vault path", text: $model.obsidianVaultPath)
+        selectedLocationCard(
+          title: model.obsidianVaultPath.isEmpty ? "No vault selected yet" : "Selected vault",
+          value: model.obsidianVaultPath.isEmpty
+            ? "Pick your Obsidian vault once, then Omi will keep refreshing `Omi/Memories.md`."
+            : model.obsidianVaultPath
+        )
 
-        Button("Choose vault") {
+        Button(model.obsidianVaultPath.isEmpty ? "Choose vault" : "Change vault") {
           model.pickObsidianVault()
         }
         .buttonStyle(.plain)
@@ -304,9 +358,11 @@ struct MemoryExportDestinationSheet: View {
 
     case .chatgpt, .claude, .gemini:
       VStack(alignment: .leading, spacing: 12) {
-        Text("Omi will generate a Markdown memory pack, copy the upload prompt, reveal the file in Finder, and open \(destination.title).")
-          .scaledFont(size: 13)
-          .foregroundColor(OmiColors.textSecondary)
+        Text(
+          "Omi will generate a Markdown memory pack, copy the prompt and export together, reveal the file in Finder, and open \(destination.title)."
+        )
+        .scaledFont(size: 13)
+        .foregroundColor(OmiColors.textSecondary)
 
         Text(destination.manualPrompt)
           .scaledFont(size: 12)
@@ -338,15 +394,17 @@ struct MemoryExportDestinationSheet: View {
   private var actionTitle: (idle: String, running: String) {
     switch destination {
     case .notion:
-      return ("Connect", "Syncing…")
+      return ("Copy & open", "Preparing…")
     case .obsidian:
-      return ("Connect", "Exporting…")
+      return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
-      return ("Connect", "Preparing…")
+      return ("Copy & open", "Preparing…")
     }
   }
 
-  private func textField(_ title: String, text: Binding<String>, isSecure: Bool = false) -> some View {
+  private func textField(_ title: String, text: Binding<String>, isSecure: Bool = false)
+    -> some View
+  {
     VStack(alignment: .leading, spacing: 6) {
       Text(title)
         .scaledFont(size: 12, weight: .medium)
@@ -371,6 +429,29 @@ struct MemoryExportDestinationSheet: View {
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )
+    }
+  }
+
+  private func selectedLocationCard(title: String, value: String) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title)
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+
+      Text(value)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textPrimary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+            .overlay(
+              RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        )
     }
   }
 }

@@ -22,21 +22,21 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var subtitle: String {
     switch self {
-    case .notion: return "Automatic page export"
-    case .obsidian: return "Automatic markdown export"
-    case .chatgpt: return "Manual memory pack"
-    case .claude: return "Manual memory pack"
-    case .gemini: return "Manual memory pack"
+    case .notion: return "Copy-ready page export"
+    case .obsidian: return "Choose once, refresh anytime"
+    case .chatgpt: return "Prompt + memory pack"
+    case .claude: return "Prompt + memory pack"
+    case .gemini: return "Prompt + memory pack"
     }
   }
 
   var description: String {
     switch self {
-    case .notion: return "Sync Omi memories into a Notion page."
+    case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
-    case .chatgpt: return "Prepare a memory pack and open ChatGPT."
-    case .claude: return "Prepare a memory pack and open Claude."
-    case .gemini: return "Prepare a memory pack and open Gemini."
+    case .chatgpt: return "Copy the prompt and memory pack, then open ChatGPT."
+    case .claude: return "Copy the prompt and memory pack, then open Claude."
+    case .gemini: return "Copy the prompt and memory pack, then open Gemini."
     }
   }
 
@@ -52,9 +52,9 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var isAutomated: Bool {
     switch self {
-    case .notion, .obsidian:
+    case .obsidian:
       return true
-    case .chatgpt, .claude, .gemini:
+    case .notion, .chatgpt, .claude, .gemini:
       return false
     }
   }
@@ -76,20 +76,39 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var manualPrompt: String {
     switch self {
+    case .notion:
+      return ""
     case .chatgpt:
       return """
-      I’m attaching an Omi memory export. Read it carefully and keep the durable facts, preferences, projects, relationships, and goals as working context for future conversations with me. Start by giving me a concise profile summary of what you learned.
-      """
+        I’m attaching an Omi memory export. Read it carefully and keep the durable facts, preferences, projects, relationships, and goals as working context for future conversations with me. Start by giving me a concise profile summary of what you learned.
+        """
     case .claude:
       return """
-      I’m attaching an Omi memory export. Absorb the durable facts about me, including projects, habits, preferences, relationships, and goals, and use them as context for future conversations. Start by summarizing the most important things you learned about me.
-      """
+        I’m attaching an Omi memory export. Absorb the durable facts about me, including projects, habits, preferences, relationships, and goals, and use them as context for future conversations. Start by summarizing the most important things you learned about me.
+        """
     case .gemini:
       return """
-      I’m attaching an Omi memory export. Read it as persistent context about me and keep the durable facts, preferences, projects, and goals in mind for future chats. Start with a short profile summary of what stands out.
-      """
-    case .notion, .obsidian:
+        I’m attaching an Omi memory export. Read it as persistent context about me and keep the durable facts, preferences, projects, and goals in mind for future chats. Start with a short profile summary of what stands out.
+        """
+    case .obsidian:
       return ""
+    }
+  }
+
+  func clipboardText(for markdown: String) -> String {
+    switch self {
+    case .notion:
+      return markdown
+    case .chatgpt, .claude, .gemini:
+      return """
+        \(manualPrompt)
+
+        ---
+
+        \(markdown)
+        """
+    case .obsidian:
+      return markdown
     }
   }
 
@@ -114,6 +133,7 @@ struct MemoryExportResult: Sendable {
   let detailText: String?
   let destinationURL: URL?
   let fileURL: URL?
+  let clipboardText: String?
 }
 
 enum MemoryExportError: LocalizedError {
@@ -160,13 +180,9 @@ actor MemoryExportService {
     let detailText = defaults.string(forKey: destination.detailKey)
     let isConfigured: Bool
     switch destination {
-    case .notion:
-      isConfigured =
-        !(defaults.string(forKey: destination.notionTokenKey) ?? "").isEmpty
-        && !(defaults.string(forKey: destination.notionParentPageKey) ?? "").isEmpty
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
-    case .chatgpt, .claude, .gemini:
+    case .notion, .chatgpt, .claude, .gemini:
       isConfigured = exportedCount > 0
     }
 
@@ -179,9 +195,10 @@ actor MemoryExportService {
   }
 
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
-    Dictionary(uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
-      (destination, status(for: destination))
-    })
+    Dictionary(
+      uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
+        (destination, status(for: destination))
+      })
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {
@@ -232,7 +249,8 @@ actor MemoryExportService {
       memoryCount: memories.count,
       detailText: detail,
       destinationURL: URL(string: "https://www.notion.so/"),
-      fileURL: nil
+      fileURL: nil,
+      clipboardText: nil
     )
   }
 
@@ -269,11 +287,14 @@ actor MemoryExportService {
       memoryCount: memories.count,
       detailText: detail,
       destinationURL: openURL,
-      fileURL: exportFileURL
+      fileURL: exportFileURL,
+      clipboardText: nil
     )
   }
 
-  func prepareManualExport(for destination: MemoryExportDestination) async throws -> MemoryExportResult {
+  func prepareManualExport(for destination: MemoryExportDestination) async throws
+    -> MemoryExportResult
+  {
     precondition(!destination.isAutomated, "prepareManualExport only supports manual destinations")
 
     let memories = try await fetchMemories(limit: 400)
@@ -299,7 +320,8 @@ actor MemoryExportService {
       memoryCount: memories.count,
       detailText: detail,
       destinationURL: destination.browserURL,
-      fileURL: fileURL
+      fileURL: fileURL,
+      clipboardText: destination.clipboardText(for: markdown)
     )
   }
 
@@ -350,14 +372,16 @@ actor MemoryExportService {
     if destination.isAutomated {
       lines.append("This export was generated by Omi and can be refreshed at any time.")
     } else {
-      lines.append("Upload or paste this export into \(destination.title) together with the copied prompt.")
+      lines.append(
+        "Upload or paste this export into \(destination.title) together with the copied prompt.")
     }
 
     return lines.joined(separator: "\n")
   }
 
   private func exportDirectory() throws -> URL {
-    let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+    let downloads =
+      FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
       ?? FileManager.default.homeDirectoryForCurrentUser
     let directory = downloads.appendingPathComponent("Omi Exports", isDirectory: true)
     try FileManager.default.createDirectory(
@@ -382,7 +406,9 @@ actor MemoryExportService {
     }
   }
 
-  private func createNotionPage(token: String, parentPageID: String, title: String) async throws -> String {
+  private func createNotionPage(token: String, parentPageID: String, title: String) async throws
+    -> String
+  {
     let url = notionBaseURL.appendingPathComponent("pages")
     var request = notionRequest(url: url, token: token)
     request.httpMethod = "POST"
@@ -415,7 +441,9 @@ actor MemoryExportService {
     return pageID
   }
 
-  private func appendNotionBlocks(token: String, pageID: String, memories: [ServerMemory]) async throws {
+  private func appendNotionBlocks(token: String, pageID: String, memories: [ServerMemory])
+    async throws
+  {
     let url = notionBaseURL.appendingPathComponent("blocks/\(pageID)/children")
     let chunks = notionChildren(memories: memories).chunked(into: 100)
 
@@ -444,8 +472,7 @@ actor MemoryExportService {
 
     guard (200..<300).contains(httpResponse.statusCode) else {
       let message: String
-      if
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
         let detail = json["message"] as? String
       {
         message = detail
@@ -535,8 +562,8 @@ actor MemoryExportService {
   }()
 }
 
-private extension Array {
-  func chunked(into size: Int) -> [[Element]] {
+extension Array {
+  fileprivate func chunked(into size: Int) -> [[Element]] {
     guard size > 0 else { return [self] }
     return stride(from: 0, to: count, by: size).map { start in
       Array(self[start..<Swift.min(start + size, count)])
