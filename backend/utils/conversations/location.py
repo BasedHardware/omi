@@ -73,9 +73,14 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
         logging.warning('Failed to read geocode cache for key %s: %s', cache_key, e)
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
-    url = f"https://maps.googleapis.com/maps/api/geocode/json"
-    client = get_maps_client()
-    response = await client.get(url, params={'latlng': f'{latitude},{longitude}', 'key': key})
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    try:
+        client = get_maps_client()
+        response = await client.get(url, params={'latlng': f'{latitude},{longitude}', 'key': key})
+    except Exception as e:
+        logging.warning('async geocode HTTP error for %s: %s', cache_key, e)
+        return None
+
     data = response.json()
     if data['status'] != 'OK' or not data.get('results'):
         return None
