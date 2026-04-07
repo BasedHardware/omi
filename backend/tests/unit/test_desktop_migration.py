@@ -125,6 +125,7 @@ utils_enc_stub.encrypt = MagicMock(return_value="encrypted")
 utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
 endpoints_stub = _stub_module("utils.other.endpoints")
 endpoints_stub.get_current_user_uid = MagicMock()
+endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
 _stub_module("utils.observability")
 
