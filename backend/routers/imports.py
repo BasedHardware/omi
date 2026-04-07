@@ -11,6 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 import database.import_jobs as import_jobs_db
+from utils.executors import storage_executor
 import database.conversations as conversations_db
 from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
@@ -60,7 +61,8 @@ async def import_limitless_data(
         f = open(zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                await asyncio.to_thread(f.write, contents)
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(storage_executor, f.write, contents)
         finally:
             f.close()
     except Exception as e:
