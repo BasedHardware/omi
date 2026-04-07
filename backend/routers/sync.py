@@ -1119,7 +1119,8 @@ async def sync_local_files(
         def _run_vad(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        await asyncio.gather(*[asyncio.to_thread(_run_vad, path) for path in wav_paths])
+        loop = asyncio.get_running_loop()
+        await asyncio.gather(*[loop.run_in_executor(critical_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1196,7 +1197,8 @@ async def sync_local_files(
 
         await asyncio.gather(
             *[
-                asyncio.to_thread(
+                loop.run_in_executor(
+                    critical_executor,
                     process_segment,
                     path,
                     uid,
@@ -1449,7 +1451,8 @@ async def sync_local_files_v2(
         def _run_vad_v2(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        await asyncio.gather(*[asyncio.to_thread(_run_vad_v2, path) for path in wav_paths])
+        loop_v2 = asyncio.get_running_loop()
+        await asyncio.gather(*[loop_v2.run_in_executor(critical_executor, _run_vad_v2, path) for path in wav_paths])
 
         _cleanup_files(wav_paths)
         wav_paths = []
