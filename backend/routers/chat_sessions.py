@@ -184,7 +184,7 @@ def rate_message(
 @router.post('/v2/chat/initial-message', tags=['chat-sessions'])
 def create_initial_message(
     request: InitialMessageRequest,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     """Generate an initial greeting message for a chat session.
 
@@ -200,7 +200,7 @@ def create_initial_message(
 @router.post('/v2/chat/generate-title', tags=['chat-sessions'])
 def generate_session_title(
     request: GenerateTitleRequest,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     """Generate a title for a chat session based on its messages."""
     from utils.llm.clients import llm_mini
