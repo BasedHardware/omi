@@ -23,8 +23,9 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
     trigger_external_integrations,
 )
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import async_get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
+from utils.executors import critical_executor, storage_executor
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -85,12 +86,15 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await asyncio.to_thread(
-                    get_google_maps_location, geolocation.latitude, geolocation.longitude
+                conversation.geolocation = await async_get_google_maps_location(
+                    geolocation.latitude, geolocation.longitude
                 )
 
-            # Run blocking operations in thread pool to avoid blocking event loop
-            conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
+            # Run blocking operations in critical executor to avoid blocking event loop
+            loop = asyncio.get_running_loop()
+            conversation = await loop.run_in_executor(
+                critical_executor, process_conversation, uid, language, conversation
+            )
             messages = await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
@@ -206,13 +210,17 @@ async def _websocket_util_trigger(
             retries = batch.get('retries', 0)
             try:
                 chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
-                await asyncio.to_thread(
-                    upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
                 try:
-                    audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
+                    audio_files = await loop.run_in_executor(
+                        storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
+                    )
                     if audio_files:
-                        await asyncio.to_thread(
+                        await loop.run_in_executor(
+                            storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
