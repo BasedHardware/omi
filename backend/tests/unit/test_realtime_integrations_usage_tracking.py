@@ -209,17 +209,27 @@ async def test_no_tracking_when_no_llm_calls():
 
 
 @pytest.mark.asyncio
-async def test_track_usage_context_available_during_proactive_message():
-    """Verify the track_usage context is active when _process_mentor_proactive_notification is called."""
-    captured_ctx = {}
+async def test_track_usage_context_entered_around_proactive_message():
+    """Verify track_usage context manager is entered before _process_mentor_proactive_notification is called.
 
-    original_process = app_integrations._process_mentor_proactive_notification
+    Uses a spy context manager to record entry/exit order without relying on ContextVar state,
+    making this test immune to module-level mutations from other test files.
+    """
+    from contextlib import contextmanager
+
+    call_log = []
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        call_log.append(('enter', uid, feature))
+        yield
+        call_log.append(('exit', uid, feature))
 
     def spy_process(*args, **kwargs):
-        captured_ctx["ctx"] = usage_tracker.get_current_context()
+        call_log.append(('process_called',))
         return "Test notification"
 
-    with patch.object(
+    with patch.object(app_integrations, "track_usage", spy_track_usage), patch.object(
         app_integrations, "process_mentor_notification", MagicMock(return_value={'prompt': 'test', 'params': []})
     ), patch.object(app_integrations, "_process_mentor_proactive_notification", spy_process), patch.object(
         app_integrations, "send_app_notification", MagicMock()
@@ -228,6 +238,9 @@ async def test_track_usage_context_available_during_proactive_message():
     ):
         await app_integrations.trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
 
-    assert captured_ctx.get("ctx") is not None
-    assert captured_ctx["ctx"].feature == usage_tracker.Features.REALTIME_INTEGRATIONS
-    assert captured_ctx["ctx"].uid == "user-rt-3"
+    # track_usage must be entered with correct args before spy_process is called
+    assert ('enter', 'user-rt-3', 'realtime_integrations') in call_log
+    process_idx = next(i for i, e in enumerate(call_log) if e == ('process_called',))
+    enter_idx = next(i for i, e in enumerate(call_log) if e == ('enter', 'user-rt-3', 'realtime_integrations'))
+    exit_idx = next(i for i, e in enumerate(call_log) if e == ('exit', 'user-rt-3', 'realtime_integrations'))
+    assert enter_idx < process_idx < exit_idx
