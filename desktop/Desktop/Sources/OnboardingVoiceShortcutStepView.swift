@@ -40,7 +40,7 @@ struct OnboardingVoiceShortcutStepView: View {
             Spacer()
 
             VStack(spacing: 24) {
-                Text("Press and hold to test.\nDoes the button light up?")
+                Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
                     .multilineTextAlignment(.center)
