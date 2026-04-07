@@ -170,20 +170,17 @@ async def test_mentor_notification_tracked_under_realtime_integrations():
         with original_track(uid, feature):
             yield
 
-    # Make mentor notification fire
-    mentor_mod.process_mentor_notification = MagicMock(return_value={'prompt': 'test prompt', 'params': []})
-
+    # Make mentor notification fire — patch on app_integrations since it's a top-level import
     with patch.object(app_integrations, "track_usage", spy_track_usage), patch.object(
-        app_integrations, "send_app_notification", MagicMock()
-    ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
+        app_integrations, "process_mentor_notification", MagicMock(return_value={'prompt': 'test prompt', 'params': []})
+    ), patch.object(app_integrations, "send_app_notification", MagicMock()), patch.object(
+        app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})
+    ):
         await app_integrations.trigger_realtime_integrations("user-rt-1", [{"text": "hello"}], "conv-1")
 
     # Should have tracked under REALTIME_INTEGRATIONS
     features_tracked = [f for _, f in captured_contexts]
     assert usage_tracker.Features.REALTIME_INTEGRATIONS in features_tracked
-
-    # Reset
-    mentor_mod.process_mentor_notification = MagicMock(return_value=None)
 
 
 @pytest.mark.asyncio
@@ -222,16 +219,15 @@ async def test_track_usage_context_available_during_proactive_message():
         captured_ctx["ctx"] = usage_tracker.get_current_context()
         return "Test notification"
 
-    mentor_mod.process_mentor_notification = MagicMock(return_value={'prompt': 'test', 'params': []})
-
-    with patch.object(app_integrations, "_process_mentor_proactive_notification", spy_process), patch.object(
+    with patch.object(
+        app_integrations, "process_mentor_notification", MagicMock(return_value={'prompt': 'test', 'params': []})
+    ), patch.object(app_integrations, "_process_mentor_proactive_notification", spy_process), patch.object(
         app_integrations, "send_app_notification", MagicMock()
-    ), patch.object(app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})):
+    ), patch.object(
+        app_integrations, "add_app_message", MagicMock(return_value={"id": "msg-1"})
+    ):
         await app_integrations.trigger_realtime_integrations("user-rt-3", [{"text": "hello"}], "conv-3")
 
     assert captured_ctx.get("ctx") is not None
     assert captured_ctx["ctx"].feature == usage_tracker.Features.REALTIME_INTEGRATIONS
     assert captured_ctx["ctx"].uid == "user-rt-3"
-
-    # Reset
-    mentor_mod.process_mentor_notification = MagicMock(return_value=None)
