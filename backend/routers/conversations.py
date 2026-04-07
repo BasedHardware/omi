@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -90,7 +92,7 @@ def process_in_progress_conversation(
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
-    messages = trigger_external_integrations(uid, conversation)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
