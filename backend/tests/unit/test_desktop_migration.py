@@ -1530,6 +1530,7 @@ class TestSessionScopedPrecedence:
     def _get_field_filter_fields():
         """Extract field names from all FieldFilter() calls."""
         from google.cloud.firestore_v1.base_query import FieldFilter
+
         fields = []
         for call in FieldFilter.call_args_list:
             if call.args:
@@ -1539,6 +1540,7 @@ class TestSessionScopedPrecedence:
     def test_get_messages_session_id_ignores_app_id(self):
         """When both app_id and chat_session_id are provided, only session filter is applied."""
         from google.cloud.firestore_v1.base_query import FieldFilter
+
         FieldFilter.reset_mock()
 
         mock_col = MagicMock()
@@ -1560,6 +1562,7 @@ class TestSessionScopedPrecedence:
     def test_delete_messages_session_id_ignores_app_id(self):
         """When both app_id and session_id are provided, only session filter is applied."""
         from google.cloud.firestore_v1.base_query import FieldFilter
+
         FieldFilter.reset_mock()
 
         mock_col = MagicMock()
@@ -1589,7 +1592,9 @@ class TestLlmDualWritePayloadParity:
         """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi in single set()."""
         mock_ref = MagicMock()
         with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_ref
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
             llm_usage_db.record_llm_usage_bucket(
                 uid='uid',
                 input_tokens=100,
@@ -1607,7 +1612,15 @@ class TestLlmDualWritePayloadParity:
         data = mock_ref.set.call_args[0][0]
 
         # Check all fields for primary bucket
-        expected_fields = ['input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'total_tokens', 'cost_usd', 'call_count']
+        expected_fields = [
+            'input_tokens',
+            'output_tokens',
+            'cache_read_tokens',
+            'cache_write_tokens',
+            'total_tokens',
+            'cost_usd',
+            'call_count',
+        ]
         for field in expected_fields:
             assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
             assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
@@ -1615,3 +1628,93 @@ class TestLlmDualWritePayloadParity:
         # Verify shared metadata fields
         assert 'date' in data
         assert 'last_updated' in data
+
+
+# ============================================================================
+# Chat AI endpoint tests (migrated from Rust)
+# ============================================================================
+
+
+class TestInitialMessageEndpoint:
+    """Test v2/chat/initial-message endpoint wire format."""
+
+    def test_returns_message_and_message_id(self):
+        from routers.chat_sessions import create_initial_message, InitialMessageRequest
+
+        mock_msg = MagicMock()
+        mock_msg.text = 'Hello! How can I help?'
+        mock_msg.id = 'msg-123'
+
+        with patch.dict(
+            'sys.modules', {'routers.chat': MagicMock(initial_message_util=MagicMock(return_value=mock_msg))}
+        ):
+            result = create_initial_message(InitialMessageRequest(session_id='s1', app_id='app1'), uid='u1')
+
+        assert result == {'message': 'Hello! How can I help?', 'message_id': 'msg-123'}
+
+    def test_app_id_defaults_to_none(self):
+        from routers.chat_sessions import create_initial_message, InitialMessageRequest
+
+        mock_msg = MagicMock()
+        mock_msg.text = 'Hi'
+        mock_msg.id = 'msg-456'
+        mock_util = MagicMock(return_value=mock_msg)
+
+        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+            create_initial_message(InitialMessageRequest(session_id='s1'), uid='u1')
+            mock_util.assert_called_once_with('u1', None)
+
+
+class TestGenerateTitleEndpoint:
+    """Test v2/chat/generate-title endpoint."""
+
+    @patch('database.chat.update_chat_session')
+    def test_returns_title(self, mock_update):
+        from routers.chat_sessions import generate_session_title, GenerateTitleRequest, TitleMessageInput
+
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = 'Project Discussion'
+        mock_llm.invoke.return_value = mock_response
+
+        request = GenerateTitleRequest(
+            session_id='s1',
+            messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
+        )
+        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+            result = generate_session_title(request, uid='u1')
+
+        assert result == {'title': 'Project Discussion'}
+        mock_update.assert_called_once_with('u1', 's1', title='Project Discussion')
+
+    @patch('database.chat.update_chat_session')
+    def test_empty_response_defaults_to_new_chat(self, mock_update):
+        from routers.chat_sessions import generate_session_title, GenerateTitleRequest, TitleMessageInput
+
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '  '
+        mock_llm.invoke.return_value = mock_response
+
+        request = GenerateTitleRequest(
+            session_id='s1',
+            messages=[TitleMessageInput(text='hi', sender='human')],
+        )
+        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+            result = generate_session_title(request, uid='u1')
+
+        assert result == {'title': 'New Chat'}
+
+
+class TestChatMessageCount:
+    """Test v1/users/stats/chat-messages endpoint."""
+
+    @patch('database.chat.get_message_count')
+    def test_returns_count(self, mock_count):
+        from routers.chat_sessions import get_chat_message_count
+
+        mock_count.return_value = 42
+        result = get_chat_message_count(uid='u1')
+
+        assert result == {'count': 42}
+        mock_count.assert_called_once_with('u1')
