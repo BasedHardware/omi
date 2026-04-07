@@ -113,6 +113,16 @@ for name in [
 # Ensure http_client stubs have correct attributes
 sys.modules["utils.http_client"].get_webhook_client = MagicMock()
 sys.modules["utils.http_client"].get_maps_client = MagicMock()
+_mock_cb = MagicMock()
+_mock_cb.allow_request = MagicMock(return_value=True)
+_mock_cb.record_success = MagicMock()
+_mock_cb.record_failure = MagicMock()
+sys.modules["utils.http_client"].get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
+import asyncio as _asyncio
+
+sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
+sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
+sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
 
 # Ensure log_sanitizer stubs have correct attributes
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
