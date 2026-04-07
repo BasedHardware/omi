@@ -28,6 +28,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/voice_playback_service.dart';
 import 'device_settings.dart';
 import 'phone_call_settings_page.dart';
 import '../conversations/auto_sync_page.dart';
@@ -262,6 +263,56 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     });
   }
 
+  Widget _buildVoiceResponseToggle() {
+    return StatefulBuilder(
+      builder: (context, setToggleState) {
+        bool isEnabled = SharedPreferencesUtil().voiceResponseEnabled;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: FaIcon(FontAwesomeIcons.volumeHigh, color: Color(0xFF8E8E93), size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Voice Responses',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Speak answers to voice questions',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: isEnabled,
+                onChanged: (value) {
+                  setToggleState(() {
+                    SharedPreferencesUtil().voiceResponseEnabled = value;
+                    if (!value) {
+                      VoicePlaybackService.instance.stop();
+                    }
+                  });
+                },
+                activeTrackColor: const Color(0xFF34C759),
+                thumbColor: WidgetStateProperty.all(Colors.white),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildOmiModeContent(BuildContext context) {
     return Consumer<UsageProvider>(
       builder: (context, usageProvider, child) {
@@ -404,6 +455,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     routeToPage(context, const PermissionsPage());
                   },
                 ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Voice Responses Section
+            _buildSectionContainer(
+              children: [
+                _buildVoiceResponseToggle(),
               ],
             ),
             const SizedBox(height: 32),
