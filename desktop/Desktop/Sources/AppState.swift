@@ -2270,8 +2270,8 @@ class AppState: ObservableObject {
             id: old.id,
             text: old.text,
             speaker: old.speaker,
-            isUser: isUser ? true : old.isUser,
-            personId: personId ?? old.personId,
+            isUser: isUser,
+            personId: isUser ? nil : personId,
             start: old.start,
             end: old.end,
             translations: old.translations
