@@ -23,6 +23,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
+import 'package:omi/services/voice_playback_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -478,6 +479,13 @@ class MessageProvider extends ChangeNotifier {
 
     MixpanelManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
+    // Voice messages always trigger voice response
+    final voicePlayback = VoicePlaybackService.instance;
+    if (voicePlayback.isEnabled) {
+      voicePlayback.stop();
+      voicePlayback.playFiller();
+    }
+
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
@@ -508,6 +516,9 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
+          if (voicePlayback.isEnabled) {
+            voicePlayback.updateStreamingResponse(message.text);
+          }
           notifyListeners();
           continue;
         }
@@ -515,6 +526,9 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[aiIndex] = message;
+          if (voicePlayback.isEnabled) {
+            voicePlayback.updateStreamingResponse(message.text, isFinal: true);
+          }
           notifyListeners();
           continue;
         }
@@ -552,15 +566,24 @@ class MessageProvider extends ChangeNotifier {
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
 
+    final isVoiceInput = _isNextMessageFromVoice;
     MixpanelManager().chatMessageSent(
       message: text,
       includesFiles: uploadedFiles.isNotEmpty,
       numberOfFiles: uploadedFiles.length,
       chatTargetId: chatTargetId,
       isPersonaChat: isPersonaChat,
-      isVoiceInput: _isNextMessageFromVoice,
+      isVoiceInput: isVoiceInput,
     );
     _isNextMessageFromVoice = false;
+
+    // Start voice playback filler if this was a voice input
+    final voicePlayback = VoicePlaybackService.instance;
+    final shouldPlayVoice = isVoiceInput && voicePlayback.isEnabled;
+    if (shouldPlayVoice) {
+      voicePlayback.stop();
+      voicePlayback.playFiller();
+    }
 
     // Route through agent VM if Claude Agent is enabled
     if (SharedPreferencesUtil().claudeAgentEnabled) {
@@ -591,6 +614,9 @@ class MessageProvider extends ChangeNotifier {
         textBuffer = '';
         aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
         HapticFeedback.lightImpact();
+        if (shouldPlayVoice) {
+          voicePlayback.updateStreamingResponse(message.text);
+        }
         notifyListeners();
       }
     }
@@ -630,6 +656,9 @@ class MessageProvider extends ChangeNotifier {
           agentLog('[MessageProvider] done — $chunkCount chunks, final text ${message.text.length} chars');
           message = chunk.message!;
           messages[aiIndex] = message;
+          if (shouldPlayVoice) {
+            voicePlayback.updateStreamingResponse(message.text, isFinal: true);
+          }
           notifyListeners();
           continue;
         }
