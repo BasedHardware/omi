@@ -73,7 +73,7 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'critical_executor.submit(' in func_body, "v2 must submit to critical_executor"
+        assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
         assert '_process_segments_background' in func_body, "v2 must submit the background worker function"
 
     def test_v2_has_fair_use_gates(self):
