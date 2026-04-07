@@ -161,6 +161,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
+        if not webhook_url:
+            return
         webhook_url = webhook_url.split(',')[0]
         if not webhook_url:
             return
