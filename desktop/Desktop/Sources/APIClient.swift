@@ -11,9 +11,9 @@ actor APIClient {
         return "https://api.omi.me/"
     }
 
-    // Rust desktop backend URL — used only for: conversations/from-segments (LLM pipeline),
-    // chat/initial-message & generate-title (AI generation), agent VM, config/api-keys,
-    // Crisp, and local test subscription. All data CRUD is on Python.
+    // Rust desktop backend URL — used only for: agent VM provisioning/status,
+    // config/api-keys, Crisp, and local test subscription. All data CRUD,
+    // chat AI, and title generation are on Python.
     // Set via OMI_API_URL env var (in .env).
     var rustBackendURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
@@ -443,7 +443,7 @@ extension APIClient {
             let count: Int
         }
 
-        let response: CountResponse = try await get("v1/users/stats/chat-messages", customBaseURL: rustBackendURL)
+        let response: CountResponse = try await get("v1/users/stats/chat-messages")
         return response.count
     }
 
@@ -4261,7 +4261,7 @@ extension APIClient {
         }
 
         let body = InitialMessageRequest(sessionId: sessionId, appId: appId)
-        return try await post("v2/chat/initial-message", body: body, customBaseURL: rustBackendURL)
+        return try await post("v2/chat/initial-message", body: body)
     }
 
     /// Generate a title for a chat session based on its messages
@@ -4285,7 +4285,7 @@ extension APIClient {
             sessionId: sessionId,
             messages: messages.map { TitleMessageInput(text: $0.text, sender: $0.sender) }
         )
-        return try await post("v2/chat/generate-title", body: body, customBaseURL: rustBackendURL)
+        return try await post("v2/chat/generate-title", body: body)
     }
 }
 
