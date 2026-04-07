@@ -6,11 +6,18 @@ Messages are persistence-only writes (no LLM streaming) — they use
 streams AI responses.
 """
 
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.chat as chat_db
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +47,21 @@ class SaveMessageRequest(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
+
+
+class InitialMessageRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    app_id: str | None = None
+
+
+class TitleMessageInput(BaseModel):
+    text: str
+    sender: str
+
+
+class GenerateTitleRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    messages: List[TitleMessageInput] = Field(..., min_length=1, max_length=50)
 
 
 # ============================================================================
@@ -152,3 +174,55 @@ def rate_message(
     if not chat_db.update_message_rating(uid, message_id, request.rating):
         raise HTTPException(status_code=404, detail='Message not found')
     return {'status': 'ok'}
+
+
+# ============================================================================
+# CHAT AI ENDPOINTS (migrated from Rust desktop backend)
+# ============================================================================
+
+
+@router.post('/v2/chat/initial-message', tags=['chat-sessions'])
+def create_initial_message(
+    request: InitialMessageRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Generate an initial greeting message for a chat session.
+
+    Delegates to the existing initial_message_util in routers/chat.py which
+    handles persona detection, previous message context, and LLM generation.
+    """
+    from routers.chat import initial_message_util
+
+    ai_message = initial_message_util(uid, request.app_id)
+    return {'message': ai_message.text, 'message_id': ai_message.id}
+
+
+@router.post('/v2/chat/generate-title', tags=['chat-sessions'])
+def generate_session_title(
+    request: GenerateTitleRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Generate a title for a chat session based on its messages."""
+    from utils.llm.clients import llm_mini
+
+    conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
+    prompt = (
+        "Generate a short, descriptive title (max 6 words) for this chat conversation. "
+        "Return ONLY the title text, no quotes or punctuation.\n\n"
+        f"{conversation}"
+    )
+    title = llm_mini.invoke(prompt).content.strip().strip('"\'')
+    if not title:
+        title = 'New Chat'
+
+    chat_db.update_chat_session(uid, request.session_id, title=title)
+    return {'title': title}
+
+
+@router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'])
+def get_chat_message_count(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Get total count of chat messages for the user."""
+    count = chat_db.get_message_count(uid)
+    return {'count': count}
