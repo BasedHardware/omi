@@ -4,7 +4,9 @@ Verifies that realtime_transcript_webhook and send_audio_bytes_developer_webhook
 use httpx.AsyncClient instead of blocking requests.post.
 """
 
+import ast
 import os
+import re
 import sys
 import types
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -182,6 +184,91 @@ class TestSendAudioBytesDeveloperWebhook:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
+
+
+class TestConversationAndSummaryWebhooksStructural:
+    """AST-based structural tests for conversation_created_webhook and day_summary_webhook.
+
+    These were migrated from blocking requests to async httpx. Verify the migration
+    is in place and uses httpx (not requests) without importing the module at the
+    class level (to avoid heavy transitive deps).
+    """
+
+    @staticmethod
+    def _read_webhooks_source() -> str:
+        webhooks_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'webhooks.py')
+        with open(webhooks_path) as f:
+            return f.read()
+
+    @staticmethod
+    def _parse_webhooks_ast():
+        webhooks_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'webhooks.py')
+        with open(webhooks_path) as f:
+            return ast.parse(f.read())
+
+    def test_conversation_created_webhook_is_async(self):
+        """conversation_created_webhook must be defined as an async function."""
+        tree = self._parse_webhooks_ast()
+        async_funcs = {node.name for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef)}
+        assert (
+            'conversation_created_webhook' in async_funcs
+        ), "conversation_created_webhook must be async — it was migrated from blocking requests to httpx"
+
+    def test_day_summary_webhook_is_async(self):
+        """day_summary_webhook must be defined as an async function."""
+        tree = self._parse_webhooks_ast()
+        async_funcs = {node.name for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef)}
+        assert (
+            'day_summary_webhook' in async_funcs
+        ), "day_summary_webhook must be async — it was migrated from blocking requests to httpx"
+
+    def test_webhooks_does_not_import_requests(self):
+        """utils/webhooks.py must not import the blocking requests library."""
+        source = self._read_webhooks_source()
+        # Allow 'requests' only as part of another name (e.g. 'allow_request')
+        bare_import = re.search(r'^import requests\b', source, re.MULTILINE)
+        from_import = re.search(r'^from requests\b', source, re.MULTILINE)
+        assert (
+            bare_import is None and from_import is None
+        ), "utils/webhooks.py must not import the blocking 'requests' library — use httpx.AsyncClient"
+
+    def test_webhooks_uses_httpx_client(self):
+        """utils/webhooks.py must use the shared httpx client (get_webhook_client)."""
+        source = self._read_webhooks_source()
+        assert (
+            'get_webhook_client' in source
+        ), "webhooks.py must use get_webhook_client() (shared httpx.AsyncClient) for HTTP calls"
+
+    def test_conversation_created_webhook_uses_await_post(self):
+        """conversation_created_webhook must await an async HTTP post, not call requests.post."""
+        source = self._read_webhooks_source()
+        start = source.index('async def conversation_created_webhook')
+        # End at next top-level async def
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert 'await' in func_body, "conversation_created_webhook must use await for async HTTP call"
+        assert '.post(' in func_body, "conversation_created_webhook must call .post() to send the payload"
+        assert (
+            'requests.post' not in func_body
+        ), "conversation_created_webhook must not use blocking requests.post — use httpx.AsyncClient"
+
+    def test_day_summary_webhook_uses_await_post(self):
+        """day_summary_webhook must await an async HTTP post, not call requests.post."""
+        source = self._read_webhooks_source()
+        start = source.index('async def day_summary_webhook')
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert 'await' in func_body, "day_summary_webhook must use await for async HTTP call"
+        assert '.post(' in func_body, "day_summary_webhook must call .post() to send the payload"
+        assert (
+            'requests.post' not in func_body
+        ), "day_summary_webhook must not use blocking requests.post — use httpx.AsyncClient"
 
 
 class TestCircuitBreakerIntegration:
