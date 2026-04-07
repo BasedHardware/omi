@@ -13,7 +13,8 @@ from database.apps import (
     get_persona_by_username_twitter_handle_db,
 )
 from database.redis_db import delete_generic_cache, save_username, is_username_taken
-from utils.http_client import get_webhook_client
+import httpx
+
 from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
 import logging
@@ -90,20 +91,20 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
     headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
     async def fetch_profile():
-        client = get_webhook_client()
-        response = await client.get(url, headers=headers, timeout=defaultTimeoutSec)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'error':
-                raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'error':
+                    raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
 
-            # Ensure avatar URL is properly formatted (full size)
-            if 'avatar' in data and data['avatar'] and '_normal' in data['avatar']:
-                data['avatar'] = data['avatar'].replace('_normal', '')
+                # Ensure avatar URL is properly formatted (full size)
+                if 'avatar' in data and data['avatar'] and '_normal' in data['avatar']:
+                    data['avatar'] = data['avatar'].replace('_normal', '')
 
-            return TwitterProfile.from_dict(data)
-        # else
-        response.raise_for_status()
+                return TwitterProfile.from_dict(data)
+            # else
+            response.raise_for_status()
 
     return await async_with_retry(f"fetching Twitter profile for {handle}", fetch_profile)
 
@@ -125,23 +126,23 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
     async def fetch_timeline():
-        client = get_webhook_client()
-        response = await client.get(url, headers=headers, timeout=defaultTimeoutSec)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'error':
-                raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'error':
+                    raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
 
-            # Convert raw timeline to structured model
-            timeline_data = data.get('timeline', [])
-            tweets = [
-                TwitterTweet(text=tweet['text'], created_at=tweet['created_at'], id=tweet['tweet_id'])
-                for tweet in timeline_data
-            ]
+                # Convert raw timeline to structured model
+                timeline_data = data.get('timeline', [])
+                tweets = [
+                    TwitterTweet(text=tweet['text'], created_at=tweet['created_at'], id=tweet['tweet_id'])
+                    for tweet in timeline_data
+                ]
 
-            return TwitterTimeline(timeline=tweets)
-        # else
-        response.raise_for_status()
+                return TwitterTimeline(timeline=tweets)
+            # else
+            response.raise_for_status()
 
     return await async_with_retry(f"fetching Twitter timeline for {handle}", fetch_timeline)
 
