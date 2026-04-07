@@ -172,16 +172,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
       // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
       const int minAudioBytes = 16000;
-      if (_pcmBytesWritten < minAudioBytes) {
-        Logger.debug('Audio too short ($_pcmBytesWritten bytes), closing without error');
+      final pcmLength = _pcmFile != null && _pcmFile!.existsSync() ? await _pcmFile!.length() : _pcmBytesWritten;
+      if (pcmLength < minAudioBytes) {
+        Logger.debug('Audio too short ($pcmLength bytes), closing without error');
         close();
         return;
       }
 
       // Convert PCM file to WAV file (reads from disk, writes to disk — no full-file RAM copy)
+      // Keep PCM file until WAV is confirmed on disk — if conversion fails, PCM is the only copy
       _wavFile = await _convertPcmFileToWavFile(_pcmFile!, 16000, 1);
 
-      // Clean up the raw PCM file
+      // WAV conversion succeeded — safe to delete PCM file now
       await _cleanupPcmFile();
 
       final transcript = await transcribeVoiceMessage(_wavFile!);
@@ -199,8 +201,11 @@ class VoiceRecorderProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
-      // Clean up PCM file on error (WAV file kept for retry)
-      await _cleanupPcmFile();
+      // Only clean up PCM if WAV exists (conversion succeeded).
+      // If WAV conversion failed, keep PCM as the only surviving copy.
+      if (_wavFile != null && _wavFile!.existsSync()) {
+        await _cleanupPcmFile();
+      }
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
@@ -214,6 +219,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
     if (_wavFile != null && _wavFile!.existsSync()) {
       // Retry transcription with existing WAV file on disk (no re-encoding needed)
       _retryTranscription();
+    } else if (_pcmFile != null && _pcmFile!.existsSync()) {
+      // WAV conversion failed but PCM survived — retry from PCM
+      processRecording();
     } else {
       startRecording();
     }
