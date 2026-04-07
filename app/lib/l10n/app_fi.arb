@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "synkronoidaan automaattisesti"
+    "willSyncAutomatically": "synkronoidaan automaattisesti",
+    "transcriptionConnecting": "Yhdistetään litterointia...",
+    "transcriptionReconnecting": "Yhdistetään litterointia uudelleen...",
+    "transcriptionUnavailable": "Litterointi ei ole käytettävissä",
+    "audioOutput": "Äänilähtö"
 }

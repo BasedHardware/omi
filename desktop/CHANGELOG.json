@@ -2,6 +2,76 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.242",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.241",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.240",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.239",
+      "date": "2026-04-07",
+      "changes": [
+        "Migrated data APIs to production backend for improved reliability and feature parity"
+      ]
+    },
+    {
+      "version": "0.11.238",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.237",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.236",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.235",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.234",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.233",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.232",
       "date": "2026-04-06",
       "changes": [

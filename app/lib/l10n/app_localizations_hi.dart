@@ -8967,6 +8967,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get transcriptionConnecting => 'ट्रांसक्रिप्शन कनेक्ट हो रहा है...';
+
+  @override
+  String get transcriptionReconnecting => 'ट्रांसक्रिप्शन फिर से कनेक्ट हो रहा है...';
+
+  @override
+  String get transcriptionUnavailable => 'ट्रांसक्रिप्शन उपलब्ध नहीं है';
+
+  @override
+  String get audioOutput => 'ऑडियो आउटपुट';
+
+  @override
   String get tasksClearCompleted => 'Clear Completed';
 
   @override

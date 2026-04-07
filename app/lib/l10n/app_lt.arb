@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "bus sinchronizuota automatiškai"
+    "willSyncAutomatically": "bus sinchronizuota automatiškai",
+    "transcriptionConnecting": "Jungiamasi prie transkripcijos...",
+    "transcriptionReconnecting": "Perjungiamasi prie transkripcijos...",
+    "transcriptionUnavailable": "Transkripcija nepasiekiama",
+    "audioOutput": "Garso išvestis"
 }

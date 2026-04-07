@@ -1713,7 +1713,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -8966,6 +8971,18 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Pripájanie prepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opätovné pripájanie prepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Prepis nie je dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
 
   @override
   String get tasksClearCompleted => 'Clear Completed';

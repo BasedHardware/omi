@@ -1708,7 +1708,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8976,6 +8981,18 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'Transkriptsiooni ühendamine...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkriptsiooni uuesti ühendamine...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkriptsioon pole saadaval';
+
+  @override
+  String get audioOutput => 'Heliväljund';
 
   @override
   String get tasksClearCompleted => 'Clear Completed';

@@ -91,6 +91,7 @@ html = f"""<!doctype html>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OMI Onboarding Sync</title>
+    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
     <style>
       :root {{
         color-scheme: dark;

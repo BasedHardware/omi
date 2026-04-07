@@ -2925,5 +2925,9 @@
             }
         }
     },
-    "willSyncAutomatically": "sünkroniseeritakse automaatselt"
+    "willSyncAutomatically": "sünkroniseeritakse automaatselt",
+    "transcriptionConnecting": "Transkriptsiooni ühendamine...",
+    "transcriptionReconnecting": "Transkriptsiooni uuesti ühendamine...",
+    "transcriptionUnavailable": "Transkriptsioon pole saadaval",
+    "audioOutput": "Heliväljund"
 }

@@ -1,5 +1,6 @@
-import SwiftUI
 import AppKit
+import GRDB
+import SwiftUI
 
 // MARK: - Safe Dismiss Button
 /// A dismiss button that prevents click-through to underlying views on macOS.
@@ -106,9 +107,13 @@ struct DismissButton: View {
 
 struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
+    var appState: AppState? = nil
+    @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
-    @State private var showPersonaPage = false
+    @State private var selectedConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
 
     var body: some View {
@@ -197,6 +202,14 @@ struct AppsPage: View {
                                 }
                             }
                         } else {
+                            ImportsSection(statusStore: connectorStatusStore) { connector in
+                                selectedConnector = connector
+                            }
+
+                            ExportsSection(statuses: exportStatuses) { destination in
+                                selectedExportDestination = destination
+                            }
+
                             // Featured section (apps marked as is_popular in backend)
                             if !appProvider.popularApps.isEmpty {
                                 AppGridSection(
@@ -263,17 +276,41 @@ struct AppsPage: View {
                     AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
                 }
         }
-        .dismissableSheet(isPresented: $showPersonaPage) {
-            PersonaPage(onDismiss: {
-                showPersonaPage = false
+        .dismissableSheet(item: $selectedConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: connectorStatusStore,
+                onDismiss: {
+                selectedConnector = nil
             })
-            .frame(width: 500, height: 650)
+            .frame(width: 520, height: 620)
+        }
+        .dismissableSheet(item: $selectedExportDestination) { destination in
+            MemoryExportDestinationSheet(
+                destination: destination,
+                statuses: $exportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
         }
         .onAppear {
             // If apps are already loaded, notify sidebar to clear loading indicator
             if !appProvider.isLoading {
                 NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
             }
+            // Retry fetch if initial load failed and apps are empty
+            if appProvider.apps.isEmpty && !appProvider.isLoading {
+                Task {
+                    await appProvider.fetchApps()
+                }
+            }
+        }
+        .task {
+            await connectorStatusStore.refresh()
+            exportStatuses = await MemoryExportService.shared.allStatuses()
         }
     }
 
@@ -352,7 +389,7 @@ struct AppsPage: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(OmiColors.backgroundSecondary)
-                .foregroundColor(appProvider.selectedCategory != nil ? OmiColors.textPrimary : OmiColors.textSecondary)
+                .foregroundColor(OmiColors.textPrimary)
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
@@ -369,19 +406,11 @@ struct AppsPage: View {
                 SmallHeaderButton(
                     icon: "app.badge.fill",
                     label: "Create App",
-                    color: OmiColors.purplePrimary
+                    color: OmiColors.textSecondary
                 ) {
                     if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
                         NSWorkspace.shared.open(url)
                     }
-                }
-
-                SmallHeaderButton(
-                    icon: "person.crop.circle.fill",
-                    label: "My Clone",
-                    color: .blue
-                ) {
-                    showPersonaPage = true
                 }
             }
         }
@@ -487,6 +516,878 @@ struct AppsPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Imports Section
+
+struct ImportConnector: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let description: String
+    let brand: ConnectorBrand
+    let statusText: String
+    let metricText: String?
+    let actionTitle: String
+    let isConnected: Bool
+
+    static let all: [ImportConnector] = [
+        ImportConnector(
+            id: "calendar",
+            title: "Calendar",
+            subtitle: "Google Calendar",
+            description: "Import events and recurring routines.",
+            brand: .calendar,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
+            id: "email",
+            title: "Email",
+            subtitle: "Gmail",
+            description: "Import email history and follow-ups.",
+            brand: .gmail,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
+            id: "local-files",
+            title: "Local files",
+            subtitle: "This Mac",
+            description: "Index documents, code, and working folders.",
+            brand: .localFiles,
+            statusText: "Connected",
+            metricText: "Available on this device",
+            actionTitle: "Connected",
+            isConnected: true
+        ),
+        ImportConnector(
+            id: "apple-notes",
+            title: "Apple Notes",
+            subtitle: "Private notes",
+            description: "Import notes and private written context.",
+            brand: .appleNotes,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
+            id: "chatgpt",
+            title: "ChatGPT",
+            subtitle: "Memory import",
+            description: "Paste a memory export into Omi.",
+            brand: .chatgpt,
+            statusText: "Optional",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
+            id: "claude",
+            title: "Claude",
+            subtitle: "Memory import",
+            description: "Paste a memory export into Omi.",
+            brand: .claude,
+            statusText: "Optional",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+    ]
+}
+
+@MainActor
+final class ImportConnectorStatusStore: ObservableObject {
+    struct ConnectorMetrics {
+        var sourceCount: Int?
+        var memoryCount: Int?
+        var lastSyncedAt: Date?
+        var lastDeltaCount: Int?
+        var availabilityText: String?
+    }
+
+    struct Snapshot {
+        let isConnected: Bool
+        let actionTitle: String
+        let primaryText: String
+        let secondaryText: String?
+    }
+
+    @Published private var metricsByID: [String: ConnectorMetrics] = [:]
+
+    private let defaults: UserDefaults
+    private let sourceCountKeyPrefix = "appsImportConnectorSourceCount."
+    private let memoryCountKeyPrefix = "appsImportConnectorMemoryCount."
+    private let lastSyncedAtKeyPrefix = "appsImportConnectorLastSyncedAt."
+    private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
+    private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
+    private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
+    private let appleNotesFolderDefaultsKey = "onboardingAppleNotesFolderPath"
+    private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
+    private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        load()
+    }
+
+    func snapshot(for connector: ImportConnector) -> Snapshot {
+        let metrics = metricsByID[connector.id] ?? ConnectorMetrics()
+        let isConnected =
+            metrics.memoryCount.map { $0 > 0 } ?? false
+            || metrics.sourceCount.map { $0 > 0 } ?? false
+            || metrics.availabilityText != nil
+            || connector.id == "local-files"
+        let actionTitle: String
+        if manualConnectorIDs.contains(connector.id) {
+            actionTitle = isConnected ? "Update" : "Connect"
+        } else {
+            actionTitle = isConnected ? "Sync now" : "Connect"
+        }
+
+        return Snapshot(
+            isConnected: isConnected,
+            actionTitle: actionTitle,
+            primaryText: primaryText(for: connector, metrics: metrics, isConnected: isConnected),
+            secondaryText: secondaryText(for: connector, metrics: metrics, isConnected: isConnected)
+        )
+    }
+
+    func markSynced(
+        connectorID: String,
+        sourceCount: Int? = nil,
+        memoryCount: Int? = nil,
+        lastDeltaCount: Int? = nil,
+        availabilityText: String? = nil,
+        syncedAt: Date = Date()
+    ) {
+        var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
+        if let sourceCount {
+            metrics.sourceCount = max(sourceCount, 0)
+            defaults.set(metrics.sourceCount, forKey: sourceCountKeyPrefix + connectorID)
+        }
+        if let memoryCount {
+            metrics.memoryCount = max(memoryCount, 0)
+            defaults.set(metrics.memoryCount, forKey: memoryCountKeyPrefix + connectorID)
+        }
+        metrics.lastSyncedAt = syncedAt
+        defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + connectorID)
+        metrics.lastDeltaCount = lastDeltaCount
+        defaults.set(lastDeltaCount != nil, forKey: hasLastDeltaKeyPrefix + connectorID)
+        if let lastDeltaCount {
+            defaults.set(lastDeltaCount, forKey: lastDeltaCountKeyPrefix + connectorID)
+        } else {
+            defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
+        }
+        if let availabilityText {
+            metrics.availabilityText = availabilityText
+        }
+        metricsByID[connectorID] = metrics
+    }
+
+    func refresh() async {
+        await refreshLocalFilesMetrics()
+        await refreshAppleNotesMetrics()
+    }
+
+    private func load() {
+        for connector in ImportConnector.all {
+            var metrics = ConnectorMetrics()
+
+            if defaults.object(forKey: sourceCountKeyPrefix + connector.id) != nil {
+                metrics.sourceCount = defaults.integer(forKey: sourceCountKeyPrefix + connector.id)
+            }
+            if defaults.object(forKey: memoryCountKeyPrefix + connector.id) != nil {
+                metrics.memoryCount = defaults.integer(forKey: memoryCountKeyPrefix + connector.id)
+            }
+            if defaults.object(forKey: lastSyncedAtKeyPrefix + connector.id) != nil {
+                let timestamp = defaults.double(forKey: lastSyncedAtKeyPrefix + connector.id)
+                if timestamp > 0 {
+                    metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+                }
+            }
+            if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
+                metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
+            }
+
+            metricsByID[connector.id] = metrics
+        }
+
+        hydrateLegacyManualImports()
+
+        if let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey), !folderPath.isEmpty {
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
+        }
+    }
+
+    private func hydrateLegacyManualImports() {
+        let legacyChatGPTCount = defaults.integer(forKey: onboardingChatGPTImportedMemoriesKey)
+        if legacyChatGPTCount > 0, metricsByID["chatgpt"]?.memoryCount == nil {
+            var metrics = metricsByID["chatgpt"] ?? ConnectorMetrics()
+            metrics.memoryCount = legacyChatGPTCount
+            metrics.availabilityText = "Imported during onboarding"
+            metricsByID["chatgpt"] = metrics
+        }
+
+        let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
+        if legacyClaudeCount > 0, metricsByID["claude"]?.memoryCount == nil {
+            var metrics = metricsByID["claude"] ?? ConnectorMetrics()
+            metrics.memoryCount = legacyClaudeCount
+            metrics.availabilityText = "Imported during onboarding"
+            metricsByID["claude"] = metrics
+        }
+    }
+
+    private func refreshLocalFilesMetrics() async {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
+
+        do {
+            let result: (count: Int, lastIndexedAt: Date?) = try await dbQueue.read { db in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                        SELECT COUNT(*) AS count, MAX(indexedAt) AS lastIndexedAt
+                        FROM indexed_files
+                    """
+                ) else {
+                    return (0, nil)
+                }
+                let count: Int = row["count"] ?? 0
+                let lastIndexedAt: Date? = row["lastIndexedAt"]
+                return (count, lastIndexedAt)
+            }
+
+            var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
+            metrics.sourceCount = result.count
+            metrics.lastSyncedAt = result.lastIndexedAt
+            metrics.availabilityText = "On-device index"
+            metricsByID["local-files"] = metrics
+        } catch {
+            log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
+        }
+    }
+
+    private func refreshAppleNotesMetrics() async {
+        do {
+            let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+            guard !notes.isEmpty else { return }
+
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.sourceCount = notes.count
+            metrics.availabilityText = "Private notes accessible"
+            metricsByID["apple-notes"] = metrics
+        } catch {
+            let folderPath = defaults.string(forKey: appleNotesFolderDefaultsKey) ?? ""
+            guard !folderPath.isEmpty else { return }
+            var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
+            metrics.availabilityText = "Folder granted"
+            metricsByID["apple-notes"] = metrics
+        }
+    }
+
+    private func primaryText(
+        for connector: ImportConnector,
+        metrics: ConnectorMetrics,
+        isConnected: Bool
+    ) -> String {
+        if let sourceCount = metrics.sourceCount {
+            if let memoryCount = metrics.memoryCount, memoryCount > 0 {
+                return
+                    "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount)) • \(memoryCount.formatted()) memories"
+            }
+            if connector.id == "local-files" || sourceCount > 0 {
+                return "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount))"
+            }
+        }
+
+        if let memoryCount = metrics.memoryCount, memoryCount > 0 {
+            return "\(memoryCount.formatted()) memories imported"
+        }
+
+        if isConnected, let availabilityText = metrics.availabilityText {
+            return availabilityText
+        }
+
+        return connector.statusText
+    }
+
+    private func secondaryText(
+        for connector: ImportConnector,
+        metrics: ConnectorMetrics,
+        isConnected: Bool
+    ) -> String? {
+        if let lastSyncedAt = metrics.lastSyncedAt {
+            var text = "Synced \(relativeTimestamp(lastSyncedAt))"
+            if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
+                text += " • +\(lastDeltaCount.formatted()) new"
+            }
+            return text
+        }
+
+        if let availabilityText = metrics.availabilityText, availabilityText != primaryText(for: connector, metrics: metrics, isConnected: isConnected) {
+            return availabilityText
+        }
+
+        if let metricText = connector.metricText {
+            return metricText
+        }
+
+        return manualConnectorIDs.contains(connector.id) && isConnected ? "Imported earlier" : nil
+    }
+
+    private func sourceLabel(for connector: ImportConnector, count: Int) -> String {
+        switch connector.id {
+        case "calendar":
+            return count == 1 ? "event" : "events"
+        case "email":
+            return count == 1 ? "email" : "emails"
+        case "local-files":
+            return count == 1 ? "file indexed" : "files indexed"
+        case "apple-notes":
+            return count == 1 ? "note" : "notes"
+        default:
+            return count == 1 ? "item" : "items"
+        }
+    }
+
+    private func relativeTimestamp(_ date: Date) -> String {
+        RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+    }
+}
+
+struct ImportsSection: View {
+    private let connectors = ImportConnector.all
+    @ObservedObject var statusStore: ImportConnectorStatusStore
+    let onSelectConnector: (ImportConnector) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Imports")
+                .scaledFont(size: 18, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 220), spacing: 16)
+            ], spacing: 16) {
+                ForEach(connectors) { connector in
+                    ImportConnectorCard(
+                        connector: connector,
+                        snapshot: statusStore.snapshot(for: connector)
+                    ) {
+                        onSelectConnector(connector)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ImportConnectorCard: View {
+    let connector: ImportConnector
+    let snapshot: ImportConnectorStatusStore.Snapshot
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: 12)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(connector.title)
+                            .scaledFont(size: 14, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .lineLimit(1)
+
+                        Text(connector.subtitle)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+                }
+
+                Text(connector.description)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(snapshot.primaryText)
+                            .scaledFont(size: 11, weight: .medium)
+                            .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
+
+                        if let secondaryText = snapshot.secondaryText {
+                            Text(secondaryText)
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer()
+
+                    ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
+                }
+            }
+            .padding(14)
+            .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
+struct ImportConnectorActionButton: View {
+    let title: String
+    let isConnected: Bool
+
+    var body: some View {
+        Text(title)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
+            .frame(width: isConnected ? 84 : 72, height: 28)
+            .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(OmiColors.border, lineWidth: 1)
+            )
+    }
+}
+
+@MainActor
+private final class ImportConnectorSheetModel: ObservableObject {
+    struct SyncResult {
+        let sourceCount: Int?
+        let memoryCount: Int?
+        let newItems: Int?
+    }
+
+    @Published var isRunning = false
+    @Published var statusMessage: String?
+    @Published var errorMessage: String?
+    @Published var draftText = ""
+
+    func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(source.prompt, forType: .string)
+        NSWorkspace.shared.open(source.prefilledBrowserURL)
+    }
+
+    func importMemoryLog(source: OnboardingMemoryLogSource) async -> SyncResult? {
+        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = "Paste the full response first."
+            return nil
+        }
+
+        errorMessage = nil
+        statusMessage = nil
+        isRunning = true
+        defer { isRunning = false }
+
+        let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(trimmed, source: source)
+        guard result.memories > 0 else {
+            errorMessage = "No durable memories could be extracted from that import."
+            return nil
+        }
+
+        draftText = ""
+        statusMessage = "Imported \(result.memories.formatted()) memories from \(source.displayName)."
+        return SyncResult(sourceCount: nil, memoryCount: result.memories, newItems: result.memories)
+    }
+
+    func importGmail() async -> SyncResult? {
+        errorMessage = nil
+        statusMessage = nil
+        isRunning = true
+        defer { isRunning = false }
+
+        do {
+            let emails = try await GmailReaderService.shared.readRecentEmails(
+                maxResults: 300,
+                query: "newer_than:365d"
+            )
+            let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
+            let synthesis = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
+            let memoryCount = rawImport.saved + synthesis.memories
+            statusMessage =
+                "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
+            return SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func importCalendar() async -> SyncResult? {
+        errorMessage = nil
+        statusMessage = nil
+        isRunning = true
+        defer { isRunning = false }
+
+        do {
+            let events = try await CalendarReaderService.shared.readEvents(
+                daysBack: 365,
+                daysForward: 30,
+                maxResults: 500
+            )
+            let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
+            let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+            let memoryCount = rawImport.saved + synthesis.memories
+            statusMessage =
+                "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
+            return SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func importAppleNotes() async -> SyncResult? {
+        errorMessage = nil
+        statusMessage = nil
+        isRunning = true
+        defer { isRunning = false }
+
+        do {
+            return try await runAppleNotesImport()
+        } catch let error as AppleNotesReaderError {
+            switch error {
+            case .storeNotFound, .storeUnavailable:
+                break
+            }
+            let granted = await selectAppleNotesFolder()
+            guard granted else {
+                if errorMessage == nil {
+                    errorMessage = error.localizedDescription
+                }
+                return nil
+            }
+
+            do {
+                return try await runAppleNotesImport()
+            } catch {
+                errorMessage = error.localizedDescription
+                return nil
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func runAppleNotesImport() async throws -> SyncResult {
+        let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+        let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
+        let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
+        let memoryCount = rawImport.saved + synthesis.memories
+        statusMessage =
+            "Imported \(notes.count.formatted()) notes and saved \(memoryCount.formatted()) memories."
+        return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
+    }
+
+    func rescanLocalFiles(appState: AppState?) async -> SyncResult? {
+        guard let appState else {
+            errorMessage = "App state is unavailable right now."
+            return nil
+        }
+
+        errorMessage = nil
+        statusMessage = nil
+        isRunning = true
+        defer { isRunning = false }
+
+        let previousCount = await currentIndexedFileCount()
+        ChatToolExecutor.onboardingAppState = appState
+        let result = await ChatToolExecutor.execute(
+            ToolCall(name: "scan_files", arguments: [:], thoughtSignature: nil)
+        )
+
+        if result.lowercased().hasPrefix("error") {
+            errorMessage = result
+            return nil
+        } else {
+            statusMessage = result
+            let updatedCount = await currentIndexedFileCount()
+            let newItems = max(updatedCount - previousCount, 0)
+            return SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems)
+        }
+    }
+
+    func selectAppleNotesFolder() async -> Bool {
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser
+        let notesContainerURL = home
+            .appendingPathComponent("Library/Group Containers/group.com.apple.notes", isDirectory: true)
+        let groupContainersURL = home
+            .appendingPathComponent("Library/Group Containers", isDirectory: true)
+
+        let panel = NSOpenPanel()
+        panel.message = "Select your Apple Notes data folder to grant access."
+        panel.prompt = "Open"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = fileManager.fileExists(atPath: notesContainerURL.path)
+            ? notesContainerURL
+            : groupContainersURL
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            return false
+        }
+
+        let resolvedURL: URL
+        if selectedURL.path == groupContainersURL.path {
+            let inferredURL = groupContainersURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+            guard fileManager.fileExists(atPath: inferredURL.path) else {
+                errorMessage = "Choose the Apple Notes folder inside Group Containers."
+                return false
+            }
+            resolvedURL = inferredURL
+        } else if selectedURL.lastPathComponent == "group.com.apple.notes" {
+            resolvedURL = selectedURL
+        } else {
+            let nestedURL = selectedURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
+            if fileManager.fileExists(atPath: nestedURL.path) {
+                resolvedURL = nestedURL
+            } else {
+                errorMessage = "Choose the Apple Notes folder named group.com.apple.notes."
+                return false
+            }
+        }
+
+        errorMessage = nil
+        await AppleNotesReaderService.shared.rememberSelectedFolder(path: resolvedURL.path)
+        return true
+    }
+
+    private func currentIndexedFileCount() async -> Int {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return 0 }
+        do {
+            return try await dbQueue.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files") ?? 0
+            }
+        } catch {
+            log("ImportConnectorSheetModel: Failed to read indexed file count: \(error)")
+            return 0
+        }
+    }
+}
+
+struct ImportConnectorSheet: View {
+    let connector: ImportConnector
+    let appState: AppState?
+    @ObservedObject var statusStore: ImportConnectorStatusStore
+    let onDismiss: () -> Void
+
+    @StateObject private var model = ImportConnectorSheetModel()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 14) {
+                ConnectorBrandIcon(brand: connector.brand, size: 56, cornerRadius: 16)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(connector.title)
+                        .scaledFont(size: 20, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text(connector.subtitle)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Text(connector.description)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .padding(.top, 4)
+                }
+
+                Spacer()
+
+                DismissButton(action: onDismiss)
+            }
+
+            if connector.id == "chatgpt" || connector.id == "claude" {
+                memoryImportContent
+            } else {
+                connectorActionContent
+            }
+
+            if let statusMessage = model.statusMessage {
+                Text(statusMessage)
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.success)
+            }
+
+            if let errorMessage = model.errorMessage {
+                Text(errorMessage)
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.warning)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .background(OmiColors.backgroundPrimary)
+    }
+
+    private var connectorActionContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let metricText = connector.metricText {
+                Text(metricText)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+
+            Button(primaryActionTitle) {
+                Task {
+                    switch connector.id {
+                    case "calendar":
+                        if let result = await model.importCalendar() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems
+                            )
+                        }
+                    case "email":
+                        if let result = await model.importGmail() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems
+                            )
+                        }
+                    case "apple-notes":
+                        if let result = await model.importAppleNotes() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "Private notes accessible"
+                            )
+                        }
+                    case "local-files":
+                        if let result = await model.rescanLocalFiles(appState: appState) {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "On-device index"
+                            )
+                        }
+                    default:
+                        break
+                    }
+                }
+            }
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .disabled(model.isRunning)
+
+            if connector.id == "local-files" {
+                Text("Local files are indexed on-device and used to build your memory graph.")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+        }
+    }
+
+    private var memoryImportContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Open \(connector.title), paste the copied prompt, then drop the full response here.")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+
+            Button("Open \(connector.title) and Copy Prompt") {
+                model.openAndCopyPrompt(for: memorySource)
+            }
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(OmiColors.backgroundSecondary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+
+                if model.draftText.isEmpty {
+                    Text("Paste the full \(connector.title) response here…")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                }
+
+                TextEditor(text: $model.draftText)
+                    .scrollContentBackground(.hidden)
+                    .font(.system(size: 13))
+                    .foregroundColor(OmiColors.textPrimary)
+                    .frame(minHeight: 220)
+                    .padding(8)
+            }
+
+            Button(model.isRunning ? "Importing…" : "Import \(connector.title)") {
+                Task {
+                    if let result = await model.importMemoryLog(source: memorySource) {
+                        statusStore.markSynced(
+                            connectorID: connector.id,
+                            sourceCount: result.sourceCount,
+                            memoryCount: result.memoryCount,
+                            lastDeltaCount: result.newItems,
+                            availabilityText: "Imported manually"
+                        )
+                    }
+                }
+            }
+            .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+            .disabled(model.isRunning)
+        }
+    }
+
+    private var memorySource: OnboardingMemoryLogSource {
+        connector.id == "chatgpt" ? .chatgpt : .claude
+    }
+
+    private var primaryActionTitle: String {
+        switch connector.id {
+        case "calendar":
+            return model.isRunning ? "Importing…" : "Import Calendar"
+        case "email":
+            return model.isRunning ? "Importing…" : "Import Gmail"
+        case "apple-notes":
+            return model.isRunning ? "Importing…" : "Import Apple Notes"
+        case "local-files":
+            return model.isRunning ? "Reindexing…" : "Reindex Local Files"
+        default:
+            return model.isRunning ? "Working…" : connector.actionTitle
+        }
     }
 }
 

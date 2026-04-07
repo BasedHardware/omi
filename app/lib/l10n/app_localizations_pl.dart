@@ -9004,6 +9004,18 @@ class AppLocalizationsPl extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get transcriptionConnecting => 'Łączenie transkrypcji...';
+
+  @override
+  String get transcriptionReconnecting => 'Ponowne łączenie transkrypcji...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkrypcja niedostępna';
+
+  @override
+  String get audioOutput => 'Wyjście audio';
+
+  @override
   String get tasksClearCompleted => 'Clear Completed';
 
   @override

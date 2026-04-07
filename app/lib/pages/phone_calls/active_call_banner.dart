@@ -119,13 +119,27 @@ class _CallInfoRow extends StatelessWidget {
 
     return Row(
       children: [
-        // Green phone icon
-        Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(color: Color(0xFF34C759), shape: BoxShape.circle),
-          child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
-        ),
+        // Phone icon — green when transcribing, orange when reconnecting, red when failed
+        Builder(builder: (context) {
+          final provider = context.watch<PhoneCallProvider>();
+          Color iconColor;
+          switch (provider.transcriptionStatus) {
+            case TranscriptionStatus.reconnecting:
+              iconColor = Colors.orange;
+              break;
+            case TranscriptionStatus.failed:
+              iconColor = Colors.red;
+              break;
+            default:
+              iconColor = const Color(0xFF34C759);
+          }
+          return Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
+            child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
+          );
+        }),
         const SizedBox(width: 10),
         // Contact name / number
         Expanded(

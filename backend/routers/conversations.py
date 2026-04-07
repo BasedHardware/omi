@@ -160,6 +160,17 @@ def get_conversations(
     return conversations
 
 
+@router.get('/v1/conversations/count', tags=['conversations'])
+def get_conversations_count(
+    statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
+    include_discarded: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    return {'count': count}
+
+
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')

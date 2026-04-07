@@ -3021,5 +3021,9 @@
             }
         }
     },
-    "willSyncAutomatically": "automatikusan szinkronizálódik"
+    "willSyncAutomatically": "automatikusan szinkronizálódik",
+    "transcriptionConnecting": "Átírás csatlakoztatása...",
+    "transcriptionReconnecting": "Átírás újracsatlakoztatása...",
+    "transcriptionUnavailable": "Átírás nem elérhető",
+    "audioOutput": "Hangkimenet"
 }

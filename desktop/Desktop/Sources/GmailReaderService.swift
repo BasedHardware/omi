@@ -142,7 +142,24 @@ actor GmailReaderService {
   {
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
-      emails = try fetchGmailViaDateWindows(daysBack: days, maxResults: maxResults)
+      let bootstrapEmails = try fetchGmailViaAtomFeedSingle(
+        maxResults: maxResults,
+        query: query,
+        feedPath: nil,
+        allowBootstrap: true
+      )
+      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults)
+      var merged: [String: GmailEmail] = [:]
+      for email in bootstrapEmails + labelEmails {
+        let existing = merged[email.id]
+        if existing == nil || existing!.date < email.date {
+          merged[email.id] = email
+        }
+      }
+      emails = Array(merged.values)
+        .sorted { $0.date > $1.date }
+        .prefix(maxResults)
+        .map(\.self)
     } else {
       emails = try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: query)
     }
@@ -321,11 +338,18 @@ actor GmailReaderService {
     }
   }
 
-  // MARK: - All-in-one Python: decrypt cookies + fetch Atom feed + return JSON
+  // MARK: - All-in-one Python: decrypt cookies + fetch Gmail session HTML + return JSON
 
-  private func fetchGmailViaAtomFeedSingle(maxResults: Int, query: String = "newer_than:1d") throws
+  private func fetchGmailViaAtomFeedSingle(
+    maxResults: Int,
+    query: String = "newer_than:1d",
+    feedPath: String? = nil,
+    allowBootstrap: Bool? = nil
+  ) throws
     -> [GmailEmail]
   {
+    let shouldUseBootstrapPage = allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
+
     // Build browser configs as JSON for Python
     var browserConfigs: [[String: String]] = []
     for browser in BrowserConfig.allBrowsers() {
@@ -395,6 +419,8 @@ actor GmailReaderService {
       browsers = json.loads(sys.argv[1])
       max_results = int(sys.argv[2]) if len(sys.argv) > 2 else 50
       query = sys.argv[3] if len(sys.argv) > 3 else 'newer_than:1d'
+      use_bootstrap = (sys.argv[4] if len(sys.argv) > 4 else '1') == '1'
+      feed_path = sys.argv[5] if len(sys.argv) > 5 else ''
 
       def decrypt_cookies_with_domains(db_path, password):
           key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
@@ -465,9 +491,130 @@ actor GmailReaderService {
               jar.set_cookie(cookie)
           return jar
 
+      def fetch_home_page(jar):
+          opener = build_opener(HTTPCookieProcessor(jar))
+          req = Request('https://mail.google.com/mail/u/0/')
+          req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
+          try:
+              resp = opener.open(req, timeout=30)
+              status = resp.getcode()
+              body = resp.read()
+              return status, body
+          except Exception as e:
+              return None, str(e)
+
+      def parse_bootstrap_page(html_bytes, max_results):
+          try:
+              body = html_bytes.decode('utf-8', errors='replace')
+          except Exception as e:
+              return None, f'HTML decode error: {e}'
+
+          needle = '"a6jdv":[["sils",null,"'
+          start = body.find(needle)
+          if start < 0:
+              return None, 'Bootstrap inbox snapshot not found'
+
+          i = start + len(needle)
+          escaped = False
+          encoded_chars = []
+          while i < len(body):
+              ch = body[i]
+              if escaped:
+                  encoded_chars.append(ch)
+                  escaped = False
+              elif ch == '\\\\':
+                  encoded_chars.append(ch)
+                  escaped = True
+              elif ch == '"':
+                  break
+              else:
+                  encoded_chars.append(ch)
+              i += 1
+
+          try:
+              encoded = '"' + ''.join(encoded_chars) + '"'
+              decoded = json.loads(encoded)
+              parsed = json.loads(decoded)
+          except Exception as e:
+              return None, f'Bootstrap JSON parse error: {e}'
+
+          if not parsed or not isinstance(parsed, list) or not parsed[0] or not isinstance(parsed[0], list):
+              return None, 'Bootstrap inbox snapshot malformed'
+
+          rows = parsed[0][0] if len(parsed[0]) > 0 and isinstance(parsed[0][0], list) else []
+          emails = []
+          seen_ids = set()
+
+          for row in rows:
+              if not isinstance(row, list) or len(row) < 5:
+                  continue
+
+              thread_id = row[1] if len(row) > 1 and isinstance(row[1], str) else ''
+              subject = row[3] if len(row) > 3 and isinstance(row[3], str) else '(no subject)'
+              row_meta = row[4] if isinstance(row[4], list) else []
+              row_snippet = row_meta[1] if len(row_meta) > 1 and isinstance(row_meta[1], str) else ''
+              row_timestamp = row_meta[2] if len(row_meta) > 2 and isinstance(row_meta[2], (int, float)) else None
+              message_rows = row_meta[4] if len(row_meta) > 4 and isinstance(row_meta[4], list) else []
+
+              if not message_rows:
+                  if thread_id and thread_id not in seen_ids:
+                      seen_ids.add(thread_id)
+                      emails.append({
+                          'id': thread_id,
+                          'from': '',
+                          'subject': subject,
+                          'snippet': row_snippet,
+                          'date': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime((row_timestamp or time.time() * 1000) / 1000.0)),
+                          'isUnread': False,
+                      })
+                  continue
+
+              for message in message_rows:
+                  if not isinstance(message, list) or not message:
+                      continue
+
+                  msg_id = message[0] if isinstance(message[0], str) else thread_id
+                  if not msg_id or msg_id in seen_ids:
+                      continue
+                  seen_ids.add(msg_id)
+
+                  sender = ''
+                  if len(message) > 1 and isinstance(message[1], list):
+                      sender_name = message[1][2] if len(message[1]) > 2 and isinstance(message[1][2], str) else ''
+                      sender_email = message[1][1] if len(message[1]) > 1 and isinstance(message[1][1], str) else ''
+                      sender = f'{sender_name} <{sender_email}>' if sender_name and sender_email else sender_name or sender_email
+
+                  msg_timestamp = message[6] if len(message) > 6 and isinstance(message[6], (int, float)) else row_timestamp
+                  snippet = message[9] if len(message) > 9 and isinstance(message[9], str) else row_snippet
+                  labels = message[10] if len(message) > 10 and isinstance(message[10], list) else []
+                  is_unread = '^u' in labels
+
+                  iso_date = time.strftime(
+                      '%Y-%m-%dT%H:%M:%SZ',
+                      time.gmtime((msg_timestamp or time.time() * 1000) / 1000.0)
+                  )
+
+                  emails.append({
+                      'id': msg_id,
+                      'from': sender,
+                      'subject': subject or '(no subject)',
+                      'snippet': snippet or '',
+                      'date': iso_date,
+                      'isUnread': is_unread,
+                  })
+
+                  if len(emails) >= max_results:
+                      return emails, None
+
+          return emails[:max_results], None
+
       def fetch_atom_feed(jar):
           opener = build_opener(HTTPCookieProcessor(jar))
-          req = Request(f'https://mail.google.com/mail/feed/atom?q={quote(query)}')
+          if feed_path:
+              url = f'https://mail.google.com/mail/feed/{feed_path.lstrip("/")}'
+          else:
+              url = f'https://mail.google.com/mail/feed/atom?q={quote(query)}'
+          req = Request(url)
           req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
           try:
               resp = opener.open(req, timeout=30)
@@ -503,9 +650,24 @@ actor GmailReaderService {
                   if '/message_id=' in href:
                       msg_id = href.split('/message_id=')[-1]
                   else:
-                      msg_id = f'atom_{i}'
+                      dedupe_parts = [
+                          href,
+                          title or '',
+                          summary or '',
+                          author_name or '',
+                          author_email_addr or '',
+                          issued or '',
+                      ]
+                      msg_id = 'atom_' + hashlib.sha1(chr(31).join(dedupe_parts).encode('utf-8')).hexdigest()
               else:
-                  msg_id = f'atom_{i}'
+                  dedupe_parts = [
+                      title or '',
+                      summary or '',
+                      author_name or '',
+                      author_email_addr or '',
+                      issued or '',
+                  ]
+                  msg_id = 'atom_' + hashlib.sha1(chr(31).join(dedupe_parts).encode('utf-8')).hexdigest()
 
               from_str = f'{author_name} <{author_email_addr}>' if author_email_addr else author_name
               emails.append({
@@ -530,16 +692,19 @@ actor GmailReaderService {
               continue
 
           jar = make_cookie_jar(cookies)
+          status, body = fetch_home_page(jar)
+          if use_bootstrap and status == 200:
+              emails, parse_err = parse_bootstrap_page(body, max_results)
+              if not parse_err and emails:
+                  print(json.dumps({'ok': True, 'browser': browser['name'], 'source': 'bootstrap', 'emails': emails, 'count': len(emails)}))
+                  sys.exit(0)
+
           status, body = fetch_atom_feed(jar)
-          if status != 200:
-              continue
-
-          emails, parse_err = parse_atom(body, max_results)
-          if parse_err or emails is None:
-              continue
-
-          print(json.dumps({'ok': True, 'browser': browser['name'], 'emails': emails, 'count': len(emails)}))
-          sys.exit(0)
+          if status == 200:
+              emails, parse_err = parse_atom(body, max_results)
+              if not parse_err and emails is not None:
+                  print(json.dumps({'ok': True, 'browser': browser['name'], 'source': 'atom', 'emails': emails, 'count': len(emails)}))
+                  sys.exit(0)
 
       print(json.dumps({'ok': False, 'error': 'No browser with valid Gmail session found'}))
       sys.exit(0)
@@ -554,7 +719,11 @@ actor GmailReaderService {
 
     let process = Process()
     process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = ["-c", pythonScript, configJSON, String(maxResults), query]
+    process.arguments = [
+      "-c", pythonScript, configJSON, String(maxResults), query,
+      shouldUseBootstrapPage ? "1" : "0",
+      feedPath ?? "",
+    ]
     let pipe = Pipe()
     let errPipe = Pipe()
     process.standardOutput = pipe
@@ -589,7 +758,8 @@ actor GmailReaderService {
     }
 
     let browserName = json["browser"] as? String ?? "unknown"
-    log("GmailReaderService: Got \(emailDicts.count) emails from \(browserName) via Atom feed")
+    let sourceName = json["source"] as? String ?? "atom"
+    log("GmailReaderService: Got \(emailDicts.count) emails from \(browserName) via \(sourceName)")
 
     return emailDicts.compactMap { dict -> GmailEmail? in
       guard let id = dict["id"] as? String,
@@ -610,6 +780,51 @@ actor GmailReaderService {
         isUnread: isUnread
       )
     }
+  }
+
+  private func fetchGmailViaLabelFeeds(maxResults: Int) throws -> [GmailEmail] {
+    guard maxResults > 0 else { return [] }
+
+    let feedPaths = [
+      "atom/all",
+      "atom/inbox",
+      "atom/sent",
+      "atom/starred",
+      "atom/important",
+      "atom/trash",
+      "atom/spam",
+      "atom/unread",
+      "atom/social",
+      "atom/promotions",
+      "atom/updates",
+      "atom/forums",
+      "atom/personal",
+    ]
+
+    var merged: [String: GmailEmail] = [:]
+    for feedPath in feedPaths {
+      let feedEmails = try fetchGmailViaAtomFeedSingle(
+        maxResults: min(20, maxResults),
+        query: "newer_than:1d",
+        feedPath: feedPath,
+        allowBootstrap: false
+      )
+      for email in feedEmails {
+        let existing = merged[email.id]
+        if existing == nil || existing!.date < email.date {
+          merged[email.id] = email
+        }
+      }
+    }
+
+    log(
+      "GmailReaderService: Collected \(merged.count) unique emails across \(feedPaths.count) label feeds"
+    )
+
+    return Array(merged.values)
+      .sorted { $0.date > $1.date }
+      .prefix(maxResults)
+      .map(\.self)
   }
 
   private func fetchGmailViaDateWindows(daysBack: Int, maxResults: Int) throws -> [GmailEmail] {

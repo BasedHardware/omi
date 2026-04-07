@@ -65,9 +65,7 @@ actor AppleNotesReaderService {
         )
 
         let notes = rows.compactMap { row -> AppleNoteRecord? in
-          guard
-            let rawTitle = row["ZTITLE"] as? String
-          else {
+          guard let rawTitle = row["ZTITLE"] as? String else {
             return nil
           }
 
@@ -170,7 +168,7 @@ actor AppleNotesReaderService {
           _ = try await APIClient.shared.createMemory(
             content: memory,
             visibility: "private",
-            tags: ["apple_notes", "onboarding", "profile"],
+            tags: ["apple_notes", "import", "profile"],
             source: "apple_notes",
             headline: "Apple Notes Insight"
           )
@@ -238,38 +236,45 @@ actor AppleNotesReaderService {
     if let selectedFolderPath = UserDefaults.standard.string(forKey: selectedFolderDefaultsKey),
       !selectedFolderPath.isEmpty
     {
-      let selectedURL = URL(fileURLWithPath: selectedFolderPath)
-      if selectedURL.lastPathComponent == "NoteStore.sqlite" {
-        candidates.append(selectedURL)
-      } else {
-        candidates.append(selectedURL.appendingPathComponent("NoteStore.sqlite"))
+      let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
+      if selectedFolderURL.lastPathComponent == "NoteStore.sqlite" {
+        candidates.append(selectedFolderURL)
       }
+      candidates.append(
+        selectedFolderURL.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+      )
+      candidates.append(
+        selectedFolderURL.appendingPathComponent(
+          "NoteStore.sqlite-wal",
+          isDirectory: false
+        ).deletingLastPathComponent().appendingPathComponent("NoteStore.sqlite")
+      )
+      candidates.append(
+        selectedFolderURL
+          .appendingPathComponent("Accounts", isDirectory: true)
+          .appendingPathComponent("LocalAccount", isDirectory: true)
+          .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+      )
     }
 
     candidates.append(
       home.appendingPathComponent("Library/Group Containers/group.com.apple.notes/NoteStore.sqlite")
     )
+    candidates.append(
+      home
+        .appendingPathComponent("Library/Group Containers/group.com.apple.notes", isDirectory: true)
+        .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+    )
+    candidates.append(
+      home
+        .appendingPathComponent(
+          "Library/Group Containers/group.com.apple.notes/Accounts/LocalAccount",
+          isDirectory: true
+        )
+        .appendingPathComponent("NoteStore.sqlite", isDirectory: false)
+    )
 
     return candidates.first(where: { fm.fileExists(atPath: $0.path) })
-  }
-
-  nonisolated private static func saveMemory(for note: AppleNoteRecord) async -> Bool {
-    let detail = note.summary.isEmpty ? "" : ": \(note.summary)"
-    let content = "Apple Note — \"\(note.title)\"\(detail)"
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        tags: ["apple_notes", "onboarding", "note"],
-        source: "apple_notes",
-        headline: note.title
-      )
-      return true
-    } catch {
-      log("AppleNotesReaderService: Failed to save raw note memory \(note.id): \(error)")
-      return false
-    }
   }
 
   private static func normalizeNoteField(_ value: String) -> String {
@@ -286,6 +291,13 @@ actor AppleNotesReaderService {
   }
 
   private static func isLikelyAttachment(title: String, summary: String) -> Bool {
+    let combined = "\(title) \(summary)".trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !combined.isEmpty else { return true }
+
+    if combined.contains("SOLITE") || combined.contains("exec") || combined.contains("kMDItem") {
+      return true
+    }
+
     let lowerTitle = title.lowercased()
     let attachmentExtensions = [".png", ".jpg", ".jpeg", ".heic", ".pdf", ".mov", ".mp4"]
     if attachmentExtensions.contains(where: { lowerTitle.hasSuffix($0) }) {
@@ -293,6 +305,10 @@ actor AppleNotesReaderService {
     }
 
     if lowerTitle.hasPrefix("cleanshot ") || lowerTitle.hasPrefix("image ") {
+      return true
+    }
+
+    if lowerTitle.contains("scan") && lowerTitle.contains("document") {
       return true
     }
 
@@ -317,5 +333,30 @@ actor AppleNotesReaderService {
     }
 
     return responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  nonisolated private static func saveMemory(for note: AppleNoteRecord) async -> Bool {
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "MMM d, yyyy"
+
+    var content = note.title
+    if !note.summary.isEmpty {
+      content += "\n\n" + note.summary
+    }
+
+    do {
+      _ = try await APIClient.shared.createMemory(
+        content: content,
+        visibility: "private",
+        tags: ["apple_notes", "import", "note"],
+        source: "apple_notes",
+        windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))",
+        headline: note.title
+      )
+      return true
+    } catch {
+      log("AppleNotesReaderService: Failed to save raw note memory \(note.id): \(error)")
+      return false
+    }
   }
 }

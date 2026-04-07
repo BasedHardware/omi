@@ -6,8 +6,13 @@ import AVFoundation
 ///
 /// Architecture:
 /// - Replaces Twilio's DefaultAudioDevice with a VoiceProcessingIO audio unit
-/// - audioPlayoutCallback: pulls remote audio from Twilio SDK → plays to speaker → streams to Flutter
-/// - audioRecordCallback: captures mic audio → sends to Twilio SDK → streams to Flutter
+/// - audioPlayoutCallback: pulls remote audio from Twilio SDK -> plays to speaker -> streams to Flutter
+/// - audioRecordCallback: captures mic audio -> sends to Twilio SDK -> streams to Flutter
+///
+/// Thread Safety:
+/// - Audio state (`_audioUnit`, `_renderingContext`, `_capturingContext`) is protected by `@OmiAudioLock`
+///   using `os_unfair_lock` (5-10ns per access) — safe for Core Audio real-time callbacks.
+/// - Capture buffer is pre-allocated in `startCapturing()`, never on the audio thread.
 final class OmiRecordingAudioDevice: NSObject {
 
     // MARK: - Audio Configuration
@@ -19,11 +24,11 @@ final class OmiRecordingAudioDevice: NSObject {
 
     var bytesPerFrame: Int { sampleSize * channelCount }
 
-    // MARK: - Audio State
+    // MARK: - Thread-Safe Audio State
 
-    private var audioUnit: AudioUnit?
-    private var renderingContext: RenderingContext?
-    private var capturingContext: CapturingContext?
+    @OmiAudioLock private var _audioUnit: AudioUnit?
+    @OmiAudioLock private var _renderingContext: RenderingContext?
+    @OmiAudioLock private var _capturingContext: CapturingContext?
 
     // Callback reference for Core Audio C callbacks
     private var callbackRefCon: UnsafeMutableRawPointer?
@@ -35,8 +40,8 @@ final class OmiRecordingAudioDevice: NSObject {
     // MARK: - Mute State
 
     /// When true, mic audio is not streamed to Flutter.
-    /// Set by PhoneCallsPlugin when user toggles mute.
-    var isMicStreamMuted: Bool = false
+    /// Set by OmiPhoneCallsPlugin when user toggles mute.
+    @OmiAudioLock var isMicStreamMuted: Bool = false
 
     // MARK: - Audio Data Callback
 
@@ -60,11 +65,31 @@ final class OmiRecordingAudioDevice: NSObject {
     class CapturingContext {
         let deviceContext: AudioDeviceContext
         let audioUnit: AudioUnit
-        var bufferList: UnsafeMutablePointer<AudioBufferList>?
+        let bufferList: UnsafeMutablePointer<AudioBufferList>
+        let bufferSizeBytes: UInt32
 
-        init(deviceContext: AudioDeviceContext, audioUnit: AudioUnit) {
+        /// Pre-allocate buffer at init time — never allocate on the audio thread.
+        init(deviceContext: AudioDeviceContext, audioUnit: AudioUnit,
+             maxFrames: UInt32, bytesPerFrame: Int) {
             self.deviceContext = deviceContext
             self.audioUnit = audioUnit
+
+            let size = maxFrames * UInt32(bytesPerFrame)
+            self.bufferSizeBytes = size
+
+            let bl = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+            bl.pointee.mNumberBuffers = 1
+            bl.pointee.mBuffers.mNumberChannels = 1
+            bl.pointee.mBuffers.mDataByteSize = size
+            bl.pointee.mBuffers.mData = UnsafeMutableRawPointer.allocate(
+                byteCount: Int(size), alignment: 16
+            )
+            self.bufferList = bl
+        }
+
+        deinit {
+            bufferList.pointee.mBuffers.mData?.deallocate()
+            bufferList.deallocate()
         }
     }
 
@@ -86,7 +111,7 @@ final class OmiRecordingAudioDevice: NSObject {
     }
 
     deinit {
-        if let unit = audioUnit {
+        if let unit = _audioUnit {
             AudioOutputUnitStop(unit)
             AudioUnitUninitialize(unit)
             AudioComponentInstanceDispose(unit)
@@ -94,21 +119,22 @@ final class OmiRecordingAudioDevice: NSObject {
         cleanupCallbacks()
     }
 
-    // MARK: - Bridge Methods (for C callbacks to access Swift state)
+    // MARK: - Bridge Methods (thread-safe access for C callbacks)
 
-    func getRenderingContext() -> RenderingContext? { renderingContext }
-    func getCapturingContext() -> CapturingContext? { capturingContext }
-    func getAudioUnit() -> AudioUnit? { audioUnit }
+    func getRenderingContext() -> RenderingContext? { _renderingContext }
+    func getCapturingContext() -> CapturingContext? { _capturingContext }
+    func getAudioUnit() -> AudioUnit? { _audioUnit }
+    func getMicMuted() -> Bool { isMicStreamMuted }
 
     // MARK: - Core Audio Setup
 
     private func setupAudioUnit() -> Bool {
         // Dispose existing
-        if let unit = audioUnit {
+        if let unit = _audioUnit {
             AudioOutputUnitStop(unit)
             AudioUnitUninitialize(unit)
             AudioComponentInstanceDispose(unit)
-            audioUnit = nil
+            _audioUnit = nil
         }
         cleanupCallbacks()
 
@@ -133,7 +159,7 @@ final class OmiRecordingAudioDevice: NSObject {
             return false
         }
 
-        audioUnit = unit
+        _audioUnit = unit
 
         // Enable input (mic) on bus 1
         var enableInput: UInt32 = 1
@@ -247,10 +273,10 @@ extension OmiRecordingAudioDevice: AudioDevice {
     func captureFormat() -> AudioFormat? { capturingFormat }
     func renderFormat() -> AudioFormat? { renderingFormat }
 
-    func isInitialized() -> Bool { audioUnit != nil }
+    func isInitialized() -> Bool { $_audioUnit.isNotNil }
 
     func isStarted() -> Bool {
-        guard let unit = audioUnit else { return false }
+        guard let unit = _audioUnit else { return false }
         var running: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         let status = AudioUnitGetProperty(unit, kAudioOutputUnitProperty_IsRunning,
@@ -259,12 +285,12 @@ extension OmiRecordingAudioDevice: AudioDevice {
     }
 
     func start() -> Bool {
-        guard let unit = audioUnit else { return false }
+        guard let unit = _audioUnit else { return false }
         return AudioOutputUnitStart(unit) == noErr
     }
 
     func stop() -> Bool {
-        guard let unit = audioUnit else { return false }
+        guard let unit = _audioUnit else { return false }
         return AudioOutputUnitStop(unit) == noErr
     }
 }
@@ -276,7 +302,7 @@ extension OmiRecordingAudioDevice: AudioDeviceRenderer {
     func initializeRenderer() -> Bool { true }
 
     func startRendering(_ context: AudioDeviceContext) -> Bool {
-        renderingContext = RenderingContext(
+        _renderingContext = RenderingContext(
             deviceContext: context,
             maxFramesPerBuffer: Int(framesPerBuffer)
         )
@@ -284,7 +310,7 @@ extension OmiRecordingAudioDevice: AudioDeviceRenderer {
     }
 
     func stopRendering() -> Bool {
-        renderingContext = nil
+        _renderingContext = nil
         return true
     }
 }
@@ -298,42 +324,21 @@ extension OmiRecordingAudioDevice: AudioDeviceCapturer {
     }
 
     func startCapturing(_ context: AudioDeviceContext) -> Bool {
-        guard let unit = audioUnit else { return false }
-        capturingContext = CapturingContext(deviceContext: context, audioUnit: unit)
+        guard let unit = _audioUnit else { return false }
+        // Pre-allocate buffer here — never on the audio thread
+        _capturingContext = CapturingContext(
+            deviceContext: context,
+            audioUnit: unit,
+            maxFrames: framesPerBuffer,
+            bytesPerFrame: bytesPerFrame
+        )
         return true
     }
 
     func stopCapturing() -> Bool {
-        capturingContext = nil
+        _capturingContext = nil
         return true
     }
-}
-
-// MARK: - Buffer Helpers
-
-private func ensureBuffer(_ context: OmiRecordingAudioDevice.CapturingContext,
-                           frameCount: UInt32, bytesPerFrame: Int) -> Bool {
-    let needed = frameCount * UInt32(bytesPerFrame)
-
-    if context.bufferList == nil {
-        context.bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        context.bufferList?.pointee.mNumberBuffers = 1
-        context.bufferList?.pointee.mBuffers.mNumberChannels = 1
-        context.bufferList?.pointee.mBuffers.mDataByteSize = 0
-        context.bufferList?.pointee.mBuffers.mData = nil
-    }
-
-    guard let bl = context.bufferList else { return false }
-
-    if bl.pointee.mBuffers.mDataByteSize != needed {
-        bl.pointee.mBuffers.mData?.deallocate()
-        bl.pointee.mBuffers.mDataByteSize = needed
-        bl.pointee.mBuffers.mData = UnsafeMutableRawPointer.allocate(
-            byteCount: Int(needed), alignment: 16
-        )
-    }
-
-    return bl.pointee.mBuffers.mData != nil
 }
 
 // MARK: - Core Audio Callbacks
@@ -392,24 +397,29 @@ private func omiAudioRecordCallback(
     guard let context = device.getCapturingContext(),
           let audioUnit = device.getAudioUnit() else { return noErr }
 
-    // Ensure buffer
-    guard ensureBuffer(context, frameCount: inNumberFrames, bytesPerFrame: device.bytesPerFrame) else {
-        return kAudioUnitErr_FailedInitialization
+    // Use pre-allocated buffer. If frame count exceeds our buffer, fill with silence.
+    let needed = inNumberFrames * UInt32(device.bytesPerFrame)
+    if needed > context.bufferSizeBytes {
+        print("OmiAudioDevice: frame count \(inNumberFrames) exceeds buffer capacity")
+        return noErr
     }
+
+    // Reset buffer size for this render
+    context.bufferList.pointee.mBuffers.mDataByteSize = needed
 
     // Capture from microphone
     let status = AudioUnitRender(audioUnit, ioActionFlags, inTimeStamp, inBusNumber,
-                                 inNumberFrames, context.bufferList!)
+                                 inNumberFrames, context.bufferList)
     guard status == noErr else { return status }
 
-    guard let bl = context.bufferList, let data = bl.pointee.mBuffers.mData else {
+    guard let data = context.bufferList.pointee.mBuffers.mData else {
         return kAudioUnitErr_InvalidParameter
     }
 
-    let size = Int(bl.pointee.mBuffers.mDataByteSize)
+    let size = Int(context.bufferList.pointee.mBuffers.mDataByteSize)
 
     // Stream local audio to Flutter (channel 1) — skip when muted
-    if !device.isMicStreamMuted, let callback = device.onAudioData {
+    if !device.getMicMuted(), let callback = device.onAudioData {
         let audioData = Data(bytes: data, count: size)
         callback(audioData, 1)
     }

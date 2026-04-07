@@ -1701,7 +1701,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'อุปกรณ์',
+      one: 'อุปกรณ์',
+    );
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -8933,6 +8938,18 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get transcriptionConnecting => 'กำลังเชื่อมต่อการถอดเสียง...';
+
+  @override
+  String get transcriptionReconnecting => 'กำลังเชื่อมต่อการถอดเสียงใหม่...';
+
+  @override
+  String get transcriptionUnavailable => 'การถอดเสียงไม่พร้อมใช้งาน';
+
+  @override
+  String get audioOutput => 'เอาต์พุตเสียง';
 
   @override
   String get tasksClearCompleted => 'Clear Completed';
