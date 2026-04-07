@@ -148,7 +148,7 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',
                     )
-            except httpx.HTTPStatusError as e:
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise HTTPException(
                     status_code=503,
                     detail=f'Failed to verify app setup completion. Please try again later or contact support.',
