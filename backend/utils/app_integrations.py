@@ -1,12 +1,17 @@
 import asyncio
-import concurrent.futures
 import threading
 from typing import List
 import os
-import requests
 import time
 
-from utils.http_client import get_webhook_client
+from utils.http_client import (
+    get_webhook_client,
+    get_webhook_circuit_breaker,
+    get_webhook_semaphore,
+    latest_wins_start,
+    latest_wins_check,
+)
+from utils.executors import critical_executor
 
 import database.notifications as notification_db
 from database import mem_db
@@ -100,8 +105,8 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 # **************************************************
 
 
-def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED — uses ThreadPoolExecutor instead of raw Thread+join."""
+async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
+    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -114,7 +119,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 
     results = {}
 
-    def _single(app: App):
+    async def _single(app: App):
         if not app.external_integration.webhook_url:
             return
 
@@ -130,18 +135,27 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
         else:
             url += '?uid=' + uid
 
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
+            return
+
         try:
             payload = serialize_datetimes(conversation_dict)
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=30,
-            )
+            async with get_webhook_semaphore():
+                client = get_webhook_client()
+                response = await client.post(
+                    url,
+                    json=payload,
+                )
             if response.status_code != 200:
+                cb.record_failure()
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 return
+
+            cb.record_success()
 
             if app.uid is not None:
                 if app.uid != uid:
@@ -159,11 +173,11 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             if message := response.json().get('message', ''):
                 results[app.id] = message
         except Exception as e:
+            cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
             return
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(filtered_apps)) as executor:
-        executor.map(_single, filtered_apps)
+    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
 
     messages = []
     for key, message in results.items():
@@ -484,17 +498,34 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 
     audio_data = bytes(data)
 
+    version = latest_wins_start(uid)
+
     async def _single(app: App):
+        if not latest_wins_check(uid, version):
+            return  # Newer call superseded this one
+
         if not app.external_integration.webhook_url:
             return
 
         url = app.external_integration.webhook_url
         url += f'?sample_rate={sample_rate}&uid={uid}'
+
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            return
+
         try:
-            client = get_webhook_client()
-            response = await client.post(url, content=audio_data, headers={'Content-Type': 'application/octet-stream'})
+            async with get_webhook_semaphore():
+                if not latest_wins_check(uid, version):
+                    return  # Check again after acquiring semaphore
+                client = get_webhook_client()
+                response = await client.post(
+                    url, content=audio_data, headers={'Content-Type': 'application/octet-stream'}
+                )
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+            cb.record_success()
         except Exception as e:
+            cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
 
     await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
@@ -535,14 +566,23 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
         else:
             url += '?uid=' + uid
 
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
+            return
+
         try:
-            client = get_webhook_client()
-            response = await client.post(url, json={"session_id": uid, "segments": segments})
+            async with get_webhook_semaphore():
+                client = get_webhook_client()
+                response = await client.post(url, json={"session_id": uid, "segments": segments})
             if response.status_code != 200:
+                cb.record_failure()
                 logger.info(
                     f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {sanitize(response.text[:100])}'
                 )
                 return
+
+            cb.record_success()
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
                 record_app_usage(
@@ -571,6 +611,7 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
                     results[app.id] = message
 
         except Exception as e:
+            cb.record_failure()
             logger.error(f"App integration error: {e}")
             return
 
