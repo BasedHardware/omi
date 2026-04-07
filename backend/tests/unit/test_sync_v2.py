@@ -64,8 +64,8 @@ class TestSyncV2Structure:
         assert "'job_id'" in func_body, "v2 response must include job_id"
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
-    def test_v2_starts_daemon_thread(self):
-        """v2 must start a daemon background thread."""
+    def test_v2_submits_to_critical_executor(self):
+        """v2 must submit background work to the shared critical_executor."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -73,8 +73,8 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'daemon=True' in func_body, "Background thread must be daemon"
-        assert 'bg_thread.start()' in func_body, "Background thread must be started"
+        assert 'critical_executor.submit(' in func_body, "v2 must submit to critical_executor"
+        assert '_process_segments_background' in func_body, "v2 must submit the background worker function"
 
     def test_v2_has_fair_use_gates(self):
         """v2 must check fair-use and DG budget (same gates as v1)."""
@@ -123,10 +123,10 @@ class TestSyncV2Structure:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
 
-        # record_dg_usage_ms must come after chunk_threads_bg
+        # record_dg_usage_ms must come after critical_executor.submit / future.result processing
         dg_pos = func_body.index('record_dg_usage_ms')
-        thread_pos = func_body.index('chunk_threads_bg(threads)')
-        assert dg_pos > thread_pos, "DG usage must be recorded AFTER segment processing"
+        processing_pos = func_body.index('future.result()')
+        assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
 
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
@@ -145,8 +145,8 @@ class TestSyncV2Structure:
 
         assert '404' in func_body, "GET must return 404 for missing job"
 
-    def test_v2_fetches_prefs_and_cache_before_bg_thread(self):
-        """v2 must fetch transcription_prefs and build person_embeddings_cache before spawning bg thread."""
+    def test_v2_fetches_prefs_and_cache_before_executor_submit(self):
+        """v2 must fetch transcription_prefs and build person_embeddings_cache before submitting to executor."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -157,12 +157,12 @@ class TestSyncV2Structure:
         assert 'get_user_transcription_preferences' in func_body, "v2 must fetch transcription preferences"
         assert 'build_person_embeddings_cache' in func_body, "v2 must build person embeddings cache"
 
-        # Both must appear before bg_thread.start()
+        # Both must appear before critical_executor.submit(
         prefs_pos = func_body.index('get_user_transcription_preferences')
         cache_pos = func_body.index('build_person_embeddings_cache')
-        thread_start_pos = func_body.index('bg_thread.start()')
-        assert prefs_pos < thread_start_pos, "Prefs must be fetched before bg thread starts"
-        assert cache_pos < thread_start_pos, "Cache must be built before bg thread starts"
+        submit_pos = func_body.index('critical_executor.submit(')
+        assert prefs_pos < submit_pos, "Prefs must be fetched before executor submit"
+        assert cache_pos < submit_pos, "Cache must be built before executor submit"
 
     def test_v2_bg_worker_accepts_prefs_and_cache_params(self):
         """_process_segments_background must accept transcription_prefs and person_embeddings_cache."""
@@ -175,8 +175,8 @@ class TestSyncV2Structure:
         assert 'transcription_prefs' in func_sig, "bg worker must accept transcription_prefs param"
         assert 'person_embeddings_cache' in func_sig, "bg worker must accept person_embeddings_cache param"
 
-    def test_v2_passes_prefs_and_cache_to_bg_thread(self):
-        """v2 must pass transcription_prefs and person_embeddings_cache in bg thread args."""
+    def test_v2_passes_prefs_and_cache_to_executor_submit(self):
+        """v2 must pass transcription_prefs and person_embeddings_cache in executor submit args."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -184,13 +184,14 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        # Find the Thread constructor args
-        thread_start = func_body.index('threading.Thread')
-        thread_end = func_body.index('bg_thread.start()')
-        thread_block = func_body[thread_start:thread_end]
+        # Find the critical_executor.submit( call block
+        submit_start = func_body.index('critical_executor.submit(')
+        # Find the closing paren — look for the return statement after it
+        submit_end = func_body.index('return JSONResponse', submit_start)
+        submit_block = func_body[submit_start:submit_end]
 
-        assert 'transcription_prefs' in thread_block, "v2 must pass transcription_prefs to bg thread"
-        assert 'person_embeddings_cache' in thread_block, "v2 must pass person_embeddings_cache to bg thread"
+        assert 'transcription_prefs' in submit_block, "v2 must pass transcription_prefs to executor submit"
+        assert 'person_embeddings_cache' in submit_block, "v2 must pass person_embeddings_cache to executor submit"
 
 
 # ---------------------------------------------------------------------------
@@ -407,10 +408,10 @@ class TestProcessSegmentsBackground:
         """Worker must heartbeat (update_sync_job) during processing to prevent stale detection."""
         body = self._get_bg_func_body()
         assert 'update_sync_job(' in body, "Worker must call update_sync_job for heartbeat"
-        # Heartbeat must be inside the chunk loop, after join
+        # Heartbeat must be inside the chunk loop, after futures are resolved
         heartbeat_pos = body.index('update_sync_job(')
-        join_pos = body.index('.join()')
-        assert heartbeat_pos > join_pos, "Heartbeat must come after thread join"
+        result_pos = body.index('future.result()')
+        assert heartbeat_pos > result_pos, "Heartbeat must come after future.result()"
 
 
 # ---------------------------------------------------------------------------
@@ -449,10 +450,11 @@ class TestV1Unchanged:
         body = self._get_v1_body()
         assert 'status_code=500' in body, "v1 must raise 500 for total failure"
 
-    def test_v1_uses_synchronous_chunk_threads(self):
-        """v1 must still join threads synchronously (no background)."""
+    def test_v1_uses_synchronous_gather(self):
+        """v1 must process segments synchronously with asyncio.gather (no background)."""
         body = self._get_v1_body()
-        assert 'chunk_threads(threads)' in body, "v1 must still use synchronous chunk_threads"
+        assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
+        assert 'asyncio.to_thread' in body, "v1 must use asyncio.to_thread for blocking segment work"
 
     def test_v1_cleanup_in_finally(self):
         """v1 must still clean up files in finally block."""
@@ -761,12 +763,20 @@ class TestBackgroundWorkerBehavioral:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'utils.executors',
         ]
         heavy_deps.extend(utils_subs)
 
         for mod in heavy_deps:
             saved_modules[mod] = sys.modules.get(mod)
             sys.modules[mod] = MagicMock()
+
+        # Provide a working critical_executor stub (submit runs the function synchronously)
+        from concurrent.futures import ThreadPoolExecutor
+
+        _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='test')
+        sys.modules['utils.executors'].critical_executor = _test_executor
+        sys.modules['utils.executors'].storage_executor = _test_executor
 
         # Set up specific mocks
         sys.modules['database.redis_db'] = MagicMock(r=mock_redis)
@@ -1214,6 +1224,13 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Stub utils.executors with a real-ish critical_executor mock
+        mock_executors = MagicMock()
+        mock_executors.critical_executor = MagicMock()
+        mock_executors.storage_executor = MagicMock()
+        saved_modules['utils.executors'] = sys.modules.get('utils.executors')
+        sys.modules['utils.executors'] = mock_executors
 
         sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
