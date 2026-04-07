@@ -179,3 +179,19 @@ class TestAsyncApiEdgeCases:
 
         assert result is not None
         assert result.google_place_id == "ChIJ_fallback"
+
+    @pytest.mark.asyncio
+    async def test_httpx_timeout_returns_none(self):
+        """Verify httpx timeout returns None instead of propagating."""
+        import httpx
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+
+        with patch("utils.conversations.location.r") as mock_r, patch(
+            "utils.conversations.location.get_maps_client", return_value=mock_client
+        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+            mock_r.get.return_value = None
+            result = await async_get_google_maps_location(37.785, -122.409)
+
+        assert result is None
