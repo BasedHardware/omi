@@ -2919,6 +2919,17 @@ struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
     let description: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+    }
 }
 
 /// App review
@@ -3020,7 +3031,7 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
