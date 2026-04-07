@@ -2941,6 +2941,8 @@ extension Notification.Name {
   static let screenCapturePermissionLost = Notification.Name("screenCapturePermissionLost")
   /// Posted when ScreenCaptureKit is broken (TCC granted but SCK declined)
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
+  /// Posted to show the "Try asking" popup centered over the full window
+  static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
   /// Posted to navigate to Rewind settings
   static let navigateToRewindSettings = Notification.Name("navigateToRewindSettings")
   /// Posted to navigate to Rewind page (global hotkey: Cmd+Option+R)
