@@ -10,6 +10,7 @@ v1 remains completely unchanged.
 
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -75,6 +76,15 @@ class TestSyncV2Structure:
 
         assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
         assert '_process_segments_background' in func_body, "v2 must submit the background worker function"
+        # The coordinator dispatch must use run_in_executor with None (default executor),
+        # not critical_executor, to avoid deadlock when the coordinator itself submits to
+        # critical_executor internally.
+        # Accept both inline and multi-line forms: run_in_executor(None, and run_in_executor(\n..None,
+        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
+        assert none_executor_pattern.search(func_body), (
+            "v2 coordinator dispatch must use run_in_executor(None, ...) — "
+            "passing critical_executor would nest executors and cause deadlock"
+        )
 
     def test_v2_has_fair_use_gates(self):
         """v2 must check fair-use and DG budget (same gates as v1)."""
@@ -1466,3 +1476,62 @@ class TestV2EndpointExecution:
             assert body['processed_segments'] == 2
         finally:
             self._cleanup_modules(saved)
+
+
+# ---------------------------------------------------------------------------
+# Pusher coordinator executor pattern
+# ---------------------------------------------------------------------------
+
+
+class TestPusherCoordinatorExecutor:
+    """Pusher _process_conversation_task must use run_in_executor(None, ...) not critical_executor.
+
+    process_conversation is a coordinator that internally submits to critical_executor.
+    Passing critical_executor to run_in_executor would nest executors and cause deadlock.
+    """
+
+    @staticmethod
+    def _read_pusher_source():
+        pusher_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'pusher.py')
+        with open(pusher_path) as f:
+            return f.read()
+
+    def test_process_conversation_uses_run_in_executor(self):
+        """pusher._process_conversation_task must use run_in_executor for process_conversation."""
+        source = self._read_pusher_source()
+        assert 'run_in_executor' in source, "pusher.py must use run_in_executor for process_conversation"
+
+    def test_process_conversation_uses_none_executor(self):
+        """pusher._process_conversation_task must pass None as executor to avoid deadlock.
+
+        process_conversation is a coordinator that submits child tasks to critical_executor.
+        Using run_in_executor(None, ...) uses the default executor, preventing nested pool deadlock.
+        """
+        source = self._read_pusher_source()
+        assert '_process_conversation_task' in source, "pusher.py must define _process_conversation_task"
+        start = source.index('async def _process_conversation_task')
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
+        assert none_executor_pattern.search(func_body), (
+            "pusher._process_conversation_task must use run_in_executor(None, process_conversation, ...) "
+            "— not critical_executor — because process_conversation is a coordinator that submits "
+            "child tasks to critical_executor; nesting would cause deadlock under load"
+        )
+
+    def test_process_conversation_not_using_critical_executor_directly(self):
+        """process_conversation call in pusher must NOT use critical_executor as the executor arg."""
+        source = self._read_pusher_source()
+        start = source.index('async def _process_conversation_task')
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert 'run_in_executor(critical_executor, process_conversation' not in func_body, (
+            "pusher._process_conversation_task must NOT pass critical_executor for process_conversation — "
+            "use None (default executor) to prevent deadlock"
+        )
