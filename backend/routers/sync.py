@@ -1527,7 +1527,11 @@ async def sync_local_files_v2(
         owned_paths = list(segmented_paths)
         segmented_paths = set()  # Prevent finally cleanup of files now owned by bg thread
 
-        critical_executor.submit(
+        # Run in default executor (not critical_executor) because _process_segments_background
+        # is a coordinator that submits child tasks to critical_executor — nesting both
+        # in the same pool causes deadlock under concurrent load.
+        loop_v2.run_in_executor(
+            None,
             _process_segments_background,
             job_id,
             uid,
