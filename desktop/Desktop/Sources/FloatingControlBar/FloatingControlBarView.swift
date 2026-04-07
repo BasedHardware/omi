@@ -11,6 +11,8 @@ struct FloatingControlBarView: View {
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
     var onClearVisibleConversation: () -> Void
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
 
@@ -365,7 +367,9 @@ struct FloatingControlBarView: View {
                     state.currentAIMessage = nil
                 }
                 onSendQuery(message)
-            }
+            },
+            onRate: onRate,
+            onShareLink: onShareLink
         )
         .transition(
             .asymmetric(
