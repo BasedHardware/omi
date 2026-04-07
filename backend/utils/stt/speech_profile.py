@@ -7,6 +7,7 @@ from typing import List
 import requests
 from pydub import AudioSegment
 
+from utils.executors import storage_executor
 from utils.http_client import get_stt_client
 from utils.log_sanitizer import sanitize
 from utils.other.storage import (
@@ -52,7 +53,8 @@ def _read_file(path: str) -> bytes:
 async def async_get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
     """Async version of get_speech_profile_matching_predictions using httpx.AsyncClient."""
     logger.info('async_get_speech_profile_matching_predictions')
-    file_data = await asyncio.to_thread(_read_file, audio_file_path)
+    loop = asyncio.get_running_loop()
+    file_data = await loop.run_in_executor(storage_executor, _read_file, audio_file_path)
 
     files = {'audio_file': (os.path.basename(audio_file_path), file_data, 'audio/wav')}
     default = [{'is_user': False, 'person_id': None}] * len(segments)
