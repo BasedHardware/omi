@@ -2273,7 +2273,8 @@ class AppState: ObservableObject {
             isUser: isUser ? true : old.isUser,
             personId: personId ?? old.personId,
             start: old.start,
-            end: old.end
+            end: old.end,
+            translations: old.translations
           )
         }
       }
