@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -113,13 +114,17 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     return embedding
 
 
+def _read_file(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read()
+
+
 async def async_extract_embedding(audio_path: str) -> np.ndarray:
     """Async version of extract_embedding using httpx.AsyncClient."""
     api_url = _get_api_url()
     client = get_stt_client()
 
-    with open(audio_path, 'rb') as f:
-        file_data = f.read()
+    file_data = await asyncio.to_thread(_read_file, audio_path)
 
     files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
     try:
