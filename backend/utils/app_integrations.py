@@ -40,6 +40,7 @@ from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 from utils.log_sanitizer import sanitize
+from utils.mentor_notifications import process_mentor_notification
 import logging
 
 logger = logging.getLogger(__name__)
@@ -515,8 +516,6 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 
 async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
     # Process mentor notification first (built-in feature) — sync, runs in thread
-    from utils.mentor_notifications import process_mentor_notification
-
     mentor_results = {}
     conversation_messages = await asyncio.to_thread(process_mentor_notification, uid, segments)
     if conversation_messages:
