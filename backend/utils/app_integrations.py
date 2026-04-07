@@ -4,6 +4,8 @@ from typing import List
 import os
 import time
 
+import requests
+
 from utils.http_client import (
     get_webhook_client,
     get_webhook_circuit_breaker,
