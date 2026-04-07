@@ -720,9 +720,13 @@ def update_personas_async(uid: str):
     if personas:
         set_persona_update_timestamp(uid)
 
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
+
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(asyncio.gather(*[update_persona_prompt(persona) for persona in personas]))
+            loop.run_until_complete(_batch())
         except Exception as e:
             logger.error(f"Error in persona batch update for uid={uid}: {str(e)}")
         finally:
