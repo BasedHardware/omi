@@ -685,7 +685,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     /// Full transcript as a single string
     var transcript: String {
         transcriptSegments.map { segment in
-            let speaker = segment.isUser ? String(localized: "You", comment: "Label for the current user in transcript") : String(localized: "Speaker \(segment.speakerId)", comment: "Label for other speakers in transcript")
+            let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
             return "\(speaker): \(segment.text)"
         }.joined(separator: "\n\n")
     }
@@ -780,6 +780,12 @@ struct Event: Codable, Identifiable, Equatable {
     }
 }
 
+/// Translation from backend
+struct TranscriptTranslation: Codable {
+    let lang: String
+    let text: String
+}
+
 struct TranscriptSegment: Codable, Identifiable {
     let id: String
     let backendId: String?
@@ -789,6 +795,7 @@ struct TranscriptSegment: Codable, Identifiable {
     let personId: String?
     let start: Double
     let end: Double
+    let translations: [TranscriptTranslation]
 
     var speakerId: Int {
         guard let speaker = speaker else { return 0 }
@@ -803,7 +810,7 @@ struct TranscriptSegment: Codable, Identifiable {
         case id, text, speaker
         case isUser = "is_user"
         case personId = "person_id"
-        case start, end
+        case start, end, translations
     }
 
     init(from decoder: Decoder) throws {
@@ -817,6 +824,7 @@ struct TranscriptSegment: Codable, Identifiable {
         personId = try container.decodeIfPresent(String.self, forKey: .personId)
         start = try container.decodeIfPresent(Double.self, forKey: .start) ?? 0
         end = try container.decodeIfPresent(Double.self, forKey: .end) ?? 0
+        translations = try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
     }
 
     /// Memberwise initializer for creating from local storage
@@ -828,7 +836,8 @@ struct TranscriptSegment: Codable, Identifiable {
         isUser: Bool,
         personId: String?,
         start: Double,
-        end: Double
+        end: Double,
+        translations: [TranscriptTranslation] = []
     ) {
         self.id = id
         self.backendId = backendId
@@ -838,6 +847,7 @@ struct TranscriptSegment: Codable, Identifiable {
         self.personId = personId
         self.start = start
         self.end = end
+        self.translations = translations
     }
 
     /// Formatted timestamp string (e.g., "00:01:30 - 00:01:45")

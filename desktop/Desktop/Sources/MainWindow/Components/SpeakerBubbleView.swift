@@ -25,9 +25,9 @@ struct SpeakerBubbleView: View {
     }
 
     private var speakerLabel: String {
-        if isUser { return String(localized: "You", comment: "Label for the current user in transcript") }
+        if isUser { return "You" }
         if let name = personName { return name }
-        return String(localized: "Speaker \(segment.speakerId)", comment: "Label for other speakers in transcript")
+        return "Speaker \(segment.speakerId)"
     }
 
     private var avatarInitial: String {
@@ -91,6 +91,22 @@ struct SpeakerBubbleView: View {
                         RoundedRectangle(cornerRadius: 18)
                             .fill(bubbleColor)
                     )
+
+                // Translations from backend
+                if !segment.translations.isEmpty {
+                    ForEach(segment.translations, id: \.lang) { translation in
+                        Text(translation.text)
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .italic()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .fill(bubbleColor.opacity(0.5))
+                            )
+                    }
+                }
 
                 // Timestamp
                 Text(formatTime(segment.start))

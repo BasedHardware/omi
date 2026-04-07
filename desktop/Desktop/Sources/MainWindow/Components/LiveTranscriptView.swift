@@ -166,9 +166,9 @@ private struct LiveSegmentView: View {
     }
 
     private var speakerLabel: String {
-        if isUser { return String(localized: "You", comment: "Label for the current user in transcript") }
+        if isUser { return "You" }
         if let name = personName { return name }
-        return String(localized: "Speaker \(segment.speaker)", comment: "Label for other speakers in transcript")
+        return "Speaker \(segment.speaker)"
     }
 
     private var bubbleColor: Color {
@@ -247,6 +247,23 @@ private struct LiveSegmentView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(bubbleColor)
                 )
+
+            // Translations from backend
+            if !segment.translations.isEmpty {
+                ForEach(segment.translations, id: \.lang) { translation in
+                    Text(translation.text)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .italic()
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(bubbleColor.opacity(0.5))
+                        )
+                }
+            }
         }
     }
 

@@ -4,6 +4,13 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+/// Translation from backend (e.g., Japanese speech translated to English)
+struct SegmentTranslation: Identifiable {
+  var id: String { lang }
+  let lang: String
+  let text: String
+}
+
 /// Speaker segment for diarized transcription
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
@@ -15,6 +22,7 @@ struct SpeakerSegment: Identifiable {
   var end: Double
   var isUser: Bool = false
   var personId: String?    // Backend-assigned person ID from speaker identification
+  var translations: [SegmentTranslation] = []
 }
 
 /// Result of finalizing a conversation
@@ -2295,6 +2303,9 @@ class AppState: ObservableObject {
       let speakerId = segment.speaker_id ?? 0
 
       // Convert backend segment to local SpeakerSegment
+      let translations = (segment.translations ?? []).map {
+        SegmentTranslation(lang: $0.lang, text: $0.text)
+      }
       let newSeg = SpeakerSegment(
         segmentId: segment.id,
         speaker: speakerId,
@@ -2302,7 +2313,8 @@ class AppState: ObservableObject {
         start: segment.start,
         end: segment.end,
         isUser: segment.is_user,
-        personId: segment.person_id
+        personId: segment.person_id,
+        translations: translations
       )
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
@@ -2471,7 +2483,30 @@ class AppState: ObservableObject {
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
 
     case "translating":
-      log("Transcription: Translation event received")
+      if let segmentsArray = event.raw["segments"] as? [[String: Any]] {
+        do {
+          let data = try JSONSerialization.data(withJSONObject: segmentsArray)
+          let translatedSegments = try JSONDecoder().decode(
+            [TranscriptionService.BackendSegment].self, from: data)
+          log("Transcription: Translation event with \(translatedSegments.count) segments")
+          for translated in translatedSegments {
+            guard let segId = translated.id,
+              let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
+            else { continue }
+            let newTranslations = (translated.translations ?? []).map {
+              SegmentTranslation(lang: $0.lang, text: $0.text)
+            }
+            if !newTranslations.isEmpty {
+              speakerSegments[idx].translations = newTranslations
+            }
+          }
+          LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+        } catch {
+          logError("Transcription: Failed to parse translation event", error: error)
+        }
+      } else {
+        log("Transcription: Translation event received (no segments)")
+      }
 
     case "last_memory":
       let memoryId = event.raw["memory_id"] as? String ?? "?"
