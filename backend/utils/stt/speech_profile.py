@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -43,11 +44,15 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
         return default
 
 
+def _read_file(path: str) -> bytes:
+    with open(path, 'rb') as f:
+        return f.read()
+
+
 async def async_get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
     """Async version of get_speech_profile_matching_predictions using httpx.AsyncClient."""
     logger.info('async_get_speech_profile_matching_predictions')
-    with open(audio_file_path, 'rb') as f:
-        file_data = f.read()
+    file_data = await asyncio.to_thread(_read_file, audio_file_path)
 
     files = {'audio_file': (os.path.basename(audio_file_path), file_data, 'audio/wav')}
     default = [{'is_user': False, 'person_id': None}] * len(segments)
