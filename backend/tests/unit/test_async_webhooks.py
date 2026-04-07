@@ -182,3 +182,69 @@ class TestSendAudioBytesDeveloperWebhook:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
+
+
+class TestCircuitBreakerIntegration:
+    """Test circuit breaker integration in webhook functions."""
+
+    @pytest.mark.asyncio
+    async def test_transcript_webhook_skips_when_circuit_open(self):
+        """realtime_transcript_webhook must skip HTTP call when circuit breaker is open."""
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = False
+
+        mock_client = AsyncMock()
+
+        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
+            "utils.webhooks.get_webhook_client", return_value=mock_client
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+            mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_transcript_webhook_records_success_on_200(self):
+        """realtime_transcript_webhook must call record_success on successful HTTP call."""
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
+            "utils.webhooks.get_webhook_client", return_value=mock_client
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+            mock_cb.record_success.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_transcript_webhook_records_failure_on_exception(self):
+        """realtime_transcript_webhook must call record_failure on HTTP exception."""
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
+
+        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
+            "utils.webhooks.get_webhook_client", return_value=mock_client
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+            mock_cb.record_failure.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_audio_bytes_webhook_skips_when_circuit_open(self):
+        """send_audio_bytes_developer_webhook must skip HTTP call when circuit breaker is open."""
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = False
+
+        mock_client = AsyncMock()
+
+        with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
+            "utils.webhooks.get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
+            mock_client.post.assert_not_called()
