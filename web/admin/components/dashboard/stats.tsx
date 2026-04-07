@@ -2,9 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Loader2, MessageSquare, CreditCard, Smartphone } from "lucide-react";
-import { useAuth } from "@/components/auth-provider";
-import { useState, useEffect } from "react";
 import useSWR from 'swr';
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 
 interface AppStats {
   total: number;
@@ -40,52 +39,8 @@ const StatItem = ({ color, count, label }: { color: string; count: number; label
   </div>
 );
 
-// Authenticated fetcher for SWR
-const authenticatedFetcher = async ([url, token]: [string, string]) => {
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const error = new Error('An error occurred while fetching the data.')
-    try {
-        (error as any).info = await response.json();
-    } catch (e) {
-        (error as any).info = { message: 'Could not parse error JSON.' };
-    }
-    (error as any).status = response.status;
-    throw error;
-  }
-  return response.json();
-};
-
 export function DashboardStats() {
-  const { user, loading: authLoading } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
-
-  useEffect(() => {
-    const getToken = async () => {
-        if (user) {
-            try {
-                const idToken = await user.getIdToken();
-                setToken(idToken);
-            } catch (error) {
-                console.error("Error getting ID token:", error);
-                setToken(null);
-            } finally {
-                setTokenLoading(false);
-            }
-        } else if (!authLoading) {
-            setToken(null);
-            setTokenLoading(false);
-        }
-    };
-    getToken();
-  }, [user, authLoading]);
+  const { token, loading: tokenLoading } = useAuthToken();
 
   // Fetch app stats using SWR with authentication
   const { 
@@ -162,7 +117,7 @@ export function DashboardStats() {
       {/* --- Apps Card --- */}
       {appStatsError ? (
         <ErrorCard title="Apps" error={appStatsError} />
-      ) : authLoading || tokenLoading || appStatsLoading ? (
+      ) : tokenLoading || appStatsLoading ? (
         <LoadingCard />
       ) : appStats && appStats.total !== undefined ? (
         <Card>
@@ -193,7 +148,7 @@ export function DashboardStats() {
       {/* --- Conversations Card --- */}
       {conversationError ? (
         <ErrorCard title="Conversations" error={conversationError} />
-      ) : authLoading || tokenLoading || conversationLoading ? (
+      ) : tokenLoading || conversationLoading ? (
         <LoadingCard />
       ) : conversationData && conversationData.totalConversations !== undefined ? (
         <Card>
@@ -219,7 +174,7 @@ export function DashboardStats() {
       {/* --- Subscriptions Card --- */}
       {subscriptionError ? (
         <ErrorCard title="Active OMI Subscriptions" error={subscriptionError} />
-      ) : authLoading || tokenLoading || subscriptionLoading ? (
+      ) : tokenLoading || subscriptionLoading ? (
         <LoadingCard />
       ) : subscriptionData && subscriptionData.totalSubscriptions !== undefined ? (
         <Card>
@@ -249,7 +204,7 @@ export function DashboardStats() {
       {/* --- App Subscriptions Card --- */}
       {appSubscriptionError ? (
         <ErrorCard title="App Subscriptions" error={appSubscriptionError} />
-      ) : authLoading || tokenLoading || appSubscriptionLoading ? (
+      ) : tokenLoading || appSubscriptionLoading ? (
         <LoadingCard />
       ) : appSubscriptionData && appSubscriptionData.totalAppSubscriptions !== undefined ? (
         <Card>
