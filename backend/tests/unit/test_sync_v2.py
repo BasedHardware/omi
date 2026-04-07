@@ -157,12 +157,12 @@ class TestSyncV2Structure:
         assert 'get_user_transcription_preferences' in func_body, "v2 must fetch transcription preferences"
         assert 'build_person_embeddings_cache' in func_body, "v2 must build person embeddings cache"
 
-        # Both must appear before critical_executor.submit(
+        # Both must appear before the background worker dispatch
         prefs_pos = func_body.index('get_user_transcription_preferences')
         cache_pos = func_body.index('build_person_embeddings_cache')
-        submit_pos = func_body.index('critical_executor.submit(')
-        assert prefs_pos < submit_pos, "Prefs must be fetched before executor submit"
-        assert cache_pos < submit_pos, "Cache must be built before executor submit"
+        submit_pos = func_body.index('_process_segments_background')
+        assert prefs_pos < submit_pos, "Prefs must be fetched before background worker dispatch"
+        assert cache_pos < submit_pos, "Cache must be built before background worker dispatch"
 
     def test_v2_bg_worker_accepts_prefs_and_cache_params(self):
         """_process_segments_background must accept transcription_prefs and person_embeddings_cache."""
@@ -184,14 +184,14 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        # Find the critical_executor.submit( call block
-        submit_start = func_body.index('critical_executor.submit(')
-        # Find the closing paren — look for the return statement after it
+        # Find the background worker dispatch block
+        submit_start = func_body.index('_process_segments_background')
+        # Find the closing — look for the return statement after it
         submit_end = func_body.index('return JSONResponse', submit_start)
         submit_block = func_body[submit_start:submit_end]
 
-        assert 'transcription_prefs' in submit_block, "v2 must pass transcription_prefs to executor submit"
-        assert 'person_embeddings_cache' in submit_block, "v2 must pass person_embeddings_cache to executor submit"
+        assert 'transcription_prefs' in submit_block, "v2 must pass transcription_prefs to background worker"
+        assert 'person_embeddings_cache' in submit_block, "v2 must pass person_embeddings_cache to background worker"
 
 
 # ---------------------------------------------------------------------------
