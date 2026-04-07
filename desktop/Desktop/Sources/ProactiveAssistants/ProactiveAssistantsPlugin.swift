@@ -495,8 +495,17 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
             // Connect gRPC client for server-side proactive AI (non-blocking)
+            // Also wire up disconnect callback for mid-session reconnect.
             if let task = taskAssistant {
                 let capturedTask = task
+                task.onGRPCDisconnect = { [weak self] in
+                    guard let self = self else { return }
+                    Task { @MainActor in
+                        self.log("ProactiveGRPC: Stream disconnected — scheduling reconnect")
+                        self.grpcClient = nil
+                        await self.connectGRPCClient(for: capturedTask)
+                    }
+                }
                 Task { await self.connectGRPCClient(for: capturedTask) }
             }
 
