@@ -36,7 +36,12 @@ class WebhookCircuitBreaker:
       OPEN    — target is down, calls short-circuited
       HALF_OPEN — recovery probe allowed (single request)
 
-    Thread-safe via asyncio — all callers are on the same event loop.
+    Thread-safe: uses only time.monotonic() and simple int/bool fields with
+    no asyncio primitives.  Safe to call from multiple threads / event loops
+    (e.g. asyncio.run() in sync FastAPI endpoints, executor threads).
+    httpx.AsyncClient instances are likewise thread-safe (httpcore is
+    thread-safe).  Per-loop semaphores are keyed by loop ID so they work
+    correctly across different event loops.
     """
 
     __slots__ = ('_failures', '_last_failure_time', '_state', '_half_open_in_flight', '_url')
