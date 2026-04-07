@@ -106,10 +106,18 @@ public actor ProactiveGRPCClient {
 
     /// Connect to the gRPC server and open a Session stream.
     public func connect(authToken: String, context: Proactive_V1_SessionContext, appVersion: String = "", osVersion: String = "") async throws -> Proactive_V1_SessionReady {
-        // Create channel
-        let conn = ClientConnection
-            .insecure(group: group)
-            .connect(host: host, port: port)
+        // Create channel — use TLS for remote hosts, insecure for localhost/dev
+        let conn: ClientConnection
+        let isLocal = (host == "localhost" || host == "127.0.0.1")
+        if isLocal {
+            conn = ClientConnection
+                .insecure(group: group)
+                .connect(host: host, port: port)
+        } else {
+            conn = ClientConnection
+                .usingTLSBackedByNIOSSL(on: group)
+                .connect(host: host, port: port)
+        }
         self.channel = conn
 
         // Add auth token to call options
