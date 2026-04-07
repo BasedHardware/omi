@@ -4188,11 +4188,37 @@ extension APIClient {
         let body = RateRequest(rating: rating)
         let _: MessageStatusResponse = try await patch("v2/desktop/messages/\(messageId)/rating", body: body)
     }
+
+    /// Share chat messages and get a shareable URL
+    func shareChatMessages(messageIds: [String]) async throws -> ShareChatResponse {
+        struct ShareRequest: Encodable {
+            let message_ids: [String]
+        }
+        let body = ShareRequest(message_ids: messageIds)
+        return try await post("v2/messages/share", body: body)
+    }
+
+    /// Convenience: get a share link for the current floating bar conversation
+    func getChatShareLink(sessionId: String) async throws -> String {
+        // For session-based chats, share the session
+        struct ShareSessionRequest: Encodable {
+            let session_id: String
+        }
+        let body = ShareSessionRequest(session_id: sessionId)
+        let response: ShareChatResponse = try await post("v2/messages/share", body: body)
+        return response.url
+    }
 }
 
 /// Response from rating a message
 struct MessageStatusResponse: Codable {
     let status: String
+}
+
+/// Response from sharing chat messages
+struct ShareChatResponse: Codable {
+    let url: String
+    let token: String
 }
 
 // MARK: - Chat Sessions API
