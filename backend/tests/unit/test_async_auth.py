@@ -93,7 +93,9 @@ class TestSocialNoBlockingPatterns:
             def visit_Call(self, node):
                 if self._in_async and isinstance(node.func, ast.Attribute):
                     if isinstance(node.func.value, ast.Name) and node.func.value.id == 'httpx':
-                        violations.append((node.lineno, f'httpx.{node.func.attr}'))
+                        # Allow httpx.AsyncClient() and httpx.Timeout() — only flag sync methods
+                        if node.func.attr not in ('AsyncClient', 'Timeout'):
+                            violations.append((node.lineno, f'httpx.{node.func.attr}'))
                 self.generic_visit(node)
 
         Visitor().visit(tree)
@@ -111,6 +113,17 @@ class TestSocialNoBlockingPatterns:
         with open(filepath) as f:
             source = f.read()
         assert 'asyncio.sleep' in source, "social.py retry should use asyncio.sleep"
+
+    def test_social_no_shared_webhook_client(self):
+        """social.py must use local httpx.AsyncClient, not shared webhook client,
+        because it runs in background threads with separate event loops."""
+        filepath = os.path.join(BACKEND_DIR, 'utils', 'social.py')
+        with open(filepath) as f:
+            source = f.read()
+        assert 'get_webhook_client' not in source, (
+            "social.py should use local httpx.AsyncClient, not shared get_webhook_client() — "
+            "shared client breaks when used across event loops in background threads"
+        )
 
 
 class TestAppsNoBlockingIO:
