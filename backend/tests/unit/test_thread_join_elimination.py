@@ -5,12 +5,26 @@ where ThreadPoolExecutor or asyncio.gather can be used instead.
 """
 
 import ast
+import importlib.util
 import os
 import re
+import sys
+import tempfile
+import textwrap
+from pathlib import Path
 
 import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _load_lint_module():
+    """Load the lint_async_blockers module without executing __main__ block."""
+    lint_path = os.path.join(BACKEND_DIR, 'scripts', 'lint_async_blockers.py')
+    spec = importlib.util.spec_from_file_location('lint_async_blockers', lint_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _count_thread_join_patterns(filepath: str) -> list:
@@ -242,3 +256,87 @@ class TestLintScript:
             source = f.read()
         # Should parse without errors
         ast.parse(source)
+
+
+class TestLintScriptDetection:
+    """Verify the lint script detects actual violations and clears clean code."""
+
+    @staticmethod
+    def _scan_source(code: str) -> list:
+        """Write code to a temp file and run scan_file on it."""
+        mod = _load_lint_module()
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(textwrap.dedent(code))
+            tmp_path = Path(f.name)
+        try:
+            return mod.scan_file(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    def test_detects_requests_get_in_async(self):
+        """requests.get inside an async function must be a violation."""
+        code = """\
+            import requests
+
+            async def fetch(url):
+                return requests.get(url)
+        """
+        violations = self._scan_source(code)
+        assert len(violations) >= 1, f"Expected at least 1 violation, got: {violations}"
+        assert any('requests' in msg for _, msg in violations), f"Expected requests violation, got: {violations}"
+
+    def test_detects_time_sleep_in_async(self):
+        """time.sleep() inside an async function must be a violation."""
+        code = """\
+            import time
+
+            async def pause():
+                time.sleep(1)
+        """
+        violations = self._scan_source(code)
+        assert len(violations) >= 1, f"Expected at least 1 violation, got: {violations}"
+        assert any('time.sleep' in msg for _, msg in violations), f"Expected time.sleep violation, got: {violations}"
+
+    def test_detects_thread_start_in_async(self):
+        """Thread().start() inside an async function must be a violation."""
+        code = """\
+            from threading import Thread
+
+            async def spawn():
+                Thread(target=lambda: None).start()
+        """
+        violations = self._scan_source(code)
+        assert len(violations) >= 1, f"Expected at least 1 violation, got: {violations}"
+        assert any('Thread' in msg for _, msg in violations), f"Expected Thread violation, got: {violations}"
+
+    def test_clean_code_has_no_violations(self):
+        """Code with no blocking patterns must produce zero violations."""
+        code = """\
+            import asyncio
+            import httpx
+
+            async def fetch(url: str) -> dict:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url)
+                return response.json()
+
+            async def pause():
+                await asyncio.sleep(1)
+
+            def sync_helper():
+                import time
+                time.sleep(0.1)  # OK — not in async function
+        """
+        violations = self._scan_source(code)
+        assert violations == [], f"Expected no violations for clean code, got: {violations}"
+
+    def test_sync_function_with_blocking_is_clean(self):
+        """Blocking calls in ordinary (non-async) functions must not be flagged."""
+        code = """\
+            import requests
+
+            def sync_fetch(url):
+                return requests.get(url)
+        """
+        violations = self._scan_source(code)
+        assert violations == [], f"Blocking in sync function should not be flagged, got: {violations}"
