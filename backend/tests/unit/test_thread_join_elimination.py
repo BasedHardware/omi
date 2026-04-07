@@ -14,16 +14,21 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 
 
 def _count_thread_join_patterns(filepath: str) -> list:
-    """Find [t.join() for t in threads] or t.join() patterns."""
+    """Find Thread+join patterns: list-comp joins and direct .join() on thread variables."""
     with open(filepath) as f:
         source = f.read()
 
+    patterns = []
     # Match list-comprehension join patterns like: [t.join() for t in threads]
-    join_patterns = re.findall(r'\[t\.join\(\)\s+for\s+t\s+in\s+\w+\]', source)
-    # Also match simple .join() on threads
-    simple_joins = re.findall(r'\.join\(\)', source)
+    patterns.extend(re.findall(r'\[t\.join\(\)\s+for\s+t\s+in\s+\w+\]', source))
+    # Match direct thread.join() calls (e.g. thread.join(), t.join())
+    # but exclude string.join() and os.path.join() via context check
+    for match in re.finditer(r'(\w+)\.join\(\)', source):
+        var_name = match.group(1)
+        if var_name in ('thread', 't', 'thr') or var_name.startswith('thread'):
+            patterns.append(match.group(0))
 
-    return join_patterns
+    return patterns
 
 
 class TestNoThreadJoinInMigratedFiles:
@@ -124,6 +129,46 @@ class TestAsyncSTTVariants:
             with open(filepath) as f:
                 source = f.read()
             assert 'asyncio.to_thread' in source, f"{filename} should offload file I/O via asyncio.to_thread"
+
+
+class TestAsyncSTTBehavior:
+    """Runtime behavior tests for async STT variants."""
+
+    @pytest.mark.asyncio
+    async def test_async_extract_embedding_from_bytes_short_audio_rejected(self):
+        """Short audio should raise ValueError before any HTTP call."""
+        from unittest.mock import patch, AsyncMock
+
+        # 44-byte WAV header with 0 data frames = 0s duration
+        short_wav = (
+            b'RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00'
+            b'\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00'
+            b'\x02\x00\x10\x00data\x00\x00\x00\x00'
+        )
+
+        with pytest.raises(ValueError, match="Audio too short"):
+            # Import here to avoid module-level side effects
+            import importlib
+
+            mod = importlib.import_module('utils.stt.speaker_embedding')
+            await mod.async_extract_embedding_from_bytes(short_wav)
+
+    @pytest.mark.asyncio
+    async def test_async_vad_local_fallback(self):
+        """When hosted VAD URL is unset, async_vad_is_empty should fall back to local VAD."""
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=False):
+            # Ensure HOSTED_VAD_API_URL is not set
+            os.environ.pop('HOSTED_VAD_API_URL', None)
+            import importlib
+
+            mod = importlib.import_module('utils.stt.vad')
+            # _local_vad should be called via asyncio.to_thread
+            with patch.object(mod, '_local_vad', return_value=[]) as mock_local:
+                result = await mod.async_vad_is_empty('/tmp/nonexistent.wav')
+                mock_local.assert_called_once_with('/tmp/nonexistent.wav')
+                assert result is True  # empty segments = True
 
 
 class TestLintScript:
