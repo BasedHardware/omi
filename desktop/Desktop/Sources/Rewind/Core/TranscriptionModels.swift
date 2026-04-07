@@ -424,7 +424,10 @@ extension TranscriptionSegmentRecord {
         )
     }
 
-    /// Convert back to TranscriptSegment for UI display
+    /// Convert back to TranscriptSegment for UI display.
+    /// NOTE: Translations are not persisted in local SQLite, so segments loaded
+    /// from cache will have empty translations. Translations are available when
+    /// fetched from the API or during a live recording session.
     func toTranscriptSegment() -> TranscriptSegment {
         return TranscriptSegment(
             id: segmentId ?? UUID().uuidString,
