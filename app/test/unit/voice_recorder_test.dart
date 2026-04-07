@@ -73,6 +73,53 @@ void main() {
       final subchunk2Size = wav[40] | (wav[41] << 8) | (wav[42] << 16) | (wav[43] << 24);
       expect(subchunk2Size, equals(pcm.length));
     });
+
+    test('all WAV header numeric fields are correct for 16kHz mono', () {
+      final pcm = Uint8List.fromList(List.generate(200, (i) => i % 256));
+      final wav = WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes();
+
+      int u16(int offset) => wav[offset] | (wav[offset + 1] << 8);
+      int u32(int offset) => wav[offset] | (wav[offset + 1] << 8) | (wav[offset + 2] << 16) | (wav[offset + 3] << 24);
+
+      // ChunkSize at offset 4 = 36 + pcm.length
+      expect(u32(4), equals(36 + pcm.length));
+
+      // Subchunk1Size at offset 16 = 16 (PCM)
+      expect(u32(16), equals(16));
+
+      // AudioFormat at offset 20 = 1 (PCM)
+      expect(u16(20), equals(1));
+
+      // NumChannels at offset 22
+      expect(u16(22), equals(1));
+
+      // SampleRate at offset 24
+      expect(u32(24), equals(16000));
+
+      // ByteRate at offset 28 = sampleRate * numChannels * bitsPerSample/8
+      // = 16000 * 1 * 16/8 = 32000
+      expect(u32(28), equals(32000));
+
+      // BlockAlign at offset 32 = numChannels * bitsPerSample/8 = 1 * 2 = 2
+      expect(u16(32), equals(2));
+
+      // BitsPerSample at offset 34 = 16
+      expect(u16(34), equals(16));
+    });
+
+    test('WAV header fields correct for stereo 48kHz', () {
+      final pcm = Uint8List(960); // 10ms of stereo 48kHz 16-bit
+      final wav = WavBytes.fromPcm(pcm, sampleRate: 48000, numChannels: 2).asBytes();
+
+      int u16(int offset) => wav[offset] | (wav[offset + 1] << 8);
+      int u32(int offset) => wav[offset] | (wav[offset + 1] << 8) | (wav[offset + 2] << 16) | (wav[offset + 3] << 24);
+
+      expect(u16(22), equals(2)); // NumChannels
+      expect(u32(24), equals(48000)); // SampleRate
+      expect(u32(28), equals(48000 * 2 * 2)); // ByteRate = 192000
+      expect(u16(32), equals(4)); // BlockAlign = 2 * 2
+      expect(u16(34), equals(16)); // BitsPerSample
+    });
   });
 
   group('VoiceRecorderProvider disk streaming', () {
