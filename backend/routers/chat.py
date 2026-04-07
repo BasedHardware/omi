@@ -259,13 +259,22 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-def initial_message_util(uid: str, app_id: Optional[str] = None):
+def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     logger.info(f'initial_message_util {app_id}')
 
-    # init chat session
-    chat_session = acquire_chat_session(uid, app_id=app_id)
+    # init chat session — use provided session_id if available, otherwise acquire by app_id
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if chat_session is None:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = acquire_chat_session(uid, app_id=app_id)
 
-    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
+    # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
+    if chat_session_id:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
+    else:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
 
     app = get_available_app_by_id(app_id, uid)
