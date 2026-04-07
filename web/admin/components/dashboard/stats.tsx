@@ -99,35 +99,35 @@ export function DashboardStats() {
   );
 
   // Fetch conversation count using SWR
-  const { 
+  const {
     data: conversationData,
     error: conversationError,
-    isLoading: conversationLoading 
+    isLoading: conversationLoading
   } = useSWR<{ totalConversations: number }>(
-    '/api/omi/stats/conversation-count',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/conversation-count', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
   // Fetch subscription stats using SWR
-  const { 
+  const {
     data: subscriptionData,
     error: subscriptionError,
-    isLoading: subscriptionLoading 
+    isLoading: subscriptionLoading
   } = useSWR<SubscriptionStats>(
-    '/api/omi/stats/subscriptions',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/subscriptions', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
   // Fetch app subscription stats using SWR
-  const { 
+  const {
     data: appSubscriptionData,
     error: appSubscriptionError,
-    isLoading: appSubscriptionLoading 
+    isLoading: appSubscriptionLoading
   } = useSWR<AppSubscriptionStats>(
-    '/api/omi/stats/app-subscriptions',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/app-subscriptions', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
@@ -193,7 +193,7 @@ export function DashboardStats() {
       {/* --- Conversations Card --- */}
       {conversationError ? (
         <ErrorCard title="Conversations" error={conversationError} />
-      ) : conversationLoading ? (
+      ) : authLoading || tokenLoading || conversationLoading ? (
         <LoadingCard />
       ) : conversationData && conversationData.totalConversations !== undefined ? (
         <Card>
@@ -219,7 +219,7 @@ export function DashboardStats() {
       {/* --- Subscriptions Card --- */}
       {subscriptionError ? (
         <ErrorCard title="Active OMI Subscriptions" error={subscriptionError} />
-      ) : subscriptionLoading ? (
+      ) : authLoading || tokenLoading || subscriptionLoading ? (
         <LoadingCard />
       ) : subscriptionData && subscriptionData.totalSubscriptions !== undefined ? (
         <Card>
@@ -249,7 +249,7 @@ export function DashboardStats() {
       {/* --- App Subscriptions Card --- */}
       {appSubscriptionError ? (
         <ErrorCard title="App Subscriptions" error={appSubscriptionError} />
-      ) : appSubscriptionLoading ? (
+      ) : authLoading || tokenLoading || appSubscriptionLoading ? (
         <LoadingCard />
       ) : appSubscriptionData && appSubscriptionData.totalAppSubscriptions !== undefined ? (
         <Card>
