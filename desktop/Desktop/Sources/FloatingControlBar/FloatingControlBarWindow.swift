@@ -1216,6 +1216,20 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Check weekly usage limit for free users
+        let limiter = FloatingBarUsageLimiter.shared
+        if limiter.isLimitReached {
+            barWindow.state.isAILoading = false
+            barWindow.state.showingAIResponse = true
+            barWindow.state.currentAIMessage = ChatMessage(
+                text: "You've used all \(FloatingBarUsageLimiter.weeklyFreeLimit) free queries this week. Upgrade to Pro for unlimited access, or wait for your weekly reset.",
+                sender: .ai
+            )
+            barWindow.resizeToResponseHeightPublic(animated: true)
+            return
+        }
+
+        limiter.recordQuery()
         FloatingBarVoicePlaybackService.shared.stop()
 
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
