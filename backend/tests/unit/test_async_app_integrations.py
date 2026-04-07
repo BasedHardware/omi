@@ -128,10 +128,14 @@ sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=
 sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
 sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
 
-# Stub executors
+# Stub executors — must use real ThreadPoolExecutor because asyncio's
+# run_in_executor calls executor.submit() and wraps the returned Future.
+from concurrent.futures import ThreadPoolExecutor as _TPE
+
 if "utils.executors" not in sys.modules:
     sys.modules["utils.executors"] = types.ModuleType("utils.executors")
-sys.modules["utils.executors"].critical_executor = MagicMock()
+sys.modules["utils.executors"].critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
+sys.modules["utils.executors"].storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
 
 import importlib
 
