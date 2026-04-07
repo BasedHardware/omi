@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -302,7 +303,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             ),
                           ),
 
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 20),
+
+                          // Voice responses checkbox
+                          _VoiceResponseCheckbox(),
+
+                          const SizedBox(height: 24),
 
                           // Get Started button
                           provider.isInitialising
@@ -509,6 +515,64 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _VoiceResponseCheckbox extends StatefulWidget {
+  @override
+  State<_VoiceResponseCheckbox> createState() => _VoiceResponseCheckboxState();
+}
+
+class _VoiceResponseCheckboxState extends State<_VoiceResponseCheckbox> {
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = SharedPreferencesUtil().voiceResponseEnabled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _enabled = !_enabled;
+          SharedPreferencesUtil().voiceResponseEnabled = _enabled;
+        });
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: Checkbox(
+              value: _enabled,
+              onChanged: (value) {
+                setState(() {
+                  _enabled = value ?? true;
+                  SharedPreferencesUtil().voiceResponseEnabled = _enabled;
+                });
+              },
+              activeColor: Colors.white,
+              checkColor: Colors.black,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Enable voice responses',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 15,
+              fontFamily: 'Manrope',
+            ),
+          ),
+        ],
       ),
     );
   }
