@@ -63,17 +63,17 @@ class TestNoThreadJoinInMigratedFiles:
 class TestThreadPoolExecutorUsed:
     """Verify migrated files use ThreadPoolExecutor or asyncio.gather."""
 
-    def test_rag_uses_threadpool(self):
+    def test_rag_uses_shared_executor(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'retrieval', 'rag.py')
         with open(filepath) as f:
             source = f.read()
-        assert 'ThreadPoolExecutor' in source or 'concurrent.futures' in source
+        assert 'critical_executor' in source
 
-    def test_sync_uses_threadpool(self):
+    def test_sync_uses_shared_executor_or_gather(self):
         filepath = os.path.join(BACKEND_DIR, 'routers', 'sync.py')
         with open(filepath) as f:
             source = f.read()
-        assert 'ThreadPoolExecutor' in source or 'concurrent.futures' in source
+        assert 'critical_executor' in source or 'storage_executor' in source or 'asyncio.gather' in source
 
     def test_app_integrations_uses_threadpool_or_gather(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'app_integrations.py')
@@ -100,24 +100,22 @@ class TestAsyncGatherInBackgroundThread:
         filepath = os.path.join(BACKEND_DIR, 'utils', 'apps.py')
         with open(filepath) as f:
             source = f.read()
-        assert 'async def _batch()' in source, (
-            "update_personas_async must wrap asyncio.gather in async _batch() helper"
-        )
-        assert 'set_event_loop' in source, (
-            "update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
-        )
+        assert 'async def _batch()' in source, "update_personas_async must wrap asyncio.gather in async _batch() helper"
+        assert (
+            'set_event_loop' in source
+        ), "update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
 
     def test_process_conversation_uses_batch_wrapper(self):
         """process_conversation.py _update_personas_async must use async _batch() wrapper."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'conversations', 'process_conversation.py')
         with open(filepath) as f:
             source = f.read()
-        assert 'async def _batch()' in source, (
-            "_update_personas_async must wrap asyncio.gather in async _batch() helper"
-        )
-        assert 'set_event_loop' in source, (
-            "_update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
-        )
+        assert (
+            'async def _batch()' in source
+        ), "_update_personas_async must wrap asyncio.gather in async _batch() helper"
+        assert (
+            'set_event_loop' in source
+        ), "_update_personas_async must call asyncio.set_event_loop(loop) before run_until_complete"
 
     def test_gather_batch_pattern_works_in_thread(self):
         """Runtime test: asyncio.gather inside _batch() wrapper works from a background thread."""
