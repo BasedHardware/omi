@@ -598,9 +598,14 @@ def _update_personas_async(uid: str):
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
+
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
+
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(asyncio.gather(*[update_persona_prompt(persona) for persona in personas]))
+            loop.run_until_complete(_batch())
         finally:
             loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
