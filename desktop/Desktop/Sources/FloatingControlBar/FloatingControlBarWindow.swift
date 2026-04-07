@@ -51,6 +51,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     var onAskAI: (() -> Void)?
     var onHide: (() -> Void)?
     var onSendQuery: ((String) -> Void)?
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
@@ -115,7 +117,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() }
+            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
+            onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
+            onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -879,6 +883,35 @@ class FloatingControlBarManager {
             guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
             Task { @MainActor in
                 await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+            }
+        }
+
+        barWindow.onRate = { [weak chatProvider] messageId, rating in
+            guard let provider = chatProvider else { return }
+            Task { @MainActor in
+                await provider.rateMessage(messageId, rating: rating)
+            }
+        }
+
+        barWindow.onShareLink = { [weak barWindow] in
+            guard let barWindow = barWindow else { return nil }
+            // Collect all synced message IDs from the conversation
+            var messageIds: [String] = []
+            for exchange in barWindow.state.chatHistory {
+                if exchange.aiMessage.isSynced {
+                    messageIds.append(exchange.aiMessage.id)
+                }
+            }
+            if let current = barWindow.state.currentAIMessage, current.isSynced {
+                messageIds.append(current.id)
+            }
+            guard !messageIds.isEmpty else { return nil }
+            do {
+                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                return response.url
+            } catch {
+                log("Failed to get chat share link: \(error)")
+                return nil
             }
         }
 
