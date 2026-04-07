@@ -880,6 +880,24 @@ def try_accept_task_share(token: str, uid: str) -> bool:
     return False
 
 
+CHAT_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
+
+
+def store_chat_share(token: str, uid: str, display_name: str, message_ids: list):
+    """Store a chat share token in Redis with 30-day TTL."""
+    data = json.dumps({"uid": uid, "display_name": display_name, "message_ids": message_ids})
+    return r.set(f'chat_share:{token}', data, ex=CHAT_SHARE_TTL)
+
+
+@try_catch_decorator
+def get_chat_share(token: str) -> Optional[dict]:
+    """Get chat share data by token. Returns None if expired or not found."""
+    data = r.get(f'chat_share:{token}')
+    if data:
+        return json.loads(data)
+    return None
+
+
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
