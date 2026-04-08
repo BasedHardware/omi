@@ -422,3 +422,171 @@ class TestPhase3NarrowImports:
         assert 'List' not in mod.__all__
         assert 'Optional' not in mod.__all__
         assert 'Dict' not in mod.__all__
+
+
+class TestConversationInitSideEffects:
+    """Conversation.__init__ backward-compat side effects."""
+
+    def test_apps_results_synced_to_plugins_results(self):
+        from models.conversation import AppResult, Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="side-effect-1",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+            apps_results=[AppResult(app_id="app1", content="result1")],
+        )
+        assert len(conv.plugins_results) == 1
+        assert conv.plugins_results[0].plugin_id == "app1"
+        assert conv.plugins_results[0].content == "result1"
+
+    def test_processing_conversation_id_synced_to_processing_memory_id(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="side-effect-2",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+            processing_conversation_id="proc-123",
+        )
+        assert conv.processing_memory_id == "proc-123"
+
+
+class TestGetPersonIds:
+    """get_person_ids with duplicates and None values."""
+
+    def test_deduplicates_person_ids(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+        from models.transcript_segment import TranscriptSegment
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="dedup-1",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+            transcript_segments=[
+                TranscriptSegment(text="a", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=False, person_id="p1"),
+                TranscriptSegment(text="b", speaker="SPEAKER_01", start=1.0, end=2.0, is_user=False, person_id="p1"),
+                TranscriptSegment(text="c", speaker="SPEAKER_02", start=2.0, end=3.0, is_user=False, person_id="p2"),
+            ],
+        )
+        ids = conv.get_person_ids()
+        assert sorted(ids) == ["p1", "p2"]
+
+    def test_filters_none_person_ids(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+        from models.transcript_segment import TranscriptSegment
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="none-filter",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+            transcript_segments=[
+                TranscriptSegment(text="a", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=False, person_id=None),
+                TranscriptSegment(text="b", speaker="SPEAKER_01", start=1.0, end=2.0, is_user=False, person_id="p1"),
+            ],
+        )
+        assert conv.get_person_ids() == ["p1"]
+
+    def test_empty_segments_returns_empty(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="empty-seg",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+        )
+        assert conv.get_person_ids() == []
+
+
+class TestAsDictCleanedDates:
+    """as_dict_cleaned_dates recursive datetime conversion."""
+
+    def test_datetimes_converted_to_iso(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime(2025, 6, 15, 10, 30, 0, tzinfo=timezone.utc)
+        conv = Conversation(
+            id="dates-1",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(title="Test"),
+        )
+        d = conv.as_dict_cleaned_dates()
+        assert isinstance(d['created_at'], str)
+        assert '2025-06-15' in d['created_at']
+        assert isinstance(d['started_at'], str)
+        assert isinstance(d['finished_at'], str)
+
+
+class TestConversationSummaryWithTranscript:
+    """ConversationSummary.from_conversation with real data."""
+
+    def test_from_conversation_with_transcript_and_person_ids(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import CategoryEnum, ConversationSource
+        from models.conversation_summary import ConversationSummary
+        from models.structured import Structured
+        from models.transcript_segment import TranscriptSegment
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="summary-1",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(
+                title="Team standup",
+                overview="Daily sync",
+                category=CategoryEnum.work,
+            ),
+            transcript_segments=[
+                TranscriptSegment(
+                    text="Hello team", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True, person_id="p1"
+                ),
+                TranscriptSegment(
+                    text="Hi there", speaker="SPEAKER_01", start=1.0, end=2.0, is_user=False, person_id="p2"
+                ),
+            ],
+        )
+        summary = ConversationSummary.from_conversation(conv)
+        assert summary.id == "summary-1"
+        assert summary.title == "Team standup"
+        assert summary.category == "work"
+        assert "Hello team" in summary.transcript_text
+        assert "Hi there" in summary.transcript_text
+        assert sorted(summary.person_ids) == ["p1", "p2"]
