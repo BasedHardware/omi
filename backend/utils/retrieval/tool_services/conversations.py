@@ -3,6 +3,7 @@ Shared service functions for conversation retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -18,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
     """Parse ISO date string with timezone. Raises ValueError on bad format."""
-    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+    # Recover '+' lost to URL query param decoding (servers decode '+' as space)
+    cleaned = re.sub(r' (\d{2}:\d{2})$', r'+\1', date_str)
+    dt = datetime.fromisoformat(cleaned.replace('Z', '+00:00'))
     if dt.tzinfo is None:
         raise ValueError(
             f"{param_name} must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM "
