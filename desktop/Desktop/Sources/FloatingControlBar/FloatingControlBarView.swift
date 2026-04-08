@@ -18,10 +18,6 @@ struct FloatingControlBarView: View {
     @State private var isHovering = false
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
 
-    private var isShowingExpandedChrome: Bool {
-        state.isVoiceListening && !state.isVoiceFollowUp || isHovering || state.showingAIConversation
-    }
-
     var body: some View {
         VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
             barChrome
@@ -213,18 +209,13 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        ZStack {
-            if !isShowingExpandedChrome {
-                compactCircleView
-                    .transition(.scale(scale: 0.84).combined(with: .opacity))
-            }
-
+        Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .frame(height: 50)
-                    .transition(.scale(scale: 0.97).combined(with: .opacity))
+                    .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
@@ -238,17 +229,12 @@ struct FloatingControlBarView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(height: 50)
-                .transition(.scale(scale: 0.97).combined(with: .opacity))
+                .transition(.opacity)
+            } else {
+                compactCircleView
+                    .transition(.opacity)
             }
         }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: isShowingExpandedChrome ? 50 : 6,
-            maxHeight: isShowingExpandedChrome ? 50 : 6,
-            alignment: .center
-        )
-        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: isShowingExpandedChrome)
-        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: state.isVoiceListening)
     }
 
     /// Minimal thin bar shown when not hovering

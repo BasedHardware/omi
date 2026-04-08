@@ -985,9 +985,30 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     @Published var isRunning = false
+    @Published var progressTitle: String?
+    @Published var progressDetail: String?
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var draftText = ""
+
+    private func beginRun(title: String, detail: String) {
+        errorMessage = nil
+        statusMessage = nil
+        progressTitle = title
+        progressDetail = detail
+        isRunning = true
+    }
+
+    private func updateProgress(title: String, detail: String) {
+        progressTitle = title
+        progressDetail = detail
+    }
+
+    private func finishRun() {
+        isRunning = false
+        progressTitle = nil
+        progressDetail = nil
+    }
 
     func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
         NSPasteboard.general.clearContents()
@@ -1002,10 +1023,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return nil
         }
 
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Importing \(source.displayName)",
+            detail: "Extracting durable memories from the pasted conversation."
+        )
+        defer { finishRun() }
 
         let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(trimmed, source: source)
         guard result.memories > 0 else {
@@ -1019,15 +1041,20 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importGmail() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Gmail",
+            detail: "Reading recent email history and follow-ups from the last year."
+        )
+        defer { finishRun() }
 
         do {
             let emails = try await GmailReaderService.shared.readRecentEmails(
                 maxResults: 300,
                 query: "newer_than:365d"
+            )
+            updateProgress(
+                title: "Importing Gmail history",
+                detail: "Saving raw emails as memories and generating follow-up insights."
             )
             let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
             let synthesis = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
@@ -1042,16 +1069,21 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importCalendar() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Calendar",
+            detail: "Reading past events and upcoming commitments for memory extraction."
+        )
+        defer { finishRun() }
 
         do {
             let events = try await CalendarReaderService.shared.readEvents(
                 daysBack: 365,
                 daysForward: 30,
                 maxResults: 500
+            )
+            updateProgress(
+                title: "Importing calendar events",
+                detail: "Saving events as memories and generating action-oriented summaries."
             )
             let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
             let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
@@ -1066,10 +1098,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importAppleNotes() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Apple Notes",
+            detail: "Checking access and preparing to import recent notes."
+        )
+        defer { finishRun() }
 
         do {
             return try await runAppleNotesImport()
@@ -1099,6 +1132,10 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     private func runAppleNotesImport() async throws -> SyncResult {
+        updateProgress(
+            title: "Importing Apple Notes",
+            detail: "Reading recent notes and turning useful content into memories."
+        )
         let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
         let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
         let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
@@ -1114,10 +1151,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return nil
         }
 
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Indexing local files",
+            detail: "Scanning your on-device files so Omi can use them in memory search."
+        )
+        defer { finishRun() }
 
         let previousCount = await currentIndexedFileCount()
         ChatToolExecutor.onboardingAppState = appState
@@ -1204,6 +1242,10 @@ struct ImportConnectorSheet: View {
 
     @StateObject private var model = ImportConnectorSheetModel()
 
+    private var snapshot: ImportConnectorStatusStore.Snapshot {
+        statusStore.snapshot(for: connector)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
@@ -1226,7 +1268,15 @@ struct ImportConnectorSheet: View {
 
                 Spacer()
 
-                DismissButton(action: onDismiss)
+                VStack(alignment: .trailing, spacing: 8) {
+                    DismissButton(action: onDismiss)
+
+                    Text("Press Esc or click × to close. Imports keep running in the background.")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 180, alignment: .trailing)
+                }
             }
 
             if connector.id == "chatgpt" || connector.id == "claude" {
@@ -1235,17 +1285,7 @@ struct ImportConnectorSheet: View {
                 connectorActionContent
             }
 
-            if let statusMessage = model.statusMessage {
-                Text(statusMessage)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.success)
-            }
-
-            if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.warning)
-            }
+            statusSection
 
             Spacer(minLength: 0)
         }
@@ -1378,16 +1418,87 @@ struct ImportConnectorSheet: View {
     private var primaryActionTitle: String {
         switch connector.id {
         case "calendar":
-            return model.isRunning ? "Importing…" : "Import Calendar"
+            return model.isRunning ? "Importing…" : "Connect Calendar"
         case "email":
-            return model.isRunning ? "Importing…" : "Import Gmail"
+            return model.isRunning ? "Importing…" : "Connect Gmail"
         case "apple-notes":
-            return model.isRunning ? "Importing…" : "Import Apple Notes"
+            return model.isRunning ? "Importing…" : "Connect Apple Notes"
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:
             return model.isRunning ? "Working…" : connector.actionTitle
         }
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        if model.isRunning, let title = model.progressTitle {
+            statusCard {
+                HStack(alignment: .top, spacing: 12) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .scaledFont(size: 12, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if let detail = model.progressDetail {
+                            Text(detail)
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Text("You can close this popup now. The import will keep running in the background.")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        } else if let statusMessage = model.statusMessage {
+            Text(statusMessage)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.success)
+        } else if let errorMessage = model.errorMessage {
+            Text(errorMessage)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.warning)
+        } else if snapshot.isConnected || snapshot.secondaryText != nil {
+            statusCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Current import status")
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Text(snapshot.primaryText)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let secondaryText = snapshot.secondaryText {
+                        Text(secondaryText)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        } else {
+            Text("Start the import here. You can close this popup any time with Esc or ×, and once started the import will keep running in the background.")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+        }
+    }
+
+    private func statusCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(OmiColors.backgroundSecondary)
+            .cornerRadius(16)
     }
 }
 
