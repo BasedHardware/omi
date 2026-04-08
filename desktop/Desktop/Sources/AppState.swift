@@ -2509,16 +2509,27 @@ class AppState: ObservableObject {
             if !newTranslations.isEmpty {
               speakerSegments[idx].translations = newTranslations
 
-              // Persist translations to SQLite
+              // Persist translations to SQLite via upsert (handles race where
+              // the initial segment INSERT hasn't completed yet)
               if let sessionId = currentSessionId {
+                let seg = speakerSegments[idx]
                 let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
-                if let jsonData = try? JSONEncoder().encode(mapped),
-                  let json = String(data: jsonData, encoding: .utf8)
-                {
-                  Task {
-                    try? await TranscriptionStorage.shared.updateSegmentTranslations(
-                      sessionId: sessionId, backendSegmentId: segId, translationsJson: json)
-                  }
+                var translationsJson: String?
+                if let jsonData = try? JSONEncoder().encode(mapped) {
+                  translationsJson = String(data: jsonData, encoding: .utf8)
+                }
+                Task {
+                  try? await TranscriptionStorage.shared.upsertSegment(
+                    sessionId: sessionId,
+                    backendSegmentId: seg.segmentId,
+                    speaker: seg.speaker,
+                    text: seg.text,
+                    startTime: seg.start,
+                    endTime: seg.end,
+                    isUser: seg.isUser,
+                    personId: seg.personId,
+                    translationsJson: translationsJson
+                  )
                 }
               }
             }
