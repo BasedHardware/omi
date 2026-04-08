@@ -2071,7 +2071,7 @@ struct CategoryAppsSheet: View {
 
 struct AppDetailSheet: View {
     let app: OmiApp
-    let appProvider: AppProvider
+    @ObservedObject var appProvider: AppProvider
     var onDismiss: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var environmentDismiss
@@ -2079,6 +2079,15 @@ struct AppDetailSheet: View {
     @State private var isLoadingReviews = false
     @State private var showAddReview = false
     @State private var userReview: OmiAppReview?
+    @State private var appDetails: OmiAppDetails?
+    @State private var isSettingUp = false
+    @State private var isSetupCompleted = false
+    @State private var setupCheckTask: Task<Void, Never>?
+
+    /// Always read live from appProvider so state survives tab switches and sheet recreations
+    var isEnabled: Bool {
+        appProvider.apps.first(where: { $0.id == app.id })?.enabled ?? app.enabled
+    }
 
     private func dismissSheet() {
         if let onDismiss = onDismiss {
@@ -2126,47 +2135,85 @@ struct AppDetailSheet: View {
                                 .foregroundColor(OmiColors.textTertiary)
 
                             HStack(spacing: 12) {
-                                if let rating = app.formattedRating {
+                                let ratingAvg = appDetails?.ratingAvg ?? app.ratingAvg
+                                let ratingCount = appDetails?.ratingCount ?? app.ratingCount
+                                let installs = appDetails?.installs ?? app.installs
+                                if let ratingAvg, ratingCount > 0 {
                                     HStack(spacing: 4) {
                                         Image(systemName: "star.fill")
                                             .foregroundColor(.yellow)
-                                        Text("\(rating) (\(app.ratingCount))")
+                                        Text(String(format: "%.1f", ratingAvg))
+                                        Text("(\(ratingCount))")
                                     }
                                     .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
-
-                                Text("\(app.installs) installs")
-                                    .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                if installs > 0 {
+                                    Text("\(installs) installs")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(OmiColors.textSecondary)
+                                }
                             }
                         }
 
                         Spacer()
 
                         // Action button
-                        Button(action: {
-                            Task {
-                                await appProvider.toggleApp(app)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                Task {
+                                    if isEnabled && app.worksExternally {
+                                        // Open the external integration in browser
+                                        openExternalApp()
+                                    } else if !isEnabled && app.worksExternally {
+                                        await handleInstall()
+                                    } else {
+                                        await appProvider.toggleApp(app)
+                                    }
+                                }
+                            }) {
+                                if appProvider.isAppLoading(app.id) {
+                                    ProgressView()
+                                        .frame(width: 100, height: 36)
+                                } else if isSettingUp {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                        Text("Setting up...")
+                                            .scaledFont(size: 12, weight: .semibold)
+                                    }
+                                    .foregroundColor(OmiColors.textSecondary)
+                                    .frame(width: 120, height: 36)
+                                } else {
+                                    Text(isEnabled ? "Open" : "Install")
+                                        .scaledFont(size: 14, weight: .semibold)
+                                        .foregroundColor(.black)
+                                        .frame(width: 100, height: 36)
+                                        .background(Color.white)
+                                        .cornerRadius(18)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18)
+                                                .stroke(OmiColors.border, lineWidth: 1)
+                                        )
+                                }
                             }
-                        }) {
-                            if appProvider.isAppLoading(app.id) {
-                                ProgressView()
-                                    .frame(width: 100, height: 36)
-                            } else {
-                                Text(app.enabled ? "Disable" : "Install")
-                                    .scaledFont(size: 14, weight: .semibold)
-                                    .foregroundColor(app.enabled ? .white : .black)
-                                    .frame(width: 100, height: 36)
-                                    .background(app.enabled ? OmiColors.error : Color.white)
-                                    .cornerRadius(18)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18)
-                                            .stroke(app.enabled ? Color.clear : OmiColors.border, lineWidth: 1)
-                                    )
+                            .buttonStyle(.plain)
+
+                            // Disable button shown only when app is enabled
+                            if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {
+                                Button(action: {
+                                    Task { await appProvider.toggleApp(app) }
+                                }) {
+                                    Image(systemName: "trash")
+                                        .scaledFont(size: 14)
+                                        .foregroundColor(OmiColors.error)
+                                        .frame(width: 36, height: 36)
+                                        .background(OmiColors.error.opacity(0.1))
+                                        .cornerRadius(18)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .buttonStyle(.plain)
                     }
 
                     Divider()
@@ -2182,6 +2229,57 @@ struct AppDetailSheet: View {
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Setup steps (external integration)
+                    if let integration = appDetails?.externalIntegration, !integration.authSteps.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
+                                Button(action: {
+                                    if let uid = AuthState.shared.userId,
+                                       let url = URL(string: "\(step.url)?uid=\(uid)") {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }) {
+                                    HStack(spacing: 12) {
+                                        // Step number / checkmark
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(isSetupCompleted ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
+                                                .frame(width: 40, height: 40)
+                                            if isSetupCompleted {
+                                                Image(systemName: "checkmark")
+                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .foregroundColor(.green)
+                                            } else {
+                                                Text("\(index + 1)")
+                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .foregroundColor(OmiColors.textSecondary)
+                                            }
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(step.name)
+                                                .scaledFont(size: 14, weight: .medium)
+                                                .foregroundColor(OmiColors.textPrimary)
+                                            Text(isSetupCompleted ? "Completed" : "Click to complete")
+                                                .scaledFont(size: 12)
+                                                .foregroundColor(isSetupCompleted ? .green : OmiColors.textTertiary)
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "arrow.up.right.square")
+                                            .scaledFont(size: 14)
+                                            .foregroundColor(OmiColors.textTertiary)
+                                    }
+                                    .padding(12)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
 
                     // Capabilities
@@ -2279,6 +2377,12 @@ struct AppDetailSheet: View {
         .background(OmiColors.backgroundPrimary)
         .task {
             await loadReviews()
+            await loadAppDetails()
+            // Resume polling if user completed setup in browser and returned to this sheet
+            await resumeSetupPollingIfNeeded()
+        }
+        .onDisappear {
+            setupCheckTask?.cancel()
         }
         .dismissableSheet(isPresented: $showAddReview) {
             AddReviewSheet(
@@ -2307,6 +2411,117 @@ struct AppDetailSheet: View {
             }
         } catch {
             // Silently fail - reviews are optional
+        }
+    }
+
+    private func loadAppDetails() async {
+        do {
+            appDetails = try await APIClient.shared.getAppDetails(appId: app.id)
+        } catch {
+            // Silently fail - details are optional, setup flow will just skip if unavailable
+        }
+    }
+
+    /// Called on sheet appear — if setup was already completed in browser, enable the app immediately.
+    /// If setup is still pending, restart polling so the UI updates when the user finishes in the browser.
+    private func resumeSetupPollingIfNeeded() async {
+        guard let uid = AuthState.shared.userId,
+              let integration = appDetails?.externalIntegration,
+              let completionUrl = integration.setupCompletedUrl,
+              !completionUrl.isEmpty else {
+            // No setup URL — if app is already enabled, treat steps as completed
+            if isEnabled { isSetupCompleted = true }
+            return
+        }
+
+        // If already installed, setup must have been completed — mark it without hitting the network
+        if isEnabled {
+            isSetupCompleted = true
+            return
+        }
+
+        // Immediate check — if setup already done in browser, mark complete and enable
+        let alreadyDone = await APIClient.shared.isAppSetupCompleted(url: completionUrl, uid: uid)
+        if alreadyDone {
+            isSetupCompleted = true
+            await appProvider.enableApp(app)
+            return
+        }
+
+        // Not done yet — silently poll in background so the step card updates when the user finishes in browser
+        // Don't set isSettingUp=true here (that's only for when the user explicitly clicked Install)
+        startSetupPolling(completionUrl: completionUrl, uid: uid)
+    }
+
+    private func openExternalApp() {
+        guard let uid = AuthState.shared.userId else { return }
+        let integration = appDetails?.externalIntegration
+        // Prefer appHomeUrl, then first auth step URL
+        if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
+            NSWorkspace.shared.open(url)
+        } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
+                  let url = URL(string: "\(authSteps[0].url)?uid=\(uid)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func handleInstall() async {
+        // Step 1: Try to enable. Backend returns 400 if setup is not yet complete.
+        await appProvider.enableApp(app)
+
+        // Step 2: If enable succeeded (no setup required), we're done.
+        if isEnabled { return }
+
+        // Step 3: Enable failed — app requires setup first. Open browser and wait.
+        // Ensure app details are loaded before navigating to setup.
+        if appDetails == nil { await loadAppDetails() }
+        await navigateToSetup()
+    }
+
+    private func navigateToSetup() async {
+        guard let uid = AuthState.shared.userId else { return }
+        let integration = appDetails?.externalIntegration
+
+        // Open auth step or setup instructions URL in browser
+        if let authSteps = integration?.authSteps, !authSteps.isEmpty {
+            let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
+            if let url = URL(string: rawUrl) {
+                NSWorkspace.shared.open(url)
+            }
+        } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {
+            if let url = URL(string: instructionsPath) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        // Poll for completion only if there is a setup_completed_url to check
+        if let completionUrl = integration?.setupCompletedUrl, !completionUrl.isEmpty {
+            isSettingUp = true
+            startSetupPolling(completionUrl: completionUrl, uid: uid)
+        }
+    }
+
+    private func startSetupPolling(completionUrl: String, uid: String) {
+        setupCheckTask?.cancel()
+        setupCheckTask = Task {
+            var tickCount = 0
+            while !Task.isCancelled && tickCount < 100 {
+                tickCount += 1
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled { break }
+
+                let completed = await APIClient.shared.isAppSetupCompleted(url: completionUrl, uid: uid)
+                if completed {
+                    await MainActor.run {
+                        isSetupCompleted = true
+                        isSettingUp = false
+                    }
+                    // Enable the app now that setup is done
+                    if !isEnabled { await appProvider.enableApp(app) }
+                    break
+                }
+            }
+            await MainActor.run { isSettingUp = false }
         }
     }
 }
