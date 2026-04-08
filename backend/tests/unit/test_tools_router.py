@@ -283,7 +283,8 @@ class TestParseIsoDate:
             conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00 ", "test")
 
     def test_source_has_encodeQueryDate(self):
-        """Verify desktop APIClient.swift uses encodeQueryDate for date params."""
+        """Verify desktop APIClient.swift uses encodeQueryDate for date params.
+        Regression guard: if encodeQueryDate is removed, this test fails."""
         swift_path = os.path.join(
             os.path.dirname(__file__), '..', '..', '..', 'desktop', 'Desktop', 'Sources', 'APIClient.swift'
         )
@@ -291,13 +292,10 @@ class TestParseIsoDate:
             pytest.skip("APIClient.swift not found (backend-only test environment)")
         with open(swift_path) as f:
             source = f.read()
-        # After the fix, encodeQueryDate should be used; before the fix, urlQueryAllowed is used.
-        # This test verifies the fix is applied when the Swift file is present.
-        if 'encodeQueryDate' in source:
-            assert source.count('encodeQueryDate(') >= 8, "All 8 date params should use encodeQueryDate"
-        else:
-            # Pre-fix: verify the date params exist (they use urlQueryAllowed)
-            assert 'start_date' in source and 'end_date' in source
+        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
+        # 8 call sites + 1 definition = at least 9 occurrences
+        count = source.count('encodeQueryDate(')
+        assert count >= 9, f"Expected >= 9 encodeQueryDate( occurrences (1 def + 8 calls), got {count}"
 
 
 # ===========================================================================
