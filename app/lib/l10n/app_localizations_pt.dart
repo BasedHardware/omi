@@ -8989,6 +8989,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get voiceRecordingFound => 'Gravação encontrada';
+
+  @override
   String get transcriptionConnecting => 'Conectando transcrição...';
 
   @override

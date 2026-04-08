@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "akan disegerakkan secara automatik",
+    "voiceRecordingFound": "Rakaman ditemui",
     "transcriptionConnecting": "Menyambung transkripsi...",
     "transcriptionReconnecting": "Menyambung semula transkripsi...",
     "transcriptionUnavailable": "Transkripsi tidak tersedia",

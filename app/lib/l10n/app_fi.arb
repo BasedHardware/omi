@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "synkronoidaan automaattisesti",
+    "voiceRecordingFound": "Tallenne löytyi",
     "transcriptionConnecting": "Yhdistetään litterointia...",
     "transcriptionReconnecting": "Yhdistetään litterointia uudelleen...",
     "transcriptionUnavailable": "Litterointi ei ole käytettävissä",

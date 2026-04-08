@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "synkroniseras automatiskt",
+    "voiceRecordingFound": "Inspelning hittad",
     "transcriptionConnecting": "Ansluter transkription...",
     "transcriptionReconnecting": "Återansluter transkription...",
     "transcriptionUnavailable": "Transkription otillgänglig",

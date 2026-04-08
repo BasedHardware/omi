@@ -2895,6 +2895,7 @@
         }
     },
     "willSyncAutomatically": "ще се синхронизира автоматично",
+    "voiceRecordingFound": "Намерен запис",
     "transcriptionConnecting": "Свързване на транскрипция...",
     "transcriptionReconnecting": "Повторно свързване на транскрипция...",
     "transcriptionUnavailable": "Транскрипцията не е налична",

@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "จะซิงค์โดยอัตโนมัติ",
+    "voiceRecordingFound": "พบการบันทึก",
     "transcriptionConnecting": "กำลังเชื่อมต่อการถอดเสียง...",
     "transcriptionReconnecting": "กำลังเชื่อมต่อการถอดเสียงใหม่...",
     "transcriptionUnavailable": "การถอดเสียงไม่พร้อมใช้งาน",

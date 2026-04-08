@@ -2894,6 +2894,7 @@
         }
     },
     "willSyncAutomatically": "wird automatisch synchronisiert",
+    "voiceRecordingFound": "Aufnahme gefunden",
     "transcriptionConnecting": "Transkription wird verbunden...",
     "transcriptionReconnecting": "Transkription wird wiederverbunden...",
     "transcriptionUnavailable": "Transkription nicht verfügbar",

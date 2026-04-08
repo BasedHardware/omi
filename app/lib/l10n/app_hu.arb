@@ -3022,6 +3022,7 @@
         }
     },
     "willSyncAutomatically": "automatikusan szinkronizálódik",
+    "voiceRecordingFound": "Felvétel találva",
     "transcriptionConnecting": "Átírás csatlakoztatása...",
     "transcriptionReconnecting": "Átírás újracsatlakoztatása...",
     "transcriptionUnavailable": "Átírás nem elérhető",

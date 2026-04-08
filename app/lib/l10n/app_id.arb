@@ -2968,6 +2968,7 @@
         }
     },
     "willSyncAutomatically": "akan disinkronkan secara otomatis",
+    "voiceRecordingFound": "Rekaman ditemukan",
     "transcriptionConnecting": "Menghubungkan transkripsi...",
     "transcriptionReconnecting": "Menghubungkan ulang transkripsi...",
     "transcriptionUnavailable": "Transkripsi tidak tersedia",

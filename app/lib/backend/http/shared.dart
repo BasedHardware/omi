@@ -26,10 +26,9 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid =
-      !(expiry.isBefore(DateTime.now()) ||
-          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
+      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshedToken = await AuthService.instance.getIdToken();
@@ -292,6 +291,81 @@ Future<http.Response> makeMultipartApiCall({
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     rethrow;
+  }
+}
+
+/// Like [makeMultipartApiCall] but uses a dedicated HTTP client instead of the
+/// shared connection pool. Prevents large uploads (e.g. voice recordings) from
+/// blocking other app HTTP traffic. The client is created and disposed per call.
+Future<http.Response> makeMultipartApiCallUnpooled({
+  required String url,
+  required List<File> files,
+  Map<String, String> headers = const {},
+  Map<String, String> fields = const {},
+  String fileFieldName = 'files',
+  String method = 'POST',
+}) async {
+  final client = http.Client();
+  try {
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+
+    var request = await _buildMultipartRequest(
+      url: url,
+      files: files,
+      headers: builtHeaders,
+      fields: fields,
+      fileFieldName: fileFieldName,
+      method: method,
+    );
+    HttpPoolManager.stampRequestTime(request);
+
+    var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (requireAuthCheck && response.statusCode == 401) {
+      Logger.log('Token expired on 1st unpooled multipart attempt');
+      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+      if (SharedPreferencesUtil().authToken.isNotEmpty) {
+        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+        request = await _buildMultipartRequest(
+          url: url,
+          files: files,
+          headers: builtHeaders,
+          fields: fields,
+          fileFieldName: fileFieldName,
+          method: method,
+        );
+        HttpPoolManager.stampRequestTime(request);
+        streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+        response = await http.Response.fromStream(streamedResponse);
+        Logger.log('Token refreshed and unpooled multipart request retried');
+        if (response.statusCode == 401) {
+          await AuthService.instance.signOut();
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
+        }
+      } else {
+        await AuthService.instance.signOut();
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
+      }
+    }
+
+    _checkClockSkewResponse(response);
+    return response;
+  } catch (e, stackTrace) {
+    Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    rethrow;
+  } finally {
+    client.close();
   }
 }
 
