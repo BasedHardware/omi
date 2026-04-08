@@ -195,6 +195,74 @@ enum ToolCallStatus {
 
 // MARK: - Chat Message Model
 
+/// Metadata about the context and resources used to generate an AI response
+struct MessageMetadata {
+    var model: String?
+    var inputTokens: Int?
+    var outputTokens: Int?
+    var cacheReadTokens: Int?
+    var cacheWriteTokens: Int?
+    var costUsd: Double?
+    var systemPrompt: String?
+    var hasScreenshot: Bool
+    var toolNames: [String]
+
+    var totalTokens: Int? {
+        guard let input = inputTokens, let output = outputTokens else { return nil }
+        return input + output + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
+    }
+
+    // MARK: - Parsed context counts from system prompt
+
+    /// Count of user facts/memories in the prompt
+    var memoriesCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        // Count lines starting with "- " inside <user_facts> section
+        guard let factsStart = prompt.range(of: "<user_facts>"),
+              let factsEnd = prompt.range(of: "</user_facts>") else { return 0 }
+        let factsSection = String(prompt[factsStart.upperBound..<factsEnd.lowerBound])
+        return factsSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
+    }
+
+    /// Count of conversation turns in the prompt
+    var conversationTurns: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        guard let histStart = prompt.range(of: "<conversation_history>"),
+              let histEnd = prompt.range(of: "</conversation_history>") else { return 0 }
+        let histSection = String(prompt[histStart.upperBound..<histEnd.lowerBound])
+        return histSection.components(separatedBy: "\n").filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }.count
+    }
+
+    /// Count of tasks in the prompt
+    var tasksCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        guard let tasksStart = prompt.range(of: "<user_tasks>"),
+              let tasksEnd = prompt.range(of: "</user_tasks>") else { return 0 }
+        let tasksSection = String(prompt[tasksStart.upperBound..<tasksEnd.lowerBound])
+        return tasksSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
+    }
+
+    /// Count of goals in the prompt
+    var goalsCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        guard let goalsStart = prompt.range(of: "<user_goals>"),
+              let goalsEnd = prompt.range(of: "</user_goals>") else { return 0 }
+        let goalsSection = String(prompt[goalsStart.upperBound..<goalsEnd.lowerBound])
+        return goalsSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
+    }
+
+    /// Count of tools/skills available in the prompt
+    var availableToolsCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        // Count tool definitions like **tool_name**:
+        var count = 0
+        for name in ["execute_sql", "semantic_search", "get_daily_recap", "complete_task", "delete_task", "save_knowledge_graph"] {
+            if prompt.contains("**\(name)**") { count += 1 }
+        }
+        return count
+    }
+}
+
 /// A single chat message
 struct ChatMessage: Identifiable {
     var id: String  // Mutable to sync with server-generated ID
@@ -210,8 +278,10 @@ struct ChatMessage: Identifiable {
     var citations: [Citation]
     /// Structured content blocks for AI messages (text interspersed with tool calls)
     var contentBlocks: [ChatContentBlock]
+    /// Metadata about context used to generate this response (AI messages only)
+    var metadata: MessageMetadata?
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = []) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -221,6 +291,7 @@ struct ChatMessage: Identifiable {
         self.isSynced = isSynced
         self.citations = citations
         self.contentBlocks = contentBlocks
+        self.metadata = metadata
     }
 }
 
@@ -281,10 +352,12 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
+ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
 If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
-Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
+Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 ================================================================================
 """
@@ -2061,6 +2134,17 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                 messages[index].text = messageText
                 messages[index].isStreaming = false
+                messages[index].metadata = MessageMetadata(
+                    model: model ?? modelOverride,
+                    inputTokens: queryResult.inputTokens,
+                    outputTokens: queryResult.outputTokens,
+                    cacheReadTokens: queryResult.cacheReadTokens,
+                    cacheWriteTokens: queryResult.cacheWriteTokens,
+                    costUsd: queryResult.costUsd,
+                    systemPrompt: systemPrompt,
+                    hasScreenshot: imageData != nil,
+                    toolNames: toolNames
+                )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {
                 // Message no longer in memory (user switched away from this session).

@@ -8951,4 +8951,59 @@ class AppLocalizationsLt extends AppLocalizations {
   String gattError(String code) {
     return 'GATT klaida ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Grįžti prie stabilios programinės įrangos';
+
+  @override
+  String get rollbackConfirmTitle => 'Grąžinti programinę įrangą?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tai pakeis dabartinę programinę įrangą naujausia stabilia versija ($version). Jūsų įrenginys bus paleistas iš naujo po atnaujinimo.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabili programinė įranga';
+
+  @override
+  String get fetchingStableFirmware => 'Gaunama naujausia stabili programinė įranga...';
+
+  @override
+  String get noStableFirmwareFound => 'Nepavyko rasti stabilios programinės įrangos versijos jūsų įrenginiui.';
+
+  @override
+  String get installStableFirmware => 'Įdiegti stabilią programinę įrangą';
+
+  @override
+  String get alreadyOnStableFirmware => 'Jau naudojate naujausią stabilią versiją.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration garso įrašyta vietoje';
+  }
+
+  @override
+  String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Rastas įrašas';
+
+  @override
+  String get transcriptionConnecting => 'Jungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionReconnecting => 'Perjungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripcija nepasiekiama';
+
+  @override
+  String get audioOutput => 'Garso išvestis';
 }

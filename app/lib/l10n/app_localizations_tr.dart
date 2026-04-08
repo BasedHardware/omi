@@ -8957,4 +8957,59 @@ class AppLocalizationsTr extends AppLocalizations {
   String gattError(String code) {
     return 'GATT hatası ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Kararlı yazılıma geri dön';
+
+  @override
+  String get rollbackConfirmTitle => 'Yazılım geri alınsın mı?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Bu, mevcut yazılımınızı en son kararlı sürümle ($version) değiştirecektir. Güncelleme sonrasında cihazınız yeniden başlatılacaktır.';
+  }
+
+  @override
+  String get stableFirmware => 'Kararlı yazılım';
+
+  @override
+  String get fetchingStableFirmware => 'En son kararlı yazılım alınıyor...';
+
+  @override
+  String get noStableFirmwareFound => 'Cihazınız için kararlı bir yazılım sürümü bulunamadı.';
+
+  @override
+  String get installStableFirmware => 'Kararlı yazılımı yükle';
+
+  @override
+  String get alreadyOnStableFirmware => 'Zaten en son kararlı sürümdesiniz.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ses yerel olarak kaydedildi';
+  }
+
+  @override
+  String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Kayıt bulundu';
+
+  @override
+  String get transcriptionConnecting => 'Transkripsiyon bağlanıyor...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkripsiyon yeniden bağlanıyor...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsiyon kullanılamıyor';
+
+  @override
+  String get audioOutput => 'Ses çıkışı';
 }

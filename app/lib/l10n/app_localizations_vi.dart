@@ -8945,4 +8945,59 @@ class AppLocalizationsVi extends AppLocalizations {
   String gattError(String code) {
     return 'Lỗi GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'Quay lại firmware ổn định';
+
+  @override
+  String get rollbackConfirmTitle => 'Quay lại firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Thao tác này sẽ thay thế firmware hiện tại bằng phiên bản ổn định mới nhất ($version). Thiết bị của bạn sẽ khởi động lại sau khi cập nhật.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware ổn định';
+
+  @override
+  String get fetchingStableFirmware => 'Đang tải firmware ổn định mới nhất...';
+
+  @override
+  String get noStableFirmwareFound => 'Không tìm thấy phiên bản firmware ổn định cho thiết bị của bạn.';
+
+  @override
+  String get installStableFirmware => 'Cài đặt firmware ổn định';
+
+  @override
+  String get alreadyOnStableFirmware => 'Bạn đã sử dụng phiên bản ổn định mới nhất.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration âm thanh đã lưu cục bộ';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sẽ tự động đồng bộ';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Đã tìm thấy bản ghi';
+
+  @override
+  String get transcriptionConnecting => 'Đang kết nối phiên âm...';
+
+  @override
+  String get transcriptionReconnecting => 'Đang kết nối lại phiên âm...';
+
+  @override
+  String get transcriptionUnavailable => 'Phiên âm không khả dụng';
+
+  @override
+  String get audioOutput => 'Đầu ra âm thanh';
 }

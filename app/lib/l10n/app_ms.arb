@@ -2908,5 +2908,27 @@
     "good": "Baik",
     "fair": "Sederhana",
     "weak": "Lemah",
-    "gattError": "Ralat GATT ({code})"
+    "gattError": "Ralat GATT ({code})",
+    "rollbackToStableFirmware": "Kembali ke firmware stabil",
+    "rollbackConfirmTitle": "Kembalikan firmware?",
+    "rollbackConfirmMessage": "Ini akan menggantikan firmware semasa anda dengan versi stabil terkini ({version}). Peranti anda akan dimulakan semula selepas kemas kini.",
+    "stableFirmware": "Firmware Stabil",
+    "fetchingStableFirmware": "Mendapatkan firmware stabil terkini...",
+    "noStableFirmwareFound": "Tidak dapat mencari versi firmware stabil untuk peranti anda.",
+    "installStableFirmware": "Pasang firmware stabil",
+    "alreadyOnStableFirmware": "Anda sudah menggunakan versi stabil terkini.",
+    "audioSavedLocally": "{duration} audio disimpan secara tempatan",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "akan disegerakkan secara automatik",
+    "voiceRecordingFound": "Rakaman ditemui",
+    "transcriptionConnecting": "Menyambung transkripsi...",
+    "transcriptionReconnecting": "Menyambung semula transkripsi...",
+    "transcriptionUnavailable": "Transkripsi tidak tersedia",
+    "audioOutput": "Output audio"
 }

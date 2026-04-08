@@ -2877,5 +2877,27 @@
     "good": "Dobré",
     "fair": "Uspokojivé",
     "weak": "Slabé",
-    "gattError": "Chyba GATT ({code})"
+    "gattError": "Chyba GATT ({code})",
+    "rollbackToStableFirmware": "Vrátit se na stabilní firmware",
+    "rollbackConfirmTitle": "Vrátit firmware?",
+    "rollbackConfirmMessage": "Tím se nahradí aktuální firmware nejnovější stabilní verzí ({version}). Po aktualizaci se zařízení restartuje.",
+    "stableFirmware": "Stabilní firmware",
+    "fetchingStableFirmware": "Načítání nejnovějšího stabilního firmwaru...",
+    "noStableFirmwareFound": "Nepodařilo se najít stabilní verzi firmwaru pro vaše zařízení.",
+    "installStableFirmware": "Nainstalovat stabilní firmware",
+    "alreadyOnStableFirmware": "Již máte nejnovější stabilní verzi.",
+    "audioSavedLocally": "{duration} zvuku uloženo lokálně",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "synchronizuje se automaticky",
+    "voiceRecordingFound": "Nalezena nahrávka",
+    "transcriptionConnecting": "Připojování přepisu...",
+    "transcriptionReconnecting": "Opětovné připojování přepisu...",
+    "transcriptionUnavailable": "Přepis není dostupný",
+    "audioOutput": "Zvukový výstup"
 }

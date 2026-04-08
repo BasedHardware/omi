@@ -309,7 +309,6 @@ struct SettingsContentView: View {
     @State private var deleteAccountError: String?
 
     // Developer API Key overrides
-    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
     @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
     @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
     @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
@@ -4254,17 +4253,12 @@ struct SettingsContentView: View {
             settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Voice Answers (Experimental)")
+                        Text("Voice Responses")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
-                        Text("Speak shortcut-based floating-bar replies aloud. Saves your ElevenLabs settings to your backend profile so the app reconnects automatically.")
+                        Text("Speak answers to voice questions aloud. When you ask with voice, Omi responds with voice. Text questions get text-only responses.")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
-                        if devElevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("No personal ElevenLabs key saved. The app will use Omi's default Sloane voice when available, otherwise it falls back to Samantha.")
-                                .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
                     }
                     Spacer()
                     Toggle("", isOn: floatingBarVoiceAnswersBinding)
@@ -4273,12 +4267,9 @@ struct SettingsContentView: View {
                 }
             }
 
-            developerKeyField(
-                title: "Deepgram API Key",
-                subtitle: "For transcription",
-                settingId: "advanced.devkeys.deepgram",
-                value: $devDeepgramKey
-            )
+            if shortcutSettings.floatingBarVoiceAnswersEnabled {
+                voiceSpeedSlider
+            }
 
             developerKeyField(
                 title: "Gemini API Key",
@@ -4301,12 +4292,11 @@ struct SettingsContentView: View {
                 value: syncedElevenLabsKeyBinding
             )
 
-            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
+            if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
                     HStack {
                         Spacer()
                         Button(action: {
-                            devDeepgramKey = ""
                             devGeminiKey = ""
                             devAnthropicKey = ""
                             devElevenLabsKey = ""
@@ -4359,6 +4349,97 @@ struct SettingsContentView: View {
                 )
             }
         )
+    }
+
+    private var voiceSpeedSlider: some View {
+        let steps = ShortcutSettings.voiceSpeedSteps
+        let currentSpeed = shortcutSettings.voicePlaybackSpeed
+        let currentIndex = steps.enumerated().min(by: { abs($0.element - currentSpeed) < abs($1.element - currentSpeed) })?.offset ?? 3
+
+        return settingsCard(settingId: "advanced.developerkeys.voicespeed") {
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ShortcutSettings.voiceSpeedLabel(for: currentSpeed))
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Voice playback speed")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    Spacer()
+                    Text("\(String(format: "%.1f", currentSpeed))×")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(OmiColors.purplePrimary)
+                        .frame(width: 52, height: 52)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(OmiColors.purplePrimary.opacity(0.15))
+                        )
+                }
+
+                VStack(spacing: 6) {
+                    // Stepped slider
+                    GeometryReader { geo in
+                        let trackWidth = geo.size.width
+                        let segmentCount = CGFloat(steps.count - 1)
+
+                        ZStack(alignment: .leading) {
+                            // Track background
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.backgroundQuaternary)
+                                .frame(height: 6)
+
+                            // Filled track
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.purplePrimary)
+                                .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+
+                            // Step dots
+                            ForEach(0..<steps.count, id: \.self) { i in
+                                Circle()
+                                    .fill(i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary)
+                                    .frame(width: 8, height: 8)
+                                    .position(
+                                        x: trackWidth * CGFloat(i) / segmentCount,
+                                        y: 3
+                                    )
+                            }
+
+                            // Thumb
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 22, height: 22)
+                                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                                .position(
+                                    x: trackWidth * CGFloat(currentIndex) / segmentCount,
+                                    y: 3
+                                )
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            let fraction = max(0, min(1, value.location.x / trackWidth))
+                                            let nearestIndex = Int(round(fraction * segmentCount))
+                                            let clamped = max(0, min(steps.count - 1, nearestIndex))
+                                            shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                                        }
+                                )
+                        }
+                    }
+                    .frame(height: 22)
+
+                    HStack {
+                        Text("Slow")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                        Spacer()
+                        Text("Max")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+            }
+        }
     }
 
     private var syncedElevenLabsKeyBinding: Binding<String> {
@@ -5565,7 +5646,7 @@ struct SettingsContentView: View {
     private func completeLocalTestSubscriptionIfNeeded() async {
         guard let expectedPriceId = pendingSubscriptionPriceId else { return }
         let checkoutSessionId = pendingCheckoutSessionId
-        let baseURL = await APIClient.shared.baseURL
+        let baseURL = await APIClient.shared.rustBackendURL
         guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/") else {
             return
         }

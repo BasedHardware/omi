@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -449,6 +449,105 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     return count
 
 
+# *****************************
+# ****** REMINDERS SYNC *******
+# *****************************
+
+
+def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
+    """Mark multiple action items as sync_requested in a single batch write."""
+    if not item_ids:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    for item_id in item_ids:
+        doc_ref = action_items_ref.document(item_id)
+        batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+
+    batch.commit()
+
+
+def get_pending_apple_reminders_sync(uid: str) -> dict:
+    """
+    Get items needing Apple Reminders sync:
+    - pending_export: sync_requested=True but not yet exported (FCM missed items)
+    - synced_items: exported to apple_reminders with apple_reminder_id (for bidirectional sync)
+    """
+    user_ref = db.collection('users').document(uid)
+    items_ref = user_ref.collection(action_items_collection)
+
+    # Pending export: sync_requested=True, filter exported!=True in Python
+    # (avoids composite index + handles missing 'exported' field)
+    pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
+    pending_docs = pending_query.stream()
+    pending_export = []
+    for doc in pending_docs:
+        data = doc.to_dict()
+        if data.get('exported') is True:
+            continue
+        data['id'] = doc.id
+        pending_export.append(_prepare_action_item_for_read(data))
+
+    # Synced items: exported to apple_reminders (for bidirectional sync)
+    # Uses only equality filters to avoid composite index requirement
+    synced_query = (
+        items_ref.where(filter=FieldFilter('export_platform', '==', 'apple_reminders'))
+        .where(filter=FieldFilter('exported', '==', True))
+        .limit(100)
+    )
+    synced_docs = synced_query.stream()
+    synced_items = []
+    for doc in synced_docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        synced_items.append(_prepare_action_item_for_read(data))
+    # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
+    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    return {"pending_export": pending_export, "synced_items": synced_items}
+
+
+def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
+    """
+    Batch update action items during reminders sync. Single Firestore batch commit.
+
+    Args:
+        uid: User ID
+        updates: List of {'id': str, 'data': dict} entries
+    """
+    if not updates:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    count = 0
+
+    for entry in updates:
+        update_data = _prepare_action_item_for_write(entry['data'])
+        update_data['updated_at'] = now
+        # Clear sync_requested when item is successfully exported
+        if update_data.get('exported') is True:
+            update_data['sync_requested'] = False
+        doc_ref = action_items_ref.document(entry['id'])
+        batch.update(doc_ref, update_data)
+        count += 1
+
+        if count >= 499:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
+        batch.commit()
+
+
 def unlock_all_action_items(uid: str):
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
@@ -469,3 +568,123 @@ def unlock_all_action_items(uid: str):
     if count > 0:
         batch.commit()
     logger.info(f"Unlocked all action items for user {uid}")
+
+
+# ============================================================================
+# DAILY SCORE — computed from action_items
+# ============================================================================
+
+
+def get_daily_score(uid: str, date: str = None) -> dict:
+    """Compute productivity score for a single day from action_items."""
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_end = day + timedelta(days=1)
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    # Count tasks due today
+    due_query = col.where(filter=FieldFilter('due_at', '>=', day)).where(filter=FieldFilter('due_at', '<', day_end))
+    total = 0
+    completed = 0
+    for doc in due_query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        total += 1
+        if data.get('completed'):
+            completed += 1
+
+    score = round((completed / total * 100) if total > 0 else 0)
+    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
+
+
+def get_scores(uid: str, date: str = None) -> dict:
+    """Compute daily, weekly, and overall scores (matching Rust backend behavior).
+
+    Takes a single date (or defaults to today) and returns:
+      daily  — tasks due on that date
+      weekly — tasks due in the 7 days ending on that date
+      overall — all non-deleted tasks
+    """
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_start = day
+    day_end = day + timedelta(days=1)
+    week_start = day - timedelta(days=7)
+
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    def _score(completed, total):
+        return round((completed / total * 100) if total > 0 else 0, 1)
+
+    # Daily: tasks due today
+    daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
+    daily_completed = daily_total = 0
+    for doc in daily_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        daily_total += 1
+        if data.get('completed'):
+            daily_completed += 1
+
+    # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
+    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
+        filter=FieldFilter('created_at', '<', day_end)
+    )
+    weekly_completed = weekly_total = 0
+    for doc in weekly_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        weekly_total += 1
+        if data.get('completed'):
+            weekly_completed += 1
+
+    # Overall: all non-deleted tasks
+    overall_completed = overall_total = 0
+    for doc in col.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        overall_total += 1
+        if data.get('completed'):
+            overall_completed += 1
+
+    daily = {
+        'score': _score(daily_completed, daily_total),
+        'completed_tasks': daily_completed,
+        'total_tasks': daily_total,
+    }
+    weekly = {
+        'score': _score(weekly_completed, weekly_total),
+        'completed_tasks': weekly_completed,
+        'total_tasks': weekly_total,
+    }
+    overall = {
+        'score': _score(overall_completed, overall_total),
+        'completed_tasks': overall_completed,
+        'total_tasks': overall_total,
+    }
+
+    # Determine default tab (highest score, prefer daily > weekly > overall)
+    if daily['total_tasks'] > 0 and daily['score'] >= weekly['score'] and daily['score'] >= overall['score']:
+        default_tab = 'daily'
+    elif weekly['score'] >= overall['score']:
+        default_tab = 'weekly'
+    else:
+        default_tab = 'overall'
+
+    return {
+        'daily': daily,
+        'weekly': weekly,
+        'overall': overall,
+        'default_tab': default_tab,
+        'date': day.strftime('%Y-%m-%d'),
+    }

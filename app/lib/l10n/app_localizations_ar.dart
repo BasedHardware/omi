@@ -8883,4 +8883,59 @@ class AppLocalizationsAr extends AppLocalizations {
   String gattError(String code) {
     return 'خطأ GATT ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => 'الرجوع إلى البرنامج الثابت المستقر';
+
+  @override
+  String get rollbackConfirmTitle => 'الرجوع إلى البرنامج الثابت؟';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'سيتم استبدال البرنامج الثابت الحالي بأحدث إصدار مستقر ($version). سيتم إعادة تشغيل جهازك بعد التحديث.';
+  }
+
+  @override
+  String get stableFirmware => 'البرنامج الثابت المستقر';
+
+  @override
+  String get fetchingStableFirmware => 'جارٍ جلب أحدث برنامج ثابت مستقر...';
+
+  @override
+  String get noStableFirmwareFound => 'تعذر العثور على إصدار مستقر من البرنامج الثابت لجهازك.';
+
+  @override
+  String get installStableFirmware => 'تثبيت البرنامج الثابت المستقر';
+
+  @override
+  String get alreadyOnStableFirmware => 'أنت بالفعل على أحدث إصدار مستقر.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return 'تم حفظ $duration من الصوت محليًا';
+  }
+
+  @override
+  String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'تسجيل موجود';
+
+  @override
+  String get transcriptionConnecting => 'جاري الاتصال بالنسخ...';
+
+  @override
+  String get transcriptionReconnecting => 'إعادة الاتصال بالنسخ...';
+
+  @override
+  String get transcriptionUnavailable => 'النسخ غير متاح';
+
+  @override
+  String get audioOutput => 'مخرج الصوت';
 }

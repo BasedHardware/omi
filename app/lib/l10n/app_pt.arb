@@ -2944,5 +2944,27 @@
     "good": "Bom",
     "fair": "Razoável",
     "weak": "Fraco",
-    "gattError": "Erro GATT ({code})"
+    "gattError": "Erro GATT ({code})",
+    "rollbackToStableFirmware": "Voltar ao firmware estável",
+    "rollbackConfirmTitle": "Reverter firmware?",
+    "rollbackConfirmMessage": "Isso substituirá seu firmware atual pela última versão estável ({version}). Seu dispositivo será reiniciado após a atualização.",
+    "stableFirmware": "Firmware estável",
+    "fetchingStableFirmware": "Obtendo o último firmware estável...",
+    "noStableFirmwareFound": "Não foi possível encontrar uma versão estável do firmware para o seu dispositivo.",
+    "installStableFirmware": "Instalar firmware estável",
+    "alreadyOnStableFirmware": "Você já está na última versão estável.",
+    "audioSavedLocally": "{duration} de áudio salvo localmente",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "será sincronizado automaticamente",
+    "voiceRecordingFound": "Gravação encontrada",
+    "transcriptionConnecting": "Conectando transcrição...",
+    "transcriptionReconnecting": "Reconectando transcrição...",
+    "transcriptionUnavailable": "Transcrição indisponível",
+    "audioOutput": "Saída de áudio"
 }

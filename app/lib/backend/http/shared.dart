@@ -294,6 +294,81 @@ Future<http.Response> makeMultipartApiCall({
   }
 }
 
+/// Like [makeMultipartApiCall] but uses a dedicated HTTP client instead of the
+/// shared connection pool. Prevents large uploads (e.g. voice recordings) from
+/// blocking other app HTTP traffic. The client is created and disposed per call.
+Future<http.Response> makeMultipartApiCallUnpooled({
+  required String url,
+  required List<File> files,
+  Map<String, String> headers = const {},
+  Map<String, String> fields = const {},
+  String fileFieldName = 'files',
+  String method = 'POST',
+}) async {
+  final client = http.Client();
+  try {
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+
+    var request = await _buildMultipartRequest(
+      url: url,
+      files: files,
+      headers: builtHeaders,
+      fields: fields,
+      fileFieldName: fileFieldName,
+      method: method,
+    );
+    HttpPoolManager.stampRequestTime(request);
+
+    var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (requireAuthCheck && response.statusCode == 401) {
+      Logger.log('Token expired on 1st unpooled multipart attempt');
+      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+      if (SharedPreferencesUtil().authToken.isNotEmpty) {
+        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+        request = await _buildMultipartRequest(
+          url: url,
+          files: files,
+          headers: builtHeaders,
+          fields: fields,
+          fileFieldName: fileFieldName,
+          method: method,
+        );
+        HttpPoolManager.stampRequestTime(request);
+        streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+        response = await http.Response.fromStream(streamedResponse);
+        Logger.log('Token refreshed and unpooled multipart request retried');
+        if (response.statusCode == 401) {
+          await AuthService.instance.signOut();
+          Logger.handle(
+            Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
+            message: 'Authentication failed. Please sign in again.',
+          );
+        }
+      } else {
+        await AuthService.instance.signOut();
+        Logger.handle(
+          Exception('Authentication failed. Please sign in again.'),
+          StackTrace.current,
+          message: 'Authentication failed. Please sign in again.',
+        );
+      }
+    }
+
+    _checkClockSkewResponse(response);
+    return response;
+  } catch (e, stackTrace) {
+    Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    rethrow;
+  } finally {
+    client.close();
+  }
+}
+
 Stream<String> makeStreamingApiCall({
   required String url,
   Map<String, String> headers = const {},
@@ -318,30 +393,27 @@ Stream<String> makeStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: buffer partial data across TCP reads and only
+    // emit complete events delimited by \n\n.  The previous 1024-byte
+    // heuristic failed when TCP segments split an SSE line at arbitrary
+    // byte boundaries (see issue #6284).
+    var remainder = '';
     await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      // Last element is either empty (if data ended with \n\n) or
+      // an incomplete fragment — keep it in the remainder.
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    // Flush any trailing data that wasn't terminated by \n\n
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
@@ -411,30 +483,21 @@ Stream<String> makeMultipartStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    // Stateful SSE parser: see makeStreamingApiCall for rationale (issue #6284).
+    var remainder = '';
     await for (var data in response.stream.transform(utf8.decoder)) {
-      var lines = data.split('\n\n');
-      for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
+      remainder += data;
+      var parts = remainder.split('\n\n');
+      remainder = parts.removeLast();
+      for (var part in parts) {
+        if (part.isNotEmpty) {
+          yield part;
         }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
-        yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    if (remainder.isNotEmpty) {
+      yield remainder;
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');

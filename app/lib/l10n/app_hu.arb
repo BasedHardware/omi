@@ -3004,5 +3004,27 @@
     "good": "Jó",
     "fair": "Elfogadható",
     "weak": "Gyenge",
-    "gattError": "GATT hiba ({code})"
+    "gattError": "GATT hiba ({code})",
+    "rollbackToStableFirmware": "Visszaállítás stabil firmware-re",
+    "rollbackConfirmTitle": "Firmware visszaállítása?",
+    "rollbackConfirmMessage": "Ez lecseréli a jelenlegi firmware-t a legújabb stabil verzióra ({version}). Az eszköz a frissítés után újraindul.",
+    "stableFirmware": "Stabil firmware",
+    "fetchingStableFirmware": "Legújabb stabil firmware lekérése...",
+    "noStableFirmwareFound": "Nem található stabil firmware verzió az eszközéhez.",
+    "installStableFirmware": "Stabil firmware telepítése",
+    "alreadyOnStableFirmware": "Már a legújabb stabil verzión van.",
+    "audioSavedLocally": "{duration} hang helyben mentve",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "automatikusan szinkronizálódik",
+    "voiceRecordingFound": "Felvétel találva",
+    "transcriptionConnecting": "Átírás csatlakoztatása...",
+    "transcriptionReconnecting": "Átírás újracsatlakoztatása...",
+    "transcriptionUnavailable": "Átírás nem elérhető",
+    "audioOutput": "Hangkimenet"
 }

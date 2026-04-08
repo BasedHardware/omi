@@ -8782,4 +8782,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String gattError(String code) {
     return 'GATT错误 ($code)';
   }
+
+  @override
+  String get rollbackToStableFirmware => '回滚到稳定固件';
+
+  @override
+  String get rollbackConfirmTitle => '回滚固件？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '这将用最新稳定版本（$version）替换当前固件。更新后设备将重新启动。';
+  }
+
+  @override
+  String get stableFirmware => '稳定固件';
+
+  @override
+  String get fetchingStableFirmware => '正在获取最新稳定固件...';
+
+  @override
+  String get noStableFirmwareFound => '未找到适用于您设备的稳定固件版本。';
+
+  @override
+  String get installStableFirmware => '安装稳定固件';
+
+  @override
+  String get alreadyOnStableFirmware => '您已在最新稳定版本上。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 音频已本地保存';
+  }
+
+  @override
+  String get willSyncAutomatically => '将自动同步';
+
+  @override
+  String get enableLocationTitle => 'Enable Location';
+
+  @override
+  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => '找到录音';
+
+  @override
+  String get transcriptionConnecting => '正在连接转录...';
+
+  @override
+  String get transcriptionReconnecting => '正在重新连接转录...';
+
+  @override
+  String get transcriptionUnavailable => '转录不可用';
+
+  @override
+  String get audioOutput => '音频输出';
 }

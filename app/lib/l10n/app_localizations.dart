@@ -16694,6 +16694,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GATT error ({code})'**
   String gattError(String code);
+
+  /// Action item title for rolling back to the latest stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back to Stable Firmware'**
+  String get rollbackToStableFirmware;
+
+  /// Confirmation dialog title for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back Firmware?'**
+  String get rollbackConfirmTitle;
+
+  /// Confirmation dialog message for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.'**
+  String rollbackConfirmMessage(String version);
+
+  /// Title for the stable firmware rollback page
+  ///
+  /// In en, this message translates to:
+  /// **'Stable Firmware'**
+  String get stableFirmware;
+
+  /// Loading text while fetching stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching latest stable firmware...'**
+  String get fetchingStableFirmware;
+
+  /// Error message when no stable firmware is available
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find a stable firmware version for your device.'**
+  String get noStableFirmwareFound;
+
+  /// Button text to install the stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Install Stable Firmware'**
+  String get installStableFirmware;
+
+  /// Message when device is already on the latest stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'You are already on the latest stable version.'**
+  String get alreadyOnStableFirmware;
+
+  /// No description provided for @audioSavedLocally.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} audio saved locally'**
+  String audioSavedLocally(String duration);
+
+  /// No description provided for @willSyncAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'will sync automatically'**
+  String get willSyncAutomatically;
+
+  /// No description provided for @enableLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Location'**
+  String get enableLocationTitle;
+
+  /// No description provided for @enableLocationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission is needed to find nearby Bluetooth devices.'**
+  String get enableLocationDescription;
+
+  /// No description provided for @voiceRecordingFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording found'**
+  String get voiceRecordingFound;
+
+  /// Status when transcription WebSocket is connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting transcription...'**
+  String get transcriptionConnecting;
+
+  /// Status when transcription WebSocket is reconnecting
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting transcription...'**
+  String get transcriptionReconnecting;
+
+  /// Status when transcription WebSocket failed after max retries
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable'**
+  String get transcriptionUnavailable;
+
+  /// Title for audio route picker bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Output'**
+  String get audioOutput;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

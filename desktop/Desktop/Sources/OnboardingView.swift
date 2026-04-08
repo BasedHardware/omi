@@ -7,6 +7,8 @@ struct OnboardingView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
   var onComplete: (() -> Void)? = nil
+  var exportStepOverride: Int? = nil
+  var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
@@ -17,7 +19,12 @@ struct OnboardingView: View {
   @AppStorage("onboardingFloatingBarShortcutStepInserted") private
     var hasInsertedFloatingBarShortcutStep = false
   @AppStorage("onboardingTrustStepReordered") private var hasReorderedTrustStep = false
-  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep = false
+  @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep =
+    false
+  @AppStorage("onboardingDataSourcesStepInserted") private var hasInsertedDataSourcesStep = false
+  @AppStorage("onboardingExportsStepInserted") private var hasInsertedExportsStep = false
+  @AppStorage("onboardingSecondBrainStepInserted") private var hasInsertedSecondBrainStep = false
+  @AppStorage("onboardingResearchStepRemoved") private var hasRemovedResearchStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -30,7 +37,7 @@ struct OnboardingView: View {
         .ignoresSafeArea()
 
       Group {
-        if appState.hasCompletedOnboarding {
+        if appState.hasCompletedOnboarding && !isExportPreview {
           Color.clear
             .onAppear {
               log("OnboardingView: hasCompletedOnboarding=true, starting monitoring")
@@ -52,17 +59,25 @@ struct OnboardingView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      currentStep = OnboardingFlow.migratedStep(
-        currentStep: currentStep,
-        hasMigratedVideoStep: hasMigratedOnboardingSteps,
-        hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
-        hasMergedVoiceInputStep: hasMergedVoiceInputStep,
-        hasRemovedNotificationStep: hasRemovedNotificationStep,
-        hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
-        hasMigratedPagedIntro: hasMigratedPagedIntro,
-        hasReorderedTrustStep: hasReorderedTrustStep,
-        hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep
-      )
+      if let exportStepOverride {
+        currentStep = exportStepOverride
+      } else {
+        currentStep = OnboardingFlow.migratedStep(
+          currentStep: currentStep,
+          hasMigratedVideoStep: hasMigratedOnboardingSteps,
+          hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
+          hasMergedVoiceInputStep: hasMergedVoiceInputStep,
+          hasRemovedNotificationStep: hasRemovedNotificationStep,
+          hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
+          hasMigratedPagedIntro: hasMigratedPagedIntro,
+          hasReorderedTrustStep: hasReorderedTrustStep,
+          hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep,
+          hasInsertedDataSourcesStep: hasInsertedDataSourcesStep,
+          hasInsertedExportsStep: hasInsertedExportsStep,
+          hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
+          hasRemovedResearchStep: hasRemovedResearchStep
+        )
+      }
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true
       hasInsertedVoiceShortcutStep = true
@@ -71,9 +86,14 @@ struct OnboardingView: View {
       hasInsertedFloatingBarShortcutStep = true
       hasReorderedTrustStep = true
       hasInsertedHowDidYouHearStep = true
+      hasInsertedDataSourcesStep = true
+      hasInsertedExportsStep = true
+      hasInsertedSecondBrainStep = false
+      hasRemovedResearchStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
+      guard !isExportPreview else { return }
       // Pre-warm the ACP bridge before the chat step starts.
       await chatProvider.warmupBridge()
       await graphViewModel.addGraphFromStorage()
@@ -309,7 +329,8 @@ struct OnboardingView: View {
             currentStep = 11
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Automation_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 10, stepName: "Automation_Skipped")
             currentStep = 11
           },
           onForceComplete: handleOnboardingComplete
@@ -376,41 +397,57 @@ struct OnboardingView: View {
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 15 {
-        OnboardingResearchStepView(
+        OnboardingDataSourcesStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 15,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Research")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources")
+            currentStep = 16
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources_Skipped")
             currentStep = 16
           },
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 16 {
+        OnboardingExportsStepView(
+          graphViewModel: graphViewModel,
+          stepIndex: 16,
+          totalSteps: OnboardingFlow.introStepCount,
+          summaryText: introCoordinator.connectedContextSummary,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Exports")
+            currentStep = 17
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 17 {
         OnboardingGoalStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 16,
+          stepIndex: 17,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Goal")
             if !ProactiveAssistantsPlugin.shared.isMonitoring {
               ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
-            currentStep = 17
+            currentStep = 18
           },
           onForceComplete: handleOnboardingComplete
         )
       } else {
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           },
           onForceComplete: handleOnboardingComplete
@@ -430,7 +467,8 @@ struct OnboardingView: View {
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-    PostOnboardingPromptSuggestions.save(OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
+    PostOnboardingPromptSuggestions.save(
+      OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false

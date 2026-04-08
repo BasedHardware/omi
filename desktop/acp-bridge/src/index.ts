@@ -578,8 +578,8 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
 
 // --- Session pre-warming ---
 
-const DEFAULT_MODEL = "claude-opus-4-6";
-const SONNET_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+// Previously had SONNET_MODEL as separate Opus fallback — removed after migration
 
 interface WarmupSessionConfig {
   key: string;
@@ -593,7 +593,7 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
   // Build the list of sessions to warm: new format (sessionConfigs) takes priority over legacy (models array)
   const allConfigs: WarmupSessionConfig[] = sessionConfigs && sessionConfigs.length > 0
     ? sessionConfigs
-    : (models && models.length > 0 ? models : [DEFAULT_MODEL, SONNET_MODEL])
+    : (models && models.length > 0 ? models : [DEFAULT_MODEL])
         .map((m) => ({ key: m, model: m }));
   const toWarm = filterSessionsToWarm(sessions, allConfigs);
 

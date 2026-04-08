@@ -8,7 +8,7 @@ import os
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from database import (
     conversations as conversations_db,
@@ -18,6 +18,7 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
+    users as users_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -1192,3 +1193,165 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
+
+
+# ============================================================================
+# Notification Settings
+# ============================================================================
+
+
+class UpdateNotificationSettingsRequest(BaseModel):
+    enabled: bool | None = None
+    frequency: int | None = Field(None, ge=0, le=5)
+
+
+@router.get('/v1/users/notification-settings', tags=['users'])
+def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_notification_settings(uid)
+
+
+@router.patch('/v1/users/notification-settings', tags=['users'])
+def update_notification_settings(
+    request: UpdateNotificationSettingsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    return users_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
+
+
+# ============================================================================
+# Assistant Settings
+# ============================================================================
+
+
+class SharedAssistantSettings(BaseModel):
+    cooldown_interval: int | None = None
+    glow_overlay_enabled: bool | None = None
+    analysis_delay: int | None = None
+    screen_analysis_enabled: bool | None = None
+
+
+class FocusAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    cooldown_interval: int | None = None
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class TaskAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    allowed_apps: list[str] | None = None
+    browser_keywords: list[str] | None = None
+
+
+class AdviceAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class MemoryAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class UpdateAssistantSettingsRequest(BaseModel):
+    shared: SharedAssistantSettings | None = None
+    focus: FocusAssistantSettings | None = None
+    task: TaskAssistantSettings | None = None
+    advice: AdviceAssistantSettings | None = None
+    memory: MemoryAssistantSettings | None = None
+    update_channel: str | None = Field(None, max_length=50)
+
+
+@router.get('/v1/users/assistant-settings', tags=['users'])
+def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_assistant_settings(uid)
+
+
+@router.patch('/v1/users/assistant-settings', tags=['users'])
+def update_assistant_settings(
+    request: UpdateAssistantSettingsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    settings = request.model_dump(exclude_unset=True)
+    return users_db.update_assistant_settings(uid, settings)
+
+
+# ============================================================================
+# AI User Profile
+# ============================================================================
+
+
+class UpdateAIUserProfileRequest(BaseModel):
+    profile_text: str | None = Field(None, max_length=50000)
+    generated_at: Optional[str] = None
+    data_sources_used: int | None = Field(None, ge=0)
+
+
+@router.get('/v1/users/ai-profile', tags=['users'])
+def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_ai_user_profile(uid)
+
+
+@router.patch('/v1/users/ai-profile', tags=['users'])
+def update_ai_profile(
+    request: UpdateAIUserProfileRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    return users_db.update_ai_user_profile(
+        uid,
+        profile_text=request.profile_text,
+        generated_at=request.generated_at,
+        data_sources_used=request.data_sources_used,
+    )
+
+
+# ============================================================================
+# Bucket-based LLM Usage (extends existing /v1/users/me/llm-usage endpoints above)
+# ============================================================================
+
+
+class RecordLlmUsageBucketRequest(BaseModel):
+    input_tokens: int = Field(0, ge=0)
+    output_tokens: int = Field(0, ge=0)
+    cache_read_tokens: int = Field(0, ge=0)
+    cache_write_tokens: int = Field(0, ge=0)
+    total_tokens: int = Field(0, ge=0)
+    cost_usd: float = Field(0.0, ge=0.0)
+    account: str = Field('omi', max_length=100)
+
+
+@router.post('/v1/users/me/llm-usage', tags=['users'])
+def record_llm_usage_bucket(
+    request: RecordLlmUsageBucketRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    llm_usage_db.record_llm_usage_bucket(
+        uid,
+        input_tokens=request.input_tokens,
+        output_tokens=request.output_tokens,
+        cache_read_tokens=request.cache_read_tokens,
+        cache_write_tokens=request.cache_write_tokens,
+        total_tokens=request.total_tokens,
+        cost_usd=request.cost_usd,
+        account=request.account,
+    )
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/me/llm-usage/total', tags=['users'])
+def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
+    total = llm_usage_db.get_total_llm_cost(uid)
+    return {'total_cost_usd': total}

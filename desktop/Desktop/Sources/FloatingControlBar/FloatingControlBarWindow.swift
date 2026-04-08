@@ -51,6 +51,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     var onAskAI: (() -> Void)?
     var onHide: (() -> Void)?
     var onSendQuery: ((String) -> Void)?
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
@@ -115,7 +117,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() }
+            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
+            onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
+            onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -882,6 +886,35 @@ class FloatingControlBarManager {
             }
         }
 
+        barWindow.onRate = { [weak chatProvider] messageId, rating in
+            guard let provider = chatProvider else { return }
+            Task { @MainActor in
+                await provider.rateMessage(messageId, rating: rating)
+            }
+        }
+
+        barWindow.onShareLink = { [weak barWindow] in
+            guard let barWindow = barWindow else { return nil }
+            // Collect all synced message IDs from the conversation
+            var messageIds: [String] = []
+            for exchange in barWindow.state.chatHistory {
+                if exchange.aiMessage.isSynced {
+                    messageIds.append(exchange.aiMessage.id)
+                }
+            }
+            if let current = barWindow.state.currentAIMessage, current.isSynced {
+                messageIds.append(current.id)
+            }
+            guard !messageIds.isEmpty else { return nil }
+            do {
+                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                return response.url
+            } catch {
+                log("Failed to get chat share link: \(error)")
+                return nil
+            }
+        }
+
         // Observe recording state
         recordingCancellable = appState.$isTranscribing
             .combineLatest(appState.$isSavingConversation)
@@ -1037,7 +1070,7 @@ class FloatingControlBarManager {
     }
 
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
-    func openAIInputWithQuery(_ query: String) {
+    func openAIInputWithQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window else { return }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
@@ -1049,6 +1082,7 @@ class FloatingControlBarManager {
         // Provider session context remains intact; only the floating-bar UI is reset.
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation()
+        window.state.currentQueryFromVoice = fromVoice
 
         guard let provider = self.chatProvider else { return }
 
@@ -1094,12 +1128,13 @@ class FloatingControlBarManager {
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
-    func sendFollowUpQuery(_ query: String) {
+    func sendFollowUpQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window, window.state.showingAIResponse else {
             // No active conversation — fall back to new conversation
-            openAIInputWithQuery(query)
+            openAIInputWithQuery(query, fromVoice: fromVoice)
             return
         }
+        window.state.currentQueryFromVoice = fromVoice
 
         // Archive current exchange
         let currentQuery = window.state.displayedQuery
@@ -1181,6 +1216,20 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Check weekly usage limit for free users
+        let limiter = FloatingBarUsageLimiter.shared
+        if limiter.isLimitReached {
+            barWindow.state.isAILoading = false
+            barWindow.state.showingAIResponse = true
+            barWindow.state.currentAIMessage = ChatMessage(
+                text: "You've used all \(FloatingBarUsageLimiter.weeklyFreeLimit) free queries this week. Upgrade to Pro for unlimited access, or wait for your weekly reset.",
+                sender: .ai
+            )
+            barWindow.resizeToResponseHeightPublic(animated: true)
+            return
+        }
+
+        limiter.recordQuery()
         FloatingBarVoicePlaybackService.shared.stop()
 
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
@@ -1199,6 +1248,11 @@ class FloatingControlBarManager {
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+
+        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        }
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -1221,10 +1275,12 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
-                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-                    aiMessage,
-                    isFinal: !aiMessage.isStreaming
-                )
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1277,10 +1333,12 @@ class FloatingControlBarManager {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
 
-        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-            barWindow.state.currentAIMessage,
-            isFinal: true
-        )
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                barWindow.state.currentAIMessage,
+                isFinal: true
+            )
+        }
     }
 }
 

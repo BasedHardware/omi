@@ -81,19 +81,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'battery': deviceProvider.batteryLevel,
       'connected_at': _diagnostics?.connectedAt ?? 0,
       'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
-      'rssi_samples': _rssiPoints
-          .map((p) => {
-                'ts': p.time.millisecondsSinceEpoch,
-                'rssi': p.rssi,
-              })
-          .toList(),
+      'rssi_samples': _rssiPoints.map((p) => {'ts': p.time.millisecondsSinceEpoch, 'rssi': p.rssi}).toList(),
       'disconnect_history': (_diagnostics?.disconnectHistory ?? [])
-          .map((e) => {
-                'ts': e.timestamp,
-                'reason': e.reason,
-                'code': e.reasonCode,
-                'manual': e.isManual,
-              })
+          .map((e) => {'ts': e.timestamp, 'reason': e.reason, 'code': e.reasonCode, 'manual': e.isManual})
           .toList(),
     };
 
@@ -102,11 +92,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
     await file.writeAsString(json);
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Omi Device Diagnostics'));
-    MixpanelManager().track('Diagnostics Exported', properties: {
-      'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
-      'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
-      'rssi_samples': _rssiPoints.length,
-    });
+    MixpanelManager().track(
+      'Diagnostics Exported',
+      properties: {
+        'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
+        'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
+        'rssi_samples': _rssiPoints.length,
+      },
+    );
   }
 
   void _onRssiUpdate(int rssi) {
@@ -150,8 +143,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0D0D),
-        title: Text(context.l10n.deviceDiagnostics,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.deviceDiagnostics,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -460,7 +455,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(reason, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
+                Text(
+                  reason,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+                ),
                 const SizedBox(height: 2),
                 Text(timeStr, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
               ],

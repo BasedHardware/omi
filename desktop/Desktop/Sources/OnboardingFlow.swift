@@ -17,7 +17,8 @@ enum OnboardingFlow {
     "FloatingBar",
     "VoiceShortcut",
     "VoiceDemo",
-    "Research",
+    "DataSources",
+    "Exports",
     "Goal",
     "Tasks",
   ]
@@ -34,7 +35,11 @@ enum OnboardingFlow {
     hasInsertedFloatingBarShortcutStep: Bool,
     hasMigratedPagedIntro: Bool,
     hasReorderedTrustStep: Bool,
-    hasInsertedHowDidYouHearStep: Bool = true
+    hasInsertedHowDidYouHearStep: Bool = true,
+    hasInsertedDataSourcesStep: Bool = true,
+    hasInsertedExportsStep: Bool = true,
+    hasInsertedSecondBrainStep: Bool = false,
+    hasRemovedResearchStep: Bool = false
   ) -> Int {
     var migratedStep = currentStep
 
@@ -67,6 +72,26 @@ enum OnboardingFlow {
     // HowDidYouHear step inserted at index 2; shift users at 2+ up
     if !hasInsertedHowDidYouHearStep, migratedStep >= 2 {
       migratedStep += 1
+    }
+
+    // DataSources step inserted after Research; shift users at Goal+ up
+    if !hasInsertedDataSourcesStep, migratedStep >= 16 {
+      migratedStep += 1
+    }
+
+    if !hasInsertedExportsStep, migratedStep >= 16 {
+      migratedStep += 1
+    }
+
+    // Research step was merged into DataSources. Keep users on that stage if they were
+    // already there, and shift later steps down by one.
+    if !hasRemovedResearchStep, migratedStep > 15 {
+      migratedStep -= 1
+    }
+
+    // Temporary SecondBrainLive step was removed; shift users at Goal+ down
+    if hasInsertedSecondBrainStep, migratedStep >= 18 {
+      migratedStep -= 1
     }
 
     // Only reorder for existing users who already had the old Trust-first layout.

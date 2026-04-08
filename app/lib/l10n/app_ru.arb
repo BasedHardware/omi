@@ -2943,5 +2943,27 @@
     "good": "Хорошо",
     "fair": "Удовлетворительно",
     "weak": "Слабый",
-    "gattError": "Ошибка GATT ({code})"
+    "gattError": "Ошибка GATT ({code})",
+    "rollbackToStableFirmware": "Откатить до стабильной прошивки",
+    "rollbackConfirmTitle": "Откатить прошивку?",
+    "rollbackConfirmMessage": "Текущая прошивка будет заменена на последнюю стабильную версию ({version}). Устройство перезагрузится после обновления.",
+    "stableFirmware": "Стабильная прошивка",
+    "fetchingStableFirmware": "Получение последней стабильной прошивки...",
+    "noStableFirmwareFound": "Не удалось найти стабильную версию прошивки для вашего устройства.",
+    "installStableFirmware": "Установить стабильную прошивку",
+    "alreadyOnStableFirmware": "Вы уже используете последнюю стабильную версию.",
+    "audioSavedLocally": "{duration} аудио сохранено локально",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "синхронизируется автоматически",
+    "voiceRecordingFound": "Запись найдена",
+    "transcriptionConnecting": "Подключение транскрипции...",
+    "transcriptionReconnecting": "Повторное подключение транскрипции...",
+    "transcriptionUnavailable": "Транскрипция недоступна",
+    "audioOutput": "Аудиовыход"
 }

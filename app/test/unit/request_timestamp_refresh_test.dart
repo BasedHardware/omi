@@ -100,14 +100,11 @@ void main() {
           ..close();
       });
 
-      final response = await HttpPoolManager.instance.send(
-        () {
-          final req = http.Request('POST', Uri.parse('$baseUrl/test'));
-          req.headers['X-Request-Start-Time'] = '1000000000.0';
-          return req;
-        },
-        retries: 0,
-      );
+      final response = await HttpPoolManager.instance.send(() {
+        final req = http.Request('POST', Uri.parse('$baseUrl/test'));
+        req.headers['X-Request-Start-Time'] = '1000000000.0';
+        return req;
+      }, retries: 0);
 
       expect(response.statusCode, 200);
       expect(receivedTimestamp, isNotNull);

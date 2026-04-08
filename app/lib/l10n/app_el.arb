@@ -2908,5 +2908,27 @@
     "good": "Καλό",
     "fair": "Μέτριο",
     "weak": "Αδύναμο",
-    "gattError": "Σφάλμα GATT ({code})"
+    "gattError": "Σφάλμα GATT ({code})",
+    "rollbackToStableFirmware": "Επαναφορά σε σταθερό firmware",
+    "rollbackConfirmTitle": "Επαναφορά firmware;",
+    "rollbackConfirmMessage": "Αυτό θα αντικαταστήσει το τρέχον firmware με την τελευταία σταθερή έκδοση ({version}). Η συσκευή σας θα επανεκκινηθεί μετά την ενημέρωση.",
+    "stableFirmware": "Σταθερό firmware",
+    "fetchingStableFirmware": "Ανάκτηση τελευταίου σταθερού firmware...",
+    "noStableFirmwareFound": "Δεν βρέθηκε σταθερή έκδοση firmware για τη συσκευή σας.",
+    "installStableFirmware": "Εγκατάσταση σταθερού firmware",
+    "alreadyOnStableFirmware": "Χρησιμοποιείτε ήδη την τελευταία σταθερή έκδοση.",
+    "audioSavedLocally": "{duration} ήχου αποθηκεύτηκε τοπικά",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "θα συγχρονιστεί αυτόματα",
+    "voiceRecordingFound": "Βρέθηκε εγγραφή",
+    "transcriptionConnecting": "Σύνδεση μεταγραφής...",
+    "transcriptionReconnecting": "Επανασύνδεση μεταγραφής...",
+    "transcriptionUnavailable": "Η μεταγραφή δεν είναι διαθέσιμη",
+    "audioOutput": "Έξοδος ήχου"
 }

@@ -74,15 +74,9 @@ struct MemoryGraphInlineCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(alignment: .center, spacing: 12) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Brain Map")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-
-          Text("How people, projects, and ideas connect across your recent memories.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
-        }
+        Text("Brain Map")
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
 
@@ -129,7 +123,7 @@ struct MemoryGraphInlineCard: View {
           .padding(18)
         }
       }
-      .frame(height: 186)
+      .frame(height: 350)
       .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
     .padding(16)

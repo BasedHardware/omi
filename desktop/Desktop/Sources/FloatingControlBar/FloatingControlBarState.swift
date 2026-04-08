@@ -61,6 +61,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceFollowUp: Bool = false
     @Published var voiceFollowUpTranscript: String = ""
 
+    /// Whether the current query originated from voice (PTT). Used to decide
+    /// whether voice responses should play for this particular query.
+    @Published var currentQueryFromVoice: Bool = false
+
     // Model selection
     @Published var selectedModel: String = "claude-sonnet-4-6"
 
@@ -96,6 +100,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         isAILoading = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
+        currentQueryFromVoice = false
         lastConversationActivityAt = nil
     }
 }

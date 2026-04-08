@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ChevronDown, ChevronRight, ShieldCheck, ShieldX, DoorOpen, DoorClosed } from "lucide-react";
+import { useAuthToken } from "@/hooks/useAuthToken";
 
 const DEFAULT_PROMPT = `You analyze {user_name}'s live conversations and ONLY intervene when the conversation directly impacts one of their active goals or tasks.
 
@@ -211,9 +212,10 @@ export default function PromptTester() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const { token } = useAuthToken();
 
   const loadNotifications = async () => {
-    if (!uid.trim()) return;
+    if (!uid.trim() || !token) return;
     setLoading(true);
     setError("");
     setNotifications([]);
@@ -221,7 +223,9 @@ export default function PromptTester() {
     setRegenerated([]);
 
     try {
-      const res = await fetch(`/api/omi/notifications/user-notifications?uid=${encodeURIComponent(uid.trim())}`);
+      const res = await fetch(`/api/omi/notifications/user-notifications?uid=${encodeURIComponent(uid.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load");
       setNotifications(data.notifications);
@@ -235,7 +239,7 @@ export default function PromptTester() {
   };
 
   const regenerateAll = async () => {
-    if (!userContext || notifications.length === 0) return;
+    if (!userContext || notifications.length === 0 || !token) return;
     setRegenerating(true);
     setProgress(0);
 
@@ -269,7 +273,7 @@ export default function PromptTester() {
     try {
       const res = await fetch("/api/omi/notifications/regenerate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           prompt_template: prompt,
           user_name: userContext.user_name,

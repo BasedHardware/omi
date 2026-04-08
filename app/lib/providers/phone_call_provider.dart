@@ -13,9 +13,12 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/audio_route.dart';
 import 'package:omi/services/phone_call_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
+
+enum TranscriptionStatus { idle, connecting, active, reconnecting, failed }
 
 class PhoneCallProvider extends ChangeNotifier {
   final PhoneCallService _nativeService = PhoneCallService();
@@ -49,10 +52,28 @@ class PhoneCallProvider extends ChangeNotifier {
   final List<TranscriptSegment> _transcriptSegments = [];
   List<TranscriptSegment> get transcriptSegments => List.unmodifiable(_transcriptSegments);
 
+  // Audio routes
+  List<AudioRoute> _availableRoutes = [];
+  List<AudioRoute> get availableRoutes => List.unmodifiable(_availableRoutes);
+  AudioRoute? _selectedRoute;
+  AudioRoute? get selectedRoute => _selectedRoute;
+
+  // Transcription status
+  TranscriptionStatus _transcriptionStatus = TranscriptionStatus.idle;
+  TranscriptionStatus get transcriptionStatus => _transcriptionStatus;
+
+  // Token refresh
+  Timer? _tokenRefreshTimer;
+
   // WebSocket for transcription
   WebSocketChannel? _transcriptionSocket;
   int _wsReconnectAttempts = 0;
   Timer? _wsReconnectTimer;
+  static const int _maxWsReconnectAttempts = 10;
+
+  // Audio buffer during WS reconnect (~2s at 20ms per frame)
+  final List<Uint8List> _audioBuffer = [];
+  static const int _maxAudioBufferSize = 100;
 
   // Verified phone numbers
   List<VerifiedPhoneNumber> _verifiedNumbers = [];
@@ -68,12 +89,18 @@ class PhoneCallProvider extends ChangeNotifier {
   String? _error;
   String? get error => _error;
 
+  PhoneCallError? _lastError;
+  PhoneCallError? get lastError => _lastError;
+
   Future<void>? _initialLoad;
   Future<void> get initialLoad => _initialLoad ?? Future.value();
 
   PhoneCallProvider() {
     _nativeService.onCallStateChanged = _onCallStateChanged;
     _nativeService.onAudioData = _onAudioData;
+    _nativeService.onError = _onNativeError;
+    _nativeService.onMuteConfirmed = _onMuteConfirmed;
+    _nativeService.onSpeakerConfirmed = _onSpeakerConfirmed;
     _nativeService.startListening();
     _initialLoad = loadVerifiedNumbers();
   }
@@ -163,6 +190,7 @@ class PhoneCallProvider extends ChangeNotifier {
     }
 
     _error = null;
+    _lastError = null;
     _callState = PhoneCallState.connecting;
     _remoteNumber = phoneNumber;
     _currentCallId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -201,6 +229,10 @@ class PhoneCallProvider extends ChangeNotifier {
       return false;
     }
 
+    // Schedule token refresh before expiry (3-minute buffer)
+
+    _scheduleTokenRefresh(token.ttl);
+
     // Make the call via native layer
     var callStarted = await _nativeService.makeCall(
       phoneNumber: phoneNumber,
@@ -227,15 +259,27 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void toggleMute() {
-    _isMuted = !_isMuted;
-    _nativeService.toggleMute(_isMuted);
-    notifyListeners();
+    // Don't update state here — wait for native confirmation via _onMuteConfirmed
+    _nativeService.toggleMute(!_isMuted);
   }
 
   void toggleSpeaker() {
-    _isSpeakerOn = !_isSpeakerOn;
-    _nativeService.toggleSpeaker(_isSpeakerOn);
+    // Don't update state here — wait for native confirmation via _onSpeakerConfirmed
+    _nativeService.toggleSpeaker(!_isSpeakerOn);
+  }
+
+  Future<void> loadAudioRoutes() async {
+    _availableRoutes = await _nativeService.getAudioRoutes();
     notifyListeners();
+  }
+
+  Future<void> selectAudioRoute(AudioRoute route) async {
+    var success = await _nativeService.selectAudioRoute(route.id);
+    if (success) {
+      _selectedRoute = route;
+      _isSpeakerOn = route.type == AudioRouteType.speaker;
+      notifyListeners();
+    }
   }
 
   void sendDtmf(String digit) {
@@ -271,10 +315,28 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _onAudioData(Uint8List audioData, int channel) {
-    // Forward audio data to WebSocket with channel prefix
     var socket = _transcriptionSocket;
-    if (socket == null) return;
+
+    // Buffer audio during WebSocket reconnect
+    if (socket == null) {
+      if (_audioBuffer.length < _maxAudioBufferSize) {
+        var data = Uint8List(1 + audioData.length);
+        data[0] = channel;
+        data.setRange(1, data.length, audioData);
+        _audioBuffer.add(data);
+      }
+      return;
+    }
+
     try {
+      // Flush buffered audio first
+      if (_audioBuffer.isNotEmpty) {
+        for (var buffered in _audioBuffer) {
+          socket.sink.add(buffered);
+        }
+        _audioBuffer.clear();
+      }
+
       var data = Uint8List(1 + audioData.length);
       data[0] = channel; // 0x01 = user, 0x02 = remote
       data.setRange(1, data.length, audioData);
@@ -289,6 +351,10 @@ class PhoneCallProvider extends ChangeNotifier {
     _callState = PhoneCallState.ended;
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = null;
+    _transcriptionStatus = TranscriptionStatus.idle;
+    _audioBuffer.clear();
     notifyListeners();
 
     // Reset state after a short delay so UI can show "Call Ended"
@@ -300,7 +366,47 @@ class PhoneCallProvider extends ChangeNotifier {
       _callStartTime = null;
       _callDuration = Duration.zero;
       _transcriptSegments.clear();
+      _availableRoutes = [];
+      _selectedRoute = null;
       notifyListeners();
+    });
+  }
+
+  void _onNativeError(PhoneCallError error) {
+    _lastError = error;
+    _error = error.message;
+    Logger.error('PhoneCallProvider: native error: ${error.code} - ${error.message}');
+    notifyListeners();
+  }
+
+  void _onMuteConfirmed(bool muted) {
+    _isMuted = muted;
+    notifyListeners();
+  }
+
+  void _onSpeakerConfirmed(bool speakerOn) {
+    _isSpeakerOn = speakerOn;
+    notifyListeners();
+  }
+
+  void _scheduleTokenRefresh(int ttlSeconds) {
+    _tokenRefreshTimer?.cancel();
+    // Refresh 3 minutes before expiry (or half TTL if TTL < 6 min)
+    var refreshInSeconds = ttlSeconds > 360 ? ttlSeconds - 180 : ttlSeconds ~/ 2;
+    if (refreshInSeconds <= 0) return;
+
+    Logger.info('PhoneCallProvider: scheduling token refresh in ${refreshInSeconds}s');
+    _tokenRefreshTimer = Timer(Duration(seconds: refreshInSeconds), () async {
+      if (_callState != PhoneCallState.active && _callState != PhoneCallState.ringing) return;
+      Logger.info('PhoneCallProvider: refreshing call token');
+      var token = await api.getPhoneCallToken();
+      if (token != null) {
+        await _nativeService.initialize(token.accessToken);
+        _scheduleTokenRefresh(token.ttl);
+      } else {
+        Logger.error('PhoneCallProvider: token refresh failed, retrying in 30s');
+        _scheduleTokenRefresh(60);
+      }
     });
   }
 
@@ -328,10 +434,11 @@ class PhoneCallProvider extends ChangeNotifier {
 
     _wsReconnectTimer?.cancel();
     _wsReconnectTimer = null;
+    _transcriptionStatus = TranscriptionStatus.connecting;
+    notifyListeners();
 
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : 'multi';
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,
@@ -349,6 +456,10 @@ class PhoneCallProvider extends ChangeNotifier {
       );
       _transcriptionSocket!.stream.listen(
         (message) {
+          if (_transcriptionStatus != TranscriptionStatus.active) {
+            _transcriptionStatus = TranscriptionStatus.active;
+            notifyListeners();
+          }
           if (message is String) {
             _handleTranscriptionMessage(message);
           }
@@ -374,12 +485,17 @@ class PhoneCallProvider extends ChangeNotifier {
 
   void _scheduleReconnect() {
     if (_callState != PhoneCallState.active) return;
-    if (_wsReconnectAttempts >= 5) {
+    if (_wsReconnectAttempts >= _maxWsReconnectAttempts) {
       Logger.error('PhoneCallProvider: max reconnect attempts reached, giving up');
+      _transcriptionStatus = TranscriptionStatus.failed;
+      notifyListeners();
       return;
     }
 
-    var delay = Duration(seconds: 1 << _wsReconnectAttempts); // 1s, 2s, 4s, 8s, 16s
+    _transcriptionStatus = TranscriptionStatus.reconnecting;
+    notifyListeners();
+
+    var delay = Duration(seconds: 1 << _wsReconnectAttempts); // 1s, 2s, 4s, 8s...
     _wsReconnectAttempts++;
     Logger.info('PhoneCallProvider: reconnecting WebSocket in ${delay.inSeconds}s (attempt $_wsReconnectAttempts)');
 
@@ -470,6 +586,7 @@ class PhoneCallProvider extends ChangeNotifier {
   void dispose() {
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
+    _tokenRefreshTimer?.cancel();
     _nativeService.dispose();
     super.dispose();
   }
