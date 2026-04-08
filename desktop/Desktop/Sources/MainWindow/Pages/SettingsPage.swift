@@ -236,6 +236,7 @@ struct SettingsContentView: View {
 
     enum SettingsSection: String, CaseIterable {
         case general = "General"
+        case device = "Device"
         case rewind = "Rewind"
         case transcription = "Transcription"
         case notifications = "Notifications"
@@ -373,6 +374,8 @@ struct SettingsContentView: View {
                 switch selectedSection {
                 case .general:
                     generalSection
+                case .device:
+                    DeviceSettingsPage()
                 case .rewind:
                     rewindSection
                 case .transcription:
