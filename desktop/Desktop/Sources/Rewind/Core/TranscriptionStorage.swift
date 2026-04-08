@@ -308,7 +308,8 @@ actor TranscriptionStorage {
                 try database.execute(
                     sql: """
                         UPDATE transcription_segments
-                        SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?, translationsJson = ?
+                        SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?,
+                            translationsJson = COALESCE(?, translationsJson)
                         WHERE sessionId = ? AND segmentId = ?
                         """,
                     arguments: [text, speaker, startTime, endTime, isUser, personId, translationsJson, sessionId, segId]
