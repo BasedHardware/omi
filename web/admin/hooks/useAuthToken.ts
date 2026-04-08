@@ -69,8 +69,9 @@ export function useAuthFetch() {
   tokenRef.current = token;
 
   const fetchWithAuth = useCallback(async (url: string, init?: RequestInit) => {
+    const isFormData = init?.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(init?.headers as Record<string, string>),
     };
     if (tokenRef.current) {
