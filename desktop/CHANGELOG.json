@@ -1,5 +1,5 @@
 {
-  "unreleased": [],
+  "unreleased": ["Fixed date-based tool queries failing for users in positive UTC timezones (UTC+1 through UTC+14)"],
   "releases": [
     {
       "version": "0.11.254",
