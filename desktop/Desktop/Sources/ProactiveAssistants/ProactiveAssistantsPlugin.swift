@@ -686,7 +686,14 @@ public class ProactiveAssistantsPlugin: NSObject {
         // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
         // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
         if #available(macOS 14.0, *) {
-            if let cgImage = await screenCaptureService.captureActiveWindowCGImage(),
+            // Use the window ID already resolved above (line 624) to avoid stale cache hits
+            // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage()
+            let cgImage: CGImage? = if let wid = windowID {
+                await screenCaptureService.captureWindowCGImage(windowID: wid)
+            } else {
+                await screenCaptureService.captureActiveWindowCGImage()
+            }
+            if let cgImage = cgImage,
                let appName = appName {
                 if !lastCaptureSucceeded {
                     log("Screen capture recovered after \(consecutiveFailures) failures")
