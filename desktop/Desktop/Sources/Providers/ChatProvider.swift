@@ -1887,6 +1887,41 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
+    @discardableResult
+    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return nil }
+
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let localId = aiMessage.id
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+
+        messages.append(aiMessage)
+
+        Task { [weak self] in
+            do {
+                let response = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "ai",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId
+                )
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                }
+                log("Saved assistant message to backend: \(response.id)")
+            } catch {
+                logError("Failed to persist assistant message", error: error)
+            }
+        }
+
+        return aiMessage
+    }
+
     // MARK: - Send Message
 
     /// Send a message and get AI response via Claude Agent SDK bridge

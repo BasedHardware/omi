@@ -4,7 +4,7 @@ import SwiftUI
 /// A single question/answer exchange in the floating bar chat history.
 struct FloatingChatExchange: Identifiable {
     let id = UUID()
-    let question: String
+    let question: String?
     let aiMessage: ChatMessage
 }
 
