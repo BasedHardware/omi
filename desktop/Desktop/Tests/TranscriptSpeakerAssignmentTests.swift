@@ -285,6 +285,175 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(segment.translations?[0].text, "Test")
   }
 
+  // MARK: - TranscriptionSegmentRecord Translation Round-Trip Tests
+
+  func testTranscriptionSegmentRecordRoundTripWithTranslations() {
+    let translations = [
+      TranscriptTranslation(lang: "en", text: "Hello"),
+      TranscriptTranslation(lang: "es", text: "Hola"),
+    ]
+    let translationsJson = String(data: try! JSONEncoder().encode(translations), encoding: .utf8)
+
+    let record = TranscriptionSegmentRecord(
+      sessionId: 1,
+      speaker: 0,
+      text: "こんにちは",
+      startTime: 0.0,
+      endTime: 1.5,
+      segmentOrder: 0,
+      segmentId: "seg_trans_rt",
+      isUser: false,
+      translationsJson: translationsJson
+    )
+
+    let segment = record.toTranscriptSegment()
+
+    XCTAssertEqual(segment.translations.count, 2)
+    XCTAssertEqual(segment.translations[0].lang, "en")
+    XCTAssertEqual(segment.translations[0].text, "Hello")
+    XCTAssertEqual(segment.translations[1].lang, "es")
+    XCTAssertEqual(segment.translations[1].text, "Hola")
+  }
+
+  func testTranscriptionSegmentRecordRoundTripNilTranslationsJson() {
+    let record = TranscriptionSegmentRecord(
+      sessionId: 1,
+      speaker: 0,
+      text: "Hello",
+      startTime: 0.0,
+      endTime: 1.0,
+      segmentOrder: 0,
+      segmentId: "seg_no_trans_rt"
+    )
+
+    let segment = record.toTranscriptSegment()
+    XCTAssertTrue(segment.translations.isEmpty, "Nil translationsJson should produce empty translations array")
+  }
+
+  func testTranscriptionSegmentRecordFromSegmentEncodesTranslations() {
+    let segment = TranscriptSegment(
+      id: "seg_encode_1",
+      backendId: "seg_encode_1",
+      text: "テスト",
+      speaker: "SPEAKER_00",
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1,
+      translations: [
+        TranscriptTranslation(lang: "en", text: "Test"),
+        TranscriptTranslation(lang: "fr", text: "Essai"),
+      ]
+    )
+
+    let record = TranscriptionSegmentRecord.from(segment, sessionId: 1, segmentOrder: 0)
+
+    XCTAssertNotNil(record.translationsJson, "Non-empty translations should be encoded to JSON")
+
+    // Decode back and verify
+    let decoded = try! JSONDecoder().decode(
+      [TranscriptTranslation].self,
+      from: record.translationsJson!.data(using: .utf8)!
+    )
+    XCTAssertEqual(decoded.count, 2)
+    XCTAssertEqual(decoded[0].lang, "en")
+    XCTAssertEqual(decoded[1].lang, "fr")
+  }
+
+  func testTranscriptionSegmentRecordFromSegmentEmptyTranslations() {
+    let segment = TranscriptSegment(
+      id: "seg_empty_trans",
+      text: "Hello",
+      speaker: "SPEAKER_00",
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1
+    )
+
+    let record = TranscriptionSegmentRecord.from(segment, sessionId: 1, segmentOrder: 0)
+    XCTAssertNil(record.translationsJson, "Empty translations should produce nil translationsJson")
+  }
+
+  // MARK: - In-Memory Translation Preservation Tests
+
+  func testSpeakerSegmentUpdatePreservesExistingTranslations() {
+    // Simulates handleBackendSegments logic: when a segment update arrives
+    // without translations, existing translations should be preserved
+    var existing = SpeakerSegment(
+      segmentId: "seg_preserve",
+      speaker: 0,
+      text: "Original text",
+      start: 0,
+      end: 1,
+      isUser: false,
+      translations: [
+        SegmentTranslation(lang: "en", text: "Original text translated"),
+      ]
+    )
+
+    // Incoming update with no translations (e.g., text refinement)
+    let incoming = SpeakerSegment(
+      segmentId: "seg_preserve",
+      speaker: 0,
+      text: "Updated text",
+      start: 0,
+      end: 1.5,
+      isUser: false,
+      translations: []
+    )
+
+    // Apply the preservation logic from handleBackendSegments
+    var updated = incoming
+    if incoming.translations.isEmpty && !existing.translations.isEmpty {
+      updated.translations = existing.translations
+    }
+    existing = updated
+
+    XCTAssertEqual(existing.text, "Updated text", "Text should be updated")
+    XCTAssertEqual(existing.end, 1.5, "End time should be updated")
+    XCTAssertEqual(existing.translations.count, 1, "Translations should be preserved")
+    XCTAssertEqual(existing.translations[0].text, "Original text translated")
+  }
+
+  func testSpeakerSegmentUpdateReplacesTranslationsWhenNewOnesProvided() {
+    var existing = SpeakerSegment(
+      segmentId: "seg_replace",
+      speaker: 0,
+      text: "Original",
+      start: 0,
+      end: 1,
+      isUser: false,
+      translations: [
+        SegmentTranslation(lang: "en", text: "Old translation"),
+      ]
+    )
+
+    let incoming = SpeakerSegment(
+      segmentId: "seg_replace",
+      speaker: 0,
+      text: "Updated",
+      start: 0,
+      end: 1,
+      isUser: false,
+      translations: [
+        SegmentTranslation(lang: "en", text: "New translation"),
+        SegmentTranslation(lang: "fr", text: "Nouvelle traduction"),
+      ]
+    )
+
+    // When incoming has translations, use them
+    var updated = incoming
+    if incoming.translations.isEmpty && !existing.translations.isEmpty {
+      updated.translations = existing.translations
+    }
+    existing = updated
+
+    XCTAssertEqual(existing.translations.count, 2, "New translations should replace old ones")
+    XCTAssertEqual(existing.translations[0].text, "New translation")
+    XCTAssertEqual(existing.translations[1].text, "Nouvelle traduction")
+  }
+
   // MARK: - Assignment Metadata Tests
 
   func testAssignmentMetadataPrefersBackendIdsAndFallsBackToIndices() {
