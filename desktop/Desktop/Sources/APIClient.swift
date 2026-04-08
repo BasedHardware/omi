@@ -2770,8 +2770,8 @@ struct OmiApp: Codable, Identifiable, Sendable {
     let approved: Bool
     let `private`: Bool
     let installs: Int
-    let ratingAvg: Double?
-    let ratingCount: Int
+    var ratingAvg: Double?
+    var ratingCount: Int
     let isPaid: Bool
     let price: Double?
     var enabled: Bool
@@ -2824,7 +2824,7 @@ struct OmiApp: Codable, Identifiable, Sendable {
 
     /// Formatted rating string
     var formattedRating: String? {
-        guard let rating = ratingAvg else { return nil }
+        guard let rating = ratingAvg, ratingCount > 0 else { return nil }
         return String(format: "%.1f", rating)
     }
 
@@ -2870,6 +2870,7 @@ struct OmiAppDetails: Codable, Identifiable {
     let twitter: String?
     let createdAt: Date?
     var enabled: Bool
+    let externalIntegration: ExternalIntegration?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, image, category, author, email, capabilities
@@ -2888,6 +2889,7 @@ struct OmiAppDetails: Codable, Identifiable {
         case username, twitter
         case createdAt = "created_at"
         case enabled
+        case externalIntegration = "external_integration"
     }
 
     init(from decoder: Decoder) throws {
@@ -2917,6 +2919,7 @@ struct OmiAppDetails: Codable, Identifiable {
         twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        externalIntegration = try container.decodeIfPresent(ExternalIntegration.self, forKey: .externalIntegration)
     }
 }
 
@@ -2930,17 +2933,49 @@ struct OmiAppCategory: Codable, Identifiable, Sendable {
 struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
-    let description: String
+    let description: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, title, description
+    }
+}
+
+/// Auth step for external integration setup
+struct AuthStep: Codable, Sendable {
+    let name: String
+    let url: String
+}
+
+/// External integration setup details
+struct ExternalIntegration: Codable, Sendable {
+    let authSteps: [AuthStep]
+    let setupCompletedUrl: String?
+    let setupInstructionsFilePath: String?
+    let appHomeUrl: String?
+    let isInstructionsUrl: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case authSteps = "auth_steps"
+        case setupCompletedUrl = "setup_completed_url"
+        case setupInstructionsFilePath = "setup_instructions_file_path"
+        case appHomeUrl = "app_home_url"
+        case isInstructionsUrl = "is_instructions_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        authSteps = try container.decodeIfPresent([AuthStep].self, forKey: .authSteps) ?? []
+        setupCompletedUrl = try container.decodeIfPresent(String.self, forKey: .setupCompletedUrl)
+        setupInstructionsFilePath = try container.decodeIfPresent(String.self, forKey: .setupInstructionsFilePath)
+        appHomeUrl = try container.decodeIfPresent(String.self, forKey: .appHomeUrl)
+        isInstructionsUrl = try container.decodeIfPresent(Bool.self, forKey: .isInstructionsUrl)
     }
 }
 
@@ -3043,7 +3078,12 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    /// Fetches all apps with real rating data from v1/apps
+    func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
+        return try await get("v1/apps?limit=\(limit)")
+    }
+
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
@@ -3064,6 +3104,10 @@ extension APIClient {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> [OmiApp] {
+        struct SearchResponse: Decodable {
+            let data: [OmiApp]
+        }
+
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)"
@@ -3090,7 +3134,8 @@ extension APIClient {
         }
 
         let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        let response: SearchResponse = try await get(endpoint)
+        return response.data
     }
 
     /// Fetches app details by ID
@@ -3110,28 +3155,35 @@ extension APIClient {
 
     /// Enables an app for the current user
     func enableApp(appId: String) async throws {
-        struct EnableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = EnableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/enable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
     }
 
     /// Disables an app for the current user
     func disableApp(appId: String) async throws {
-        struct DisableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = DisableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/disable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
+    }
+
+    /// Checks if an external integration app's setup is complete
+    func isAppSetupCompleted(url: String, uid: String) async -> Bool {
+        guard !url.isEmpty else { return true }
+        guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
+        var request = URLRequest(url: fullUrl)
+        request.httpMethod = "GET"
+        do {
+            let (data, _) = try await session.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json["is_setup_completed"] as? Bool ?? false
+            }
+        } catch {}
+        return false
     }
 
     /// Submits a review for an app
@@ -3862,7 +3914,7 @@ struct TaskSettingsResponse: Codable {
     }
 }
 
-struct AdviceSettingsResponse: Codable {
+struct InsightSettingsResponse: Codable {
     var enabled: Bool?
     var analysisPrompt: String?
     var extractionInterval: Double?
@@ -3914,13 +3966,13 @@ struct AssistantSettingsResponse: Codable {
     var shared: SharedAssistantSettingsResponse?
     var focus: FocusSettingsResponse?
     var task: TaskSettingsResponse?
-    var advice: AdviceSettingsResponse?
+    var insight: InsightSettingsResponse?
     var memory: MemorySettingsResponse?
     var floatingBar: FloatingBarSettingsResponse?
     var updateChannel: String?
 
     enum CodingKeys: String, CodingKey {
-        case shared, focus, task, advice, memory
+        case shared, focus, task, insight = "advice", memory
         case floatingBar = "floating_bar"
         case updateChannel = "update_channel"
     }
@@ -3959,17 +4011,17 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice API
+// MARK: - Insight API
 
 extension APIClient {
 
-    /// Fetches advice history from the backend
-    func getAdvice(
+    /// Fetches insight history from the backend
+    func getInsights(
         limit: Int = 100,
         offset: Int = 0,
         category: String? = nil,
         includeDismissed: Bool = false
-    ) async throws -> [ServerAdvice] {
+    ) async throws -> [ServerInsight] {
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)",
@@ -3984,13 +4036,13 @@ extension APIClient {
         return try await get(endpoint)
     }
 
-    /// Creates a new advice entry
-    func createAdvice(_ request: CreateAdviceRequest) async throws -> ServerAdvice {
+    /// Creates a new insight entry
+    func createInsight(_ request: CreateInsightRequest) async throws -> ServerInsight {
         return try await post("v1/advice", body: request)
     }
 
-    /// Updates advice (mark as read/dismissed)
-    func updateAdvice(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerAdvice {
+    /// Updates insight (mark as read/dismissed)
+    func updateInsight(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerInsight {
         struct UpdateRequest: Encodable {
             let is_read: Bool?
             let is_dismissed: Bool?
@@ -3999,13 +4051,13 @@ extension APIClient {
         return try await patch("v1/advice/\(id)", body: body)
     }
 
-    /// Deletes advice permanently
-    func deleteAdvice(id: String) async throws {
+    /// Deletes insight permanently
+    func deleteInsight(id: String) async throws {
         try await delete("v1/advice/\(id)")
     }
 
-    /// Marks all advice as read
-    func markAllAdviceAsRead() async throws {
+    /// Marks all insights as read
+    func markAllInsightsAsRead() async throws {
         struct StatusResponse: Decodable {
             let status: String
         }
@@ -4013,13 +4065,13 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice Models
+// MARK: - Insight Models
 
-/// Server advice model matching Rust AdviceDB
-struct ServerAdvice: Codable, Identifiable {
+/// Server insight model matching Rust InsightDB
+struct ServerInsight: Codable, Identifiable {
     let id: String
     let content: String
-    let category: ServerAdviceCategory
+    let category: ServerInsightCategory
     let reasoning: String?
     let sourceApp: String?
     let confidence: Double
@@ -4045,7 +4097,7 @@ struct ServerAdvice: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        category = try container.decodeIfPresent(ServerAdviceCategory.self, forKey: .category) ?? .other
+        category = try container.decodeIfPresent(ServerInsightCategory.self, forKey: .category) ?? .other
         reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
         sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
         confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
@@ -4058,16 +4110,16 @@ struct ServerAdvice: Codable, Identifiable {
     }
 }
 
-/// Server advice category enum matching Rust AdviceCategory
-enum ServerAdviceCategory: String, Codable {
+/// Server advice category enum matching Rust InsightCategory
+enum ServerInsightCategory: String, Codable {
     case productivity
     case health
     case communication
     case learning
     case other
 
-    /// Convert to local AdviceCategory
-    var toLocal: AdviceCategory {
+    /// Convert to local InsightCategory
+    var toLocal: InsightCategory {
         switch self {
         case .productivity: return .productivity
         case .health: return .health
@@ -4078,8 +4130,8 @@ enum ServerAdviceCategory: String, Codable {
     }
 }
 
-/// Request to create new advice
-struct CreateAdviceRequest: Encodable {
+/// Request to create new insight
+struct CreateInsightRequest: Encodable {
     let content: String
     let category: String?
     let reasoning: String?
@@ -4090,7 +4142,7 @@ struct CreateAdviceRequest: Encodable {
 
     init(
         content: String,
-        category: AdviceCategory? = nil,
+        category: InsightCategory? = nil,
         reasoning: String? = nil,
         sourceApp: String? = nil,
         confidence: Double? = nil,
@@ -4737,6 +4789,15 @@ extension APIClient {
         }
     }
 
+    /// Percent-encode a date string for use in query parameters.
+    /// `.urlQueryAllowed` does not encode `+`, but servers decode `+` as space in query strings.
+    /// This encodes `+` as `%2B` so timezone offsets like `+07:00` survive round-trip.
+    private func encodeQueryDate(_ date: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+")
+        return date.addingPercentEncoding(withAllowedCharacters: allowed) ?? date
+    }
+
     func toolGetConversations(
         startDate: String? = nil,
         endDate: String? = nil,
@@ -4745,8 +4806,8 @@ extension APIClient {
         includeTranscript: Bool = true
     ) async throws -> ToolResponse {
         var params = "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
         return try await get(params, customBaseURL: nil)
     }
 
@@ -4768,8 +4829,8 @@ extension APIClient {
         endDate: String? = nil
     ) async throws -> ToolResponse {
         var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
         return try await get(params, customBaseURL: nil)
     }
 
@@ -4789,10 +4850,10 @@ extension APIClient {
     ) async throws -> ToolResponse {
         var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
         if let c = completed { params += "&completed=\(c)" }
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        if let dsd = dueStartDate { params += "&due_start_date=\(dsd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? dsd)" }
-        if let ded = dueEndDate { params += "&due_end_date=\(ded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ded)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
+        if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
+        if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
         return try await get(params, customBaseURL: nil)
     }
 

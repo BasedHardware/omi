@@ -41,6 +41,7 @@ if 'deepgram' in _mock_modules:
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
+from utils.stt.streaming import get_stt_service_for_language, STTService  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -54,7 +55,7 @@ async def test_returns_connection_on_first_success():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
         )
     assert result is mock_conn
 
@@ -86,7 +87,7 @@ async def test_retries_with_async_sleep():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
         )
 
@@ -112,7 +113,7 @@ async def test_raises_after_all_retries_exhausted():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=3,
             )
 
@@ -127,7 +128,7 @@ async def test_aborts_before_first_attempt_when_inactive():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             is_active=lambda: False,
         )
     assert result is None
@@ -155,7 +156,7 @@ async def test_aborts_between_retries_when_inactive():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
             is_active=lambda: active[0],
         )
@@ -187,7 +188,7 @@ async def test_is_active_none_skips_check():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
             is_active=None,
         )
@@ -206,7 +207,7 @@ async def test_retries_zero_raises_immediately():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=0,
             )
     mock_connect.assert_not_called()
@@ -230,7 +231,7 @@ async def test_retries_one_failure_raises_no_sleep():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=1,
             )
     assert len(sleep_calls) == 0  # no sleep with only 1 retry
@@ -253,7 +254,7 @@ async def test_connect_uses_asyncio_to_thread():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
         )
     assert result is mock_conn
     mock_to_thread.assert_called_once()
@@ -319,7 +320,7 @@ async def test_retries_on_none_then_succeeds():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
         )
 
@@ -345,7 +346,7 @@ async def test_returns_none_after_all_none_retries_exhausted():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
         )
 
@@ -1025,3 +1026,104 @@ def test_gated_socket_death_reason_delegates_none_when_alive():
         assert gated.death_reason is None
     finally:
         safe.finish()
+
+
+# ---------------------------------------------------------------------------
+# get_stt_service_for_language — Nova-3 unified model selection (#6382)
+# ---------------------------------------------------------------------------
+
+
+class TestGetSttServiceForLanguage:
+    """Verify get_stt_service_for_language returns nova-3 for all languages."""
+
+    def test_english_multi_enabled(self):
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=True)
+        assert service == STTService.deepgram
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_english_multi_disabled(self):
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_chinese_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('zh', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'zh'
+        assert model == 'nova-3'
+
+    def test_chinese_traditional_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'zh-TW'
+        assert model == 'nova-3'
+
+    def test_thai_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('th', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'th'
+        assert model == 'nova-3'
+
+    def test_arabic_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ar', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ar'
+        assert model == 'nova-3'
+
+    def test_tamil_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ta', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ta'
+        assert model == 'nova-3'
+
+    def test_urdu_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ur', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ur'
+        assert model == 'nova-3'
+
+    def test_hebrew_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('he', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'he'
+        assert model == 'nova-3'
+
+    def test_unsupported_falls_back_to_english(self):
+        service, lang, model = get_stt_service_for_language('xx-INVALID')
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_multi_language_returns_multi(self):
+        service, lang, model = get_stt_service_for_language('multi')
+        assert service == STTService.deepgram
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_french_multi_enabled(self):
+        """French is in the multi set — should return 'multi' when multi_lang_enabled."""
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_french_multi_disabled(self):
+        """French with multi disabled — should return 'fr' directly."""
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
+        assert lang == 'fr'
+        assert model == 'nova-3'
+
+    def test_empty_string_falls_back_to_english(self):
+        """Empty string language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language('')
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_none_language_falls_back_to_english(self):
+        """None language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language(None)
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'

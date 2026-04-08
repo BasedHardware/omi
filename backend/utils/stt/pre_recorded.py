@@ -17,51 +17,66 @@ logger = logging.getLogger(__name__)
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
 
-# Language sets for Deepgram models (subset needed for pre-recorded)
-# Languages only supported by nova-2 (not nova-3)
-_deepgram_nova2_only_languages = {
-    "zh",
-    "zh-CN",
-    "zh-Hans",
-    "zh-TW",
-    "zh-Hant",
-    "zh-HK",
-    "th",
-    "th-TH",
-}
-
 # Languages supported by nova-3
 _deepgram_nova3_languages = {
+    "ar",
+    "ar-AE",
+    "ar-SA",
+    "ar-QA",
+    "ar-KW",
+    "ar-SY",
+    "ar-LB",
+    "ar-PS",
+    "ar-JO",
+    "ar-EG",
+    "ar-SD",
+    "ar-TD",
+    "ar-MA",
+    "ar-DZ",
+    "ar-TN",
+    "ar-IQ",
+    "ar-IR",
+    "be",
     "bg",
+    "bn",
+    "bs",
     "ca",
     "cs",
     "da",
     "da-DK",
-    "nl",
+    "de",
+    "de-CH",
+    "el",
     "en",
     "en-US",
     "en-AU",
     "en-GB",
     "en-IN",
     "en-NZ",
+    "es",
+    "es-419",
     "et",
+    "fa",
     "fi",
-    "nl-BE",
     "fr",
     "fr-CA",
-    "de",
-    "de-CH",
-    "el",
+    "he",
     "hi",
+    "hr",
     "hu",
     "id",
     "it",
     "ja",
+    "kn",
     "ko",
     "ko-KR",
-    "lv",
     "lt",
+    "lv",
+    "mk",
+    "mr",
     "ms",
+    "nl",
+    "nl-BE",
     "no",
     "pl",
     "pt",
@@ -70,13 +85,25 @@ _deepgram_nova3_languages = {
     "ro",
     "ru",
     "sk",
-    "es",
-    "es-419",
+    "sl",
+    "sr",
     "sv",
     "sv-SE",
+    "ta",
+    "te",
+    "th",
+    "th-TH",
+    "tl",
     "tr",
     "uk",
+    "ur",
     "vi",
+    "zh",
+    "zh-CN",
+    "zh-Hans",
+    "zh-HK",
+    "zh-Hant",
+    "zh-TW",
 }
 
 
@@ -93,10 +120,6 @@ def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
     # For multi-language mode
     if language == 'multi':
         return 'multi', 'nova-3'
-
-    # Languages that require nova-2
-    if language in _deepgram_nova2_only_languages:
-        return language, 'nova-2-general'
 
     # Languages supported by nova-3
     if language in _deepgram_nova3_languages:

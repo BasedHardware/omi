@@ -14,7 +14,7 @@ import {
   Monitor,
 } from "lucide-react";
 import useSWR from "swr";
-import { useAuthToken } from "@/hooks/useAuthToken";
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 import {
   Bar,
   Line,
@@ -171,14 +171,7 @@ interface MacosVersionStatsData {
 
 // --- Helpers ---
 
-const authFetcher = async ([url, token]: [string, string | null]) => {
-  if (!token) throw new Error("Auth token not available");
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
-};
+const authFetcher = authenticatedFetcher;
 
 const COLORS = {
   mrr: "#6366f1",

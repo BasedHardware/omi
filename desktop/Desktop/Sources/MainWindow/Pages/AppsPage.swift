@@ -985,9 +985,30 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     @Published var isRunning = false
+    @Published var progressTitle: String?
+    @Published var progressDetail: String?
     @Published var statusMessage: String?
     @Published var errorMessage: String?
     @Published var draftText = ""
+
+    private func beginRun(title: String, detail: String) {
+        errorMessage = nil
+        statusMessage = nil
+        progressTitle = title
+        progressDetail = detail
+        isRunning = true
+    }
+
+    private func updateProgress(title: String, detail: String) {
+        progressTitle = title
+        progressDetail = detail
+    }
+
+    private func finishRun() {
+        isRunning = false
+        progressTitle = nil
+        progressDetail = nil
+    }
 
     func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
         NSPasteboard.general.clearContents()
@@ -1002,10 +1023,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return nil
         }
 
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Importing \(source.displayName)",
+            detail: "Extracting durable memories from the pasted conversation."
+        )
+        defer { finishRun() }
 
         let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(trimmed, source: source)
         guard result.memories > 0 else {
@@ -1019,15 +1041,20 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importGmail() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Gmail",
+            detail: "Reading recent email history and follow-ups from the last year."
+        )
+        defer { finishRun() }
 
         do {
             let emails = try await GmailReaderService.shared.readRecentEmails(
                 maxResults: 300,
                 query: "newer_than:365d"
+            )
+            updateProgress(
+                title: "Importing Gmail history",
+                detail: "Saving raw emails as memories and generating follow-up insights."
             )
             let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
             let synthesis = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
@@ -1042,16 +1069,21 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importCalendar() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Calendar",
+            detail: "Reading past events and upcoming commitments for memory extraction."
+        )
+        defer { finishRun() }
 
         do {
             let events = try await CalendarReaderService.shared.readEvents(
                 daysBack: 365,
                 daysForward: 30,
                 maxResults: 500
+            )
+            updateProgress(
+                title: "Importing calendar events",
+                detail: "Saving events as memories and generating action-oriented summaries."
             )
             let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
             let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
@@ -1066,10 +1098,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     func importAppleNotes() async -> SyncResult? {
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Connecting to Apple Notes",
+            detail: "Checking access and preparing to import recent notes."
+        )
+        defer { finishRun() }
 
         do {
             return try await runAppleNotesImport()
@@ -1099,6 +1132,10 @@ private final class ImportConnectorSheetModel: ObservableObject {
     }
 
     private func runAppleNotesImport() async throws -> SyncResult {
+        updateProgress(
+            title: "Importing Apple Notes",
+            detail: "Reading recent notes and turning useful content into memories."
+        )
         let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
         let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
         let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
@@ -1114,10 +1151,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return nil
         }
 
-        errorMessage = nil
-        statusMessage = nil
-        isRunning = true
-        defer { isRunning = false }
+        beginRun(
+            title: "Indexing local files",
+            detail: "Scanning your on-device files so Omi can use them in memory search."
+        )
+        defer { finishRun() }
 
         let previousCount = await currentIndexedFileCount()
         ChatToolExecutor.onboardingAppState = appState
@@ -1204,6 +1242,10 @@ struct ImportConnectorSheet: View {
 
     @StateObject private var model = ImportConnectorSheetModel()
 
+    private var snapshot: ImportConnectorStatusStore.Snapshot {
+        statusStore.snapshot(for: connector)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
@@ -1226,7 +1268,15 @@ struct ImportConnectorSheet: View {
 
                 Spacer()
 
-                DismissButton(action: onDismiss)
+                VStack(alignment: .trailing, spacing: 8) {
+                    DismissButton(action: onDismiss)
+
+                    Text("Press Esc or click × to close. Imports keep running in the background.")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 180, alignment: .trailing)
+                }
             }
 
             if connector.id == "chatgpt" || connector.id == "claude" {
@@ -1235,17 +1285,7 @@ struct ImportConnectorSheet: View {
                 connectorActionContent
             }
 
-            if let statusMessage = model.statusMessage {
-                Text(statusMessage)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.success)
-            }
-
-            if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.warning)
-            }
+            statusSection
 
             Spacer(minLength: 0)
         }
@@ -1378,16 +1418,87 @@ struct ImportConnectorSheet: View {
     private var primaryActionTitle: String {
         switch connector.id {
         case "calendar":
-            return model.isRunning ? "Importing…" : "Import Calendar"
+            return model.isRunning ? "Importing…" : "Connect Calendar"
         case "email":
-            return model.isRunning ? "Importing…" : "Import Gmail"
+            return model.isRunning ? "Importing…" : "Connect Gmail"
         case "apple-notes":
-            return model.isRunning ? "Importing…" : "Import Apple Notes"
+            return model.isRunning ? "Importing…" : "Connect Apple Notes"
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:
             return model.isRunning ? "Working…" : connector.actionTitle
         }
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        if model.isRunning, let title = model.progressTitle {
+            statusCard {
+                HStack(alignment: .top, spacing: 12) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .scaledFont(size: 12, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if let detail = model.progressDetail {
+                            Text(detail)
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Text("You can close this popup now. The import will keep running in the background.")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        } else if let statusMessage = model.statusMessage {
+            Text(statusMessage)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.success)
+        } else if let errorMessage = model.errorMessage {
+            Text(errorMessage)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.warning)
+        } else if snapshot.isConnected || snapshot.secondaryText != nil {
+            statusCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Current import status")
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Text(snapshot.primaryText)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let secondaryText = snapshot.secondaryText {
+                        Text(secondaryText)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        } else {
+            Text("Start the import here. You can close this popup any time with Esc or ×, and once started the import will keep running in the background.")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+        }
+    }
+
+    private func statusCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(OmiColors.backgroundSecondary)
+            .cornerRadius(16)
     }
 }
 
@@ -2071,7 +2182,7 @@ struct CategoryAppsSheet: View {
 
 struct AppDetailSheet: View {
     let app: OmiApp
-    let appProvider: AppProvider
+    @ObservedObject var appProvider: AppProvider
     var onDismiss: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var environmentDismiss
@@ -2079,6 +2190,15 @@ struct AppDetailSheet: View {
     @State private var isLoadingReviews = false
     @State private var showAddReview = false
     @State private var userReview: OmiAppReview?
+    @State private var appDetails: OmiAppDetails?
+    @State private var isSettingUp = false
+    @State private var isSetupCompleted = false
+    @State private var setupCheckTask: Task<Void, Never>?
+
+    /// Always read live from appProvider so state survives tab switches and sheet recreations
+    var isEnabled: Bool {
+        appProvider.apps.first(where: { $0.id == app.id })?.enabled ?? app.enabled
+    }
 
     private func dismissSheet() {
         if let onDismiss = onDismiss {
@@ -2126,47 +2246,85 @@ struct AppDetailSheet: View {
                                 .foregroundColor(OmiColors.textTertiary)
 
                             HStack(spacing: 12) {
-                                if let rating = app.formattedRating {
+                                let ratingAvg = appDetails?.ratingAvg ?? app.ratingAvg
+                                let ratingCount = appDetails?.ratingCount ?? app.ratingCount
+                                let installs = appDetails?.installs ?? app.installs
+                                if let ratingAvg, ratingCount > 0 {
                                     HStack(spacing: 4) {
                                         Image(systemName: "star.fill")
                                             .foregroundColor(.yellow)
-                                        Text("\(rating) (\(app.ratingCount))")
+                                        Text(String(format: "%.1f", ratingAvg))
+                                        Text("(\(ratingCount))")
                                     }
                                     .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
-
-                                Text("\(app.installs) installs")
-                                    .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                if installs > 0 {
+                                    Text("\(installs) installs")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(OmiColors.textSecondary)
+                                }
                             }
                         }
 
                         Spacer()
 
                         // Action button
-                        Button(action: {
-                            Task {
-                                await appProvider.toggleApp(app)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                Task {
+                                    if isEnabled && app.worksExternally {
+                                        // Open the external integration in browser
+                                        openExternalApp()
+                                    } else if !isEnabled && app.worksExternally {
+                                        await handleInstall()
+                                    } else {
+                                        await appProvider.toggleApp(app)
+                                    }
+                                }
+                            }) {
+                                if appProvider.isAppLoading(app.id) {
+                                    ProgressView()
+                                        .frame(width: 100, height: 36)
+                                } else if isSettingUp {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                        Text("Setting up...")
+                                            .scaledFont(size: 12, weight: .semibold)
+                                    }
+                                    .foregroundColor(OmiColors.textSecondary)
+                                    .frame(width: 120, height: 36)
+                                } else {
+                                    Text(isEnabled ? "Open" : "Install")
+                                        .scaledFont(size: 14, weight: .semibold)
+                                        .foregroundColor(.black)
+                                        .frame(width: 100, height: 36)
+                                        .background(Color.white)
+                                        .cornerRadius(18)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18)
+                                                .stroke(OmiColors.border, lineWidth: 1)
+                                        )
+                                }
                             }
-                        }) {
-                            if appProvider.isAppLoading(app.id) {
-                                ProgressView()
-                                    .frame(width: 100, height: 36)
-                            } else {
-                                Text(app.enabled ? "Disable" : "Install")
-                                    .scaledFont(size: 14, weight: .semibold)
-                                    .foregroundColor(app.enabled ? .white : .black)
-                                    .frame(width: 100, height: 36)
-                                    .background(app.enabled ? OmiColors.error : Color.white)
-                                    .cornerRadius(18)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18)
-                                            .stroke(app.enabled ? Color.clear : OmiColors.border, lineWidth: 1)
-                                    )
+                            .buttonStyle(.plain)
+
+                            // Disable button shown only when app is enabled
+                            if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {
+                                Button(action: {
+                                    Task { await appProvider.toggleApp(app) }
+                                }) {
+                                    Image(systemName: "trash")
+                                        .scaledFont(size: 14)
+                                        .foregroundColor(OmiColors.error)
+                                        .frame(width: 36, height: 36)
+                                        .background(OmiColors.error.opacity(0.1))
+                                        .cornerRadius(18)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .buttonStyle(.plain)
                     }
 
                     Divider()
@@ -2182,6 +2340,57 @@ struct AppDetailSheet: View {
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Setup steps (external integration)
+                    if let integration = appDetails?.externalIntegration, !integration.authSteps.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
+                                Button(action: {
+                                    if let uid = AuthState.shared.userId,
+                                       let url = URL(string: "\(step.url)?uid=\(uid)") {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }) {
+                                    HStack(spacing: 12) {
+                                        // Step number / checkmark
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(isSetupCompleted ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
+                                                .frame(width: 40, height: 40)
+                                            if isSetupCompleted {
+                                                Image(systemName: "checkmark")
+                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .foregroundColor(.green)
+                                            } else {
+                                                Text("\(index + 1)")
+                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .foregroundColor(OmiColors.textSecondary)
+                                            }
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(step.name)
+                                                .scaledFont(size: 14, weight: .medium)
+                                                .foregroundColor(OmiColors.textPrimary)
+                                            Text(isSetupCompleted ? "Completed" : "Click to complete")
+                                                .scaledFont(size: 12)
+                                                .foregroundColor(isSetupCompleted ? .green : OmiColors.textTertiary)
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "arrow.up.right.square")
+                                            .scaledFont(size: 14)
+                                            .foregroundColor(OmiColors.textTertiary)
+                                    }
+                                    .padding(12)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
 
                     // Capabilities
@@ -2279,6 +2488,12 @@ struct AppDetailSheet: View {
         .background(OmiColors.backgroundPrimary)
         .task {
             await loadReviews()
+            await loadAppDetails()
+            // Resume polling if user completed setup in browser and returned to this sheet
+            await resumeSetupPollingIfNeeded()
+        }
+        .onDisappear {
+            setupCheckTask?.cancel()
         }
         .dismissableSheet(isPresented: $showAddReview) {
             AddReviewSheet(
@@ -2307,6 +2522,117 @@ struct AppDetailSheet: View {
             }
         } catch {
             // Silently fail - reviews are optional
+        }
+    }
+
+    private func loadAppDetails() async {
+        do {
+            appDetails = try await APIClient.shared.getAppDetails(appId: app.id)
+        } catch {
+            // Silently fail - details are optional, setup flow will just skip if unavailable
+        }
+    }
+
+    /// Called on sheet appear — if setup was already completed in browser, enable the app immediately.
+    /// If setup is still pending, restart polling so the UI updates when the user finishes in the browser.
+    private func resumeSetupPollingIfNeeded() async {
+        guard let uid = AuthState.shared.userId,
+              let integration = appDetails?.externalIntegration,
+              let completionUrl = integration.setupCompletedUrl,
+              !completionUrl.isEmpty else {
+            // No setup URL — if app is already enabled, treat steps as completed
+            if isEnabled { isSetupCompleted = true }
+            return
+        }
+
+        // If already installed, setup must have been completed — mark it without hitting the network
+        if isEnabled {
+            isSetupCompleted = true
+            return
+        }
+
+        // Immediate check — if setup already done in browser, mark complete and enable
+        let alreadyDone = await APIClient.shared.isAppSetupCompleted(url: completionUrl, uid: uid)
+        if alreadyDone {
+            isSetupCompleted = true
+            await appProvider.enableApp(app)
+            return
+        }
+
+        // Not done yet — silently poll in background so the step card updates when the user finishes in browser
+        // Don't set isSettingUp=true here (that's only for when the user explicitly clicked Install)
+        startSetupPolling(completionUrl: completionUrl, uid: uid)
+    }
+
+    private func openExternalApp() {
+        guard let uid = AuthState.shared.userId else { return }
+        let integration = appDetails?.externalIntegration
+        // Prefer appHomeUrl, then first auth step URL
+        if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
+            NSWorkspace.shared.open(url)
+        } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
+                  let url = URL(string: "\(authSteps[0].url)?uid=\(uid)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func handleInstall() async {
+        // Step 1: Try to enable. Backend returns 400 if setup is not yet complete.
+        await appProvider.enableApp(app)
+
+        // Step 2: If enable succeeded (no setup required), we're done.
+        if isEnabled { return }
+
+        // Step 3: Enable failed — app requires setup first. Open browser and wait.
+        // Ensure app details are loaded before navigating to setup.
+        if appDetails == nil { await loadAppDetails() }
+        await navigateToSetup()
+    }
+
+    private func navigateToSetup() async {
+        guard let uid = AuthState.shared.userId else { return }
+        let integration = appDetails?.externalIntegration
+
+        // Open auth step or setup instructions URL in browser
+        if let authSteps = integration?.authSteps, !authSteps.isEmpty {
+            let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
+            if let url = URL(string: rawUrl) {
+                NSWorkspace.shared.open(url)
+            }
+        } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {
+            if let url = URL(string: instructionsPath) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        // Poll for completion only if there is a setup_completed_url to check
+        if let completionUrl = integration?.setupCompletedUrl, !completionUrl.isEmpty {
+            isSettingUp = true
+            startSetupPolling(completionUrl: completionUrl, uid: uid)
+        }
+    }
+
+    private func startSetupPolling(completionUrl: String, uid: String) {
+        setupCheckTask?.cancel()
+        setupCheckTask = Task {
+            var tickCount = 0
+            while !Task.isCancelled && tickCount < 100 {
+                tickCount += 1
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled { break }
+
+                let completed = await APIClient.shared.isAppSetupCompleted(url: completionUrl, uid: uid)
+                if completed {
+                    await MainActor.run {
+                        isSetupCompleted = true
+                        isSettingUp = false
+                    }
+                    // Enable the app now that setup is done
+                    if !isEnabled { await appProvider.enableApp(app) }
+                    break
+                }
+            }
+            await MainActor.run { isSettingUp = false }
         }
     }
 }

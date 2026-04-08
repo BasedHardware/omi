@@ -30,6 +30,16 @@ export function useAuthToken() {
       }
     };
     getToken();
+
+    // Refresh token every 10 minutes to prevent stale-token 401s.
+    // Firebase ID tokens expire after 1 hour; getIdToken() returns
+    // a fresh token when the cached one is close to expiry.
+    if (user) {
+      const interval = setInterval(() => {
+        user.getIdToken().then(setToken).catch(() => setToken(null));
+      }, 10 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
   }, [user, authLoading]);
 
   return { token, loading: authLoading || tokenLoading };
@@ -69,8 +79,9 @@ export function useAuthFetch() {
   tokenRef.current = token;
 
   const fetchWithAuth = useCallback(async (url: string, init?: RequestInit) => {
+    const isFormData = init?.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(init?.headers as Record<string, string>),
     };
     if (tokenRef.current) {

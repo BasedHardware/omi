@@ -79,8 +79,8 @@ enum ViewExporter {
       ),
 
       (
-        "06-advice",
-        { AnyView(AdvicePage()) },
+        "06-insight",
+        { AnyView(InsightPage()) },
         CGSize(width: 900, height: 700)
       ),
 
@@ -298,7 +298,7 @@ enum ViewExporter {
         }
       ),
       ("full-focus", 5, { AnyView(FocusPage()) }),
-      ("full-advice", 6, { AnyView(AdvicePage()) }),
+      ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),
       (

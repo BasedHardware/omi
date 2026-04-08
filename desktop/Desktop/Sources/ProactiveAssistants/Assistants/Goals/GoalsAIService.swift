@@ -332,8 +332,8 @@ actor GoalsAIService {
 
   // MARK: - Get Goal Advice
 
-  /// Get AI-generated actionable advice for achieving a goal
-  func getGoalAdvice(goal: Goal) async throws -> String {
+  /// Get AI-generated actionable insight for achieving a goal
+  func getGoalInsight(goal: Goal) async throws -> String {
     guard let client = getGeminiClient() else {
       throw GoalsAIError.clientNotInitialized
     }
