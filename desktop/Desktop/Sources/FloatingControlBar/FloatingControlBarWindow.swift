@@ -1245,7 +1245,8 @@ class FloatingControlBarManager {
         guard storedNotificationMessages[notification.id] == nil,
               let provider = historyChatProvider else { return }
 
-        let messageText = "**\(notification.title)**\n\n\(notification.message)"
+        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? notification.title : bodyText
         guard let message = provider.appendAssistantMessage(messageText) else { return }
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
