@@ -6,7 +6,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_ar.dart';
+import 'app_localizations_be.dart';
 import 'app_localizations_bg.dart';
+import 'app_localizations_bn.dart';
+import 'app_localizations_bs.dart';
 import 'app_localizations_ca.dart';
 import 'app_localizations_cs.dart';
 import 'app_localizations_da.dart';
@@ -15,16 +18,22 @@ import 'app_localizations_el.dart';
 import 'app_localizations_en.dart';
 import 'app_localizations_es.dart';
 import 'app_localizations_et.dart';
+import 'app_localizations_fa.dart';
 import 'app_localizations_fi.dart';
 import 'app_localizations_fr.dart';
+import 'app_localizations_he.dart';
 import 'app_localizations_hi.dart';
+import 'app_localizations_hr.dart';
 import 'app_localizations_hu.dart';
 import 'app_localizations_id.dart';
 import 'app_localizations_it.dart';
 import 'app_localizations_ja.dart';
+import 'app_localizations_kn.dart';
 import 'app_localizations_ko.dart';
 import 'app_localizations_lt.dart';
 import 'app_localizations_lv.dart';
+import 'app_localizations_mk.dart';
+import 'app_localizations_mr.dart';
 import 'app_localizations_ms.dart';
 import 'app_localizations_nl.dart';
 import 'app_localizations_no.dart';
@@ -33,10 +42,16 @@ import 'app_localizations_pt.dart';
 import 'app_localizations_ro.dart';
 import 'app_localizations_ru.dart';
 import 'app_localizations_sk.dart';
+import 'app_localizations_sl.dart';
+import 'app_localizations_sr.dart';
 import 'app_localizations_sv.dart';
+import 'app_localizations_ta.dart';
+import 'app_localizations_te.dart';
 import 'app_localizations_th.dart';
+import 'app_localizations_tl.dart';
 import 'app_localizations_tr.dart';
 import 'app_localizations_uk.dart';
+import 'app_localizations_ur.dart';
 import 'app_localizations_vi.dart';
 import 'app_localizations_zh.dart';
 
@@ -124,7 +139,10 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('ar'),
+    Locale('be'),
     Locale('bg'),
+    Locale('bn'),
+    Locale('bs'),
     Locale('ca'),
     Locale('cs'),
     Locale('da'),
@@ -133,16 +151,22 @@ abstract class AppLocalizations {
     Locale('en'),
     Locale('es'),
     Locale('et'),
+    Locale('fa'),
     Locale('fi'),
     Locale('fr'),
+    Locale('he'),
     Locale('hi'),
+    Locale('hr'),
     Locale('hu'),
     Locale('id'),
     Locale('it'),
     Locale('ja'),
+    Locale('kn'),
     Locale('ko'),
     Locale('lt'),
     Locale('lv'),
+    Locale('mk'),
+    Locale('mr'),
     Locale('ms'),
     Locale('nl'),
     Locale('no'),
@@ -151,10 +175,16 @@ abstract class AppLocalizations {
     Locale('ro'),
     Locale('ru'),
     Locale('sk'),
+    Locale('sl'),
+    Locale('sr'),
     Locale('sv'),
+    Locale('ta'),
+    Locale('te'),
     Locale('th'),
+    Locale('tl'),
     Locale('tr'),
     Locale('uk'),
+    Locale('ur'),
     Locale('vi'),
     Locale('zh')
   ];
@@ -16809,7 +16839,10 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   @override
   bool isSupported(Locale locale) => <String>[
         'ar',
+        'be',
         'bg',
+        'bn',
+        'bs',
         'ca',
         'cs',
         'da',
@@ -16818,16 +16851,22 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'en',
         'es',
         'et',
+        'fa',
         'fi',
         'fr',
+        'he',
         'hi',
+        'hr',
         'hu',
         'id',
         'it',
         'ja',
+        'kn',
         'ko',
         'lt',
         'lv',
+        'mk',
+        'mr',
         'ms',
         'nl',
         'no',
@@ -16836,10 +16875,16 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'ro',
         'ru',
         'sk',
+        'sl',
+        'sr',
         'sv',
+        'ta',
+        'te',
         'th',
+        'tl',
         'tr',
         'uk',
+        'ur',
         'vi',
         'zh'
       ].contains(locale.languageCode);
@@ -16853,8 +16898,14 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'ar':
       return AppLocalizationsAr();
+    case 'be':
+      return AppLocalizationsBe();
     case 'bg':
       return AppLocalizationsBg();
+    case 'bn':
+      return AppLocalizationsBn();
+    case 'bs':
+      return AppLocalizationsBs();
     case 'ca':
       return AppLocalizationsCa();
     case 'cs':
@@ -16871,12 +16922,18 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsEs();
     case 'et':
       return AppLocalizationsEt();
+    case 'fa':
+      return AppLocalizationsFa();
     case 'fi':
       return AppLocalizationsFi();
     case 'fr':
       return AppLocalizationsFr();
+    case 'he':
+      return AppLocalizationsHe();
     case 'hi':
       return AppLocalizationsHi();
+    case 'hr':
+      return AppLocalizationsHr();
     case 'hu':
       return AppLocalizationsHu();
     case 'id':
@@ -16885,12 +16942,18 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsIt();
     case 'ja':
       return AppLocalizationsJa();
+    case 'kn':
+      return AppLocalizationsKn();
     case 'ko':
       return AppLocalizationsKo();
     case 'lt':
       return AppLocalizationsLt();
     case 'lv':
       return AppLocalizationsLv();
+    case 'mk':
+      return AppLocalizationsMk();
+    case 'mr':
+      return AppLocalizationsMr();
     case 'ms':
       return AppLocalizationsMs();
     case 'nl':
@@ -16907,14 +16970,26 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsRu();
     case 'sk':
       return AppLocalizationsSk();
+    case 'sl':
+      return AppLocalizationsSl();
+    case 'sr':
+      return AppLocalizationsSr();
     case 'sv':
       return AppLocalizationsSv();
+    case 'ta':
+      return AppLocalizationsTa();
+    case 'te':
+      return AppLocalizationsTe();
     case 'th':
       return AppLocalizationsTh();
+    case 'tl':
+      return AppLocalizationsTl();
     case 'tr':
       return AppLocalizationsTr();
     case 'uk':
       return AppLocalizationsUk();
+    case 'ur':
+      return AppLocalizationsUr();
     case 'vi':
       return AppLocalizationsVi();
     case 'zh':
