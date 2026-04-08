@@ -1448,13 +1448,25 @@ struct UserProfile: Codable {
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
-struct ActionItemsListResponse: Codable {
+/// Accepts both "action_items" (/v1/action-items) and "items" (/v1/staged-tasks) keys.
+struct ActionItemsListResponse: Decodable {
     let items: [TaskActionItem]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
-        case items = "action_items"
+        case actionItems = "action_items"
+        case items
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
+            self.items = actionItems
+        } else {
+            self.items = try container.decode([TaskActionItem].self, forKey: .items)
+        }
+        self.hasMore = try container.decode(Bool.self, forKey: .hasMore)
     }
 }
 
