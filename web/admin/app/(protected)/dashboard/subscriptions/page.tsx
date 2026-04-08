@@ -92,7 +92,7 @@ interface MRRTrendData {
 
 export default function SubscriptionsPage() {
   const { user } = useAuth();
-  const { fetchWithAuth } = useAuthFetch();
+  const { fetchWithAuth, token } = useAuthFetch();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [revenueMetrics, setRevenueMetrics] = useState<RevenueMetrics | null>(null);
@@ -110,13 +110,14 @@ export default function SubscriptionsPage() {
   const [previousPage, setPreviousPage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!token) return;
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
     fetchSubscriptionCounts();
     fetchSubscriptionTrends();
     fetchMrrTrends();
-  }, [statusFilter]);
+  }, [statusFilter, token]);
 
   const fetchSubscriptions = async (pageParams?: { starting_after?: string; ending_before?: string }) => {
     try {
