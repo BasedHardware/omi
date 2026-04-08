@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
+import { DEV_BYPASS_ENABLED, DEV_BYPASS_TOKEN, DEV_BYPASS_UID } from '@/lib/dev-auth';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
 
 interface AuthContextProps {
@@ -20,9 +21,16 @@ const AuthContext = createContext<AuthContextProps>({
   signOut: async () => {},
 });
 
+function createBypassUser(): User {
+  return {
+    uid: DEV_BYPASS_UID,
+    getIdToken: async () => DEV_BYPASS_TOKEN,
+  } as User;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const bypassAuth = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === '1';
-  const [user, setUser] = useState<User | null>(bypassAuth ? ({ uid: 'dev-admin' } as User) : null);
+  const bypassAuth = DEV_BYPASS_ENABLED;
+  const [user, setUser] = useState<User | null>(bypassAuth ? createBypassUser() : null);
   const [isAdmin, setIsAdmin] = useState<boolean>(bypassAuth);
   const [loading, setLoading] = useState<boolean>(!bypassAuth);
   const router = useRouter();
@@ -40,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (bypassAuth) {
-      setUser({ uid: 'dev-admin' } as User);
+      setUser(createBypassUser());
       setIsAdmin(true);
       setLoading(false);
       return;
