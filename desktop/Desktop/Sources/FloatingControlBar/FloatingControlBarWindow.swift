@@ -99,14 +99,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        // Esc clears visible floating-bar history without closing the bar.
         if event.keyCode == 53 { // Escape
-            if state.showingAIConversation && state.hasVisibleConversation {
-                clearVisibleConversationFromUI()
-            }
+            handleEscapeKey()
             return
         }
         super.keyDown(with: event)
+    }
+
+    func handleEscapeKey() {
+        FloatingBarVoicePlaybackService.shared.stop()
+
+        guard state.showingAIConversation else { return }
+
+        if state.hasVisibleConversation {
+            clearVisibleConversationFromUI()
+        } else {
+            closeAIConversation()
+        }
     }
 
     private func setupViews() {
@@ -117,6 +126,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
+            onEscape: { [weak self] in self?.handleEscapeKey() },
             onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
             onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
             onShareLink: { [weak self] in await self?.onShareLink?() }
@@ -293,6 +303,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
             state.isAILoading = false
+            state.isHoveringBar = false
+            state.requiresHoverReset = true
         }
         // Suppress hover resizes while the close animation plays, otherwise onHover
         // fires mid-animation, reads an intermediate frame, and causes position drift.
@@ -754,34 +766,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             || eventType == .otherMouseDown
         guard isMouseClick else { return }
 
-        // Stamp a token so a new PTT query can cancel this in-flight dismiss.
+        // Close in-place so the bar collapses smoothly instead of blinking out and back in.
         resignKeyAnimationToken += 1
-        let token = resignKeyAnimationToken
-
-        // Phase 1: fade out (easeIn — accelerates to gone, feels intentional).
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self.animator().alphaValue = 0
-        }) { [weak self] in
-            guard let self, self.resignKeyAnimationToken == token else { return }
-            // Phase 2: collapse while invisible (no jarring resize flash).
-            self.closeAIConversation()
-
-            // If the bar is disabled, keep it hidden instead of fading the pill back in.
-            if !FloatingControlBarManager.shared.isEnabled {
-                self.orderOut(nil)
-                self.alphaValue = 1
-                return
-            }
-
-            // Phase 3: fade the collapsed pill back in (easeOut — decelerates into place).
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                self.animator().alphaValue = 1
-            })
-        }
+        closeAIConversation()
     }
 
     @objc func windowDidMove(_ notification: Notification) {
@@ -1378,19 +1365,10 @@ class FloatingControlBarManager {
         limiter.recordQuery()
         FloatingBarVoicePlaybackService.shared.stop()
 
-        // Hide the bar visually (without ordering it out) so we keep key-window ownership
-        // and avoid promoting the main Omi window while capturing a clean screenshot.
-        let previousAlpha = barWindow.alphaValue
-        let previousIgnoresMouseEvents = barWindow.ignoresMouseEvents
-        barWindow.alphaValue = 0
-        barWindow.ignoresMouseEvents = true
-        try? await Task.sleep(nanoseconds: 150_000_000) // 150ms for window to disappear
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
             return try? Data(contentsOf: url)
         }.value
-        barWindow.alphaValue = previousAlpha
-        barWindow.ignoresMouseEvents = previousIgnoresMouseEvents
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)

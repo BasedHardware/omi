@@ -10,11 +10,17 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onEscape: () -> Void
     var onClearVisibleConversation: () -> Void
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
+    private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
+
+    private var isShowingExpandedChrome: Bool {
+        state.isVoiceListening && !state.isVoiceFollowUp || isHovering || state.showingAIConversation
+    }
 
     var body: some View {
         VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
@@ -43,22 +49,19 @@ struct FloatingControlBarView: View {
 
             // AI conversation view - conditionally visible
             if state.showingAIConversation {
-                Group {
-                    if state.showingAIResponse {
-                        aiResponseView
-                    } else {
-                        aiInputView
-                    }
-                }
+                conversationView
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.showingAIConversation)
+        .animation(conversationTransition, value: state.showingAIResponse)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -111,17 +114,37 @@ struct FloatingControlBarView: View {
         .onHover(perform: handleBarHover)
     }
 
+    private var conversationView: some View {
+        ZStack(alignment: .top) {
+            if state.showingAIResponse {
+                aiResponseView
+                    .id("response")
+                    .zIndex(1)
+            } else {
+                aiInputView
+                    .id("input")
+                    .zIndex(1)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
     private func handleBarHover(_ hovering: Bool) {
-        state.isHoveringBar = hovering
+        if !hovering {
+            state.requiresHoverReset = false
+        }
+
+        let effectiveHover = hovering && !state.requiresHoverReset
+        state.isHoveringBar = effectiveHover
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
         // content never renders in a too-small window (which causes overflow).
-        if hovering {
+        if effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
         }
         withAnimation(.easeInOut(duration: 0.2)) {
-            isHovering = hovering
+            isHovering = effectiveHover
         }
-        if !hovering {
+        if !effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
         }
     }
@@ -190,13 +213,18 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        Group {
+        ZStack {
+            if !isShowingExpandedChrome {
+                compactCircleView
+                    .transition(.scale(scale: 0.84).combined(with: .opacity))
+            }
+
             if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .frame(height: 50)
-                    .transition(.opacity)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
@@ -210,12 +238,17 @@ struct FloatingControlBarView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(height: 50)
-                .transition(.opacity)
-            } else {
-                compactCircleView
-                    .transition(.opacity)
+                .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: isShowingExpandedChrome ? 50 : 6,
+            maxHeight: isShowingExpandedChrome ? 50 : 6,
+            alignment: .center
+        )
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: isShowingExpandedChrome)
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: state.isVoiceListening)
     }
 
     /// Minimal thin bar shown when not hovering
@@ -329,6 +362,7 @@ struct FloatingControlBarView: View {
                 onSendQuery(message)
             },
             onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -337,8 +371,8 @@ struct FloatingControlBarView: View {
         )
         .transition(
             .asymmetric(
-                insertion: .scale(scale: 0.95).combined(with: .opacity),
-                removal: .scale(scale: 0.95).combined(with: .opacity)
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity)
             ))
     }
 
@@ -361,6 +395,7 @@ struct FloatingControlBarView: View {
             ),
             canClearVisibleConversation: state.hasVisibleConversation,
             onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
             onSendFollowUp: { message in
                 archiveCurrentExchange()
 
@@ -377,8 +412,8 @@ struct FloatingControlBarView: View {
         )
         .transition(
             .asymmetric(
-                insertion: .scale(scale: 0.95).combined(with: .opacity),
-                removal: .scale(scale: 0.95).combined(with: .opacity)
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
             ))
     }
 
