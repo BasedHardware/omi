@@ -2381,6 +2381,7 @@ class AppState: ObservableObject {
               endTime: segment.end,
               isUser: segment.is_user,
               personId: segment.person_id,
+              speakerLabel: segment.speaker,
               translationsJson: translationsJson
             )
           } catch {
@@ -2534,6 +2535,7 @@ class AppState: ObservableObject {
                   endTime: translated.end,
                   isUser: translated.is_user,
                   personId: translated.person_id,
+                  speakerLabel: translated.speaker,
                   translationsJson: translationsJson
                 )
               }
