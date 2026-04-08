@@ -4789,6 +4789,15 @@ extension APIClient {
         }
     }
 
+    /// Percent-encode a date string for use in query parameters.
+    /// `.urlQueryAllowed` does not encode `+`, but servers decode `+` as space in query strings.
+    /// This encodes `+` as `%2B` so timezone offsets like `+07:00` survive round-trip.
+    private func encodeQueryDate(_ date: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+")
+        return date.addingPercentEncoding(withAllowedCharacters: allowed) ?? date
+    }
+
     func toolGetConversations(
         startDate: String? = nil,
         endDate: String? = nil,
@@ -4797,8 +4806,8 @@ extension APIClient {
         includeTranscript: Bool = true
     ) async throws -> ToolResponse {
         var params = "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
         return try await get(params, customBaseURL: nil)
     }
 
@@ -4820,8 +4829,8 @@ extension APIClient {
         endDate: String? = nil
     ) async throws -> ToolResponse {
         var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
         return try await get(params, customBaseURL: nil)
     }
 
@@ -4841,10 +4850,10 @@ extension APIClient {
     ) async throws -> ToolResponse {
         var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
         if let c = completed { params += "&completed=\(c)" }
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        if let dsd = dueStartDate { params += "&due_start_date=\(dsd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? dsd)" }
-        if let ded = dueEndDate { params += "&due_end_date=\(ded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ded)" }
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
+        if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
+        if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
         return try await get(params, customBaseURL: nil)
     }
 
