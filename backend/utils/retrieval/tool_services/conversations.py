@@ -6,6 +6,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 import re
 from datetime import datetime, timezone
 from typing import List, Optional
+from urllib.parse import unquote
 
 import database.conversations as conversations_db
 import database.users as users_db
@@ -19,8 +20,11 @@ logger = logging.getLogger(__name__)
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
     """Parse ISO date string with timezone. Raises ValueError on bad format."""
+    # Decode any residual percent-encoding (proxy/CDN may double-encode %2B → %252B,
+    # which the server decodes once to %2B instead of +)
+    cleaned = unquote(date_str)
     # Recover '+' lost to URL query param decoding (servers decode '+' as space)
-    cleaned = re.sub(r' (\d{2}:\d{2})$', r'+\1', date_str)
+    cleaned = re.sub(r' (\d{2}:\d{2})$', r'+\1', cleaned)
     dt = datetime.fromisoformat(cleaned.replace('Z', '+00:00'))
     if dt.tzinfo is None:
         raise ValueError(
