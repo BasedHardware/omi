@@ -367,17 +367,6 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Updated speaker assignment for \(segmentIds.count) segments in session \(sessionId)")
     }
 
-    /// Update translations JSON for a segment by its backend segment ID
-    func updateSegmentTranslations(sessionId: Int64, backendSegmentId: String, translationsJson: String) async throws {
-        let db = try await ensureInitialized()
-        try await db.write { database in
-            try database.execute(
-                sql: "UPDATE transcription_segments SET translationsJson = ? WHERE sessionId = ? AND segmentId = ?",
-                arguments: [translationsJson, sessionId, backendSegmentId]
-            )
-        }
-    }
-
     /// Delete segments by their backend segment IDs
     func deleteSegmentsByBackendIds(sessionId: Int64, segmentIds: [String]) async throws {
         guard !segmentIds.isEmpty else { return }
