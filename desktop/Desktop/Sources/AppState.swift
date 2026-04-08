@@ -2359,6 +2359,13 @@ class AppState: ObservableObject {
         for segment in segments {
           guard !segment.text.isEmpty else { continue }
           let speakerId = segment.speaker_id ?? 0
+          var translationsJson: String?
+          if let translations = segment.translations, !translations.isEmpty {
+            let mapped = translations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+            if let data = try? JSONEncoder().encode(mapped) {
+              translationsJson = String(data: data, encoding: .utf8)
+            }
+          }
           do {
             try await TranscriptionStorage.shared.upsertSegment(
               sessionId: sessionId,
@@ -2368,7 +2375,8 @@ class AppState: ObservableObject {
               startTime: segment.start,
               endTime: segment.end,
               isUser: segment.is_user,
-              personId: segment.person_id
+              personId: segment.person_id,
+              translationsJson: translationsJson
             )
           } catch {
             logError("Transcription: Failed to persist segment to DB", error: error)
