@@ -350,8 +350,8 @@ class TestProcessSegmentPreferences:
     @patch('routers.sync.deepgram_prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_chinese_selects_nova2(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
-        """Chinese language should select nova-2-general model."""
+    def test_chinese_selects_nova3(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+        """Chinese language should select nova-3 model."""
         from routers.sync import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'zh')
@@ -367,7 +367,7 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'zh'
-        assert kwargs['model'] == 'nova-2-general'
+        assert kwargs['model'] == 'nova-3'
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
@@ -561,12 +561,12 @@ class TestGetDeepgramModelForLanguage:
         assert lang == 'multi'
         assert model == 'nova-3'
 
-    def test_chinese_returns_nova2(self):
+    def test_chinese_returns_nova3(self):
         from utils.stt.pre_recorded import get_deepgram_model_for_language
 
         lang, model = get_deepgram_model_for_language('zh')
         assert lang == 'zh'
-        assert model == 'nova-2-general'
+        assert model == 'nova-3'
 
     def test_english_returns_nova3(self):
         from utils.stt.pre_recorded import get_deepgram_model_for_language
@@ -575,12 +575,26 @@ class TestGetDeepgramModelForLanguage:
         assert lang == 'en'
         assert model == 'nova-3'
 
-    def test_thai_returns_nova2(self):
+    def test_thai_returns_nova3(self):
         from utils.stt.pre_recorded import get_deepgram_model_for_language
 
         lang, model = get_deepgram_model_for_language('th')
         assert lang == 'th'
-        assert model == 'nova-2-general'
+        assert model == 'nova-3'
+
+    def test_arabic_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('ar')
+        assert lang == 'ar'
+        assert model == 'nova-3'
+
+    def test_tamil_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('ta')
+        assert lang == 'ta'
+        assert model == 'nova-3'
 
 
 # ---------------------------------------------------------------------------
