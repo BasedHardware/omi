@@ -188,11 +188,6 @@ struct ConversationDetailView: View {
                             updatedConversation.transcriptSegments = segments
                             loadedConversation = updatedConversation
                             log("ConversationDetail: Loaded \(segments.count) segments from local database")
-
-                            // Local DB doesn't persist translations — fetch from API and merge
-                            Task {
-                                await mergeTranslationsFromAPI(conversationId: conversation.id)
-                            }
                         } else {
                             // No local segments, fetch from API
                             let fullConversation = try await APIClient.shared.getConversation(id: conversation.id)
@@ -209,13 +204,6 @@ struct ConversationDetailView: View {
                     logError("ConversationDetail: Failed to load conversation segments", error: error)
                 }
                 isLoadingConversation = false
-            } else if !conversation.transcriptSegments.isEmpty
-                && !conversation.transcriptSegments.contains(where: { !$0.translations.isEmpty })
-            {
-                // Segments already loaded (from list) but may lack translations — fetch in background
-                Task {
-                    await mergeTranslationsFromAPI(conversationId: conversation.id)
-                }
             }
         }
         .onReceive(
@@ -733,53 +721,6 @@ struct ConversationDetailView: View {
             )
         }
         loadedConversation = updatedConversation
-    }
-
-    /// Fetches the conversation from the API and merges any translations into the current segments.
-    /// Called after loading from local DB, which doesn't persist translations.
-    private func mergeTranslationsFromAPI(conversationId: String) async {
-        do {
-            let pythonURL = await APIClient.shared.pythonBackendURL
-            let apiConversation: ServerConversation = try await APIClient.shared.get(
-                "v1/conversations/\(conversationId)",
-                customBaseURL: pythonURL
-            )
-            let apiSegments = apiConversation.transcriptSegments
-            let hasTranslations = apiSegments.contains { !$0.translations.isEmpty }
-            guard hasTranslations else { return }
-
-            // Build lookup from segment ID to translations
-            var translationsBySegmentId: [String: [TranscriptTranslation]] = [:]
-            for seg in apiSegments where !seg.translations.isEmpty {
-                translationsBySegmentId[seg.id] = seg.translations
-            }
-
-            guard var current = loadedConversation else { return }
-            var merged = 0
-            for i in current.transcriptSegments.indices {
-                let segId = current.transcriptSegments[i].id
-                if let translations = translationsBySegmentId[segId], !translations.isEmpty {
-                    current.transcriptSegments[i] = TranscriptSegment(
-                        id: current.transcriptSegments[i].id,
-                        backendId: current.transcriptSegments[i].backendId,
-                        text: current.transcriptSegments[i].text,
-                        speaker: current.transcriptSegments[i].speaker,
-                        isUser: current.transcriptSegments[i].isUser,
-                        personId: current.transcriptSegments[i].personId,
-                        start: current.transcriptSegments[i].start,
-                        end: current.transcriptSegments[i].end,
-                        translations: translations
-                    )
-                    merged += 1
-                }
-            }
-            if merged > 0 {
-                loadedConversation = current
-                log("ConversationDetail: Merged \(merged) translations from API")
-            }
-        } catch {
-            log("ConversationDetail: Could not fetch translations from API: \(error.localizedDescription)")
-        }
     }
 
     private func persistSpeakerAssignment(
