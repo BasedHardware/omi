@@ -43,6 +43,10 @@ __all__ = [
     'ConversationPhoto',
     'Geolocation',
     'MeetingParticipant',
+    # Passthrough imports (used by star-import consumers like postprocess_conversation.py)
+    'Message',
+    'Person',
+    'TranscriptSegment',
     # Core models (defined in this file)
     'AppResult',
     'BulkAssignSegmentsRequest',

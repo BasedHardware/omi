@@ -92,6 +92,16 @@ class TestImportBackwardCompatibility:
         for name in mod.__all__:
             assert hasattr(mod, name), f"__all__ lists '{name}' but it's not in the module"
 
+    def test_star_import_includes_passthrough_symbols(self):
+        """Star import must include TranscriptSegment, Message, Person for backward compat."""
+        ns = {}
+        exec('from models.conversation import *', ns)
+        assert 'TranscriptSegment' in ns, "TranscriptSegment missing from star import"
+        assert 'Message' in ns, "Message missing from star import"
+        assert 'Person' in ns, "Person missing from star import"
+        assert 'Conversation' in ns, "Conversation missing from star import"
+        assert 'PostProcessingStatus' in ns, "PostProcessingStatus missing from star import"
+
     def test_identity_preserved_across_import_paths(self):
         """Re-exported classes must be the same object, not copies."""
         from models.conversation import CategoryEnum as CE_conv
