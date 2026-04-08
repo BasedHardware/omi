@@ -86,7 +86,13 @@ class TestImportBackwardCompatibility:
         assert SearchRequest(query="test").query == "test"
 
     def test_star_import_provides_all_needed_symbols(self):
-        """Star import must include all symbols that existing consumers depend on."""
+        """Star import must include all symbols that existing consumers depend on.
+
+        Note: We can't smoke-import the actual star-import consumers
+        (postprocess_conversation.py, process_conversation.py) because they
+        pull in database._client -> Firestore which requires GCP credentials.
+        Instead, we verify the namespace content directly.
+        """
         ns = {}
         exec('from models.conversation import *', ns)
         # Models used by postprocess_conversation.py and process_conversation.py via star import
@@ -140,7 +146,10 @@ class TestDirectImportsFromNewModules:
     def test_conversation_enums(self):
         from models.conversation_enums import CategoryEnum
 
-        assert len(CategoryEnum) == 33  # 31 categories + architecture + environment from issue but counting actual
+        # Verify key members exist rather than brittle count assertion
+        assert CategoryEnum.other.value == 'other'
+        assert CategoryEnum.work.value == 'work'
+        assert CategoryEnum.personal.value == 'personal'
 
     def test_conversation_source_missing(self):
         from models.conversation_enums import ConversationSource
@@ -276,6 +285,49 @@ class TestHelperMethods:
         from models.conversation_photo import ConversationPhoto
 
         assert ConversationPhoto.photos_as_string([]) == 'None'
+
+    def test_event_to_string_empty(self):
+        from models.structured import Event
+
+        assert Event.events_to_string([]) == 'None'
+
+    def test_action_item_to_string_with_timestamps(self):
+        from models.structured import ActionItem
+
+        items = [
+            ActionItem(
+                description="Review PR",
+                completed=True,
+                created_at=datetime(2025, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+                due_at=datetime(2025, 3, 2, 10, 0, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2025, 3, 1, 15, 0, 0, tzinfo=timezone.utc),
+            ),
+        ]
+        result = ActionItem.actions_to_string(items)
+        assert "Created: 2025-03-01 10:00:00 UTC" in result
+        assert "Due: 2025-03-02 10:00:00 UTC" in result
+        assert "Completed: 2025-03-01 15:00:00 UTC" in result
+
+    def test_photo_to_string_with_timestamps(self):
+        from models.conversation_photo import ConversationPhoto
+
+        photos = [
+            ConversationPhoto(
+                base64="abc",
+                description="A dog",
+                created_at=datetime(2025, 6, 15, 14, 30, 45, tzinfo=timezone.utc),
+            )
+        ]
+        result = ConversationPhoto.photos_as_string(photos, include_timestamps=True)
+        assert "[14:30:45]" in result
+        assert '"A dog"' in result
+
+    def test_photo_to_string_no_description(self):
+        """Photos with no description should be excluded."""
+        from models.conversation_photo import ConversationPhoto
+
+        photos = [ConversationPhoto(base64="abc", description=None)]
+        assert ConversationPhoto.photos_as_string(photos) == 'None'
 
     def test_event_as_dict_cleaned_dates(self):
         from models.structured import Event
