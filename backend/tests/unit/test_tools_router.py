@@ -232,6 +232,37 @@ class TestParseIsoDate:
         with pytest.raises(ValueError):
             conversations_svc.parse_iso_date("not-a-date", "test")
 
+    def test_space_to_plus_recovery_positive_offset(self):
+        """URL decoding converts + to space; parse_iso_date should recover it."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00", "test")
+        assert dt.year == 2026
+        assert dt.utcoffset().total_seconds() == 7 * 3600
+
+    def test_space_to_plus_recovery_utc(self):
+        """Space before 00:00 at end should be recovered to +00:00."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00 00:00", "test")
+        assert dt.utcoffset().total_seconds() == 0
+
+    def test_negative_offset_unchanged(self):
+        """Negative offsets (-07:00) should not be affected by recovery."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00-07:00", "test")
+        assert dt.utcoffset().total_seconds() == -7 * 3600
+
+    def test_valid_plus_still_works(self):
+        """Normal +07:00 (not URL-corrupted) should still parse fine."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00+07:00", "test")
+        assert dt.utcoffset().total_seconds() == 7 * 3600
+
+    def test_z_suffix_still_works(self):
+        """Z suffix should still parse as UTC."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00Z", "test")
+        assert dt.utcoffset().total_seconds() == 0
+
+    def test_malformed_still_raises(self):
+        """Truly malformed dates should still raise ValueError."""
+        with pytest.raises(ValueError):
+            conversations_svc.parse_iso_date("2026-13-01T00:00:00+07:00", "test")
+
 
 # ===========================================================================
 # Tests: get_conversations_text
