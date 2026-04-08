@@ -23,7 +23,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 from models.memories import MemoryDB, Memory, MemoryCategory
-from models.conversation import CategoryEnum
+from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()

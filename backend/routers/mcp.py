@@ -12,7 +12,7 @@ import database.users as users_db
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import MemoryDB, Memory, MemoryCategory
-from models.conversation import CategoryEnum
+from models.conversation_enums import CategoryEnum
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id

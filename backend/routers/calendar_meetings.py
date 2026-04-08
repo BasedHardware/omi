@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import database.calendar_meetings as calendar_db
-from models.conversation import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.other import endpoints as auth
 
 router = APIRouter()

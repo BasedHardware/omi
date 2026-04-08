@@ -21,7 +21,8 @@ from database.redis_db import (
 )
 from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
-from models.conversation import Conversation, ConversationSource
+from models.conversation import Conversation
+from models.conversation_enums import ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification

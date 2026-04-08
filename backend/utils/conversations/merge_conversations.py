@@ -15,12 +15,10 @@ from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
 from database.vector_db import delete_vector
-from models.conversation import (
-    AudioFile,
-    Conversation,
-    ConversationStatus,
-    Structured,
-)
+from models.audio_file import AudioFile
+from models.conversation import Conversation
+from models.conversation_enums import ConversationStatus
+from models.structured import Structured
 from utils.other.storage import (
     delete_conversation_audio_files,
     list_audio_chunks,

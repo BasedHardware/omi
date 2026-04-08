@@ -21,12 +21,50 @@ from models.other import Person
 from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
 from models.transcript_segment import TranscriptSegment
 
-# Re-export all moved symbols for backward compatibility.
-# Existing callers can continue to use: from models.conversation import CategoryEnum, Structured, etc.
-# NOTE: No __all__ here intentionally. Two files use `from models.conversation import *` and depend
-# on getting typing symbols (List, Optional) and passthrough imports (TranscriptSegment, Message,
-# Person) via the star import. Adding __all__ would break them. Phase 3 (#6423) will clean up the
-# star imports and add __all__ afterward.
+# Re-export moved symbols so that `from models.conversation import CategoryEnum` etc. still works.
+# Wildcard imports have been migrated to explicit imports (Phase 3, #6423), so __all__ is safe now.
+__all__ = [
+    # Defined here
+    'AppResult',
+    'BulkAssignSegmentsRequest',
+    'Conversation',
+    'ConversationPostProcessing',
+    'CreateConversation',
+    'CreateConversationResponse',
+    'CreateMemoryResponse',
+    'DeleteActionItemRequest',
+    'ExternalIntegrationCreateConversation',
+    'MergeConversationsRequest',
+    'MergeConversationsResponse',
+    'PluginResult',
+    'SearchRequest',
+    'SetConversationActionItemsStateRequest',
+    'SetConversationEventsStateRequest',
+    'TestPromptRequest',
+    'UpdateActionItemDescriptionRequest',
+    'UpdateConversation',
+    'UpdateSegmentTextRequest',
+    # Re-exports (backward compat — prefer importing from the canonical module)
+    'ActionItem',
+    'ActionItemsExtraction',
+    'AudioFile',
+    'CalendarMeetingContext',
+    'CategoryEnum',
+    'ConversationPhoto',
+    'ConversationSource',
+    'ConversationStatus',
+    'ConversationVisibility',
+    'Event',
+    'ExternalIntegrationConversationSource',
+    'Geolocation',
+    'MeetingParticipant',
+    'Message',
+    'Person',
+    'PostProcessingModel',
+    'PostProcessingStatus',
+    'Structured',
+    'TranscriptSegment',
+]
 
 
 class UpdateConversation(BaseModel):

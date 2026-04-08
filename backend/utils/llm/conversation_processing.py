@@ -6,15 +6,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from models.app import App
-from models.conversation import (
-    CalendarMeetingContext,
-    Structured,
-    Conversation,
-    ActionItem,
-    Event,
-    ConversationPhoto,
-    ActionItemsExtraction,
-)
+from models.calendar_context import CalendarMeetingContext
+from models.conversation import Conversation
+from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 import logging
 

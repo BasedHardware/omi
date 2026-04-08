@@ -86,17 +86,14 @@ class TestImportBackwardCompatibility:
         assert SearchRequest(query="test").query == "test"
 
     def test_star_import_provides_all_needed_symbols(self):
-        """Star import must include all symbols that existing consumers depend on.
-
-        Note: We can't smoke-import the actual star-import consumers
-        (postprocess_conversation.py, process_conversation.py) because they
-        pull in database._client -> Firestore which requires GCP credentials.
-        Instead, we verify the namespace content directly.
-        """
+        """Star import controlled by __all__ provides re-exported model symbols."""
         ns = {}
         exec('from models.conversation import *', ns)
-        # Models used by postprocess_conversation.py and process_conversation.py via star import
+        # Core models defined in conversation.py
         assert 'Conversation' in ns
+        assert 'CreateConversation' in ns
+        assert 'AppResult' in ns
+        # Re-exported symbols from new modules
         assert 'TranscriptSegment' in ns
         assert 'Message' in ns
         assert 'Person' in ns
@@ -104,8 +101,8 @@ class TestImportBackwardCompatibility:
         assert 'ConversationSource' in ns
         assert 'CategoryEnum' in ns
         assert 'Structured' in ns
-        # Typing symbols leaked by old module-level imports (postprocess_conversation.py uses List)
-        assert 'List' in ns
+        # __all__ controls star import — typing symbols no longer leak
+        assert 'List' not in ns
 
     def test_identity_preserved_across_import_paths(self):
         """Re-exported classes must be the same object, not copies."""
@@ -336,3 +333,92 @@ class TestHelperMethods:
         d = e.as_dict_cleaned_dates()
         assert isinstance(d['start'], str)
         assert '2025-06-15' in d['start']
+
+
+class TestConversationSummary:
+    """Phase 2: ConversationSummary lightweight view model."""
+
+    def test_basic_creation(self):
+        from models.conversation_summary import ConversationSummary
+
+        s = ConversationSummary(id="test-1", title="Test", overview="Overview")
+        assert s.id == "test-1"
+        assert s.title == "Test"
+        assert s.category == "other"
+        assert s.person_ids == []
+
+    def test_from_conversation(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import CategoryEnum, ConversationSource
+        from models.conversation_summary import ConversationSummary
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="conv-1",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.omi,
+            structured=Structured(
+                title="Team standup",
+                overview="Daily sync",
+                category=CategoryEnum.work,
+            ),
+        )
+        summary = ConversationSummary.from_conversation(conv)
+        assert summary.id == "conv-1"
+        assert summary.title == "Team standup"
+        assert summary.overview == "Daily sync"
+        assert summary.category == "work"
+        assert summary.created_at == now
+        assert summary.person_ids == []
+
+    def test_defaults(self):
+        from models.conversation_summary import ConversationSummary
+
+        s = ConversationSummary(id="x")
+        assert s.title == ''
+        assert s.overview == ''
+        assert s.category == 'other'
+        assert s.transcript_text == ''
+        assert s.created_at is None
+
+
+class TestPhase3NarrowImports:
+    """Phase 3: Verify callers import from canonical modules, not conversation.py."""
+
+    def test_enums_from_canonical_module(self):
+        from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
+
+        assert CategoryEnum.other.value == 'other'
+        assert ConversationSource.omi.value == 'omi'
+        assert ConversationStatus.completed.value == 'completed'
+
+    def test_structured_from_canonical_module(self):
+        from models.structured import Structured, ActionItem, Event
+
+        assert Structured().title == ''
+        assert ActionItem(description="test").description == "test"
+
+    def test_domain_models_from_canonical_modules(self):
+        from models.audio_file import AudioFile
+        from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+        from models.conversation_photo import ConversationPhoto
+        from models.geolocation import Geolocation
+
+        assert Geolocation(latitude=0, longitude=0).latitude == 0
+        assert MeetingParticipant().name is None
+        assert ConversationPhoto(base64="abc").base64 == "abc"
+
+    def test_all_controls_star_import(self):
+        """__all__ restricts star import to defined + re-exported symbols only."""
+        import models.conversation as mod
+
+        assert hasattr(mod, '__all__')
+        assert 'Conversation' in mod.__all__
+        assert 'CategoryEnum' in mod.__all__
+        # Typing symbols excluded
+        assert 'List' not in mod.__all__
+        assert 'Optional' not in mod.__all__
+        assert 'Dict' not in mod.__all__
