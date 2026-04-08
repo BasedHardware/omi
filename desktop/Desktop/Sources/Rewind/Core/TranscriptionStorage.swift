@@ -298,6 +298,7 @@ actor TranscriptionStorage {
         endTime: Double,
         isUser: Bool = false,
         personId: String? = nil,
+        speakerLabel: String? = nil,
         translationsJson: String? = nil
     ) async throws -> Int64 {
         let db = try await ensureInitialized()
@@ -309,10 +310,11 @@ actor TranscriptionStorage {
                     sql: """
                         UPDATE transcription_segments
                         SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?,
+                            speakerLabel = COALESCE(?, speakerLabel),
                             translationsJson = COALESCE(?, translationsJson)
                         WHERE sessionId = ? AND segmentId = ?
                         """,
-                    arguments: [text, speaker, startTime, endTime, isUser, personId, translationsJson, sessionId, segId]
+                    arguments: [text, speaker, startTime, endTime, isUser, personId, speakerLabel, translationsJson, sessionId, segId]
                 )
                 return database.changesCount > 0
             }
@@ -338,6 +340,7 @@ actor TranscriptionStorage {
             endTime: endTime,
             segmentOrder: segmentOrder,
             segmentId: backendSegmentId,
+            speakerLabel: speakerLabel,
             isUser: isUser,
             personId: personId,
             translationsJson: translationsJson
