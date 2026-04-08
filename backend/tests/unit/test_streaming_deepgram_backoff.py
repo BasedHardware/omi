@@ -1113,3 +1113,17 @@ class TestGetSttServiceForLanguage:
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
         assert lang == 'fr'
         assert model == 'nova-3'
+
+    def test_empty_string_falls_back_to_english(self):
+        """Empty string language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language('')
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_none_language_falls_back_to_english(self):
+        """None language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language(None)
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
