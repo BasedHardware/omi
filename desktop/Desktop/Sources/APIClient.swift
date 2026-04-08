@@ -3636,11 +3636,19 @@ struct UserLanguageResponse: Codable {
 /// Recording permission response
 struct RecordingPermissionResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "store_recording_permission"
+    }
 }
 
 /// Private cloud sync response
 struct PrivateCloudSyncResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "private_cloud_sync_enabled"
+    }
 }
 
 /// Notification settings response
