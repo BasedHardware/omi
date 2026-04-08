@@ -596,6 +596,34 @@ class TestGetDeepgramModelForLanguage:
         assert lang == 'ta'
         assert model == 'nova-3'
 
+    def test_locale_tagged_zh_tw_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('zh-TW')
+        assert lang == 'zh-TW'
+        assert model == 'nova-3'
+
+    def test_locale_tagged_th_th_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('th-TH')
+        assert lang == 'th-TH'
+        assert model == 'nova-3'
+
+    def test_locale_tagged_ar_ae_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('ar-AE')
+        assert lang == 'ar-AE'
+        assert model == 'nova-3'
+
+    def test_locale_tagged_ko_kr_returns_nova3(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('ko-KR')
+        assert lang == 'ko-KR'
+        assert model == 'nova-3'
+
     def test_unsupported_language_falls_back_to_multi(self):
         from utils.stt.pre_recorded import get_deepgram_model_for_language
 
