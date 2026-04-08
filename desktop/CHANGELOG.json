@@ -1,6 +1,13 @@
 {
-  "unreleased": ["Fixed date-based tool queries failing for users in positive UTC timezones (UTC+1 through UTC+14)"],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.259",
+      "date": "2026-04-08",
+      "changes": [
+        "Fixed date-based tool queries failing for users in positive UTC timezones (UTC+1 through UTC+14)"
+      ]
+    },
     {
       "version": "0.11.258",
       "date": "2026-04-08",
