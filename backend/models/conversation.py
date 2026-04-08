@@ -1,91 +1,74 @@
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
+from models.audio_file import AudioFile
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.chat import Message
+from models.conversation_enums import (
+    CategoryEnum,
+    ConversationSource,
+    ConversationStatus,
+    ConversationVisibility,
+    ExternalIntegrationConversationSource,
+    PostProcessingModel,
+    PostProcessingStatus,
+)
+from models.conversation_photo import ConversationPhoto
+from models.geolocation import Geolocation
 from models.other import Person
+from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
 from models.transcript_segment import TranscriptSegment
 
-
-class AudioFile(BaseModel):
-    id: str = Field(description="Unique identifier for the audio file")
-    uid: str = Field(description="User ID who owns this audio file")
-    conversation_id: str = Field(description="ID of the conversation this audio belongs to")
-    chunk_timestamps: List[float] = Field(description="List of chunk timestamps (for on-demand merging)")
-    provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
-    started_at: Optional[datetime] = Field(
-        default=None, description="When this audio file started (absolute timestamp)"
-    )
-    duration: float = Field(description="Duration in seconds")
-
-
-class CategoryEnum(str, Enum):
-    personal = 'personal'
-    education = 'education'
-    health = 'health'
-    finance = 'finance'
-    legal = 'legal'
-    philosophy = 'philosophy'
-    spiritual = 'spiritual'
-    science = 'science'
-    entrepreneurship = 'entrepreneurship'
-    parenting = 'parenting'
-    romance = 'romantic'
-    travel = 'travel'
-    inspiration = 'inspiration'
-    technology = 'technology'
-    business = 'business'
-    social = 'social'
-    work = 'work'
-    sports = 'sports'
-    politics = 'politics'
-    literature = 'literature'
-    history = 'history'
-    architecture = 'architecture'
-    # Added at 2024-01-23
-    music = 'music'
-    weather = 'weather'
-    news = 'news'
-    entertainment = 'entertainment'
-    psychology = 'psychology'
-    real = 'real'
-    design = 'design'
-    family = 'family'
-    economics = 'economics'
-    environment = 'environment'
-    other = 'other'
+# Re-export all moved symbols for backward compatibility.
+# Existing callers can continue to use: from models.conversation import CategoryEnum, Structured, etc.
+__all__ = [
+    # Enums
+    'CategoryEnum',
+    'ConversationSource',
+    'ConversationStatus',
+    'ConversationVisibility',
+    'ExternalIntegrationConversationSource',
+    'PostProcessingModel',
+    'PostProcessingStatus',
+    # Structured models
+    'ActionItem',
+    'ActionItemsExtraction',
+    'Event',
+    'Structured',
+    # Domain models
+    'AudioFile',
+    'CalendarMeetingContext',
+    'ConversationPhoto',
+    'Geolocation',
+    'MeetingParticipant',
+    # Core models (defined in this file)
+    'AppResult',
+    'BulkAssignSegmentsRequest',
+    'Conversation',
+    'ConversationPostProcessing',
+    'CreateConversation',
+    'CreateConversationResponse',
+    'CreateMemoryResponse',
+    'DeleteActionItemRequest',
+    'ExternalIntegrationCreateConversation',
+    'MergeConversationsRequest',
+    'MergeConversationsResponse',
+    'PluginResult',
+    'SearchRequest',
+    'SetConversationActionItemsStateRequest',
+    'SetConversationEventsStateRequest',
+    'TestPromptRequest',
+    'UpdateActionItemDescriptionRequest',
+    'UpdateConversation',
+    'UpdateSegmentTextRequest',
+]
 
 
 class UpdateConversation(BaseModel):
     title: Optional[str] = None
     overview: Optional[str] = None
-
-
-class ConversationPhoto(BaseModel):
-    id: Optional[str] = None
-    base64: str
-    description: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    discarded: bool = False
-    data_protection_level: Optional[str] = None
-
-    @staticmethod
-    def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:
-        if not photos:
-            return 'None'
-        descriptions = []
-        for p in photos:
-            if p.description and p.description.strip():
-                timestamp_str = ''
-                if include_timestamps:
-                    timestamp_str = f"[{p.created_at.strftime('%H:%M:%S')}] "
-                descriptions.append(f'- {timestamp_str}"{p.description}"')
-
-        if not descriptions:
-            return 'None'
-        return '\n'.join(descriptions)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -97,196 +80,6 @@ class PluginResult(BaseModel):
 class AppResult(BaseModel):
     app_id: Optional[str]
     content: str
-
-
-class ActionItem(BaseModel):
-    description: str = Field(description="The action item to be completed")
-    completed: bool = False
-    created_at: Optional[datetime] = Field(default=None, description="When the action item was created")
-    updated_at: Optional[datetime] = Field(default=None, description="When the action item was last updated")
-    due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
-    completed_at: Optional[datetime] = Field(default=None, description="When the action item was completed")
-    conversation_id: Optional[str] = Field(
-        default=None, description="ID of the conversation this action item came from"
-    )
-
-    @staticmethod
-    def actions_to_string(action_items: List['ActionItem']) -> str:
-        if not action_items:
-            return 'None'
-
-        result = []
-        for item in action_items:
-            status = 'completed' if item.completed else 'pending'
-            line = f"- {item.description} ({status})"
-
-            # Add timestamp information
-            timestamps = []
-            if item.created_at:
-                timestamps.append(f"Created: {item.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            if item.due_at:
-                timestamps.append(f"Due: {item.due_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            if item.completed_at:
-                timestamps.append(f"Completed: {item.completed_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-
-            if timestamps:
-                line += f" [{', '.join(timestamps)}]"
-
-            result.append(line)
-
-        return '\n'.join(result)
-
-
-class Event(BaseModel):
-    title: str = Field(description="The title of the event")
-    description: str = Field(description="A brief description of the event", default='')
-    start: datetime = Field(description="The start date and time of the event")
-    duration: int = Field(description="The duration of the event in minutes", default=30)
-    created: bool = False
-
-    def as_dict_cleaned_dates(self):
-        event_dict = self.dict()
-        event_dict['start'] = event_dict['start'].isoformat()
-        return event_dict
-
-    @staticmethod
-    def events_to_string(events: List['Event']) -> str:
-        if not events:
-            return 'None'
-        # Format the datetime for better readability in the prompt
-        return '\n'.join(
-            [
-                f"- {event.title} (Starts: {event.start.strftime('%Y-%m-%d %H:%M:%S %Z')}, Duration: {event.duration} mins)"
-                for event in events
-            ]
-        )
-
-
-class ActionItemsExtraction(BaseModel):
-    action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
-
-
-class Structured(BaseModel):
-    title: str = Field(description="A title/name for this conversation", default='')
-    overview: str = Field(
-        description="A brief overview of the conversation, highlighting the key details from it",
-        default='',
-    )
-    emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
-    category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
-    action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
-    events: List[Event] = Field(
-        description="A list of events extracted from the conversation, that the user must have on his calendar.",
-        default=[],
-    )
-
-    @field_validator('category', mode='before')
-    @classmethod
-    def set_category_default_on_error(cls, v: any) -> 'CategoryEnum':
-        if isinstance(v, CategoryEnum):
-            return v
-        try:
-            return CategoryEnum(v)
-        except ValueError:
-            return CategoryEnum.other
-
-    def __str__(self):
-        result = (
-            f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
-            f"{str(self.overview).capitalize()}\n"
-        )
-
-        if self.action_items:
-            result += f"Action Items:\n{ActionItem.actions_to_string(self.action_items)}\n"
-
-        if self.events:
-            result += f"Events:\n{Event.events_to_string(self.events)}\n"
-        return result.strip()
-
-
-class Geolocation(BaseModel):
-    google_place_id: Optional[str] = None
-    latitude: float
-    longitude: float
-    address: Optional[str] = None
-    location_type: Optional[str] = None
-
-
-class MeetingParticipant(BaseModel):
-    """Represents a participant in a calendar meeting"""
-
-    name: Optional[str] = Field(default=None, description="Participant's display name")
-    email: Optional[str] = Field(default=None, description="Participant's email address")
-
-
-class CalendarMeetingContext(BaseModel):
-    """Calendar meeting metadata to provide context for conversation processing"""
-
-    calendar_event_id: str = Field(description="System calendar event ID")
-    title: str = Field(description="Meeting title from calendar")
-    participants: List[MeetingParticipant] = Field(default_factory=list, description="List of meeting participants")
-    platform: Optional[str] = Field(default=None, description="Meeting platform (Zoom, Teams, Google Meet, etc.)")
-    meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
-    start_time: datetime = Field(description="Meeting start time")
-    duration_minutes: int = Field(description="Meeting duration in minutes")
-    notes: Optional[str] = Field(default=None, description="Meeting notes/description from calendar")
-    calendar_source: Optional[str] = Field(
-        default='system_calendar', description="Calendar source (system_calendar, google, outlook, etc.)"
-    )
-
-
-class ConversationSource(str, Enum):
-    friend = 'friend'
-    omi = 'omi'
-    fieldy = 'fieldy'
-    bee = 'bee'
-    plaud = 'plaud'
-    frame = 'frame'
-    friend_com = 'friend_com'
-    apple_watch = 'apple_watch'
-    phone = 'phone'
-    phone_call = 'phone_call'
-    desktop = 'desktop'
-    openglass = 'openglass'
-    screenpipe = 'screenpipe'
-    workflow = 'workflow'
-    sdcard = 'sdcard'
-    external_integration = 'external_integration'
-    limitless = 'limitless'
-    onboarding = 'onboarding'
-    unknown = 'unknown'
-
-    @classmethod
-    def _missing_(cls, value):
-        if isinstance(value, str):
-            return cls.unknown
-        return None
-
-
-class ConversationVisibility(str, Enum):
-    private = 'private'
-    shared = 'shared'
-    public = 'public'
-
-
-class PostProcessingStatus(str, Enum):
-    not_started = 'not_started'
-    in_progress = 'in_progress'
-    completed = 'completed'
-    canceled = 'canceled'
-    failed = 'failed'
-
-
-class ConversationStatus(str, Enum):
-    in_progress = 'in_progress'
-    processing = 'processing'
-    merging = 'merging'
-    completed = 'completed'
-    failed = 'failed'
-
-
-class PostProcessingModel(str, Enum):
-    fal_whisperx = 'fal_whisperx'
 
 
 class ConversationPostProcessing(BaseModel):
@@ -470,12 +263,6 @@ class CreateConversation(BaseModel):
         if not self.transcript_segments:
             return []
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
-
-
-class ExternalIntegrationConversationSource(str, Enum):
-    audio = 'audio_transcript'
-    message = 'message'
-    other = 'other_text'
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
