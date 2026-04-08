@@ -43,6 +43,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
   final List<double> _audioLevels = List.generate(20, (_) => 0.1);
   Timer? _waveformTimer;
 
+  // Recording duration tracking
+  DateTime? _recordingStartTime;
+
   // Callbacks for UI integration
   Function(String transcript)? _onTranscriptReady;
   VoidCallback? _onClose;
@@ -54,6 +57,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
   bool get isRecording => _state == VoiceRecorderState.recording;
   bool get isActive => _state != VoiceRecorderState.idle;
   bool get hasPendingRecording => _state == VoiceRecorderState.pendingRecovery;
+  Duration get recordingDuration =>
+      _recordingStartTime != null ? DateTime.now().difference(_recordingStartTime!) : Duration.zero;
 
   /// Check for a WAV file persisted from a previous session.
   /// Call this on app startup to recover interrupted recordings.
@@ -90,6 +95,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _state = VoiceRecorderState.recording;
     _transcript = '';
     _pcmBytesWritten = 0;
+    _recordingStartTime = DateTime.now();
 
     // Clean up any previous WAV file
     await _cleanupWavFile();
@@ -438,6 +444,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _transcript = '';
     _isProcessing = false;
     _pcmBytesWritten = 0;
+    _recordingStartTime = null;
 
     // Close PCM sink if still open
     _pcmSink?.close();
