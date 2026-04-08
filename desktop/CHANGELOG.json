@@ -2,6 +2,160 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.259",
+      "date": "2026-04-08",
+      "changes": [
+        "Fixed date-based tool queries failing for users in positive UTC timezones (UTC+1 through UTC+14)"
+      ]
+    },
+    {
+      "version": "0.11.258",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.257",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.256",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.255",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.254",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.253",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.251",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.249",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.247",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.245",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.243",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.242",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.241",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.240",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.239",
+      "date": "2026-04-07",
+      "changes": [
+        "Migrated data APIs to production backend for improved reliability and feature parity"
+      ]
+    },
+    {
+      "version": "0.11.238",
+      "date": "2026-04-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.237",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.236",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.235",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.234",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.233",
+      "date": "2026-04-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.232",
       "date": "2026-04-06",
       "changes": [

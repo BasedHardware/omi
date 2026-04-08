@@ -17,6 +17,8 @@ struct AIResponseView: View {
 
     var onClearVisibleConversation: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -31,8 +33,9 @@ struct AIResponseView: View {
                             chatExchangeView(exchange)
                         }
 
-                        // Current question
-                        questionBar
+                        if hasUserInput(userInput) {
+                            questionBar
+                        }
 
                         // Current response
                         currentContentView
@@ -175,25 +178,41 @@ struct AIResponseView: View {
         }
     }
 
+    // MARK: - Per-Message Hover Action Overlay
+
+    /// Wraps an AI message's content with a hover-triggered action bar
+    private func messageWithHoverActions(message: ChatMessage) -> some View {
+        MessageHoverOverlay(
+            message: message,
+            onRate: { rating in
+                onRate?(message.id, rating)
+            }
+        )
+        {
+            contentBlocksView(for: message)
+        }
+    }
+
     // MARK: - Chat History
 
     private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Question bubble
-            HStack(alignment: .top, spacing: 8) {
-                Text(exchange.question)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if hasUserInput(exchange.question) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(exchange.question ?? "")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
 
-            // Response with content blocks
-            contentBlocksView(for: exchange.aiMessage)
+            // Response with hover actions
+            messageWithHoverActions(message: exchange.aiMessage)
                 .padding(.horizontal, 4)
 
             Divider()
@@ -261,15 +280,25 @@ struct AIResponseView: View {
         return size.height > font.pointSize * 1.5
     }
 
+    private func hasUserInput(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var currentContentView: some View {
         Group {
             if let message = currentMessage {
                 VStack(alignment: .leading, spacing: 4) {
-                    contentBlocksView(for: message)
+                    if message.isStreaming {
+                        // While streaming, show content without hover actions
+                        contentBlocksView(for: message)
 
-                    // Show typing indicator while streaming with no text yet
-                    if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
-                        TypingIndicator()
+                        if message.text.isEmpty && message.contentBlocks.isEmpty {
+                            TypingIndicator()
+                        }
+                    } else {
+                        // After streaming completes, show with hover actions
+                        messageWithHoverActions(message: message)
                     }
                 }
                 .padding(.horizontal, 4)
@@ -329,26 +358,19 @@ struct AIResponseView: View {
 
     // MARK: - Follow-Up Input
 
-    @State private var showCopiedFeedback = false
     @State private var showShareFeedback = false
+    @State private var isSharingLink = false
 
     private var followUpInputView: some View {
         HStack(spacing: 6) {
-            Button(action: { copyResponse() }) {
-                Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                    .scaledFont(size: 13)
-                    .foregroundColor(showCopiedFeedback ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Copy response")
-
-            Button(action: { shareResponse() }) {
+            Button(action: { shareLink() }) {
                 Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
                     .scaledFont(size: 13)
                     .foregroundColor(showShareFeedback ? .green : .secondary)
             }
             .buttonStyle(.plain)
-            .help("Share response")
+            .help("Copy share link")
+            .disabled(isSharingLink)
 
             TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
@@ -375,28 +397,20 @@ struct AIResponseView: View {
         }
     }
 
-    private func copyResponse() {
-        let text = currentMessage?.text ?? ""
-        guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        AnalyticsManager.shared.shareAction(category: "floating_bar_response")
-        withAnimation { showCopiedFeedback = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showCopiedFeedback = false }
-        }
-    }
-
-    private func shareResponse() {
-        let answer = currentMessage?.text ?? ""
-        guard !answer.isEmpty else { return }
-        let combined = "Q: \(userInput)\n\nA: \(answer)"
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(combined, forType: .string)
-        AnalyticsManager.shared.shareAction(category: "floating_bar_share")
-        withAnimation { showShareFeedback = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showShareFeedback = false }
+    private func shareLink() {
+        guard !isSharingLink else { return }
+        isSharingLink = true
+        Task {
+            if let url = await onShareLink?() {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url, forType: .string)
+                AnalyticsManager.shared.shareAction(category: "floating_bar_share_link")
+                withAnimation { showShareFeedback = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation { showShareFeedback = false }
+                }
+            }
+            isSharingLink = false
         }
     }
 
@@ -405,6 +419,224 @@ struct AIResponseView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         onSendFollowUp?(trimmed)
+    }
+}
+
+// MARK: - Message Hover Overlay
+
+/// Overlay that shows action buttons (thumbs up/down, copy, info) on hover over an AI message
+struct MessageHoverOverlay<Content: View>: View {
+    let message: ChatMessage
+    let onRate: (Int?) -> Void
+    @ViewBuilder let content: () -> Content
+
+    @State private var isHovered = false
+    @State private var isBarHovered = false
+    @State private var showCopied = false
+    @State private var showInfoPopover = false
+    @State private var hideWorkItem: DispatchWorkItem?
+
+    private var shouldShowBar: Bool {
+        (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+
+            // Action bar — visible on hover with delayed hide
+            if shouldShowBar {
+                HStack(spacing: 8) {
+                    // Thumbs up
+                    Button(action: {
+                        let newRating = message.rating == 1 ? nil : 1
+                        onRate(newRating)
+                    }) {
+                        Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            .scaledFont(size: 11)
+                            .foregroundColor(message.rating == 1 ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Helpful response")
+
+                    // Thumbs down
+                    Button(action: {
+                        let newRating = message.rating == -1 ? nil : -1
+                        onRate(newRating)
+                    }) {
+                        Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .scaledFont(size: 11)
+                            .foregroundColor(message.rating == -1 ? .red : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Not helpful")
+
+                    // Copy
+                    Button(action: { copyMessageText() }) {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .scaledFont(size: 11)
+                            .foregroundColor(showCopied ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy response")
+
+                    // Info (developer context)
+                    if message.metadata != nil {
+                        Button(action: { showInfoPopover.toggle() }) {
+                            Image(systemName: "info.circle")
+                                .scaledFont(size: 11)
+                                .foregroundColor(showInfoPopover ? .white : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("View response context")
+                        .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                            MessageMetadataPopover(metadata: message.metadata!)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(.top, 6)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .onHover { hovering in
+                    isBarHovered = hovering
+                    if hovering {
+                        // Cancel any pending hide
+                        hideWorkItem?.cancel()
+                        hideWorkItem = nil
+                    }
+                }
+            }
+        }
+        .onHover { hovering in
+            if hovering {
+                // Show immediately
+                hideWorkItem?.cancel()
+                hideWorkItem = nil
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovered = true
+                }
+            } else {
+                // Delay hide by 1.5s so user can move cursor to the buttons
+                let work = DispatchWorkItem {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHovered = false
+                    }
+                }
+                hideWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+            }
+        }
+    }
+
+    private func copyMessageText() {
+        guard !message.text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(message.text, forType: .string)
+        AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
+        withAnimation { showCopied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showCopied = false }
+        }
+    }
+}
+
+// MARK: - Metadata Popover
+
+/// Developer popover showing full context used to generate an AI response
+struct MessageMetadataPopover: View {
+    let metadata: MessageMetadata
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                // Header
+                Text("Response Context")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+
+                // Key info
+                if let model = metadata.model {
+                    metadataRow(label: "Model", value: model)
+                }
+                metadataRow(label: "Screenshot attached", value: metadata.hasScreenshot ? "Yes" : "No")
+
+                Divider()
+
+                // Context fed into the prompt
+                Text("Context in Prompt")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundColor(.primary)
+                metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
+                metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
+                metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
+                metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
+                metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
+
+                // Tool calls
+                if !metadata.toolNames.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Tools used (\(metadata.toolNames.count))")
+                            .scaledFont(size: 11, weight: .semibold)
+                            .foregroundColor(.primary)
+                        ForEach(metadata.toolNames, id: \.self) { tool in
+                            Text("  \(tool)")
+                                .scaledFont(size: 11)
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+
+                // Full system prompt — always expanded, scrollable
+                if let prompt = metadata.systemPrompt, !prompt.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Full System Prompt")
+                                .scaledFont(size: 11, weight: .semibold)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(prompt.count) chars")
+                                .scaledFont(size: 10)
+                                .foregroundColor(.secondary)
+                            Button(action: {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(prompt, forType: .string)
+                            }) {
+                                Image(systemName: "doc.on.doc")
+                                    .scaledFont(size: 10)
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Copy prompt")
+                        }
+                        Text(prompt)
+                            .scaledFont(size: 10)
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding()
+            .frame(width: 450)
+        }
+        .frame(width: 450, height: 500)
+    }
+
+    private func metadataRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(.primary)
+                .textSelection(.enabled)
+        }
     }
 }
 

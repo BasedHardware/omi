@@ -157,14 +157,28 @@ async fn get_conversations_count(
 }
 
 /// POST /v1/conversations/from-segments - Create conversation from transcript
-/// Copied from Python create_conversation_from_segments
+/// DEPRECATED: Desktop now uses Python POST /v1/conversations (force-process) instead.
+/// This endpoint will return 410 Gone after 24 hours from deploy.
+/// See: https://github.com/BasedHardware/omi/issues/6355
 async fn create_conversation_from_segments(
     State(state): State<AppState>,
     user: AuthUser,
     Json(request): Json<CreateConversationRequest>,
 ) -> Result<Json<CreateConversationResponse>, (StatusCode, String)> {
-    tracing::info!(
-        "Creating conversation for user {} from {} segments",
+    // Deprecation: return 410 Gone after 24h from deploy
+    if is_from_segments_deprecated() {
+        tracing::warn!(
+            "from-segments endpoint expired for user {} (deprecated)",
+            user.uid,
+        );
+        return Err((
+            StatusCode::GONE,
+            "This endpoint is deprecated. Desktop app now uses Python POST /v1/conversations.".to_string(),
+        ));
+    }
+
+    tracing::warn!(
+        "DEPRECATED: Creating conversation for user {} from {} segments — use Python POST /v1/conversations instead",
         user.uid,
         request.transcript_segments.len()
     );
@@ -1126,6 +1140,21 @@ async fn get_shared_conversation(
     Ok(Json(response))
 }
 
+/// Check if the from-segments endpoint has been deprecated (>24h since DEPRECATION_TIMESTAMP).
+fn is_from_segments_deprecated() -> bool {
+    is_from_segments_deprecated_at(chrono::Utc::now().timestamp())
+}
+
+/// Testable version: check deprecation at a given timestamp.
+fn is_from_segments_deprecated_at(now: i64) -> bool {
+    if let Ok(ts) = std::env::var("DEPRECATION_TIMESTAMP") {
+        if let Ok(deploy_time) = ts.parse::<i64>() {
+            return now - deploy_time > 86400;
+        }
+    }
+    false
+}
+
 pub fn conversations_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/conversations", get(get_conversations))
@@ -1158,3 +1187,41 @@ pub fn conversations_routes() -> Router<AppState> {
         )
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deprecation_not_set() {
+        // No env var → not deprecated
+        std::env::remove_var("DEPRECATION_TIMESTAMP");
+        assert!(!is_from_segments_deprecated_at(1_000_000));
+    }
+
+    #[test]
+    fn test_deprecation_within_24h() {
+        let deploy_time: i64 = 1_700_000_000;
+        std::env::set_var("DEPRECATION_TIMESTAMP", deploy_time.to_string());
+        // 23h59m later → not deprecated
+        let now = deploy_time + 86399;
+        assert!(!is_from_segments_deprecated_at(now));
+        std::env::remove_var("DEPRECATION_TIMESTAMP");
+    }
+
+    #[test]
+    fn test_deprecation_after_24h() {
+        let deploy_time: i64 = 1_700_000_000;
+        std::env::set_var("DEPRECATION_TIMESTAMP", deploy_time.to_string());
+        // 24h + 1s later → deprecated
+        let now = deploy_time + 86401;
+        assert!(is_from_segments_deprecated_at(now));
+        std::env::remove_var("DEPRECATION_TIMESTAMP");
+    }
+
+    #[test]
+    fn test_deprecation_invalid_value() {
+        std::env::set_var("DEPRECATION_TIMESTAMP", "not-a-number");
+        assert!(!is_from_segments_deprecated_at(1_000_000));
+        std::env::remove_var("DEPRECATION_TIMESTAMP");
+    }
+}

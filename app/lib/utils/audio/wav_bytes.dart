@@ -72,12 +72,11 @@ class WavBytes {
     wavData.setUint8(39, 0x61); // 'a'
     wavData.setUint32(40, subchunk2Size, Endian.little); // Subchunk2Size
 
-    // Copy PCM data
-    for (int i = 0; i < _pcmData.length; i++) {
-      wavData.setUint8(44 + i, _pcmData[i]);
-    }
+    // Copy PCM data (bulk copy via Uint8List view instead of byte-by-byte)
+    final wavBytes = wavData.buffer.asUint8List();
+    wavBytes.setRange(44, 44 + _pcmData.length, _pcmData);
 
-    return wavData.buffer.asUint8List();
+    return wavBytes;
   }
 }
 

@@ -82,7 +82,9 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
-                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+                conversation.geolocation = await asyncio.to_thread(
+                    get_google_maps_location, geolocation.latitude, geolocation.longitude
+                )
 
             # Run blocking operations in thread pool to avoid blocking event loop
             conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)

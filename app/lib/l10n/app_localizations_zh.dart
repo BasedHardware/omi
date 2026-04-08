@@ -8522,7 +8522,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -8817,4 +8822,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => '找到录音';
+
+  @override
+  String get transcriptionConnecting => '正在连接转录...';
+
+  @override
+  String get transcriptionReconnecting => '正在重新连接转录...';
+
+  @override
+  String get transcriptionUnavailable => '转录不可用';
+
+  @override
+  String get audioOutput => '音频输出';
 }

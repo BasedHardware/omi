@@ -51,6 +51,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     var onAskAI: (() -> Void)?
     var onHide: (() -> Void)?
     var onSendQuery: ((String) -> Void)?
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
@@ -115,7 +117,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() }
+            onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
+            onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
+            onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -424,6 +428,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard state.showingAIConversation else { return }
 
         FloatingControlBarManager.shared.cancelChat()
+        FloatingControlBarManager.shared.clearPendingNotificationContext()
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
         cancelInputHeightObserver()
@@ -813,15 +818,26 @@ class FloatingControlBarManager {
     static let shared = FloatingControlBarManager()
 
     private static let kAskOmiEnabled = "askOmiBarEnabled"
+    private static let recentNotificationReuseInterval: TimeInterval = 60
+
+    private struct StoredNotificationMessage {
+        var message: ChatMessage
+        let createdAt: Date
+    }
 
     private var window: FloatingControlBarWindow?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
-    private var chatProvider: ChatProvider?
+    private var historyChatProvider: ChatProvider?
+    private var floatingChatProvider: ChatProvider?
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
+    private var storedNotificationMessages: [UUID: StoredNotificationMessage] = [:]
+    private var mostRecentNotificationID: UUID?
+    private var pendingNotificationContextMessage: ChatMessage?
+    private var floatingSessionKey = "floating"
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
@@ -872,13 +888,47 @@ class FloatingControlBarManager {
             self?.isEnabled = false
         }
 
-        // Reuse the sidebar's ChatProvider (bridge is already warm from app startup)
-        self.chatProvider = chatProvider
+        // Keep the shared provider for syncing persisted messages into the main
+        // chat history, but use an isolated provider for floating-bar sends.
+        historyChatProvider = chatProvider
+        let floatingProvider = floatingChatProvider ?? ChatProvider()
+        floatingProvider.modelOverride = chatProvider.modelOverride
+        floatingProvider.workingDirectory = chatProvider.workingDirectory
+        floatingChatProvider = floatingProvider
 
-        barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
-            guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
+        barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
+            guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
             Task { @MainActor in
                 await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+            }
+        }
+
+        barWindow.onRate = { [weak floatingProvider] messageId, rating in
+            guard let provider = floatingProvider else { return }
+            Task { @MainActor in
+                await provider.rateMessage(messageId, rating: rating)
+            }
+        }
+
+        barWindow.onShareLink = { [weak barWindow] in
+            guard let barWindow = barWindow else { return nil }
+            // Collect all synced message IDs from the conversation
+            var messageIds: [String] = []
+            for exchange in barWindow.state.chatHistory {
+                if exchange.aiMessage.isSynced {
+                    messageIds.append(exchange.aiMessage.id)
+                }
+            }
+            if let current = barWindow.state.currentAIMessage, current.isSynced {
+                messageIds.append(current.id)
+            }
+            guard !messageIds.isEmpty else { return nil }
+            do {
+                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                return response.url
+            } catch {
+                log("Failed to get chat share link: \(error)")
+                return nil
             }
         }
 
@@ -958,6 +1008,10 @@ class FloatingControlBarManager {
             break
         }
 
+        if !window.state.showingAIConversation {
+            persistNotificationMessageIfNeeded(notification)
+        }
+
         if window.state.currentNotification != nil || window.state.showingAIConversation {
             pendingNotifications.append(notification)
             return
@@ -969,7 +1023,7 @@ class FloatingControlBarManager {
     func dismissCurrentNotification() {
         notificationDismissWorkItem?.cancel()
         notificationDismissWorkItem = nil
-        dismissNotificationAndAdvanceQueue()
+        dismissNotificationAndAdvanceQueue(trackDismissal: true)
     }
 
     func flushQueuedNotificationsIfPossible() {
@@ -1032,12 +1086,17 @@ class FloatingControlBarManager {
             // disabled, it will hide again when the AI conversation closes.
             window.makeKeyAndOrderFront(nil)
         }
+
+        if openRecentNotificationConversationIfAvailable(in: window) {
+            return
+        }
+
         window.showAIConversation()
         window.orderFrontRegardless()
     }
 
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
-    func openAIInputWithQuery(_ query: String) {
+    func openAIInputWithQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window else { return }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
@@ -1049,10 +1108,13 @@ class FloatingControlBarManager {
         // Provider session context remains intact; only the floating-bar UI is reset.
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation()
+        window.state.currentQueryFromVoice = fromVoice
+        pendingNotificationContextMessage = nil
+        floatingSessionKey = "floating"
 
-        guard let provider = self.chatProvider else { return }
+        guard let provider = activeFloatingProvider() else { return }
 
-        // Re-wire the onSendQuery to use the shared provider
+        // Re-wire the onSendQuery to use the isolated floating-bar provider
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
@@ -1094,17 +1156,24 @@ class FloatingControlBarManager {
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
-    func sendFollowUpQuery(_ query: String) {
+    func sendFollowUpQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window, window.state.showingAIResponse else {
             // No active conversation — fall back to new conversation
-            openAIInputWithQuery(query)
+            openAIInputWithQuery(query, fromVoice: fromVoice)
             return
         }
+        window.state.currentQueryFromVoice = fromVoice
 
         // Archive current exchange
-        let currentQuery = window.state.displayedQuery
-        if let currentMessage = window.state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
-            window.state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
+        if let currentMessage = window.state.currentAIMessage,
+           !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            window.state.chatHistory.append(
+                FloatingChatExchange(
+                    question: currentQuery.isEmpty ? nil : currentQuery,
+                    aiMessage: currentMessage
+                )
+            )
         }
 
         // Cancel existing streaming response if still in progress
@@ -1120,7 +1189,24 @@ class FloatingControlBarManager {
         window.onSendQuery?(query)
     }
 
+    func openNotificationAsChat(_ notification: FloatingBarNotification) {
+        guard let window else { return }
+
+        AnalyticsManager.shared.notificationClicked(
+            notificationId: notification.id.uuidString,
+            title: notification.title,
+            assistantId: notification.assistantId
+        )
+
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        dismissNotificationAndAdvanceQueue(trackDismissal: false)
+        _ = openNotificationConversation(notificationID: notification.id, in: window)
+    }
+
     private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+        persistNotificationMessageIfNeeded(notification)
+
         if !window.isVisible {
             notificationWasTemporarilyShown = true
             window.orderFrontRegardless()
@@ -1136,19 +1222,19 @@ class FloatingControlBarManager {
         )
 
         let dismissWorkItem = DispatchWorkItem { [weak self] in
-            self?.dismissNotificationAndAdvanceQueue()
+            self?.dismissNotificationAndAdvanceQueue(trackDismissal: true)
         }
         notificationDismissWorkItem = dismissWorkItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
     }
 
-    private func dismissNotificationAndAdvanceQueue() {
+    private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
         guard let window else { return }
 
         let dismissedNotification = window.state.currentNotification
         window.dismissNotification()
 
-        if let dismissedNotification {
+        if trackDismissal, let dismissedNotification {
             AnalyticsManager.shared.notificationDismissed(
                 notificationId: dismissedNotification.id.uuidString,
                 title: dismissedNotification.title,
@@ -1168,6 +1254,101 @@ class FloatingControlBarManager {
         notificationWasTemporarilyShown = false
     }
 
+    private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
+        guard storedNotificationMessages[notification.id] == nil,
+              let provider = historyChatProvider else { return }
+
+        let messageText = "**\(notification.title)**\n\n\(notification.message)"
+        guard let message = provider.appendAssistantMessage(messageText) else { return }
+
+        storedNotificationMessages[notification.id] = StoredNotificationMessage(
+            message: message,
+            createdAt: Date()
+        )
+        mostRecentNotificationID = notification.id
+    }
+
+    private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
+        guard let mostRecentNotificationID else { return false }
+        return openNotificationConversation(notificationID: mostRecentNotificationID, in: window)
+    }
+
+    @discardableResult
+    private func openNotificationConversation(notificationID: UUID, in window: FloatingControlBarWindow) -> Bool {
+        purgeExpiredNotificationMessages()
+
+        guard let stored = storedNotificationMessages[notificationID],
+              Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval else {
+            return false
+        }
+
+        let resolvedMessage = resolveStoredNotificationMessage(stored)
+
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        pendingNotifications.removeAll { $0.id == notificationID }
+        if window.state.currentNotification != nil {
+            window.dismissNotification()
+        }
+
+        window.cancelPendingDismiss()
+        window.savePreChatCenterIfNeeded()
+        window.cancelInputHeightObserver()
+        window.state.clearVisibleConversation()
+
+        window.state.showingAIConversation = true
+        window.state.showingAIResponse = true
+        window.state.isAILoading = false
+        window.state.aiInputText = ""
+        window.state.displayedQuery = ""
+        window.state.currentAIMessage = resolvedMessage
+        window.state.markConversationActivity()
+        window.resizeToResponseHeightPublic(animated: true)
+        window.orderFrontRegardless()
+        window.focusInputField()
+
+        pendingNotificationContextMessage = resolvedMessage
+        floatingSessionKey = "floating-notification-\(notificationID.uuidString)"
+        storedNotificationMessages.removeValue(forKey: notificationID)
+        if mostRecentNotificationID == notificationID {
+            mostRecentNotificationID = nil
+        }
+        return true
+    }
+
+    private func resolveStoredNotificationMessage(_ stored: StoredNotificationMessage) -> ChatMessage {
+        guard let provider = historyChatProvider else { return stored.message }
+
+        if let synced = provider.messages.first(where: { $0.id == stored.message.id }) {
+            return synced
+        }
+
+        return provider.messages.last(where: {
+            $0.sender == .ai &&
+            $0.text == stored.message.text
+        }) ?? stored.message
+    }
+
+    private func purgeExpiredNotificationMessages() {
+        let now = Date()
+        storedNotificationMessages = storedNotificationMessages.filter { _, stored in
+            now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
+        }
+
+        if let mostRecentNotificationID, storedNotificationMessages[mostRecentNotificationID] == nil {
+            self.mostRecentNotificationID = nil
+        }
+    }
+
+    private func activeFloatingProvider() -> ChatProvider? {
+        guard let floatingProvider = floatingChatProvider else { return nil }
+        if let sharedProvider = historyChatProvider {
+            floatingProvider.modelOverride = sharedProvider.modelOverride
+            floatingProvider.workingDirectory = sharedProvider.workingDirectory
+        }
+        return floatingProvider
+    }
+
     /// Access the bar state for PTT updates.
     var barState: FloatingControlBarState? {
         return window?.state
@@ -1181,6 +1362,20 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Check weekly usage limit for free users
+        let limiter = FloatingBarUsageLimiter.shared
+        if limiter.isLimitReached {
+            barWindow.state.isAILoading = false
+            barWindow.state.showingAIResponse = true
+            barWindow.state.currentAIMessage = ChatMessage(
+                text: "You've used all \(FloatingBarUsageLimiter.weeklyFreeLimit) free queries this week. Upgrade to Pro for unlimited access, or wait for your weekly reset.",
+                sender: .ai
+            )
+            barWindow.resizeToResponseHeightPublic(animated: true)
+            return
+        }
+
+        limiter.recordQuery()
         FloatingBarVoicePlaybackService.shared.stop()
 
         // Hide the bar visually (without ordering it out) so we keep key-window ownership
@@ -1200,7 +1395,10 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
-        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        }
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -1223,10 +1421,12 @@ class FloatingControlBarManager {
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
-                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-                    aiMessage,
-                    isFinal: !aiMessage.isStreaming
-                )
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
@@ -1247,7 +1447,15 @@ class FloatingControlBarManager {
         let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
             ? "claude-sonnet-4-6"
             : ShortcutSettings.shared.selectedModel
-        await provider.sendMessage(message, model: floatingModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+        let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+        await provider.sendMessage(
+            message,
+            model: floatingModel,
+            systemPromptSuffix: notificationContextSuffix,
+            systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix,
+            sessionKey: floatingSessionKey,
+            imageData: screenshotData
+        )
 
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -1279,10 +1487,34 @@ class FloatingControlBarManager {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
 
-        FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-            barWindow.state.currentAIMessage,
-            isFinal: true
-        )
+        if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                barWindow.state.currentAIMessage,
+                isFinal: true
+            )
+        }
+    }
+
+    private func notificationContextSuffixIfNeeded(for message: String) -> String? {
+        guard let pendingNotificationContextMessage else { return nil }
+
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMessage.isEmpty else { return nil }
+
+        return """
+<floating_bar_notification_context>
+Before the user's latest message, you proactively sent this assistant message in the floating bar.
+Treat it as your immediately previous turn in the same conversation and answer as a continuation.
+
+Assistant message:
+\(pendingNotificationContextMessage.text)
+</floating_bar_notification_context>
+"""
+    }
+
+    func clearPendingNotificationContext() {
+        pendingNotificationContextMessage = nil
+        floatingSessionKey = "floating"
     }
 }
 

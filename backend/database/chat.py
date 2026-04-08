@@ -16,6 +16,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+BATCH_LIMIT = 500  # Firestore hard limit
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -177,15 +179,17 @@ def get_messages(
     include_conversations: bool = False,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
-    # include_plugin_id_filter: bool = True,
 ):
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
+        # Session-scoped query: filter by session only, skip plugin_id filter
+        # because the session already determines which app the messages belong to.
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        # App-scoped query: filter by plugin_id (None = main chat)
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
@@ -238,6 +242,13 @@ def get_messages(
         message['files'] = [files[file_id] for file_id in message.get('files_id', []) if file_id in files]
 
     return messages
+
+
+def get_message_count(uid: str) -> int:
+    """Return the total number of chat messages for a user."""
+    user_ref = db.collection('users').document(uid)
+    docs = user_ref.collection('messages').count().get()
+    return int(docs[0][0].value) if docs and docs[0] else 0
 
 
 def iter_all_messages(uid: str, batch_size: int = 1000):
@@ -462,9 +473,24 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     return None
 
 
-def delete_chat_session(uid, chat_session_id):
+def delete_chat_session(uid, chat_session_id, cascade_messages: bool = False):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+
+    if cascade_messages:
+        if not session_ref.get().exists:
+            return False
+        msg_col = user_ref.collection('messages')
+        query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        while True:
+            docs = list(query.limit(BATCH_LIMIT).stream())
+            if not docs:
+                break
+            batch = db.batch()
+            for doc in docs:
+                batch.delete(msg_col.document(doc.id))
+            batch.commit()
+
     session_ref.delete()
 
 
@@ -554,3 +580,166 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()
+
+
+# ============================================================================
+# CHAT SESSIONS (v2)
+#
+# v2 sessions support: title, preview, message_count, starred, updated_at.
+# v1 sessions store: message_ids, file_ids, openai_thread_id.
+# Both schemas coexist in the same Firestore collection.
+# Both MUST write plugin_id alongside app_id for cross-platform query compat.
+# ============================================================================
+
+
+def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict:
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    doc = {
+        'id': session_id,
+        'title': title or 'New Chat',
+        'preview': None,
+        'created_at': now,
+        'updated_at': now,
+        'app_id': app_id,
+        'plugin_id': app_id,  # Python chat.py queries chat_sessions by plugin_id
+        'message_count': 0,
+        'starred': False,
+    }
+    db.collection('users').document(uid).collection('chat_sessions').document(session_id).set(doc)
+    return doc
+
+
+def acquire_chat_session(uid: str, app_id: str = None) -> str:
+    """Get or create a chat session for the given app_id (None = main chat).
+
+    Queries by plugin_id to match both Python chat.py and Rust backend behavior.
+    For main chat (app_id=None), matches sessions where plugin_id is None.
+    """
+    col = db.collection('users').document(uid).collection('chat_sessions')
+    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        return docs[0].id
+    session = create_chat_session(uid, app_id=app_id)
+    return session['id']
+
+
+def get_chat_sessions(
+    uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
+) -> List[dict]:
+    col = db.collection('users').document(uid).collection('chat_sessions')
+    # Order by updated_at — v2 sessions always have this field.
+    # Legacy v1 sessions (missing updated_at) are excluded by Firestore,
+    # which is correct since this endpoint serves v2 clients only.
+    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
+
+    # Always filter — when app_id is None this returns only default-chat sessions
+    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    if starred is not None:
+        query = query.where(filter=FieldFilter('starred', '==', starred))
+
+    query = query.offset(offset).limit(limit)
+    items = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
+
+
+def update_chat_session(uid: str, session_id: str, title: str = None, starred: bool = None) -> Optional[dict]:
+    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+    if not ref.get().exists:
+        return None
+    updates = {'updated_at': datetime.now(timezone.utc)}
+    if title is not None:
+        updates['title'] = title
+    if starred is not None:
+        updates['starred'] = starred
+    ref.update(updates)
+    result = ref.get().to_dict()
+    result['id'] = session_id
+    return result
+
+
+# ============================================================================
+# MESSAGES (v2)
+#
+# Persistence-only message writes (no LLM streaming).  They write the same
+# field set as the Message model for cross-platform compatibility:
+#   plugin_id, app_id, type='text', chat_session_id, from_external_integration
+#
+# When session_id is not provided, acquire_chat_session() auto-creates one.
+# ============================================================================
+
+
+def save_message(
+    uid: str, text: str, sender: str, app_id: str = None, session_id: str = None, metadata: str = None
+) -> dict:
+    """Save a chat message for the desktop app.
+
+    Writes all fields expected by chat.py's Message model so messages are
+    visible across platforms.  Auto-acquires a session if none provided.
+    """
+    msg_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    # Auto-acquire session (matches Rust backend behavior)
+    if not session_id:
+        session_id = acquire_chat_session(uid, app_id=app_id)
+
+    doc = {
+        'id': msg_id,
+        'text': text,
+        'created_at': now,
+        'sender': sender,
+        'type': 'text',  # Desktop messages are always type 'text'
+        'app_id': app_id,
+        'plugin_id': app_id,  # chat.py queries messages by plugin_id
+        'session_id': session_id,
+        'chat_session_id': session_id,  # chat.py uses this field name
+        'from_external_integration': False,
+        'rating': None,
+        'reported': False,
+        'memories_id': [],
+        'metadata': metadata,
+    }
+    db.collection('users').document(uid).collection('messages').document(msg_id).set(doc)
+
+    # Update session message_count and preview (skip if session was deleted)
+    if session_id:
+        session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+        if session_ref.get().exists:
+            session_ref.update(
+                {
+                    'updated_at': now,
+                    'message_count': firestore.Increment(1),
+                    'preview': text[:100] if text else None,
+                }
+            )
+
+    return {'id': msg_id, 'created_at': now.isoformat()}
+
+
+def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
+    """Delete messages matching app_id/session_id.  Returns count deleted."""
+    col = db.collection('users').document(uid).collection('messages')
+    if session_id:
+        # Session-scoped delete: filter by session only (same logic as get_messages)
+        query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
+    else:
+        # App-scoped delete: filter by plugin_id (None = main chat)
+        query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    deleted = 0
+    while True:
+        docs = list(query.limit(BATCH_LIMIT).stream())
+        if not docs:
+            break
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(col.document(doc.id))
+        batch.commit()
+        deleted += len(docs)
+    return deleted

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Clock, XCircle, Search } from "lucide-react"
 import { useApps as usePublicApprovedApps } from "@/hooks/useApps";
 import { useUnapprovedApps } from "@/hooks/useUnapprovedApps";
 import { useAuth } from '@/components/auth-provider';
+import { useAuthFetch } from '@/hooks/useAuthToken';
 import { 
   Select, 
   SelectContent, 
@@ -33,6 +34,7 @@ export default function ReviewsPage() {
   const { apps: publicApps, isLoading: isLoadingPublic, error: errorPublic } = usePublicApprovedApps();
   const { unapprovedApps, isLoadingUnapproved, errorUnapproved } = useUnapprovedApps();
   const { user } = useAuth();
+  const { fetchWithAuth } = useAuthFetch();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -75,19 +77,14 @@ export default function ReviewsPage() {
     if (selectedAppIds.size === 0 || !user) return;
 
     setIsBulkProcessing(true);
-    const idToken = await user.getIdToken();
     let successCount = 0;
     let errorCount = 0;
 
     const reviewPromises = Array.from(selectedAppIds).map(async (appId) => {
       try {
-        const response = await fetch(`/api/omi/apps/${appId}/review`, {
+        const response = await fetchWithAuth(`/api/omi/apps/${appId}/review`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             action,
             reason: action === 'reject' ? 'Bulk rejection' : undefined
           }),
@@ -119,16 +116,14 @@ export default function ReviewsPage() {
     if (!user) return;
 
     try {
-      const idToken = await user.getIdToken();
-      const unapprovedAppsKey = ['/api/omi/apps/unapproved', idToken];
-
+      // Invalidate all SWR keys matching the unapproved apps endpoint
       swrMutate(
-        unapprovedAppsKey,
+        (key: any) => Array.isArray(key) && key[0] === '/api/omi/apps/unapproved',
         (currentData: OmiApp[] | undefined) => {
           if (!currentData) return [];
           return currentData.filter(app => app.id !== appId);
         },
-        false 
+        false
       );
     } catch (error) {
       console.error("Error performing optimistic update for review:", error);

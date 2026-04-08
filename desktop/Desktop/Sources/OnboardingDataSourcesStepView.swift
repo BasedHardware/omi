@@ -6,6 +6,7 @@ struct OnboardingDataSourcesStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onSkip: (() -> Void)?
   let onForceComplete: (() -> Void)?
 
   @State private var activeImportSource: OnboardingMemoryLogSource?
@@ -21,6 +22,8 @@ struct OnboardingDataSourcesStepView: View {
       title: "Your 2nd brain is live.",
       description: "Connect more of your context.",
       rightPaneFooterText: coordinator.connectedContextSummary,
+      showsSkip: true,
+      onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 18) {
@@ -32,11 +35,22 @@ struct OnboardingDataSourcesStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        Button(coordinator.isResearchComplete ? "Continue" : "Finishing…") {
-          onContinue()
+        if coordinator.isResearchComplete {
+          Button("Continue") {
+            onContinue()
+          }
+          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        } else {
+          HStack(spacing: 8) {
+            ProgressView()
+              .controlSize(.small)
+              .tint(OmiColors.textTertiary)
+            Text("Scanning your data sources...")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundColor(OmiColors.textTertiary)
+          }
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-        .disabled(!coordinator.isResearchComplete)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
@@ -51,8 +65,7 @@ struct OnboardingDataSourcesStepView: View {
   private var connectionsList: some View {
     VStack(alignment: .leading, spacing: 0) {
       compactSourceRow(
-        icon: "calendar",
-        accent: Color(red: 0.39, green: 0.64, blue: 1.0),
+        brand: .calendar,
         title: "Calendar",
         metrics: metricsText(
           sourceCount: coordinator.calendarInsightCount,
@@ -66,8 +79,7 @@ struct OnboardingDataSourcesStepView: View {
       listDivider
 
       compactSourceRow(
-        icon: "envelope.fill",
-        accent: Color(red: 0.33, green: 0.76, blue: 0.47),
+        brand: .gmail,
         title: "Email",
         metrics: metricsText(
           sourceCount: coordinator.gmailInsightCount,
@@ -81,8 +93,7 @@ struct OnboardingDataSourcesStepView: View {
       listDivider
 
       compactSourceRow(
-        icon: "folder.fill",
-        accent: Color(red: 0.96, green: 0.72, blue: 0.25),
+        brand: .localFiles,
         title: "Local files",
         metrics: metricsText(
           sourceCount: coordinator.scanSnapshot?.fileCount ?? 0,
@@ -96,8 +107,7 @@ struct OnboardingDataSourcesStepView: View {
       listDivider
 
       compactSourceRow(
-        icon: "note.text",
-        accent: Color(red: 1.0, green: 0.80, blue: 0.35),
+        brand: .appleNotes,
         title: "Apple Notes",
         metrics: metricsText(
           sourceCount: coordinator.appleNotesInsightCount,
@@ -157,10 +167,7 @@ struct OnboardingDataSourcesStepView: View {
     let isConnected = importedCount > 0
 
     return compactSourceRow(
-      icon: source == .chatgpt ? "sparkles.rectangle.stack" : "brain.head.profile",
-      accent: source == .chatgpt
-        ? Color(red: 0.22, green: 0.74, blue: 0.52)
-        : Color(red: 0.64, green: 0.33, blue: 0.98),
+      brand: source == .chatgpt ? .chatgpt : .claude,
       title: source.displayName,
       metrics: isConnected
         ? countLabel(importedCount, singular: "memory", plural: "memories")
@@ -250,8 +257,7 @@ struct OnboardingDataSourcesStepView: View {
   }
 
   private func compactSourceRow(
-    icon: String,
-    accent: Color,
+    brand: ConnectorBrand,
     title: String,
     metrics: String,
     isOn: Bool,
@@ -261,14 +267,7 @@ struct OnboardingDataSourcesStepView: View {
     onToggle: ((Bool) -> Void)? = nil
   ) -> some View {
     HStack(alignment: .center, spacing: 12) {
-      RoundedRectangle(cornerRadius: 11, style: .continuous)
-        .fill(accent.opacity(0.18))
-        .frame(width: 38, height: 38)
-        .overlay {
-          Image(systemName: icon)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(accent)
-        }
+      ConnectorBrandIcon(brand: brand, size: 38, cornerRadius: 11)
 
       VStack(alignment: .leading, spacing: 3) {
         Text(title)

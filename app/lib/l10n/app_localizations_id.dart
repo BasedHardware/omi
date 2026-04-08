@@ -1714,7 +1714,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -8989,4 +8994,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Rekaman ditemukan';
+
+  @override
+  String get transcriptionConnecting => 'Menghubungkan transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menghubungkan ulang transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
 }

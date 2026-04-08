@@ -29,6 +29,7 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
+  @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
 
@@ -633,6 +634,28 @@ struct DesktopHomeView: View {
       // Goal completion celebration overlay
       GoalCelebrationView()
     }
+    .overlay {
+      if showTryAskingPopup {
+        let suggestions = PostOnboardingPromptSuggestions.suggestions()
+        if !suggestions.isEmpty {
+          TryAskingPopupView(
+            suggestions: suggestions,
+            onAsk: { suggestion in
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+              FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+            },
+            onDismiss: {
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+            }
+          )
+        }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+      showTryAskingPopup = true
+    }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
       selectedSettingsSection = .rewind
@@ -762,7 +785,7 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider)
+        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
       case 9:
         SettingsPage(
           appState: appState,

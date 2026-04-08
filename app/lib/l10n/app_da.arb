@@ -2934,5 +2934,10 @@
             }
         }
     },
-    "willSyncAutomatically": "synkroniseres automatisk"
+    "willSyncAutomatically": "synkroniseres automatisk",
+    "voiceRecordingFound": "Optagelse fundet",
+    "transcriptionConnecting": "Forbinder transskription...",
+    "transcriptionReconnecting": "Genopretter transskription...",
+    "transcriptionUnavailable": "Transskription ikke tilgængelig",
+    "audioOutput": "Lydudgang"
 }
