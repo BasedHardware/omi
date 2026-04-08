@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -20,21 +20,18 @@ class VoiceRecorderWidget extends StatefulWidget {
 }
 
 class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
       ..repeat(reverse: true);
 
-    // Set up callbacks and start recording
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<VoiceRecorderProvider>();
       provider.setCallbacks(onTranscriptReady: widget.onTranscriptReady, onClose: widget.onClose);
-
-      // Only start recording if not already recording and not recovering a previous recording
-      if (!provider.isRecording && !provider.hasPendingRecording) {
+      if (!provider.isRecording) {
         provider.startRecording();
       }
     });
@@ -42,10 +39,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
   @override
   void dispose() {
-    _animationController.dispose();
-    // Don't stop recording on dispose - let it continue across page navigation
-    // The provider will handle cleanup when close() is called
+    _pulseController.dispose();
     super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -54,130 +55,264 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       builder: (context, provider, child) {
         switch (provider.state) {
           case VoiceRecorderState.recording:
-            return Container(
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: provider.close,
-                  ),
-                  Expanded(
-                    child: SizedBox(
-                      height: 40,
-                      child: CustomPaint(painter: AudioWavePainter(levels: provider.audioLevels)),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: provider.processRecording,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6, left: 16),
-                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                      child: const Icon(Icons.check, color: Colors.black, size: 20.0),
-                    ),
-                  ),
-                ],
-              ),
-            );
-
+            return _buildRecordingState(provider);
           case VoiceRecorderState.transcribing:
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ShimmerWithTimeout(
-                    baseColor: Color(0xFF35343B),
-                    highlightColor: Colors.white,
-                    child: Text(context.l10n.transcribing, style: const TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            );
-
+            return _buildTranscribingState(context);
           case VoiceRecorderState.transcribeSuccess:
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-                  child: Text(provider.transcript, style: const TextStyle(color: Colors.white)),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: provider.close,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: () => widget.onTranscriptReady(provider.transcript),
-                    ),
-                  ],
-                ),
-              ],
-            );
-
+            return _buildSuccessState(context, provider);
           case VoiceRecorderState.transcribeFailed:
+            return _buildFailedState(context, provider);
           case VoiceRecorderState.pendingRecovery:
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    provider.state == VoiceRecorderState.pendingRecovery
-                        ? context.l10n.voiceRecordingFound
-                        : context.l10n.error,
-                    style: TextStyle(
-                      color: provider.state == VoiceRecorderState.pendingRecovery ? Colors.white : Colors.redAccent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: SizedBox(
-                      height: 40,
-                      child: CustomPaint(painter: AudioWavePainter(levels: provider.audioLevels)),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: provider.retry,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          margin: const EdgeInsets.only(left: 10, right: 0, top: 10, bottom: 10),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: const Icon(color: Colors.black, Icons.refresh, size: 20.0),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: provider.close,
-                        child: Container(
-                          padding: const EdgeInsets.only(left: 14, right: 0, top: 14, bottom: 14),
-                          child: const Icon(Icons.close, color: Colors.white, size: 20),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-
+            return _buildRecoveryState(context, provider);
           default:
             return const SizedBox.shrink();
         }
       },
+    );
+  }
+
+  Widget _buildRecordingState(VoiceRecorderProvider provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1E),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF2A2A2E), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          // Pulsing red recording indicator
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, child) {
+              return Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color.lerp(
+                    const Color(0xFFFF3B30),
+                    const Color(0xFFFF3B30).withValues(alpha: 0.4),
+                    _pulseController.value,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF3B30).withValues(alpha: 0.3 * (1 - _pulseController.value)),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          // Recording duration
+          Text(
+            _formatDuration(provider.recordingDuration),
+            style: const TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Waveform
+          Expanded(
+            child: SizedBox(
+              height: 32,
+              child: CustomPaint(painter: AudioWavePainter(levels: provider.audioLevels)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Cancel button
+          GestureDetector(
+            onTap: provider.close,
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close_rounded, color: Color(0xFF8E8E93), size: 20),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Stop & send button
+          GestureDetector(
+            onTap: provider.processRecording,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(color: Color(0xFF34C759), shape: BoxShape.circle),
+              child: const Icon(Icons.stop_rounded, color: Colors.white, size: 20),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTranscribingState(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1E),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF2A2A2E), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8E8E93)),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            context.l10n.transcribing,
+            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuccessState(BuildContext context, VoiceRecorderProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2A2A2E), width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(provider.transcript, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              GestureDetector(
+                onTap: provider.close,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
+                  child: Text(
+                    context.l10n.cancel,
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => widget.onTranscriptReady(provider.transcript),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(color: const Color(0xFF0A84FF), borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.send_rounded, color: Colors.white, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        context.l10n.send,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFailedState(BuildContext context, VoiceRecorderProvider provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1E),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF3A2020), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Color(0xFFFF453A), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              context.l10n.voiceFailedToTranscribe,
+              style: const TextStyle(color: Color(0xFFFF453A), fontSize: 13, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: provider.retry,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(14)),
+              child: Text(
+                context.l10n.retry,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: provider.close,
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close_rounded, color: Color(0xFF8E8E93), size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecoveryState(BuildContext context, VoiceRecorderProvider provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1E),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF2A3A2A), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.mic_rounded, color: Color(0xFF34C759), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              context.l10n.voiceRecordingFound,
+              style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: provider.retry,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: const Color(0xFF34C759), borderRadius: BorderRadius.circular(14)),
+              child: Text(
+                context.l10n.retry,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: provider.close,
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close_rounded, color: Color(0xFF8E8E93), size: 18),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -189,37 +324,32 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Guard against empty levels to prevent divide-by-zero
     if (levels.isEmpty) return;
-
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth =
-          4 // Slightly thicker for better visibility
-      ..strokeCap = StrokeCap.round;
 
     final width = size.width;
     final height = size.height;
-    final barWidth = width / levels.length / 2;
+    final barCount = levels.length;
+    final totalBarWidth = width / barCount;
+    final barWidth = 3.0;
+    final gap = totalBarWidth - barWidth;
 
-    for (int i = 0; i < levels.length; i++) {
-      final x = i * (barWidth * 2) + barWidth;
-
-      // Use the level directly for more accurate RMS representation
+    for (int i = 0; i < barCount; i++) {
+      final x = i * totalBarWidth + gap / 2;
       final level = levels[i];
-      final barHeight = level * height * 0.8;
+      final barHeight = (level * height * 0.85).clamp(3.0, height);
+      final topY = (height - barHeight) / 2;
 
-      final topY = height / 2 - barHeight / 2;
-      final bottomY = height / 2 + barHeight / 2;
+      final paint = Paint()
+        ..color = Color.lerp(const Color(0xFF3A3A3E), const Color(0xFF34C759), level.clamp(0.0, 1.0))!
+        ..strokeWidth = barWidth
+        ..strokeCap = StrokeCap.round;
 
-      // Draw only the individual bars with rounded caps
-      canvas.drawLine(Offset(x, topY), Offset(x, bottomY), paint);
+      canvas.drawLine(Offset(x, topY), Offset(x, topY + barHeight), paint);
     }
   }
 
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
-    // Only repaint if the audio levels have actually changed
     if (levels.length != oldDelegate.levels.length) return true;
     for (int i = 0; i < levels.length; i++) {
       if ((levels[i] - oldDelegate.levels[i]).abs() > 0.01) return true;
