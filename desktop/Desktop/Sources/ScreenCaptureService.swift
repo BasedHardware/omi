@@ -8,7 +8,7 @@ final class ScreenCaptureService: Sendable {
   private let maxSize: CGFloat = 3000
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
-  private static let activeWindowCacheTTL: TimeInterval = 10
+  private static let activeWindowCacheTTL: TimeInterval = 2
 
   /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
   /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
@@ -733,6 +733,52 @@ final class ScreenCaptureService: Sendable {
   /// Capture the active window and return the raw CGImage (no JPEG encoding).
   /// Use this on macOS 14+ to avoid redundant encode/decode round-trips.
   @available(macOS 14.0, *)
+  /// Capture a specific window by ID (avoids re-resolving the active window)
+  func captureWindowCGImage(windowID: CGWindowID) async -> CGImage? {
+    do {
+      let content = try await SCShareableContent.excludingDesktopWindows(
+        false,
+        onScreenWindowsOnly: true
+      )
+
+      let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
+        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+          return nil
+        }
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let config = SCStreamConfiguration()
+        config.scalesToFit = true
+        config.showsCursor = false
+        let windowWidth = window.frame.width
+        let windowHeight = window.frame.height
+        let aspectRatio = windowWidth / windowHeight
+        var configWidth = min(windowWidth, maxSize)
+        var configHeight = configWidth / aspectRatio
+        if configHeight > maxSize {
+          configHeight = maxSize
+          configWidth = configHeight * aspectRatio
+        }
+        config.width = Int(configWidth)
+        config.height = Int(configHeight)
+        return (filter, config)
+      }
+
+      guard let (filter, config) = filterAndConfig else {
+        log("Window \(windowID) not found in SCShareableContent")
+        return nil
+      }
+
+      return try await SCScreenshotManager.captureImage(
+        contentFilter: filter,
+        configuration: config
+      )
+    } catch {
+      log("ScreenCaptureKit CGImage error for window \(windowID): \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   func captureActiveWindowCGImage() async -> CGImage? {
     let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
     guard let windowID else {
