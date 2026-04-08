@@ -9014,6 +9014,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get voiceRecordingFound => 'Запись найдена';
+
+  @override
   String get transcriptionConnecting => 'Подключение транскрипции...';
 
   @override

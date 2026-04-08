@@ -2895,6 +2895,7 @@
         }
     },
     "willSyncAutomatically": "es sincronitzarà automàticament",
+    "voiceRecordingFound": "Gravació trobada",
     "transcriptionConnecting": "Connectant la transcripció...",
     "transcriptionReconnecting": "Reconnectant la transcripció...",
     "transcriptionUnavailable": "Transcripció no disponible",

@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "synkroniseres automatisk",
+    "voiceRecordingFound": "Opptak funnet",
     "transcriptionConnecting": "Kobler til transkripsjon...",
     "transcriptionReconnecting": "Kobler til transkripsjon på nytt...",
     "transcriptionUnavailable": "Transkripsjon utilgjengelig",

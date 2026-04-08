@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "verrà sincronizzato automaticamente",
+    "voiceRecordingFound": "Registrazione trovata",
     "transcriptionConnecting": "Connessione trascrizione...",
     "transcriptionReconnecting": "Riconnessione trascrizione...",
     "transcriptionUnavailable": "Trascrizione non disponibile",

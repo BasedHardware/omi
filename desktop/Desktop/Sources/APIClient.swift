@@ -1448,13 +1448,25 @@ struct UserProfile: Codable {
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
-struct ActionItemsListResponse: Codable {
+/// Accepts both "action_items" (/v1/action-items) and "items" (/v1/staged-tasks) keys.
+struct ActionItemsListResponse: Decodable {
     let items: [TaskActionItem]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
-        case items = "action_items"
+        case actionItems = "action_items"
+        case items
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
+            self.items = actionItems
+        } else {
+            self.items = try container.decode([TaskActionItem].self, forKey: .items)
+        }
+        self.hasMore = try container.decode(Bool.self, forKey: .hasMore)
     }
 }
 
@@ -3624,11 +3636,19 @@ struct UserLanguageResponse: Codable {
 /// Recording permission response
 struct RecordingPermissionResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "store_recording_permission"
+    }
 }
 
 /// Private cloud sync response
 struct PrivateCloudSyncResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "private_cloud_sync_enabled"
+    }
 }
 
 /// Notification settings response
@@ -4188,11 +4208,37 @@ extension APIClient {
         let body = RateRequest(rating: rating)
         let _: MessageStatusResponse = try await patch("v2/desktop/messages/\(messageId)/rating", body: body)
     }
+
+    /// Share chat messages and get a shareable URL
+    func shareChatMessages(messageIds: [String]) async throws -> ShareChatResponse {
+        struct ShareRequest: Encodable {
+            let message_ids: [String]
+        }
+        let body = ShareRequest(message_ids: messageIds)
+        return try await post("v2/messages/share", body: body)
+    }
+
+    /// Convenience: get a share link for the current floating bar conversation
+    func getChatShareLink(sessionId: String) async throws -> String {
+        // For session-based chats, share the session
+        struct ShareSessionRequest: Encodable {
+            let session_id: String
+        }
+        let body = ShareSessionRequest(session_id: sessionId)
+        let response: ShareChatResponse = try await post("v2/messages/share", body: body)
+        return response.url
+    }
 }
 
 /// Response from rating a message
 struct MessageStatusResponse: Codable {
     let status: String
+}
+
+/// Response from sharing chat messages
+struct ShareChatResponse: Codable {
+    let url: String
+    let token: String
 }
 
 // MARK: - Chat Sessions API

@@ -8971,6 +8971,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get voiceRecordingFound => 'Optagelse fundet';
+
+  @override
   String get transcriptionConnecting => 'Forbinder transskription...';
 
   @override

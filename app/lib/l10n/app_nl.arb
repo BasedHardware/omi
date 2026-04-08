@@ -2926,6 +2926,7 @@
         }
     },
     "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
+    "voiceRecordingFound": "Opname gevonden",
     "transcriptionConnecting": "Transcriptie verbinden...",
     "transcriptionReconnecting": "Transcriptie opnieuw verbinden...",
     "transcriptionUnavailable": "Transcriptie niet beschikbaar",

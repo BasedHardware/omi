@@ -2931,6 +2931,7 @@
         }
     },
     "willSyncAutomatically": "synchronizuje sa automaticky",
+    "voiceRecordingFound": "Nahrávka nájdená",
     "transcriptionConnecting": "Pripájanie prepisu...",
     "transcriptionReconnecting": "Opätovné pripájanie prepisu...",
     "transcriptionUnavailable": "Prepis nie je dostupný",

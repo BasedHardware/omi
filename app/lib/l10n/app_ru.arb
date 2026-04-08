@@ -2961,6 +2961,7 @@
         }
     },
     "willSyncAutomatically": "синхронизируется автоматически",
+    "voiceRecordingFound": "Запись найдена",
     "transcriptionConnecting": "Подключение транскрипции...",
     "transcriptionReconnecting": "Повторное подключение транскрипции...",
     "transcriptionUnavailable": "Транскрипция недоступна",

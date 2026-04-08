@@ -2927,6 +2927,7 @@
         }
     },
     "willSyncAutomatically": "自動的に同期されます",
+    "voiceRecordingFound": "録音が見つかりました",
     "transcriptionConnecting": "文字起こしに接続中...",
     "transcriptionReconnecting": "文字起こしに再接続中...",
     "transcriptionUnavailable": "文字起こしは利用できません",

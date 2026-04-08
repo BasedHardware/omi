@@ -8967,6 +8967,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
 
   @override
+  String get voiceRecordingFound => 'रिकॉर्डिंग मिली';
+
+  @override
   String get transcriptionConnecting => 'ट्रांसक्रिप्शन कनेक्ट हो रहा है...';
 
   @override
