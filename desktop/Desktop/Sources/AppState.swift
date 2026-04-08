@@ -2508,6 +2508,19 @@ class AppState: ObservableObject {
             }
             if !newTranslations.isEmpty {
               speakerSegments[idx].translations = newTranslations
+
+              // Persist translations to SQLite
+              if let sessionId = currentSessionId {
+                let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+                if let jsonData = try? JSONEncoder().encode(mapped),
+                  let json = String(data: jsonData, encoding: .utf8)
+                {
+                  Task {
+                    try? await TranscriptionStorage.shared.updateSegmentTranslations(
+                      sessionId: sessionId, backendSegmentId: segId, translationsJson: json)
+                  }
+                }
+              }
             }
           }
           LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
