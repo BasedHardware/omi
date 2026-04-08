@@ -10,6 +10,7 @@ struct AskAIInputView: View {
     var canClearVisibleConversation: Bool = false
     var onSend: ((String) -> Void)?
     var onClearVisibleConversation: (() -> Void)?
+    var onEscape: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
 
     private let minHeight: CGFloat = 40
@@ -95,8 +96,7 @@ struct AskAIInputView: View {
             .frame(maxWidth: .infinity)
         }
         .onExitCommand {
-            guard canClearVisibleConversation else { return }
-            onClearVisibleConversation?()
+            onEscape?()
         }
     }
 

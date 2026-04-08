@@ -26,6 +26,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isInitialising: Bool = false
     @Published var isDragging: Bool = false
     @Published var isHoveringBar: Bool = false
+    @Published var requiresHoverReset: Bool = false
     @Published var currentNotification: FloatingBarNotification? = nil
 
     // AI conversation state

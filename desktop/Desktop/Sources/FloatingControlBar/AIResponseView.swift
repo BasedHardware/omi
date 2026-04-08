@@ -16,6 +16,7 @@ struct AIResponseView: View {
     var canClearVisibleConversation: Bool = false
 
     var onClearVisibleConversation: (() -> Void)?
+    var onEscape: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
@@ -90,8 +91,7 @@ struct AIResponseView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onExitCommand {
-            guard canClearVisibleConversation else { return }
-            onClearVisibleConversation?()
+            onEscape?()
         }
         .onAppear {
             if !isLoading {
