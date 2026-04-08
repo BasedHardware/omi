@@ -23,51 +23,10 @@ from models.transcript_segment import TranscriptSegment
 
 # Re-export all moved symbols for backward compatibility.
 # Existing callers can continue to use: from models.conversation import CategoryEnum, Structured, etc.
-__all__ = [
-    # Enums
-    'CategoryEnum',
-    'ConversationSource',
-    'ConversationStatus',
-    'ConversationVisibility',
-    'ExternalIntegrationConversationSource',
-    'PostProcessingModel',
-    'PostProcessingStatus',
-    # Structured models
-    'ActionItem',
-    'ActionItemsExtraction',
-    'Event',
-    'Structured',
-    # Domain models
-    'AudioFile',
-    'CalendarMeetingContext',
-    'ConversationPhoto',
-    'Geolocation',
-    'MeetingParticipant',
-    # Passthrough imports (used by star-import consumers like postprocess_conversation.py)
-    'Message',
-    'Person',
-    'TranscriptSegment',
-    # Core models (defined in this file)
-    'AppResult',
-    'BulkAssignSegmentsRequest',
-    'Conversation',
-    'ConversationPostProcessing',
-    'CreateConversation',
-    'CreateConversationResponse',
-    'CreateMemoryResponse',
-    'DeleteActionItemRequest',
-    'ExternalIntegrationCreateConversation',
-    'MergeConversationsRequest',
-    'MergeConversationsResponse',
-    'PluginResult',
-    'SearchRequest',
-    'SetConversationActionItemsStateRequest',
-    'SetConversationEventsStateRequest',
-    'TestPromptRequest',
-    'UpdateActionItemDescriptionRequest',
-    'UpdateConversation',
-    'UpdateSegmentTextRequest',
-]
+# NOTE: No __all__ here intentionally. Two files use `from models.conversation import *` and depend
+# on getting typing symbols (List, Optional) and passthrough imports (TranscriptSegment, Message,
+# Person) via the star import. Adding __all__ would break them. Phase 3 (#6423) will clean up the
+# star imports and add __all__ afterward.
 
 
 class UpdateConversation(BaseModel):

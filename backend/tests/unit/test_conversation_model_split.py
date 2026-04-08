@@ -85,22 +85,21 @@ class TestImportBackwardCompatibility:
 
         assert SearchRequest(query="test").query == "test"
 
-    def test_star_import_covers_all_symbols(self):
-        import importlib
-
-        mod = importlib.import_module('models.conversation')
-        for name in mod.__all__:
-            assert hasattr(mod, name), f"__all__ lists '{name}' but it's not in the module"
-
-    def test_star_import_includes_passthrough_symbols(self):
-        """Star import must include TranscriptSegment, Message, Person for backward compat."""
+    def test_star_import_provides_all_needed_symbols(self):
+        """Star import must include all symbols that existing consumers depend on."""
         ns = {}
         exec('from models.conversation import *', ns)
-        assert 'TranscriptSegment' in ns, "TranscriptSegment missing from star import"
-        assert 'Message' in ns, "Message missing from star import"
-        assert 'Person' in ns, "Person missing from star import"
-        assert 'Conversation' in ns, "Conversation missing from star import"
-        assert 'PostProcessingStatus' in ns, "PostProcessingStatus missing from star import"
+        # Models used by postprocess_conversation.py and process_conversation.py via star import
+        assert 'Conversation' in ns
+        assert 'TranscriptSegment' in ns
+        assert 'Message' in ns
+        assert 'Person' in ns
+        assert 'PostProcessingStatus' in ns
+        assert 'ConversationSource' in ns
+        assert 'CategoryEnum' in ns
+        assert 'Structured' in ns
+        # Typing symbols leaked by old module-level imports (postprocess_conversation.py uses List)
+        assert 'List' in ns
 
     def test_identity_preserved_across_import_paths(self):
         """Re-exported classes must be the same object, not copies."""
