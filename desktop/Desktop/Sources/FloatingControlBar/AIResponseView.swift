@@ -33,8 +33,9 @@ struct AIResponseView: View {
                             chatExchangeView(exchange)
                         }
 
-                        // Current question
-                        questionBar
+                        if hasUserInput(userInput) {
+                            questionBar
+                        }
 
                         // Current response
                         currentContentView
@@ -196,18 +197,19 @@ struct AIResponseView: View {
 
     private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Question bubble
-            HStack(alignment: .top, spacing: 8) {
-                Text(exchange.question)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if hasUserInput(exchange.question) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(exchange.question ?? "")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
 
             // Response with hover actions
             messageWithHoverActions(message: exchange.aiMessage)
@@ -276,6 +278,11 @@ struct AIResponseView: View {
             attributes: attributes
         ).size
         return size.height > font.pointSize * 1.5
+    }
+
+    private func hasUserInput(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var currentContentView: some View {
