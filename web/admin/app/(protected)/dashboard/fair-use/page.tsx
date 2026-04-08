@@ -76,7 +76,7 @@ function formatDate(dateStr?: string) {
 }
 
 export default function FairUsePage() {
-  const { fetchWithAuth } = useAuthFetch();
+  const { fetchWithAuth, token } = useAuthFetch();
   const [flaggedUsers, setFlaggedUsers] = useState<FlaggedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [stageFilter, setStageFilter] = useState<string>('');
@@ -87,6 +87,7 @@ export default function FairUsePage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchFlaggedUsers = useCallback(async () => {
+    if (!token) return;
     try {
       setLoading(true);
       setError(null);
@@ -101,7 +102,7 @@ export default function FairUsePage() {
     } finally {
       setLoading(false);
     }
-  }, [fetchWithAuth, stageFilter]);
+  }, [fetchWithAuth, stageFilter, token]);
 
   useEffect(() => {
     fetchFlaggedUsers();
