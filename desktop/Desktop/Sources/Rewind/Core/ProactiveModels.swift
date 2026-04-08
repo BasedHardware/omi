@@ -7,7 +7,7 @@ import GRDB
 enum ExtractionType: String, Codable, CaseIterable {
     case memory
     case task
-    case advice
+    case insight
 }
 
 // MARK: - Proactive Extraction Record

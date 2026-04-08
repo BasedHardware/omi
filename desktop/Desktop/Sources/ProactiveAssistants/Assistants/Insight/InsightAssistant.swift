@@ -2,17 +2,17 @@ import AppKit
 import Foundation
 import GRDB
 
-/// Proactive advice assistant that provides contextual suggestions based on screen content
-actor AdviceAssistant: ProactiveAssistant {
+/// Proactive insight assistant that provides contextual suggestions based on screen content
+actor InsightAssistant: ProactiveAssistant {
     // MARK: - ProactiveAssistant Protocol
 
-    nonisolated let identifier = "advice"
-    nonisolated let displayName = "Proactive Advisor"
+    nonisolated let identifier = "insight"
+    nonisolated let displayName = "Proactive Insights"
 
     var isEnabled: Bool {
         get async {
             await MainActor.run {
-                AdviceAssistantSettings.shared.isEnabled
+                InsightAssistantSettings.shared.isEnabled
             }
         }
     }
@@ -22,9 +22,9 @@ actor AdviceAssistant: ProactiveAssistant {
     private let geminiClient: GeminiClient
     private var isRunning = false
     private var lastAnalysisTime: Date = .distantPast
-    private var previousAdvice: [ExtractedAdvice] = [] // Dedup window for advice context
-    private let maxPreviousAdvice = 50
-    private let maxAdviceInPrompt = 30 // Only include first 30 in prompt to keep token count reasonable
+    private var previousInsights: [ExtractedInsight] = [] // Dedup window for insight context
+    private let maxPreviousInsights = 50
+    private let maxInsightsInPrompt = 30 // Only include first 30 in prompt to keep token count reasonable
     private var currentApp: String?
     private var pendingFrame: CapturedFrame?
     private var cachedLanguage: String?
@@ -37,7 +37,7 @@ actor AdviceAssistant: ProactiveAssistant {
     private var systemPrompt: String {
         get async {
             await MainActor.run {
-                AdviceAssistantSettings.shared.analysisPrompt
+                InsightAssistantSettings.shared.analysisPrompt
             }
         }
     }
@@ -46,7 +46,7 @@ actor AdviceAssistant: ProactiveAssistant {
     private var extractionInterval: TimeInterval {
         get async {
             await MainActor.run {
-                AdviceAssistantSettings.shared.extractionInterval
+                InsightAssistantSettings.shared.extractionInterval
             }
         }
     }
@@ -55,7 +55,7 @@ actor AdviceAssistant: ProactiveAssistant {
     private var minConfidence: Double {
         get async {
             await MainActor.run {
-                AdviceAssistantSettings.shared.minConfidence
+                InsightAssistantSettings.shared.minConfidence
             }
         }
     }
@@ -63,7 +63,7 @@ actor AdviceAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        // Use Gemini 3.1 Pro for better advice quality (3-pro-preview retires March 9, 2026)
+        // Use Gemini 3.1 Pro for better insight quality (3-pro-preview retires March 9, 2026)
         self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
@@ -88,30 +88,30 @@ actor AdviceAssistant: ProactiveAssistant {
         }
     }
 
-    /// Load previous advice from SQLite to persist dedup across app restarts
+    /// Load previous insights from SQLite to persist dedup across app restarts
     private func loadPreviousAdviceFromDB() async {
         do {
             let memories = try await MemoryStorage.shared.getLocalMemories(
-                limit: maxPreviousAdvice,
+                limit: maxPreviousInsights,
                 category: "system",
                 tags: ["tips"]
             )
             for memory in memories {
-                let advice = ExtractedAdvice(
-                    advice: memory.content,
+                let insight = ExtractedInsight(
+                    insight: memory.content,
                     headline: nil,
                     reasoning: nil,
                     category: .other,
                     sourceApp: memory.sourceApp ?? "",
                     confidence: 0.0
                 )
-                previousAdvice.append(advice)
+                previousInsights.append(insight)
             }
-            if !previousAdvice.isEmpty {
-                log("Advice: Loaded \(previousAdvice.count) previous tips from DB for dedup")
+            if !previousInsights.isEmpty {
+                log("Insight: Loaded \(previousInsights.count) previous tips from DB for dedup")
             }
         } catch {
-            logError("Advice: Failed to load previous tips from DB", error: error)
+            logError("Insight: Failed to load previous tips from DB", error: error)
         }
     }
 
@@ -146,7 +146,7 @@ actor AdviceAssistant: ProactiveAssistant {
     /// Used by the test runner to replay past screenshots.
     /// `screenshotTime` anchors the activity summary to the screenshot's actual timestamp.
     /// Returns (result, sqlQueryCount) where sqlQueryCount is the number of execute_sql tool calls made.
-    func testAnalyze(jpegData: Data, appName: String, windowTitle: String? = nil, screenshotTime: Date) async throws -> (AdviceExtractionResult?, Int) {
+    func testAnalyze(jpegData: Data, appName: String, windowTitle: String? = nil, screenshotTime: Date) async throws -> (InsightExtractionResult?, Int) {
         let interval = await extractionInterval
         let lookbackStart = screenshotTime.addingTimeInterval(-interval)
         return try await runAdviceExtraction(
@@ -169,10 +169,10 @@ actor AdviceAssistant: ProactiveAssistant {
     }
 
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
-        // Skip apps excluded from advice extraction (built-in + user's custom list)
-        let excluded = await MainActor.run { AdviceAssistantSettings.shared.isAppExcluded(frame.appName) }
+        // Skip apps excluded from insight extraction (built-in + user's custom list)
+        let excluded = await MainActor.run { InsightAssistantSettings.shared.isAppExcluded(frame.appName) }
         if excluded {
-            log("Advice: Skipping excluded app '\(frame.appName)'")
+            log("Insight: Skipping excluded app '\(frame.appName)'")
             return nil
         }
 
@@ -185,44 +185,44 @@ actor AdviceAssistant: ProactiveAssistant {
 
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
         // This method is required by protocol but we use handleResultWithScreenshot instead
-        guard let adviceResult = result as? AdviceExtractionResult else { return }
-        await handleResultWithScreenshot(adviceResult, screenshotId: nil, sendEvent: sendEvent)
+        guard let insightResult = result as? InsightExtractionResult else { return }
+        await handleResultWithScreenshot(insightResult, screenshotId: nil, sendEvent: sendEvent)
     }
 
     /// Handle result with screenshot ID for SQLite storage
     private func handleResultWithScreenshot(
-        _ adviceResult: AdviceExtractionResult,
+        _ adviceResult: InsightExtractionResult,
         screenshotId: Int64?,
         windowTitle: String? = nil,
         sendEvent: @escaping (String, [String: Any]) -> Void
     ) async {
-        // Check if AI has new advice (should almost always be true now - only false for duplicates)
-        guard adviceResult.hasAdvice, let advice = adviceResult.advice else {
-            log("Advice: Skipped (duplicate or no context)")
+        // Check if AI has new insight (should almost always be true now - only false for duplicates)
+        guard adviceResult.hasInsight, let extractedInsight = adviceResult.insight else {
+            log("Insight: Skipped (duplicate or no context)")
             return
         }
 
         // Get min confidence threshold
         let threshold = await minConfidence
-        let confidencePercent = Int(advice.confidence * 100)
+        let confidencePercent = Int(extractedInsight.confidence * 100)
 
         // Check confidence threshold
-        guard advice.confidence >= threshold else {
-            log("Advice: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(advice.advice)\"")
+        guard extractedInsight.confidence >= threshold else {
+            log("Insight: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(extractedInsight.insight)\"")
             return
         }
 
-        log("Advice: [\(confidencePercent)% conf.] \"\(advice.advice)\"")
+        log("Insight: [\(confidencePercent)% conf.] \"\(extractedInsight.insight)\"")
 
-        // Add to previous advice (keep last 10 for context)
-        previousAdvice.insert(advice, at: 0)
-        if previousAdvice.count > maxPreviousAdvice {
-            previousAdvice.removeLast()
+        // Add to previous insights (keep last N for context)
+        previousInsights.insert(extractedInsight, at: 0)
+        if previousInsights.count > maxPreviousInsights {
+            previousInsights.removeLast()
         }
 
         // Save to SQLite first
-        let extractionRecord = await saveAdviceToSQLite(
-            advice: advice,
+        let extractionRecord = await saveInsightToSQLite(
+            insight: extractedInsight,
             screenshotId: screenshotId,
             contextSummary: adviceResult.contextSummary,
             currentActivity: adviceResult.currentActivity,
@@ -230,52 +230,52 @@ actor AdviceAssistant: ProactiveAssistant {
         )
 
         // Sync to backend and update local record with backendId
-        if let backendId = await syncAdviceToBackend(advice: advice, adviceResult: adviceResult, windowTitle: windowTitle) {
+        if let backendId = await syncInsightToBackend(insight: extractedInsight, insightResult: adviceResult, windowTitle: windowTitle) {
             if let recordId = extractionRecord?.id {
                 do {
                     try await MemoryStorage.shared.markSynced(id: recordId, backendId: backendId)
                 } catch {
-                    logError("Advice: Failed to update sync status", error: error)
+                    logError("Insight: Failed to update sync status", error: error)
                 }
             }
         }
 
-        // Also update AdviceStorage cache (for UI display)
+        // Also update InsightStorage cache (for UI display)
         await MainActor.run {
-            AdviceStorage.shared.addAdvice(adviceResult)
+            InsightStorage.shared.addInsight(adviceResult)
         }
 
-        // Track advice generated
+        // Track insight generated
         await MainActor.run {
-            AnalyticsManager.shared.adviceGenerated(category: advice.category.rawValue)
+            AnalyticsManager.shared.insightGenerated(category: extractedInsight.category.rawValue)
         }
 
         // Send notification if enabled
         let notificationsEnabled = await MainActor.run {
-            AdviceAssistantSettings.shared.notificationsEnabled
+            InsightAssistantSettings.shared.notificationsEnabled
         }
         if notificationsEnabled {
-            await sendAdviceNotification(advice: advice)
+            await sendInsightNotification(insight: extractedInsight)
         }
 
         // Send event to Flutter
-        sendEvent("adviceProvided", [
+        sendEvent("insightProvided", [
             "assistant": identifier,
-            "advice": advice.toDictionary(),
+            "insight": extractedInsight.toDictionary(),
             "contextSummary": adviceResult.contextSummary
         ])
     }
 
-    /// Save advice to SQLite using MemoryStorage with tips tags
-    private func saveAdviceToSQLite(
-        advice: ExtractedAdvice,
+    /// Save insight to SQLite using MemoryStorage with tips tags
+    private func saveInsightToSQLite(
+        insight: ExtractedInsight,
         screenshotId: Int64?,
         contextSummary: String,
         currentActivity: String,
         windowTitle: String? = nil
     ) async -> MemoryRecord? {
         // Build tags: ["tips", "<category>"]
-        let categoryTag = advice.category.rawValue.lowercased()
+        let categoryTag = insight.category.rawValue.lowercased()
         let tags = ["tips", categoryTag]
 
         // Encode tags as JSON
@@ -289,67 +289,67 @@ actor AdviceAssistant: ProactiveAssistant {
 
         let record = MemoryRecord(
             backendSynced: false,
-            content: advice.advice,
+            content: insight.insight,
             category: "system",  // Tips are stored as system category with tags
             tagsJson: tagsJson,
             source: "screenshot",
             screenshotId: screenshotId,
-            confidence: advice.confidence,
-            reasoning: advice.reasoning,
-            sourceApp: advice.sourceApp,
+            confidence: insight.confidence,
+            reasoning: insight.reasoning,
+            sourceApp: insight.sourceApp,
             windowTitle: windowTitle,
             contextSummary: contextSummary,
             currentActivity: currentActivity,
-            headline: advice.headline
+            headline: insight.headline
         )
 
         do {
             let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
-            log("Advice: Saved to SQLite (id: \(inserted.id ?? -1)) with tags \(tags)")
+            log("Insight: Saved to SQLite (id: \(inserted.id ?? -1)) with tags \(tags)")
             return inserted
         } catch {
-            logError("Advice: Failed to save to SQLite", error: error)
+            logError("Insight: Failed to save to SQLite", error: error)
             return nil
         }
     }
 
-    /// Sync advice to backend API, returns backend ID if successful
-    private func syncAdviceToBackend(advice: ExtractedAdvice, adviceResult: AdviceExtractionResult, windowTitle: String? = nil) async -> String? {
+    /// Sync insight to backend API, returns backend ID if successful
+    private func syncInsightToBackend(insight: ExtractedInsight, insightResult: InsightExtractionResult, windowTitle: String? = nil) async -> String? {
         do {
             // Build tags: ["tips", "<category>"]
-            let categoryTag = advice.category.rawValue.lowercased()
+            let categoryTag = insight.category.rawValue.lowercased()
             let tags = ["tips", categoryTag]
 
             let response = try await APIClient.shared.createMemory(
-                content: advice.advice,
+                content: insight.insight,
                 visibility: "private",
                 category: .system,
-                confidence: advice.confidence,
-                sourceApp: advice.sourceApp,
-                contextSummary: adviceResult.contextSummary,
+                confidence: insight.confidence,
+                sourceApp: insight.sourceApp,
+                contextSummary: insightResult.contextSummary,
                 tags: tags,
-                reasoning: advice.reasoning,
-                currentActivity: adviceResult.currentActivity,
+                reasoning: insight.reasoning,
+                currentActivity: insightResult.currentActivity,
                 source: "screenshot",
                 windowTitle: windowTitle,
-                headline: advice.headline
+                headline: insight.headline
             )
 
-            log("Advice: Synced to backend (id: \(response.id))")
+            log("Insight: Synced to backend (id: \(response.id))")
             return response.id
         } catch {
-            logError("Advice: Failed to sync to backend", error: error)
+            logError("Insight: Failed to sync to backend", error: error)
             return nil
         }
     }
 
-    /// Send a notification for the advice (uses short headline for notification body)
-    private func sendAdviceNotification(advice: ExtractedAdvice) async {
-        let message = advice.headline ?? advice.advice
+    /// Send a notification for the insight (uses short headline for notification body)
+    private func sendInsightNotification(insight: ExtractedInsight) async {
+        let message = insight.headline ?? insight.insight
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
-                title: "Tip",
+                title: "Insight",
                 message: message,
                 assistantId: identifier
             )
@@ -359,9 +359,9 @@ actor AdviceAssistant: ProactiveAssistant {
     func onAppSwitch(newApp: String) async {
         if newApp != currentApp {
             if let previousApp = currentApp {
-                log("Advice: APP SWITCH: \(previousApp) -> \(newApp)")
+                log("Insight: APP SWITCH: \(previousApp) -> \(newApp)")
             } else {
-                log("Advice: Active app: \(newApp)")
+                log("Insight: Active app: \(newApp)")
             }
             currentApp = newApp
         }
@@ -369,7 +369,7 @@ actor AdviceAssistant: ProactiveAssistant {
 
     func clearPendingWork() async {
         pendingFrame = nil
-        log("Advice: Cleared pending frame")
+        log("Insight: Cleared pending frame")
     }
 
     func stop() async {
@@ -450,11 +450,11 @@ actor AdviceAssistant: ProactiveAssistant {
                 }
             }
         } catch {
-            logError("Advice extraction error", error: error)
+            logError("Insight extraction error", error: error)
         }
     }
 
-    private func extractAdvice(from frame: CapturedFrame) async throws -> AdviceExtractionResult? {
+    private func extractAdvice(from frame: CapturedFrame) async throws -> InsightExtractionResult? {
         let now = Date()
         // Cap lookback: since last analysis or max 1 hour ago
         let lookbackStart = max(lastAnalysisTime, now.addingTimeInterval(-3600))
@@ -471,7 +471,7 @@ actor AdviceAssistant: ProactiveAssistant {
 
     // MARK: - Core Extraction (shared by production + test)
 
-    /// Two-phase advice extraction:
+    /// Two-phase insight extraction:
     /// Phase 1 (text-only): Activity summary + SQL investigation loop. Model investigates via
     ///   execute_sql, then calls `request_screenshot` with an ID and its findings so far.
     /// Phase 2 (single vision call): Load the chosen screenshot + Phase 1 findings → single
@@ -484,7 +484,7 @@ actor AdviceAssistant: ProactiveAssistant {
         referenceTime: Date,
         lookbackStart: Date,
         trackSqlCount: Bool
-    ) async throws -> (AdviceExtractionResult?, Int) {
+    ) async throws -> (InsightExtractionResult?, Int) {
         var sqlCount = 0
 
         // Build prompt with current context
@@ -498,13 +498,13 @@ actor AdviceAssistant: ProactiveAssistant {
 
         // Add activity summary from database, anchored to the reference time
         let elapsed = referenceTime.timeIntervalSince(lookbackStart)
-        log("Advice: Activity lookback: \(String(format: "%.0f", elapsed))s (\(lookbackStart) to \(referenceTime))")
+        log("Insight: Activity lookback: \(String(format: "%.0f", elapsed))s (\(lookbackStart) to \(referenceTime))")
         let activitySummary = await buildActivitySummary(from: lookbackStart, to: referenceTime)
         if !activitySummary.isEmpty {
             prompt += "\n\n" + activitySummary
-            log("Advice: --- ACTIVITY SUMMARY ---\n\(activitySummary)")
+            log("Insight: --- ACTIVITY SUMMARY ---\n\(activitySummary)")
         } else {
-            log("Advice: --- ACTIVITY SUMMARY --- (empty, no screenshots in range)")
+            log("Insight: --- ACTIVITY SUMMARY --- (empty, no screenshots in range)")
         }
 
         // Add user profile for context
@@ -513,25 +513,25 @@ actor AdviceAssistant: ProactiveAssistant {
             prompt += profile.profileText + "\n"
         }
 
-        // Add previous advice for dedup
-        if !previousAdvice.isEmpty {
-            prompt += "\n\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
-            let adviceToInclude = previousAdvice.prefix(maxAdviceInPrompt)
-            for (index, advice) in adviceToInclude.enumerated() {
-                prompt += "\(index + 1). \(advice.advice)"
-                if let reasoning = advice.reasoning {
+        // Add previous insights for dedup
+        if !previousInsights.isEmpty {
+            prompt += "\n\nPREVIOUSLY PROVIDED INSIGHTS (do not repeat these or semantically similar):\n"
+            let insightsToInclude = previousInsights.prefix(maxInsightsInPrompt)
+            for (index, prev) in insightsToInclude.enumerated() {
+                prompt += "\(index + 1). \(prev.insight)"
+                if let reasoning = prev.reasoning {
                     prompt += " (Reasoning: \(reasoning))"
                 }
                 prompt += "\n"
             }
-            prompt += "\nOnly provide advice if there's a genuinely NEW non-obvious insight not covered above."
+            prompt += "\nOnly provide insight if there's a genuinely NEW non-obvious insight not covered above."
         } else {
-            prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
+            prompt += "\n\nOnly provide insight if there's something specific and non-obvious that would help."
         }
 
         prompt += "\n\nInvestigate the activity summary. Scan OCR from the TOP 3-5 apps (not just the dominant one) — the best insights often come from browsers, communication apps, and notes, not just the app with the most screenshots. Skip apps with < 10 screenshots. When you've identified the most interesting screenshot, call request_screenshot with the ID and your findings. Or call no_advice if nothing qualifies."
 
-        log("Advice: --- PROMPT ---\n\(prompt)")
+        log("Insight: --- PROMPT ---\n\(prompt)")
 
         // Build system prompt
         var currentSystemPrompt = await systemPrompt
@@ -572,12 +572,12 @@ actor AdviceAssistant: ProactiveAssistant {
                     )
                 }
             } catch {
-                log("Advice: Phase 1 failed on iteration \(iteration): \(error.localizedDescription)")
+                log("Insight: Phase 1 failed on iteration \(iteration): \(error.localizedDescription)")
                 throw error
             }
 
             guard let toolCall = result.toolCalls.first else {
-                log("Advice: Phase 1 — no tool call on iteration \(iteration), breaking")
+                log("Insight: Phase 1 — no tool call on iteration \(iteration), breaking")
                 break
             }
 
@@ -585,11 +585,11 @@ actor AdviceAssistant: ProactiveAssistant {
             case "execute_sql":
                 let query = toolCall.arguments["query"] as? String ?? ""
                 sqlCount += 1
-                log("Advice: P1 execute_sql iter \(iteration): \(query)")
+                log("Insight: P1 execute_sql iter \(iteration): \(query)")
                 let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
                 let resultStr = await ChatToolExecutor.execute(sqlToolCall)
                 let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
-                log("Advice: P1 sql result (\(resultStr.count) chars): \(truncated)")
+                log("Insight: P1 sql result (\(resultStr.count) chars): \(truncated)")
 
                 contents.append(GeminiImageToolRequest.Content(
                     role: "model",
@@ -619,22 +619,22 @@ actor AdviceAssistant: ProactiveAssistant {
                 } else if let idDouble = toolCall.arguments["screenshot_id"] as? Double {
                     chosenScreenshotId = Int64(idDouble)
                 }
-                log("Advice: P1 request_screenshot iter \(iteration): id=\(chosenScreenshotId ?? 0), findings=\(findings.prefix(200))")
+                log("Insight: P1 request_screenshot iter \(iteration): id=\(chosenScreenshotId ?? 0), findings=\(findings.prefix(200))")
                 break // Exit phase 1
 
             case "no_advice":
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-                log("Advice: P1 no_advice — \(contextSummary)")
-                return (AdviceExtractionResult(
-                    hasAdvice: false,
-                    advice: nil,
+                log("Insight: P1 no_advice — \(contextSummary)")
+                return (InsightExtractionResult(
+                    hasInsight: false,
+                    insight: nil,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
                 ), sqlCount)
 
             default:
-                log("Advice: P1 unknown tool: \(toolCall.name), breaking")
+                log("Insight: P1 unknown tool: \(toolCall.name), breaking")
                 break
             }
 
@@ -644,7 +644,7 @@ actor AdviceAssistant: ProactiveAssistant {
 
         // If Phase 1 exhausted without choosing a screenshot, no advice
         guard let screenshotId = chosenScreenshotId, let findings = investigationFindings else {
-            log("Advice: Phase 1 exhausted without request_screenshot")
+            log("Insight: Phase 1 exhausted without request_screenshot")
             return (nil, sqlCount)
         }
 
@@ -652,28 +652,28 @@ actor AdviceAssistant: ProactiveAssistant {
         // PHASE 2: Single vision call with chosen screenshot
         // =============================================
 
-        log("Advice: Phase 2 — loading screenshot \(screenshotId)")
+        log("Insight: Phase 2 — loading screenshot \(screenshotId)")
 
         // Load the screenshot image
         let imageData: Data
         do {
             guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
-                log("Advice: P2 screenshot not in DB: \(screenshotId)")
+                log("Insight: P2 screenshot not in DB: \(screenshotId)")
                 return (nil, sqlCount)
             }
             // Check active chunk
             if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath {
                 let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
                 if chunk == activeChunk {
-                    log("Advice: P2 screenshot is in active chunk, skipping")
+                    log("Insight: P2 screenshot is in active chunk, skipping")
                     return (nil, sqlCount)
                 }
             }
             let rawData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
             imageData = Self.compressForGemini(rawData) ?? rawData
-            log("Advice: P2 loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
+            log("Insight: P2 loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
         } catch {
-            log("Advice: P2 screenshot load failed: \(error.localizedDescription)")
+            log("Insight: P2 screenshot load failed: \(error.localizedDescription)")
             return (nil, sqlCount)
         }
 
@@ -684,7 +684,7 @@ actor AdviceAssistant: ProactiveAssistant {
 
             The screenshot below is from the app/window identified during investigation.
 
-            Before giving advice, CROSS-REFERENCE your findings:
+            Before giving insight, CROSS-REFERENCE your findings:
             - Use execute_sql to check if this issue was resolved in later screenshots
             - Check if the user moved on to something else (the issue may be stale)
             - Verify the context is still relevant by looking at nearby timestamps
@@ -721,12 +721,12 @@ actor AdviceAssistant: ProactiveAssistant {
                     )
                 }
             } catch {
-                log("Advice: Phase 2 failed on iteration \(p2Iteration): \(error.localizedDescription)")
+                log("Insight: Phase 2 failed on iteration \(p2Iteration): \(error.localizedDescription)")
                 throw error
             }
 
             guard let toolCall = phase2Result.toolCalls.first else {
-                log("Advice: Phase 2 — no tool call on iteration \(p2Iteration), breaking")
+                log("Insight: Phase 2 — no tool call on iteration \(p2Iteration), breaking")
                 break
             }
 
@@ -734,11 +734,11 @@ actor AdviceAssistant: ProactiveAssistant {
             case "execute_sql":
                 let query = toolCall.arguments["query"] as? String ?? ""
                 sqlCount += 1
-                log("Advice: P2 execute_sql iter \(p2Iteration): \(query)")
+                log("Insight: P2 execute_sql iter \(p2Iteration): \(query)")
                 let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
                 let resultStr = await ChatToolExecutor.execute(sqlToolCall)
                 let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
-                log("Advice: P2 sql result (\(resultStr.count) chars): \(truncated)")
+                log("Insight: P2 sql result (\(resultStr.count) chars): \(truncated)")
 
                 phase2Contents.append(GeminiImageToolRequest.Content(
                     role: "model",
@@ -757,22 +757,22 @@ actor AdviceAssistant: ProactiveAssistant {
                 continue
 
             case "provide_advice":
-                log("Advice: P2 provide_advice (after \(p2Iteration) cross-reference iterations)")
+                log("Insight: P2 provide_advice (after \(p2Iteration) cross-reference iterations)")
                 return (parseProvideAdvice(toolCall), sqlCount)
 
             case "no_advice":
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-                log("Advice: P2 no_advice — \(contextSummary)")
-                return (AdviceExtractionResult(
-                    hasAdvice: false,
-                    advice: nil,
+                log("Insight: P2 no_advice — \(contextSummary)")
+                return (InsightExtractionResult(
+                    hasInsight: false,
+                    insight: nil,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
                 ), sqlCount)
 
             default:
-                log("Advice: P2 unexpected tool: \(toolCall.name)")
+                log("Insight: P2 unexpected tool: \(toolCall.name)")
                 break
             }
             break // Break on unexpected tool
@@ -833,11 +833,11 @@ actor AdviceAssistant: ProactiveAssistant {
                 }
 
                 let summary = lines.joined(separator: "\n")
-                log("Advice: Activity summary (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots)")
+                log("Insight: Activity summary (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots)")
                 return summary
             }
         } catch {
-            logError("Advice: Failed to build activity summary", error: error)
+            logError("Insight: Failed to build activity summary", error: error)
             return ""
         }
     }
@@ -908,7 +908,7 @@ actor AdviceAssistant: ProactiveAssistant {
                         "advice": .init(type: "string", description: "The advice text (1-2 sentences, max 100 chars). Start with what you noticed, then why it matters."),
                         "headline": .init(type: "string", description: "Ultra-short observation (max 5 words) for notification preview. E.g. 'Draft saved in /tmp', 'Credentials visible in terminal'"),
                         "reasoning": .init(type: "string", description: "Brief explanation of why this advice is relevant"),
-                        "category": .init(type: "string", description: "Category of advice", enumValues: ["productivity", "communication", "learning", "other"]),
+                        "category": .init(type: "string", description: "Category of insight", enumValues: ["productivity", "communication", "learning", "other"]),
                         "source_app": .init(type: "string", description: "App where context was observed"),
                         "confidence": .init(type: "number", description: "Confidence score 0.0-1.0. 0.90+: preventing clear mistake. 0.75-0.89: highly relevant non-obvious tip. 0.60-0.74: useful but user might know."),
                         "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
@@ -934,13 +934,13 @@ actor AdviceAssistant: ProactiveAssistant {
 
     // MARK: - Parse Tool Results
 
-    /// Parse the provide_advice tool call into an AdviceExtractionResult
-    private func parseProvideAdvice(_ toolCall: ToolCall) -> AdviceExtractionResult {
+    /// Parse the provide_advice tool call into an InsightExtractionResult
+    private func parseProvideAdvice(_ toolCall: ToolCall) -> InsightExtractionResult {
         let adviceText = toolCall.arguments["advice"] as? String ?? ""
         let headline = toolCall.arguments["headline"] as? String
         let reasoning = toolCall.arguments["reasoning"] as? String
         let categoryStr = toolCall.arguments["category"] as? String ?? "other"
-        let category = AdviceCategory(rawValue: categoryStr) ?? .other
+        let category = InsightCategory(rawValue: categoryStr) ?? .other
         let sourceApp = toolCall.arguments["source_app"] as? String ?? ""
         let contextSummary = toolCall.arguments["context_summary"] as? String ?? ""
         let currentActivity = toolCall.arguments["current_activity"] as? String ?? ""
@@ -956,8 +956,8 @@ actor AdviceAssistant: ProactiveAssistant {
             confidence = 0.5
         }
 
-        let advice = ExtractedAdvice(
-            advice: adviceText,
+        let insight = ExtractedInsight(
+            insight: adviceText,
             headline: headline,
             reasoning: reasoning,
             category: category,
@@ -965,18 +965,18 @@ actor AdviceAssistant: ProactiveAssistant {
             confidence: confidence
         )
 
-        log("Advice: --- PROVIDE_ADVICE ---")
-        log("Advice:   advice: \(adviceText)")
-        log("Advice:   headline: \(headline ?? "(none)")")
-        log("Advice:   reasoning: \(reasoning ?? "(none)")")
-        log("Advice:   category: \(categoryStr)")
-        log("Advice:   source_app: \(sourceApp)")
-        log("Advice:   confidence: \(confidence)")
-        log("Advice:   context: \(contextSummary)")
-        log("Advice:   activity: \(currentActivity)")
-        return AdviceExtractionResult(
-            hasAdvice: true,
-            advice: advice,
+        log("Insight: --- PROVIDE_ADVICE ---")
+        log("Insight:   insight: \(adviceText)")
+        log("Insight:   headline: \(headline ?? "(none)")")
+        log("Insight:   reasoning: \(reasoning ?? "(none)")")
+        log("Insight:   category: \(categoryStr)")
+        log("Insight:   source_app: \(sourceApp)")
+        log("Insight:   confidence: \(confidence)")
+        log("Insight:   context: \(contextSummary)")
+        log("Insight:   activity: \(currentActivity)")
+        return InsightExtractionResult(
+            hasInsight: true,
+            insight: insight,
             contextSummary: contextSummary,
             currentActivity: currentActivity
         )
