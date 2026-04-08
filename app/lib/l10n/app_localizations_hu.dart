@@ -1471,7 +1471,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get payYourSttProvider => 'Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.';
 
   @override
-  String get freeMinutesMonth => '4800 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
+  String get freeMinutesMonth => '1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1827,7 +1827,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get skipThisQuestion => 'Kérdés kihagyása';
 
   @override
-  String get skipForNow => 'Egyelőre kihagyom';
+  String get skipForNow => 'Kihagyás most';
 
   @override
   String get connectionError => 'Kapcsolódási hiba';
@@ -4786,7 +4786,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
 
   @override
-  String get basicPlanDescription => '4800 prémium perc + korlátlan eszközön';
+  String get basicPlanDescription => '1200 prémium perc + korlátlan eszközön';
 
   @override
   String get minutes => 'perc';
@@ -6120,7 +6120,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cloudProvider => 'Felhő szolgáltató';
 
   @override
-  String get premiumMinutesInfo => '4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
+  String get premiumMinutesInfo => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
@@ -6201,7 +6201,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryDrainSignificantly => 'Az akkumulátor-lemerülés jelentősen növekedni fog.';
 
   @override
-  String get premiumMinutesMonth => '4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+  String get premiumMinutesMonth => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8593,62 +8593,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get clearAll => 'Összes törlése';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Billentyűzet';
 
   @override
@@ -8720,4 +8664,487 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'A felvétel folytatódik — újrakapcsolódás az átíráshoz...';
+
+  @override
+  String get enableE2ee => 'E2EE engedélyezése';
+
+  @override
+  String get recoveryKey => 'Helyreállítási kulcs';
+
+  @override
+  String get saveKeyMessage =>
+      'Mentse el ezt a kulcsot biztonságos helyre. Szüksége lesz rá a titkosított emlékek helyreállításához, ha eszközt vált.';
+
+  @override
+  String get savedMyKey => 'Elmentettem a kulcsomat';
+
+  @override
+  String get showRecoveryKey => 'Helyreállítási kulcs mutatása';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Ha elveszíti a helyreállítási kulcsot, adatai nem állíthatók helyre.';
+
+  @override
+  String get e2eeBackupReminder => 'Készítsen biztonsági másolatot a kulcsról az engedélyezés után.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Az E2EE engedélyezése sikertelen: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Kulcs a vágólapra másolva';
+
+  @override
+  String get e2eeMemoriesDescription => 'Az eszközén titkosítva, mielőtt eléri a szervert. Csak Ön tudja olvasni.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Nyugalmi állapotban titkosítva a szerveren. A szerver feldolgozza a hangot átíráshoz, de a tárolt adatok titkosítottak.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Maximális védelem — emlékek az eszközön titkosítva, minden más adat nyugalmi állapotban titkosítva';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Titkosított — nem sikerült visszafejteni. Ellenőrizze a helyreállítási kulcsot.';
+
+  @override
+  String get pairWithWeb => 'Párosítás a webbel';
+
+  @override
+  String get scanQrOnWeb => 'Olvassa be ezt a QR-kódot az omi.me oldalon a titkosított adatok feloldásához';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Lejár $seconds mp múlva';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Csak megbízható eszközön olvassa be';
+
+  @override
+  String get e2eeEnableDialogIntro => 'A végpontok közötti titkosítás a legmagasabb szintű adatvédelmet nyújtja:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Emlékek: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Beszélgetések, chat és egyéb adatok: ';
+
+  @override
+  String get switchToSecureEncryption => 'Váltás biztonságos titkosításra?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Ez újratitkosítja az adataidat szerver által kezelt kulcsokkal. A végpontok közötti titkosítási kulcsod többé nem lesz használatban.\n\nAz adataid továbbra is titkosítva maradnak nyugalmi állapotban, de a kulcsokat a szerver kezeli.';
+
+  @override
+  String get switchButton => 'Váltás';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'A harmadik féltől származó alkalmazások és integrációk nem férnek hozzá a titkosított adataidhoz, hacsak nem adod meg nekik a kulcsodat.';
+
+  @override
+  String get preparingMigration => 'Migráció előkészítése...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Helyreállítási kulcs szükséges';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Hiányzik az E2EE titkosítási kulcsod. Illeszd be a helyreállítási kulcsot a titkosított adataidhoz való hozzáférés visszaállításához.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Helyreállítási kulcs beillesztése';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Helyreállítás';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'A kulcs sikeresen helyreállítva';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Hibás kulcs — nem egyezik az adataid titkosításához használt kulccsal';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Elvesztettem a helyreállítási kulcsomat';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Helyreállítási kulcs nélkül egy másik bejelentkezett eszközről kell kikapcsolnod az E2EE-t, vagy kapcsolatba kell lépned a támogatással a titkosítás visszaállításához.';
+
+  @override
+  String get processingOnServer => 'Feldolgozás a szerveren...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Feldolgozás... $current/$total szegmens';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Méltányos használat: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Kapcsolat javítása';
+
+  @override
+  String get improveConnectionContent =>
+      'Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.';
+
+  @override
+  String get improveConnectionAction => 'Értem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Az eszköz órája ~$minutes perccel eltér. Ellenőrizze a dátum- és időbeállításokat.';
+  }
+
+  @override
+  String get omisStorage => 'Omi tárhelye';
+
+  @override
+  String get phoneStorage => 'Telefon tárhelye';
+
+  @override
+  String get cloudStorage => 'Felhő tárhely';
+
+  @override
+  String get howSyncingWorks => 'Hogyan működik a szinkronizálás';
+
+  @override
+  String get noSyncedRecordings => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get recordingsSyncAutomatically => 'A felvételek automatikusan szinkronizálódnak — nincs teendő.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'A már letöltött fájlok legközelebb feltöltődnek.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés létrehozva',
+      one: '1 beszélgetés létrehozva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Koppintson a megtekintéshez';
+
+  @override
+  String get syncFailed => 'Szinkronizálás sikertelen';
+
+  @override
+  String get keepSyncing => 'Szinkronizálás folytatása';
+
+  @override
+  String get cancelSyncQuestion => 'Szinkronizálás megszakítása?';
+
+  @override
+  String get omisStorageDesc =>
+      'Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Amikor az Omi újra csatlakozik, a felvételek automatikusan átkerülnek a telefonjára feltöltés előtt.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Feltöltés után a felvételei feldolgozásra és átírásra kerülnek. A beszélgetések egy percen belül elérhetők lesznek.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz';
+
+  @override
+  String get tipStableInternet => 'Stabil internet gyorsítja a felhőbe feltöltést';
+
+  @override
+  String get tipAutoSync => 'A felvételek automatikusan szinkronizálódnak';
+
+  @override
+  String get storageSection => 'TÁRHELY';
+
+  @override
+  String get permissions => 'Engedélyek';
+
+  @override
+  String get permissionEnabled => 'Engedélyezve';
+
+  @override
+  String get permissionEnable => 'Engedélyezés';
+
+  @override
+  String get permissionsPageDescription =>
+      'Ezek az engedélyek alapvetőek az Omi működéséhez. Kulcsfontosságú funkciókat tesznek lehetővé, mint az értesítések, helymeghatározáson alapuló élmények és hangfelvétel.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Az Omi néhány engedélyre van szüksége a megfelelő működéshez. Kérjük, add meg őket a folytatáshoz.';
+
+  @override
+  String get permissionsSetupTitle => 'Szerezd meg a legjobb élményt';
+
+  @override
+  String get permissionsSetupDescription => 'Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.';
+
+  @override
+  String get permissionsChangeAnytime => 'Ezeket bármikor módosíthatod a Beállítások > Engedélyek menüben';
+
+  @override
+  String get location => 'Helyzet';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miért mondod le?';
+
+  @override
+  String get cancelReasonSubtitle => 'El tudod mondani, miért távozol?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Túl drága';
+
+  @override
+  String get cancelReasonNotUsing => 'Nem használom eleget';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Hiányzó funkciók';
+
+  @override
+  String get cancelReasonAudioQuality => 'Hang/átírási minőség';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Akkumerülési aggodalmak';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Találtam alternatívát';
+
+  @override
+  String get cancelReasonOther => 'Egyéb';
+
+  @override
+  String get tellUsMore => 'Mondj el többet (opcionális)';
+
+  @override
+  String get cancelReasonDetailHint => 'Minden visszajelzést értékelünk...';
+
+  @override
+  String get justAMoment => 'Egy pillanat, kérlek';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Erősen javasoljuk, hogy a lemondás helyett fedezd fel a többi lehetőségedet.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'A csomagod aktív marad $date-ig. Ezután az ingyenes verzióra leszel átállítva korlátozott funkciókkal.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ha lemondod:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'A számlázási időszak végén már nem lesz korlátlan hozzáférésed.';
+
+  @override
+  String get cancelConsequenceBattery => '7x több akkuhasználat (eszközön történő feldolgozás)';
+
+  @override
+  String get cancelConsequenceQuality => '30%-kal alacsonyabb átírási minőség (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 másodperces feldolgozási késleltetés (eszközön lévő modellek)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nem tudja azonosítani a beszélőket.';
+
+  @override
+  String get confirmAndCancel => 'Megerősítés és lemondás';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nincs valós idejű telefonhívás átírás';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milyen ár lenne megfelelő számodra?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milyen funkciók hiányoznak?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milyen problémákat tapasztaltál?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Mesélj az akkuproblémákról';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Mire váltasz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mi késztetne arra, hogy többet használd az Omit?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Visszajelzésed segít megtalálni a megfelelő egyensúlyt.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mindig építünk — ez segít a prioritások meghatározásában.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Szeretnénk megérteni, mi ment rosszul.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ez segít hardvercsapatunknak fejlődni.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Szeretnénk tudni, mi ragadta meg a figyelmedet.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Szeretnénk hasznosabbá tenni az Omit számodra.';
+
+  @override
+  String get deviceDiagnostics => 'Eszközdiagnosztika';
+
+  @override
+  String get signalStrength => 'Jelerősség';
+
+  @override
+  String get connectionUptime => 'Üzemidő';
+
+  @override
+  String get reconnections => 'Újracsatlakozások';
+
+  @override
+  String get disconnectHistory => 'Lecsatlakozási előzmények';
+
+  @override
+  String get noDisconnectsRecorded => 'Nincs rögzített lecsatlakozás';
+
+  @override
+  String get diagnostics => 'Diagnosztika';
+
+  @override
+  String get waitingForData => 'Adatokra várakozás...';
+
+  @override
+  String get liveRssiOverTime => 'Élő RSSI az idő függvényében';
+
+  @override
+  String get noRssiDataYet => 'Még nincs RSSI adat';
+
+  @override
+  String get collectingData => 'Adatgyűjtés...';
+
+  @override
+  String get cleanDisconnect => 'Tiszta lecsatlakozás';
+
+  @override
+  String get connectionTimeout => 'Kapcsolat időtúllépés';
+
+  @override
+  String get remoteDeviceTerminated => 'A távoli eszköz megszakította a kapcsolatot';
+
+  @override
+  String get pairedToAnotherPhone => 'Másik telefonhoz párosítva';
+
+  @override
+  String get linkKeyMismatch => 'Kapcsolati kulcs eltérés';
+
+  @override
+  String get connectionFailed => 'Sikertelen kapcsolódás';
+
+  @override
+  String get appClosed => 'Alkalmazás bezárva';
+
+  @override
+  String get manualDisconnect => 'Kézi lecsatlakozás';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Utolsó $count esemény';
+  }
+
+  @override
+  String get signal => 'Jel';
+
+  @override
+  String get battery => 'Akkumulátor';
+
+  @override
+  String get excellent => 'Kiváló';
+
+  @override
+  String get good => 'Jó';
+
+  @override
+  String get fair => 'Elfogadható';
+
+  @override
+  String get weak => 'Gyenge';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hiba ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Visszaállítás stabil firmware-re';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware visszaállítása?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ez lecseréli a jelenlegi firmware-t a legújabb stabil verzióra ($version). Az eszköz a frissítés után újraindul.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabil firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Legújabb stabil firmware lekérése...';
+
+  @override
+  String get noStableFirmwareFound => 'Nem található stabil firmware verzió az eszközéhez.';
+
+  @override
+  String get installStableFirmware => 'Stabil firmware telepítése';
+
+  @override
+  String get alreadyOnStableFirmware => 'Már a legújabb stabil verzión van.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration hang helyben mentve';
+  }
+
+  @override
+  String get willSyncAutomatically => 'automatikusan szinkronizálódik';
+
+  @override
+  String get enableLocationTitle => 'Hely engedélyezése';
+
+  @override
+  String get enableLocationDescription => 'A helyengedély szükséges a közeli Bluetooth-eszközök megtalálásához.';
+
+  @override
+  String get voiceRecordingFound => 'Felvétel találva';
+
+  @override
+  String get transcriptionConnecting => 'Átírás csatlakoztatása...';
+
+  @override
+  String get transcriptionReconnecting => 'Átírás újracsatlakoztatása...';
+
+  @override
+  String get transcriptionUnavailable => 'Átírás nem elérhető';
+
+  @override
+  String get audioOutput => 'Hangkimenet';
 }

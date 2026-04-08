@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -18,7 +20,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -26,9 +28,11 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
 import 'package:omi/models/subscription.dart';
@@ -49,8 +53,10 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/pages/settings/widgets/e2ee_key_recovery_dialog.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-
+import 'package:omi/services/apple_reminders_sync_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
@@ -60,7 +66,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
@@ -94,9 +99,13 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
 
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
+        context.read<DeviceProvider>().initiateConnection('HomePageWrapper', boundDeviceOnly: true);
       }
-      if (SharedPreferencesUtil().notificationsEnabled) {
+      // Check actual system permission state — the SharedPreferences flag may
+      // be stale (e.g. user granted via Settings > Permissions, or reinstall).
+      final notifGranted = await Permission.notification.isGranted;
+      if (notifGranted) {
+        SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
 
@@ -238,6 +247,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ensureAgentVm();
         Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
       }
+
+      // Sync Apple Reminders on foreground resume
+      if (mounted && PlatformService.isApple) {
+        final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+        if (taskProvider.selectedApp == TaskIntegrationApp.appleReminders) {
+          AppleRemindersSyncService().syncOnForegroundResume().then((_) {
+            if (mounted) {
+              Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
+            }
+          });
+        }
+      }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {
@@ -276,6 +297,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
+    if (!SharedPreferencesUtil().permissionsCompleted) {
+      SharedPreferencesUtil().permissionsCompleted = true;
+    }
     updateUserOnboardingState(completed: true);
 
     // Navigate uri
@@ -327,8 +351,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
 
-      // ForegroundUtil.requestPermissions();
-      if (!PlatformService.isDesktop) {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         await ForegroundUtil.initializeForegroundService();
         await ForegroundUtil.startForegroundTask();
       }
@@ -377,16 +401,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
+          // so the widget tree is fully settled — push directly.
           // If there's an auto-message (e.g., from daily reflection notification), send it
           final autoMessageToSend = widget.autoMessage;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
-              );
-            }
-          });
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
+            );
+          }
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -396,11 +420,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           });
           if (detailPageId == 'data-privacy') {
-            MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
+            globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
           }
           break;
         case "facts":
-          MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
+          globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
           break;
         case "conversation":
           // Handle conversation deep link: /conversation/{id}?share=1
@@ -463,7 +487,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
-
+    _registerAutoSyncCallback();
     super.initState();
 
     // After init
@@ -491,7 +515,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
   }
 
-    void _onDeviceConnectedForAnnouncements(BtDevice device) async {
+  void _registerAutoSyncCallback() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+      deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        if (!syncProvider.isSyncing) {
+          Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
+          syncProvider.syncWals();
+        }
+      };
+    });
+  }
+
+  void _onDeviceConnectedForAnnouncements(BtDevice device) async {
     if (!mounted) return;
 
     final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
@@ -649,6 +687,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
+                          // Show slim green call bar on non-home tabs when a call is active
+                          if (homeProvider.selectedIndex != 0) const ActiveCallTopBar(),
                           Expanded(
                             child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
                           ),
@@ -819,7 +859,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SyncPage()));
+                        final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
                       },
                       child: Container(
                         width: 36,
@@ -829,8 +870,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -839,8 +880,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );
@@ -1126,6 +1167,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     try {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.onDeviceConnected = null;
+      deviceProvider.onOfflineDataDetected = null;
     } catch (_) {}
     // Clean up freemium handler
     _freemiumHandler.dispose();

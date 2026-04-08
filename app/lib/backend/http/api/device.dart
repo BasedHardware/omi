@@ -23,3 +23,18 @@ Future<Map> getLatestFirmwareVersion({
 
   return jsonDecode(res.body);
 }
+
+Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async {
+  var res = await makeApiCall(
+    url: "${Env.apiBaseUrl}v2/firmware/stable?device_model=$deviceModelNumber",
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+
+  if (res == null || res.statusCode != 200) {
+    return {};
+  }
+
+  return jsonDecode(res.body);
+}

@@ -1465,7 +1465,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT Anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '4.800 menit gratis/bulan termasuk. Tanpa batas dengan ';
+  String get freeMinutesMonth => '1.200 menit gratis/bulan termasuk. Tanpa batas dengan ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1865,7 +1865,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get continueWithoutDevice => 'Lanjutkan Tanpa Perangkat';
 
   @override
-  String get permissionsRequired => 'Izin Diperlukan';
+  String get permissionsRequired => 'Izin diperlukan';
 
   @override
   String get permissionsRequiredDesc =>
@@ -4776,7 +4776,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tidak ada akses data spesifik yang dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '4.800 menit premium + tak terbatas di perangkat';
+  String get basicPlanDescription => '1.200 menit premium + tak terbatas di perangkat';
 
   @override
   String get minutes => 'menit';
@@ -6107,7 +6107,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
+      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6189,7 +6189,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
+      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8565,62 +8565,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearAll => 'Hapus semua';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Keypad';
 
   @override
@@ -8692,4 +8636,489 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Masih merekam — menghubungkan ulang ke transkripsi...';
+
+  @override
+  String get enableE2ee => 'Aktifkan E2EE';
+
+  @override
+  String get recoveryKey => 'Kunci pemulihan';
+
+  @override
+  String get saveKeyMessage =>
+      'Simpan kunci ini di tempat yang aman. Anda akan membutuhkannya untuk memulihkan kenangan terenkripsi jika berganti perangkat.';
+
+  @override
+  String get savedMyKey => 'Saya sudah menyimpan kunci saya';
+
+  @override
+  String get showRecoveryKey => 'Tampilkan kunci pemulihan';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Jika Anda kehilangan kunci pemulihan, data Anda tidak dapat dipulihkan.';
+
+  @override
+  String get e2eeBackupReminder => 'Pastikan untuk mencadangkan kunci Anda setelah mengaktifkan.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Gagal mengaktifkan E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Kunci disalin ke papan klip';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Dienkripsi di perangkat Anda sebelum mencapai server. Hanya Anda yang dapat membacanya.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Dienkripsi saat istirahat di server. Server memproses audio untuk transkripsi tetapi data yang disimpan dienkripsi.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Perlindungan maksimal — kenangan dienkripsi di perangkat, semua data lain dienkripsi saat istirahat';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Terenkripsi — tidak dapat mendekripsi. Periksa kunci pemulihan Anda.';
+
+  @override
+  String get pairWithWeb => 'Pasangkan dengan web';
+
+  @override
+  String get scanQrOnWeb => 'Pindai kode QR ini di omi.me untuk membuka data terenkripsi Anda';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Kedaluwarsa dalam ${seconds}d';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Pindai hanya di perangkat tepercaya';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Enkripsi ujung ke ujung memberikan tingkat perlindungan data tertinggi:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Memori: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Percakapan, chat, dan data lainnya: ';
+
+  @override
+  String get switchToSecureEncryption => 'Beralih ke Enkripsi Aman?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Ini akan mengenkripsi ulang data Anda dengan kunci yang dikelola server. Kunci enkripsi ujung ke ujung Anda tidak akan digunakan lagi.\n\nData Anda tetap terenkripsi saat tersimpan, tetapi server akan mengelola kuncinya.';
+
+  @override
+  String get switchButton => 'Beralih';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Aplikasi dan integrasi pihak ketiga tidak akan dapat mengakses data terenkripsi Anda kecuali Anda memberi mereka kunci Anda.';
+
+  @override
+  String get preparingMigration => 'Menyiapkan migrasi...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Kunci Pemulihan Diperlukan';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Kunci enkripsi E2EE Anda hilang. Tempel kunci pemulihan untuk memulihkan akses ke data terenkripsi Anda.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Tempel kunci pemulihan';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Pulihkan';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Kunci berhasil dipulihkan';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey =>
+      'Kunci salah — tidak cocok dengan kunci yang digunakan untuk mengenkripsi data Anda';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Saya kehilangan kunci pemulihan saya';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Tanpa kunci pemulihan, Anda perlu menonaktifkan E2EE dari perangkat lain tempat Anda masuk, atau menghubungi dukungan untuk mengatur ulang enkripsi.';
+
+  @override
+  String get processingOnServer => 'Memproses di server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Memproses... $current/$total segmen';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Penggunaan Wajar: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Tingkatkan Koneksi';
+
+  @override
+  String get improveConnectionContent =>
+      'Kami telah meningkatkan cara Omi tetap terhubung ke perangkat Anda. Untuk mengaktifkan ini, buka halaman Info Perangkat, ketuk \"Putuskan Perangkat\", lalu pasangkan perangkat Anda kembali.';
+
+  @override
+  String get improveConnectionAction => 'Mengerti';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jam perangkat Anda melenceng ~$minutes menit. Periksa pengaturan tanggal & waktu.';
+  }
+
+  @override
+  String get omisStorage => 'Penyimpanan Omi';
+
+  @override
+  String get phoneStorage => 'Penyimpanan Telepon';
+
+  @override
+  String get cloudStorage => 'Penyimpanan Cloud';
+
+  @override
+  String get howSyncingWorks => 'Cara kerja sinkronisasi';
+
+  @override
+  String get noSyncedRecordings => 'Belum ada rekaman yang disinkronkan';
+
+  @override
+  String get recordingsSyncAutomatically => 'Rekaman disinkronkan secara otomatis — tidak perlu tindakan.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'File yang sudah diunduh akan diunggah lain kali.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan dibuat',
+      one: '1 percakapan dibuat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Ketuk untuk melihat';
+
+  @override
+  String get syncFailed => 'Sinkronisasi gagal';
+
+  @override
+  String get keepSyncing => 'Lanjutkan sinkronisasi';
+
+  @override
+  String get cancelSyncQuestion => 'Batalkan sinkronisasi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Saat Omi tidak terhubung ke ponsel Anda, ia menyimpan audio secara lokal di memori bawaannya. Anda tidak akan pernah kehilangan rekaman.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Saat Omi terhubung kembali, rekaman ditransfer otomatis ke ponsel Anda sebelum diunggah.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Setelah diunggah, rekaman Anda diproses dan ditranskripsikan. Percakapan akan tersedia dalam satu menit.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Jaga ponsel Anda dekat untuk sinkronisasi lebih cepat';
+
+  @override
+  String get tipStableInternet => 'Internet stabil mempercepat unggahan cloud';
+
+  @override
+  String get tipAutoSync => 'Rekaman disinkronkan secara otomatis';
+
+  @override
+  String get storageSection => 'PENYIMPANAN';
+
+  @override
+  String get permissions => 'Izin';
+
+  @override
+  String get permissionEnabled => 'Diaktifkan';
+
+  @override
+  String get permissionEnable => 'Aktifkan';
+
+  @override
+  String get permissionsPageDescription =>
+      'Izin ini penting untuk cara kerja Omi. Izin ini mengaktifkan fitur utama seperti notifikasi, pengalaman berbasis lokasi, dan perekaman audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi memerlukan beberapa izin agar dapat berfungsi dengan baik. Silakan berikan izin untuk melanjutkan.';
+
+  @override
+  String get permissionsSetupTitle => 'Dapatkan pengalaman terbaik';
+
+  @override
+  String get permissionsSetupDescription => 'Aktifkan beberapa izin agar Omi dapat bekerja dengan maksimal.';
+
+  @override
+  String get permissionsChangeAnytime => 'Anda dapat mengubahnya kapan saja di Pengaturan > Izin';
+
+  @override
+  String get location => 'Lokasi';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Mengapa Anda membatalkan?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bisakah Anda memberi tahu kami mengapa Anda pergi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Terlalu mahal';
+
+  @override
+  String get cancelReasonNotUsing => 'Tidak cukup menggunakannya';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Fitur yang hilang';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kualitas audio/transkripsi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Kekhawatiran pengurasan baterai';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Menemukan alternatif';
+
+  @override
+  String get cancelReasonOther => 'Lainnya';
+
+  @override
+  String get tellUsMore => 'Ceritakan lebih lanjut (opsional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Kami menghargai umpan balik apa pun...';
+
+  @override
+  String get justAMoment => 'Sebentar, silakan';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Kami sangat menyarankan untuk menjelajahi opsi lain Anda daripada membatalkan.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Paket Anda akan tetap aktif hingga $date. Setelah itu, Anda akan dipindahkan ke versi gratis dengan fitur terbatas.';
+  }
+
+  @override
+  String get ifYouCancel => 'Jika Anda membatalkan:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Tidak lagi memiliki akses tak terbatas di akhir periode penagihan Anda.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lebih banyak penggunaan baterai (pemrosesan di perangkat)';
+
+  @override
+  String get cancelConsequenceQuality => 'Kualitas transkripsi 30% lebih rendah (model di perangkat)';
+
+  @override
+  String get cancelConsequenceDelay => 'Penundaan pemrosesan 5-7 detik (model di perangkat)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Tidak dapat mengidentifikasi pembicara.';
+
+  @override
+  String get confirmAndCancel => 'Konfirmasi dan batalkan';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Tidak ada transkripsi panggilan telepon real-time';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Harga berapa yang cocok untuk Anda?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Fitur apa yang Anda butuhkan?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Masalah apa yang Anda alami?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Ceritakan tentang masalah baterai';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Anda beralih ke apa?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Apa yang membuat Anda menggunakan Omi lebih banyak?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Umpan balik Anda membantu kami menemukan keseimbangan yang tepat.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Kami selalu membangun — ini membantu kami memprioritaskan.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Kami ingin memahami apa yang salah.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Ini membantu tim perangkat keras kami meningkatkan.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Kami ingin tahu apa yang menarik perhatian Anda.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Kami ingin membuat Omi lebih berguna untuk Anda.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostik Perangkat';
+
+  @override
+  String get signalStrength => 'Kekuatan Sinyal';
+
+  @override
+  String get connectionUptime => 'Waktu Aktif';
+
+  @override
+  String get reconnections => 'Koneksi Ulang';
+
+  @override
+  String get disconnectHistory => 'Riwayat Pemutusan';
+
+  @override
+  String get noDisconnectsRecorded => 'Tidak ada pemutusan yang tercatat';
+
+  @override
+  String get diagnostics => 'Diagnostik';
+
+  @override
+  String get waitingForData => 'Menunggu data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI langsung seiring waktu';
+
+  @override
+  String get noRssiDataYet => 'Belum ada data RSSI';
+
+  @override
+  String get collectingData => 'Mengumpulkan data...';
+
+  @override
+  String get cleanDisconnect => 'Pemutusan bersih';
+
+  @override
+  String get connectionTimeout => 'Waktu koneksi habis';
+
+  @override
+  String get remoteDeviceTerminated => 'Perangkat jarak jauh memutuskan koneksi';
+
+  @override
+  String get pairedToAnotherPhone => 'Dipasangkan dengan ponsel lain';
+
+  @override
+  String get linkKeyMismatch => 'Ketidakcocokan kunci tautan';
+
+  @override
+  String get connectionFailed => 'Koneksi gagal';
+
+  @override
+  String get appClosed => 'Aplikasi ditutup';
+
+  @override
+  String get manualDisconnect => 'Pemutusan manual';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count peristiwa terakhir';
+  }
+
+  @override
+  String get signal => 'Sinyal';
+
+  @override
+  String get battery => 'Baterai';
+
+  @override
+  String get excellent => 'Sangat Baik';
+
+  @override
+  String get good => 'Baik';
+
+  @override
+  String get fair => 'Cukup';
+
+  @override
+  String get weak => 'Lemah';
+
+  @override
+  String gattError(String code) {
+    return 'Kesalahan GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Kembali ke firmware stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Kembalikan firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Ini akan mengganti firmware Anda saat ini dengan versi stabil terbaru ($version). Perangkat Anda akan dimulai ulang setelah pembaruan.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware Stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Mengambil firmware stabil terbaru...';
+
+  @override
+  String get noStableFirmwareFound => 'Tidak dapat menemukan versi firmware stabil untuk perangkat Anda.';
+
+  @override
+  String get installStableFirmware => 'Pasang firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Anda sudah menggunakan versi stabil terbaru.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio disimpan secara lokal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'akan disinkronkan secara otomatis';
+
+  @override
+  String get enableLocationTitle => 'Aktifkan Lokasi';
+
+  @override
+  String get enableLocationDescription => 'Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di sekitar.';
+
+  @override
+  String get voiceRecordingFound => 'Rekaman ditemukan';
+
+  @override
+  String get transcriptionConnecting => 'Menghubungkan transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menghubungkan ulang transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
 }

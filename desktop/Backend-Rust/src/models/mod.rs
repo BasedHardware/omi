@@ -57,7 +57,7 @@ pub use user_settings::{
     UpdateLanguageRequest, UpdateNotificationSettingsRequest, UpdateTranscriptionPreferencesRequest,
     UpdateUserProfileRequest, UserLanguage, UserProfile, UserSettingsStatusResponse,
     AssistantSettingsData, SharedAssistantSettingsData, FocusSettingsData, TaskSettingsData,
-    AdviceSettingsData, MemorySettingsData,
+    AdviceSettingsData, MemorySettingsData, FloatingBarSettingsData,
 };
 pub use chat_session::{
     ChatSessionDB, ChatSessionStatusResponse, CreateChatSessionRequest, GetChatSessionsQuery,

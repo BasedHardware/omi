@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private var bleHostApiImpl: BleHostApiImpl? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -23,6 +24,15 @@ class MainActivity: FlutterActivity() {
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
+
+        // Register Native BLE Pigeon APIs
+        OmiBleManager.initialize(application)
+        OmiBleManager.isFlutterAlive = true
+        OmiBleManager.instance.flutterApi = BleFlutterApi(flutterEngine.dartExecutor.binaryMessenger)
+        val hostApi = BleHostApiImpl { this }
+        hostApi.initCompanionManager(this)
+        bleHostApiImpl = hostApi
+        BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
@@ -43,6 +53,24 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-   
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
 
+        // Handle CompanionDeviceManager chooser result
+        val address = bleHostApiImpl?.onActivityResult(requestCode, resultCode, data)
+        if (address != null) {
+            // Device selected — start foreground service (Dart will call manageDevice)
+            OmiBleForegroundService.startService(this, address, caller = "MainActivity.onActivityResult")
+        }
+    }
+
+    override fun onDestroy() {
+        // When user closes the app (swipe away), stop the foreground service.
+        // The service handles disconnecting all managed devices in onDestroy.
+        if (isFinishing) {
+            OmiBleManager.isFlutterAlive = false
+            OmiBleForegroundService.stopService(this)
+        }
+        super.onDestroy()
+    }
 }

@@ -1465,7 +1465,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get payYourSttProvider => 'Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.';
 
   @override
-  String get freeMinutesMonth => '4.800 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
+  String get freeMinutesMonth => '1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1821,7 +1821,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get skipThisQuestion => 'Bỏ qua câu hỏi này';
 
   @override
-  String get skipForNow => 'Bỏ qua';
+  String get skipForNow => 'Bỏ qua lúc này';
 
   @override
   String get connectionError => 'Lỗi Kết nối';
@@ -4771,7 +4771,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
 
   @override
-  String get basicPlanDescription => '4.800 phút cao cấp + không giới hạn trên thiết bị';
+  String get basicPlanDescription => '1.200 phút cao cấp + không giới hạn trên thiết bị';
 
   @override
   String get minutes => 'phút';
@@ -6176,7 +6176,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+      '1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8558,62 +8558,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get clearAll => 'Xóa tất cả';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Bàn phím';
 
   @override
@@ -8685,4 +8629,484 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Vẫn đang ghi — đang kết nối lại với phiên âm...';
+
+  @override
+  String get enableE2ee => 'Bật E2EE';
+
+  @override
+  String get recoveryKey => 'Khóa khôi phục';
+
+  @override
+  String get saveKeyMessage =>
+      'Lưu khóa này ở nơi an toàn. Bạn sẽ cần nó để khôi phục ký ức được mã hóa khi đổi thiết bị.';
+
+  @override
+  String get savedMyKey => 'Tôi đã lưu khóa';
+
+  @override
+  String get showRecoveryKey => 'Hiện khóa khôi phục';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Nếu mất khóa khôi phục, dữ liệu của bạn không thể được khôi phục.';
+
+  @override
+  String get e2eeBackupReminder => 'Hãy sao lưu khóa sau khi bật.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Không thể bật E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Đã sao chép khóa vào bộ nhớ tạm';
+
+  @override
+  String get e2eeMemoriesDescription => 'Được mã hóa trên thiết bị trước khi gửi đến máy chủ. Chỉ bạn mới có thể đọc.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Được mã hóa khi lưu trữ trên máy chủ. Máy chủ xử lý âm thanh để phiên âm nhưng dữ liệu lưu trữ được mã hóa.';
+
+  @override
+  String get e2eeCardSubtitle => 'Bảo vệ tối đa — ký ức mã hóa trên thiết bị, dữ liệu khác mã hóa khi lưu trữ';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Đã mã hóa — không thể giải mã. Kiểm tra khóa khôi phục.';
+
+  @override
+  String get pairWithWeb => 'Ghép nối với web';
+
+  @override
+  String get scanQrOnWeb => 'Quét mã QR này tại omi.me để mở khóa dữ liệu mã hóa';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Hết hạn sau ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Chỉ quét trên thiết bị đáng tin cậy';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Mã hóa đầu cuối cung cấp mức bảo vệ dữ liệu cao nhất:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Ký ức: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Cuộc trò chuyện, chat và dữ liệu khác: ';
+
+  @override
+  String get switchToSecureEncryption => 'Chuyển sang mã hóa an toàn?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Thao tác này sẽ mã hóa lại dữ liệu của bạn bằng khóa do máy chủ quản lý. Khóa mã hóa đầu cuối của bạn sẽ không còn được sử dụng.\n\nDữ liệu của bạn vẫn sẽ được mã hóa khi lưu trữ, nhưng máy chủ sẽ quản lý các khóa.';
+
+  @override
+  String get switchButton => 'Chuyển';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Ứng dụng và tích hợp của bên thứ ba sẽ không thể truy cập dữ liệu đã mã hóa của bạn trừ khi bạn cung cấp khóa cho họ.';
+
+  @override
+  String get preparingMigration => 'Đang chuẩn bị di chuyển...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Cần khóa khôi phục';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Thiếu khóa mã hóa E2EE của bạn. Dán khóa khôi phục để khôi phục quyền truy cập vào dữ liệu đã mã hóa của bạn.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Dán khóa khôi phục';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Khôi phục';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Khóa đã được khôi phục thành công';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Khóa sai — không khớp với khóa đã dùng để mã hóa dữ liệu của bạn';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Tôi đã mất khóa khôi phục';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Nếu không có khóa khôi phục, bạn cần tắt E2EE từ một thiết bị khác mà bạn đã đăng nhập, hoặc liên hệ hỗ trợ để đặt lại mã hóa.';
+
+  @override
+  String get processingOnServer => 'Đang xử lý trên máy chủ...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Đang xử lý... $current/$total phân đoạn';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Sử dụng hợp lý: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Cải thiện kết nối';
+
+  @override
+  String get improveConnectionContent =>
+      'Chúng tôi đã cải thiện cách Omi duy trì kết nối với thiết bị của bạn. Để kích hoạt, hãy vào trang Thông tin thiết bị, nhấn \"Ngắt kết nối thiết bị\", rồi ghép nối lại thiết bị.';
+
+  @override
+  String get improveConnectionAction => 'Đã hiểu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Đồng hồ thiết bị của bạn lệch ~$minutes phút. Kiểm tra cài đặt ngày và giờ.';
+  }
+
+  @override
+  String get omisStorage => 'Bộ nhớ Omi';
+
+  @override
+  String get phoneStorage => 'Bộ nhớ điện thoại';
+
+  @override
+  String get cloudStorage => 'Bộ nhớ đám mây';
+
+  @override
+  String get howSyncingWorks => 'Cách đồng bộ hoạt động';
+
+  @override
+  String get noSyncedRecordings => 'Chưa có bản ghi đã đồng bộ';
+
+  @override
+  String get recordingsSyncAutomatically => 'Bản ghi tự động đồng bộ — không cần thao tác.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Các tệp đã tải xuống sẽ được tải lên lần sau.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã tạo $count cuộc trò chuyện',
+      one: 'Đã tạo 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Nhấn để xem';
+
+  @override
+  String get syncFailed => 'Đồng bộ thất bại';
+
+  @override
+  String get keepSyncing => 'Tiếp tục đồng bộ';
+
+  @override
+  String get cancelSyncQuestion => 'Hủy đồng bộ?';
+
+  @override
+  String get omisStorageDesc =>
+      'Khi Omi không kết nối với điện thoại, nó lưu trữ âm thanh cục bộ trong bộ nhớ tích hợp. Bạn sẽ không bao giờ mất bản ghi.';
+
+  @override
+  String get phoneStorageDesc => 'Khi Omi kết nối lại, bản ghi tự động chuyển sang điện thoại trước khi tải lên.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Sau khi tải lên, bản ghi của bạn được xử lý và chuyển thành văn bản. Cuộc trò chuyện sẽ có trong vòng một phút.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Giữ điện thoại gần để đồng bộ nhanh hơn';
+
+  @override
+  String get tipStableInternet => 'Internet ổn định giúp tải lên đám mây nhanh hơn';
+
+  @override
+  String get tipAutoSync => 'Bản ghi tự động đồng bộ';
+
+  @override
+  String get storageSection => 'BỘ NHỚ';
+
+  @override
+  String get permissions => 'Quyền';
+
+  @override
+  String get permissionEnabled => 'Đã bật';
+
+  @override
+  String get permissionEnable => 'Bật';
+
+  @override
+  String get permissionsPageDescription =>
+      'Các quyền này rất quan trọng đối với hoạt động của Omi. Chúng kích hoạt các tính năng chính như thông báo, trải nghiệm dựa trên vị trí và ghi âm.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi cần một số quyền để hoạt động bình thường. Vui lòng cấp quyền để tiếp tục.';
+
+  @override
+  String get permissionsSetupTitle => 'Trải nghiệm tốt nhất';
+
+  @override
+  String get permissionsSetupDescription => 'Bật một vài quyền để Omi có thể phát huy hết khả năng.';
+
+  @override
+  String get permissionsChangeAnytime => 'Bạn có thể thay đổi bất cứ lúc nào trong Cài đặt > Quyền';
+
+  @override
+  String get location => 'Vị trí';
+
+  @override
+  String get microphone => 'Micrô';
+
+  @override
+  String get whyAreYouCanceling => 'Tại sao bạn hủy?';
+
+  @override
+  String get cancelReasonSubtitle => 'Bạn có thể cho chúng tôi biết tại sao bạn rời đi?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Quá đắt';
+
+  @override
+  String get cancelReasonNotUsing => 'Không sử dụng đủ';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Thiếu tính năng';
+
+  @override
+  String get cancelReasonAudioQuality => 'Chất lượng âm thanh/phiên âm';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Lo ngại về tiêu hao pin';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Đã tìm thấy giải pháp thay thế';
+
+  @override
+  String get cancelReasonOther => 'Khác';
+
+  @override
+  String get tellUsMore => 'Cho chúng tôi biết thêm (tùy chọn)';
+
+  @override
+  String get cancelReasonDetailHint => 'Chúng tôi đánh giá cao mọi phản hồi...';
+
+  @override
+  String get justAMoment => 'Một chút thôi';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Chúng tôi khuyên bạn nên khám phá các lựa chọn khác thay vì hủy.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Gói của bạn sẽ vẫn hoạt động đến $date. Sau đó, bạn sẽ được chuyển sang phiên bản miễn phí với tính năng hạn chế.';
+  }
+
+  @override
+  String get ifYouCancel => 'Nếu bạn hủy:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Không còn truy cập không giới hạn khi kết thúc kỳ thanh toán.';
+
+  @override
+  String get cancelConsequenceBattery => 'Tiêu thụ pin gấp 7 lần (xử lý trên thiết bị)';
+
+  @override
+  String get cancelConsequenceQuality => 'Chất lượng phiên âm thấp hơn 30% (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceDelay => 'Độ trễ xử lý 5-7 giây (mô hình trên thiết bị)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Không thể nhận dạng người nói.';
+
+  @override
+  String get confirmAndCancel => 'Xác nhận và hủy';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Không có phiên âm cuộc gọi thời gian thực';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Mức giá nào phù hợp với bạn?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Bạn thiếu tính năng gì?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Bạn gặp vấn đề gì?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Hãy cho chúng tôi biết về vấn đề pin';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Bạn chuyển sang gì?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Điều gì sẽ khiến bạn sử dụng Omi nhiều hơn?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Phản hồi của bạn giúp chúng tôi tìm sự cân bằng.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Chúng tôi luôn xây dựng — điều này giúp ưu tiên.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Chúng tôi muốn hiểu điều gì đã sai.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Điều này giúp đội ngũ phần cứng cải thiện.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Chúng tôi muốn biết điều gì thu hút bạn.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chúng tôi muốn làm Omi hữu ích hơn cho bạn.';
+
+  @override
+  String get deviceDiagnostics => 'Chẩn đoán thiết bị';
+
+  @override
+  String get signalStrength => 'Cường độ tín hiệu';
+
+  @override
+  String get connectionUptime => 'Thời gian hoạt động';
+
+  @override
+  String get reconnections => 'Kết nối lại';
+
+  @override
+  String get disconnectHistory => 'Lịch sử ngắt kết nối';
+
+  @override
+  String get noDisconnectsRecorded => 'Không có ngắt kết nối nào được ghi nhận';
+
+  @override
+  String get diagnostics => 'Chẩn đoán';
+
+  @override
+  String get waitingForData => 'Đang chờ dữ liệu...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI trực tiếp theo thời gian';
+
+  @override
+  String get noRssiDataYet => 'Chưa có dữ liệu RSSI';
+
+  @override
+  String get collectingData => 'Đang thu thập dữ liệu...';
+
+  @override
+  String get cleanDisconnect => 'Ngắt kết nối sạch';
+
+  @override
+  String get connectionTimeout => 'Hết thời gian kết nối';
+
+  @override
+  String get remoteDeviceTerminated => 'Thiết bị từ xa đã ngắt kết nối';
+
+  @override
+  String get pairedToAnotherPhone => 'Đã ghép nối với điện thoại khác';
+
+  @override
+  String get linkKeyMismatch => 'Khóa liên kết không khớp';
+
+  @override
+  String get connectionFailed => 'Kết nối thất bại';
+
+  @override
+  String get appClosed => 'Ứng dụng đã đóng';
+
+  @override
+  String get manualDisconnect => 'Ngắt kết nối thủ công';
+
+  @override
+  String lastNEvents(int count) {
+    return '$count sự kiện gần nhất';
+  }
+
+  @override
+  String get signal => 'Tín hiệu';
+
+  @override
+  String get battery => 'Pin';
+
+  @override
+  String get excellent => 'Xuất sắc';
+
+  @override
+  String get good => 'Tốt';
+
+  @override
+  String get fair => 'Khá';
+
+  @override
+  String get weak => 'Yếu';
+
+  @override
+  String gattError(String code) {
+    return 'Lỗi GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Quay lại firmware ổn định';
+
+  @override
+  String get rollbackConfirmTitle => 'Quay lại firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Thao tác này sẽ thay thế firmware hiện tại bằng phiên bản ổn định mới nhất ($version). Thiết bị của bạn sẽ khởi động lại sau khi cập nhật.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware ổn định';
+
+  @override
+  String get fetchingStableFirmware => 'Đang tải firmware ổn định mới nhất...';
+
+  @override
+  String get noStableFirmwareFound => 'Không tìm thấy phiên bản firmware ổn định cho thiết bị của bạn.';
+
+  @override
+  String get installStableFirmware => 'Cài đặt firmware ổn định';
+
+  @override
+  String get alreadyOnStableFirmware => 'Bạn đã sử dụng phiên bản ổn định mới nhất.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration âm thanh đã lưu cục bộ';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sẽ tự động đồng bộ';
+
+  @override
+  String get enableLocationTitle => 'Bật vị trí';
+
+  @override
+  String get enableLocationDescription => 'Cần quyền vị trí để tìm các thiết bị Bluetooth ở gần.';
+
+  @override
+  String get voiceRecordingFound => 'Đã tìm thấy bản ghi';
+
+  @override
+  String get transcriptionConnecting => 'Đang kết nối phiên âm...';
+
+  @override
+  String get transcriptionReconnecting => 'Đang kết nối lại phiên âm...';
+
+  @override
+  String get transcriptionUnavailable => 'Phiên âm không khả dụng';
+
+  @override
+  String get audioOutput => 'Đầu ra âm thanh';
 }

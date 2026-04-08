@@ -6,8 +6,6 @@ struct TasksWidget: View {
     let recentTasks: [TaskActionItem]
     let onToggleCompletion: (TaskActionItem) -> Void
 
-    @State private var showDailyTaskCreation = false
-
     private var totalTaskCount: Int {
         overdueTasks.count + todaysTasks.count + recentTasks.count
     }
@@ -23,102 +21,75 @@ struct TasksWidget: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack {
                 Text("Tasks")
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
-
-                Spacer()
-
-                Button(action: {
-                    showDailyTaskCreation = true
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "repeat.circle")
-                            .scaledFont(size: 12)
-                        Text("Daily")
-                            .scaledFont(size: 11, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.purplePrimary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(OmiColors.purplePrimary.opacity(0.1))
-                    )
-                }
-                .buttonStyle(.plain)
             }
 
             if totalTaskCount == 0 {
                 // Empty state
-                VStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle")
-                        .scaledFont(size: 28)
-                        .foregroundColor(OmiColors.textQuaternary)
-                    Text("No incomplete tasks")
-                        .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                VStack {
+                    Spacer(minLength: 0)
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .scaledFont(size: 28)
+                            .foregroundColor(OmiColors.textQuaternary)
+                        Text("No incomplete tasks")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                .frame(maxHeight: .infinity)
             } else {
                 let allTasks = (combinedTodayTasks + recentTasks).prefix(3)
 
-                VStack(spacing: 6) {
-                    ForEach(Array(allTasks)) { task in
-                        TaskRowView(
-                            task: task,
-                            onToggle: { onToggleCompletion(task) }
-                        )
-                    }
-                }
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
 
-                // View all link
-                Button(action: {
-                    // Navigate to Tasks tab
-                    NotificationCenter.default.post(
-                        name: .navigateToTasks,
-                        object: nil
-                    )
-                }) {
-                    HStack {
-                        Spacer()
-                        Text("View all tasks")
-                            .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
-                        Image(systemName: "chevron.right")
-                            .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.textSecondary)
-                        Spacer()
+                    VStack(spacing: 10) {
+                        ForEach(Array(allTasks)) { task in
+                            TaskRowView(
+                                task: task,
+                                onToggle: { onToggleCompletion(task) }
+                            )
+                        }
                     }
+
+                    Button(action: {
+                        NotificationCenter.default.post(
+                            name: .navigateToTasks,
+                            object: nil
+                        )
+                    }) {
+                        HStack {
+                            Spacer()
+                            Text("View all tasks")
+                                .scaledFont(size: 12, weight: .semibold)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Image(systemName: "chevron.right")
+                                .scaledFont(size: 10)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
+
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(20)
+        .padding(22)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
-                )
-        )
-        .sheet(isPresented: $showDailyTaskCreation) {
-            DailyTaskCreationSheet { description, priority in
-                Task {
-                    await TasksStore.shared.createDailyRecurringTask(
-                        description: description,
-                        priority: priority
-                    )
-                }
-            }
-        }
+        .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }
 
@@ -131,7 +102,7 @@ struct TaskRowView: View {
     @State private var isToggling = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             // Checkbox
             Button(action: {
                 guard !isToggling else { return }
@@ -179,11 +150,11 @@ struct TaskRowView: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(task.completed ? OmiColors.backgroundQuaternary.opacity(0.3) : Color.clear)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(task.completed ? OmiColors.backgroundRaised.opacity(0.55) : OmiColors.backgroundTertiary.opacity(0.45))
         )
     }
 }

@@ -3,10 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesFiveSteps() {
+  func testMergedFlowUsesNineteenSteps() {
     XCTAssertEqual(
-      OnboardingFlow.steps, ["Chat", "Notifications", "FloatingBar", "VoiceShortcut", "Tasks"])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 4)
+      OnboardingFlow.steps,
+      [
+        "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
+        "FullDiskAccess", "FileScan", "Microphone", "Notifications", "Accessibility",
+        "Automation", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo",
+        "DataSources", "Exports", "Goal", "Tasks",
+      ])
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 18)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -14,7 +20,15 @@ final class OnboardingFlowTests: XCTestCase {
       currentStep: 4,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
-      hasMergedVoiceInputStep: false
+      hasMergedVoiceInputStep: false,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
     )
 
     XCTAssertEqual(migrated, 3)
@@ -22,13 +36,92 @@ final class OnboardingFlowTests: XCTestCase {
 
   func testMigrationClampsOverflowToTasksStep() {
     let migrated = OnboardingFlow.migratedStep(
-      currentStep: 9,
+      currentStep: 99,
       hasMigratedVideoStep: true,
       hasInsertedVoiceShortcutStep: true,
-      hasMergedVoiceInputStep: true
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
     )
 
     XCTAssertEqual(migrated, OnboardingFlow.lastStepIndex)
+  }
+
+  func testMigrationMapsRemovedResearchStepToDataSourcesAndShiftsLaterSteps() {
+    let migratedResearch = OnboardingFlow.migratedStep(
+      currentStep: 15,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    let migratedLegacyGoalAfterExportInsert = OnboardingFlow.migratedStep(
+      currentStep: 16,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: false,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    let migratedGoal = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    let migratedTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    XCTAssertEqual(migratedResearch, 15)
+    XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
+    XCTAssertEqual(migratedGoal, 17)
+    XCTAssertEqual(migratedTasks, 18)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {

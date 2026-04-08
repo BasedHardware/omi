@@ -216,7 +216,7 @@ def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=100),
     include_reviews: bool = Query(default=False),
 ):
     """Public omi apps, paginated by capability groups.
@@ -1149,7 +1149,9 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
 
 
 @router.get('/v1/app/generate-prompts', tags=['v1'])
-async def generate_sample_prompts_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+async def generate_sample_prompts_endpoint(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
+):
     """
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.

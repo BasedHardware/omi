@@ -33,8 +33,8 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       final provider = context.read<VoiceRecorderProvider>();
       provider.setCallbacks(onTranscriptReady: widget.onTranscriptReady, onClose: widget.onClose);
 
-      // Only start recording if not already recording
-      if (!provider.isRecording) {
+      // Only start recording if not already recording and not recovering a previous recording
+      if (!provider.isRecording && !provider.hasPendingRecording) {
         provider.startRecording();
       }
     });
@@ -126,6 +126,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             );
 
           case VoiceRecorderState.transcribeFailed:
+          case VoiceRecorderState.pendingRecovery:
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
@@ -133,8 +134,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    context.l10n.error,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w700),
+                    provider.state == VoiceRecorderState.pendingRecovery
+                        ? context.l10n.voiceRecordingFound
+                        : context.l10n.error,
+                    style: TextStyle(
+                      color: provider.state == VoiceRecorderState.pendingRecovery ? Colors.white : Colors.redAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -187,8 +194,7 @@ class AudioWavePainter extends CustomPainter {
 
     final paint = Paint()
       ..color = Colors.white
-      ..strokeWidth =
-          4 // Slightly thicker for better visibility
+      ..strokeWidth = 4 // Slightly thicker for better visibility
       ..strokeCap = StrokeCap.round;
 
     final width = size.width;

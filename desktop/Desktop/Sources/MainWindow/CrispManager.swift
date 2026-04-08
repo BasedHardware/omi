@@ -97,6 +97,7 @@ class CrispManager: ObservableObject {
                 let messages = try await fetchUnreadMessages()
                 log("CrispManager: poll returned \(messages.count) messages (since=\(self.lastSeenTimestamp))")
 
+                var newMessageCount = 0
                 for msg in messages {
                     let key = String(msg.text.prefix(80)) + "_\(msg.timestamp)"
 
@@ -109,10 +110,7 @@ class CrispManager: ObservableObject {
                     guard !notifiedMessages.contains(key) else { continue }
                     notifiedMessages.insert(key)
 
-                    // Update unread count if not currently viewing help
-                    if !isViewingHelp {
-                        unreadCount += 1
-                    }
+                    newMessageCount += 1
 
                     // Send macOS notification
                     let preview = msg.text.count > 100 ? String(msg.text.prefix(100)) + "..." : msg.text
@@ -123,6 +121,11 @@ class CrispManager: ObservableObject {
                         message: preview,
                         assistantId: "crisp"
                     )
+                }
+
+                // Batch update: single @Published write instead of per-message increments
+                if newMessageCount > 0 && !isViewingHelp {
+                    unreadCount += newMessageCount
                 }
                 AuthBackoffTracker.shared.reportSuccess()
             } catch {
@@ -147,7 +150,7 @@ class CrispManager: ObservableObject {
 
     private func fetchUnreadMessages() async throws -> [CrispOperatorMessage] {
         let api = APIClient.shared
-        let baseURL = await api.baseURL
+        let baseURL = await api.rustBackendURL
         let headers = try await api.buildHeaders(requireAuth: true)
 
         var urlString = "\(baseURL)v1/crisp/unread"

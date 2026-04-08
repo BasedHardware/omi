@@ -1,10 +1,11 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/kernel.h>
+#include "rtc.h"
 
 #include <errno.h>
 #include <stdio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
-#include "rtc.h"
+#include "lib/core/sd_card.h"
 #include "lib/core/settings.h"
 
 LOG_MODULE_REGISTER(rtc, CONFIG_LOG_DEFAULT_LEVEL);
@@ -12,8 +13,30 @@ LOG_MODULE_REGISTER(rtc, CONFIG_LOG_DEFAULT_LEVEL);
 static uint64_t base_epoch_ms;
 static int64_t base_uptime_ms;
 static bool utc_valid;
+static uint64_t pending_epoch_to_persist;
+static struct k_work rtc_persist_work;
 
 static struct k_mutex rtc_lock;
+
+static void rtc_persist_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    uint64_t epoch_s;
+
+    k_mutex_lock(&rtc_lock, K_FOREVER);
+    epoch_s = pending_epoch_to_persist;
+    k_mutex_unlock(&rtc_lock);
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    sd_notify_time_synced((uint32_t) epoch_s);
+#endif
+
+    int err = app_settings_save_rtc_epoch(epoch_s);
+    if (err) {
+        LOG_ERR("Failed to persist rtc_epoch (err %d)", err);
+    }
+}
 
 // Debug functions to format UTC datetime strings
 #ifdef CONFIG_LOG
@@ -25,18 +48,18 @@ static void civil_from_days(int64_t z_days, int32_t *year, uint8_t *month, uint8
      */
     int64_t z = z_days + 719468;
     int64_t era = (z >= 0) ? (z / 146097) : ((z - 146096) / 146097);
-    uint32_t doe = (uint32_t)(z - era * 146097);
+    uint32_t doe = (uint32_t) (z - era * 146097);
     uint32_t yoe = (doe - doe / 1460U + doe / 36524U - doe / 146096U) / 365U;
-    int32_t y = (int32_t)yoe + (int32_t)era * 400;
+    int32_t y = (int32_t) yoe + (int32_t) era * 400;
     uint32_t doy = doe - (365U * yoe + yoe / 4U - yoe / 100U);
     uint32_t mp = (5U * doy + 2U) / 153U;
     uint32_t d = doy - (153U * mp + 2U) / 5U + 1U;
-    uint32_t m = mp + ((mp < 10U) ? 3U : (uint32_t)-9);
+    uint32_t m = mp + ((mp < 10U) ? 3U : (uint32_t) -9);
     y += (m <= 2U);
 
     *year = y;
-    *month = (uint8_t)m;
-    *day = (uint8_t)d;
+    *month = (uint8_t) m;
+    *day = (uint8_t) d;
 }
 
 static int rtc_format_utc_datetime(int64_t utc_epoch_s, char *out, size_t out_len)
@@ -65,12 +88,11 @@ static int rtc_format_utc_datetime(int64_t utc_epoch_s, char *out, size_t out_le
     uint8_t day;
     civil_from_days(days, &year, &month, &day);
 
-    uint8_t hour = (uint8_t)(sod / 3600);
-    uint8_t minute = (uint8_t)((sod % 3600) / 60);
-    uint8_t second = (uint8_t)(sod % 60);
+    uint8_t hour = (uint8_t) (sod / 3600);
+    uint8_t minute = (uint8_t) ((sod % 3600) / 60);
+    uint8_t second = (uint8_t) (sod % 60);
 
-    (void)snprintf(out, out_len, "%04d-%02u-%02u %02u:%02u:%02u",
-                   year, month, day, hour, minute, second);
+    (void) snprintf(out, out_len, "%04d-%02u-%02u %02u:%02u:%02u", year, month, day, hour, minute, second);
     return 0;
 }
 
@@ -83,7 +105,7 @@ int rtc_format_now_utc_datetime(char *out, size_t out_len)
         }
         return -ENODATA;
     }
-    return rtc_format_utc_datetime((int64_t)now_s, out, out_len);
+    return rtc_format_utc_datetime((int64_t) now_s, out, out_len);
 }
 #endif
 
@@ -107,7 +129,7 @@ uint64_t rtc_get_utc_time_ms(void)
     if (delta_ms < 0) {
         delta_ms = 0;
     }
-    uint64_t now_ms = base_epoch_ms + (uint64_t)delta_ms;
+    uint64_t now_ms = base_epoch_ms + (uint64_t) delta_ms;
     k_mutex_unlock(&rtc_lock);
     return now_ms;
 }
@@ -123,8 +145,17 @@ int rtc_set_utc_time(uint64_t utc_epoch_s)
         return err;
     }
 
-    /* Persist seconds for compatibility. */
-    return app_settings_save_rtc_epoch(utc_epoch_s);
+    k_mutex_lock(&rtc_lock, K_FOREVER);
+    pending_epoch_to_persist = utc_epoch_s;
+    k_mutex_unlock(&rtc_lock);
+
+    /*
+     * Defer persistence and SD rename to system workqueue so BLE GATT callback
+     * stack stays small and cannot overflow on filesystem/settings operations.
+     */
+    k_work_submit(&rtc_persist_work);
+
+    return 0;
 }
 
 int rtc_set_utc_time_ms(uint64_t utc_epoch_ms)
@@ -154,7 +185,7 @@ uint32_t get_utc_time(void)
         return UINT32_MAX;
     }
 
-    return (uint32_t)now_s;
+    return (uint32_t) now_s;
 }
 
 void init_rtc(void)
@@ -162,6 +193,7 @@ void init_rtc(void)
     static bool initialized;
     if (!initialized) {
         k_mutex_init(&rtc_lock);
+        k_work_init(&rtc_persist_work, rtc_persist_work_handler);
         initialized = true;
     }
 

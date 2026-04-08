@@ -1459,7 +1459,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payYourSttProvider => 'Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.';
 
   @override
-  String get freeMinutesMonth => '4800 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
+  String get freeMinutesMonth => '1200 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1860,7 +1860,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get continueWithoutDevice => 'Jätka ilma seadmeta';
 
   @override
-  String get permissionsRequired => 'Load on nõutud';
+  String get permissionsRequired => 'Õigused nõutavad';
 
   @override
   String get permissionsRequiredDesc =>
@@ -4762,7 +4762,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 
   @override
-  String get basicPlanDescription => '4800 premium minutit + piiramatu seadmes';
+  String get basicPlanDescription => '1200 premium minutit + piiramatu seadmes';
 
   @override
   String get minutes => 'minutit';
@@ -6090,7 +6090,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+      '1200 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6172,7 +6172,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8553,62 +8553,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get clearAll => 'Tühjenda kõik';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Klahvistik';
 
   @override
@@ -8680,4 +8624,487 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...';
+
+  @override
+  String get enableE2ee => 'Luba E2EE';
+
+  @override
+  String get recoveryKey => 'Taastevõti';
+
+  @override
+  String get saveKeyMessage =>
+      'Salvestage see võti turvalisse kohta. Vajate seda krüpteeritud mälestuste taastamiseks seadme vahetamisel.';
+
+  @override
+  String get savedMyKey => 'Salvestasin oma võtme';
+
+  @override
+  String get showRecoveryKey => 'Näita taastevõtit';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Kui kaotate taastevõtme, ei saa teie andmeid taastada.';
+
+  @override
+  String get e2eeBackupReminder => 'Varundage oma võti pärast lubamist.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'E2EE lubamine ebaõnnestus: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Võti kopeeritud lõikelauale';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Krüpteeritud teie seadmes enne serverisse jõudmist. Ainult teie saate neid lugeda.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Krüpteeritud puhkeolekus serveris. Server töötleb heli transkriptsiooni jaoks, kuid salvestatud andmed on krüpteeritud.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Maksimaalne kaitse — mälestused krüpteeritud seadmes, kõik muud andmed krüpteeritud puhkeolekus';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Krüpteeritud — dekrüpteerimine ebaõnnestus. Kontrollige taastevõtit.';
+
+  @override
+  String get pairWithWeb => 'Seo veebiga';
+
+  @override
+  String get scanQrOnWeb => 'Skannige see QR-kood aadressil omi.me krüpteeritud andmete avamiseks';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Aegub ${seconds}s pärast';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Skannige ainult usaldusväärsel seadmel';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Otsast lõpuni krüpteerimine pakub kõrgeimat andmekaitse taset:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Mälestused: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Vestlused, chat ja muud andmed: ';
+
+  @override
+  String get switchToSecureEncryption => 'Kas lülituda turvalisele krüpteerimisele?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'See krüpteerib sinu andmed uuesti serveri hallatavate võtmetega. Sinu otsast lõpuni krüpteerimise võtit enam ei kasutata.\n\nSinu andmed jäävad puhkeolekus krüpteerituks, kuid võtmeid haldab server.';
+
+  @override
+  String get switchButton => 'Lülitu';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Kolmandate osapoolte rakendused ja integratsioonid ei pääse sinu krüpteeritud andmetele juurde, kui sa ei anna neile oma võtit.';
+
+  @override
+  String get preparingMigration => 'Migratsiooni ettevalmistamine...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Taastevõti on nõutav';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Sinu E2EE krüpteerimisvõti puudub. Kleebi taastevõti, et taastada ligipääs oma krüpteeritud andmetele.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Kleebi taastevõti';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Taasta';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Võti taastati edukalt';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Vale võti — see ei ühti võtmega, millega sinu andmed krüpteeriti';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Kaotasin oma taastevõtme';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Ilma taastevõtmeta pead E2EE keelama teisest seadmest, kus oled sisse logitud, või võtma ühendust toega krüpteerimise lähtestamiseks.';
+
+  @override
+  String get processingOnServer => 'Töötlemine serveris...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Töötlemine... $current/$total segmenti';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Õiglane kasutus: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Ühenduse parandamine';
+
+  @override
+  String get improveConnectionContent =>
+      'Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.';
+
+  @override
+  String get improveConnectionAction => 'Selge';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Teie seadme kell erineb ~$minutes min. Kontrollige kuupäeva ja kellaaja seadeid.';
+  }
+
+  @override
+  String get omisStorage => 'Omi salvestusruum';
+
+  @override
+  String get phoneStorage => 'Telefoni salvestusruum';
+
+  @override
+  String get cloudStorage => 'Pilvsalvestus';
+
+  @override
+  String get howSyncingWorks => 'Kuidas sünkroonimine töötab';
+
+  @override
+  String get noSyncedRecordings => 'Sünkroonitud salvestusi veel pole';
+
+  @override
+  String get recordingsSyncAutomatically => 'Salvestised sünkroonitakse automaatselt — tegevust pole vaja.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Juba allalaaditud failid laaditakse üles järgmisel korral.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust loodud',
+      one: '1 vestlus loodud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Puudutage vaatamiseks';
+
+  @override
+  String get syncFailed => 'Sünkroonimine ebaõnnestus';
+
+  @override
+  String get keepSyncing => 'Jätka sünkroonimist';
+
+  @override
+  String get cancelSyncQuestion => 'Tühista sünkroonimine?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kui Omi uuesti ühendub, kantakse salvestised automaatselt teie telefoni enne üleslaadimist.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Pärast üleslaadimist töödeldakse ja transkribeeritakse teie salvestised. Vestlused on saadaval minuti jooksul.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Hoidke telefon lähedal kiiremaks sünkroonimiseks';
+
+  @override
+  String get tipStableInternet => 'Stabiilne internet kiirendab pilveüleslaadimist';
+
+  @override
+  String get tipAutoSync => 'Salvestised sünkroonitakse automaatselt';
+
+  @override
+  String get storageSection => 'SALVESTUSRUUM';
+
+  @override
+  String get permissions => 'Õigused';
+
+  @override
+  String get permissionEnabled => 'Lubatud';
+
+  @override
+  String get permissionEnable => 'Luba';
+
+  @override
+  String get permissionsPageDescription =>
+      'Need load on Omi toimimiseks olulised. Need võimaldavad põhifunktsioone nagu teavitused, asukohapõhised kogemused ja helisalvestus.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi vajab mõningaid õigusi, et korralikult töötada. Palun anna need jätkamiseks.';
+
+  @override
+  String get permissionsSetupTitle => 'Saage parim kogemus';
+
+  @override
+  String get permissionsSetupDescription => 'Lubage mõned õigused, et Omi saaks oma võlu avaldada.';
+
+  @override
+  String get permissionsChangeAnytime => 'Saate neid igal ajal muuta jaotises Seaded > Õigused';
+
+  @override
+  String get location => 'Asukoht';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Miks tühistate?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kas saate meile öelda, miks lahkute?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Liiga kallis';
+
+  @override
+  String get cancelReasonNotUsing => 'Ei kasuta piisavalt';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Puuduvad funktsioonid';
+
+  @override
+  String get cancelReasonAudioQuality => 'Heli/transkriptsiooni kvaliteet';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Aku tühjenemise mured';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Leidsin alternatiivi';
+
+  @override
+  String get cancelReasonOther => 'Muu';
+
+  @override
+  String get tellUsMore => 'Rääkige meile rohkem (valikuline)';
+
+  @override
+  String get cancelReasonDetailHint => 'Hindame igasugust tagasisidet...';
+
+  @override
+  String get justAMoment => 'Üks hetk, palun';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Soovitame tungivalt uurida oma teisi võimalusi tühistamise asemel.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda viiakse teid üle tasuta versioonile piiratud funktsioonidega.';
+  }
+
+  @override
+  String get ifYouCancel => 'Kui tühistate:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Arveldusperioodi lõpus ei ole teil enam piiramatut juurdepääsu.';
+
+  @override
+  String get cancelConsequenceBattery => '7x suurem akukasutus (seadmes töötlemine)';
+
+  @override
+  String get cancelConsequenceQuality => '30% madalam transkriptsiooni kvaliteet (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundit töötlemisviivitust (seadme mudelid)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Ei suuda kõnelejaid tuvastada.';
+
+  @override
+  String get confirmAndCancel => 'Kinnita ja tühista';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Puudub reaalajas telefonikõnede transkriptsioon';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Milline hind sobiks teile?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Milliseid funktsioone teil puudu on?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Milliseid probleeme kogesite?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Rääkige meile akuprobleemidest';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Millele lähete üle?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Mis paneks teid Omi rohkem kasutama?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Teie tagasiside aitab meil leida õige tasakaalu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Ehitame alati — see aitab meil prioriteete seada.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Tahaksime mõista, mis läks valesti.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'See aitab meie riistvarameeskonnal paraneda.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Tahaksime teada, mis teie tähelepanu köitis.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Tahame muuta Omi teile kasulikumaks.';
+
+  @override
+  String get deviceDiagnostics => 'Seadme diagnostika';
+
+  @override
+  String get signalStrength => 'Signaali tugevus';
+
+  @override
+  String get connectionUptime => 'Tööaeg';
+
+  @override
+  String get reconnections => 'Taasühendused';
+
+  @override
+  String get disconnectHistory => 'Katkestuste ajalugu';
+
+  @override
+  String get noDisconnectsRecorded => 'Katkestusi pole registreeritud';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Andmete ootel...';
+
+  @override
+  String get liveRssiOverTime => 'Reaalajas RSSI ajas';
+
+  @override
+  String get noRssiDataYet => 'RSSI andmeid veel pole';
+
+  @override
+  String get collectingData => 'Andmete kogumine...';
+
+  @override
+  String get cleanDisconnect => 'Puhas katkestus';
+
+  @override
+  String get connectionTimeout => 'Ühenduse ajalõpp';
+
+  @override
+  String get remoteDeviceTerminated => 'Kaugseade katkestas ühenduse';
+
+  @override
+  String get pairedToAnotherPhone => 'Seotud teise telefoniga';
+
+  @override
+  String get linkKeyMismatch => 'Lingivõtme mittevastavus';
+
+  @override
+  String get connectionFailed => 'Ühendamine ebaõnnestus';
+
+  @override
+  String get appClosed => 'Rakendus suletud';
+
+  @override
+  String get manualDisconnect => 'Käsitsi katkestus';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Viimased $count sündmust';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Aku';
+
+  @override
+  String get excellent => 'Suurepärane';
+
+  @override
+  String get good => 'Hea';
+
+  @override
+  String get fair => 'Rahuldav';
+
+  @override
+  String get weak => 'Nõrk';
+
+  @override
+  String gattError(String code) {
+    return 'GATT viga ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Tagasi stabiilsele püsivarale';
+
+  @override
+  String get rollbackConfirmTitle => 'Taastada püsivara?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'See asendab teie praeguse püsivara uusima stabiilse versiooniga ($version). Teie seade taaskäivitub pärast värskendust.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiilne püsivara';
+
+  @override
+  String get fetchingStableFirmware => 'Uusima stabiilse püsivara toomine...';
+
+  @override
+  String get noStableFirmwareFound => 'Teie seadmele ei leitud stabiilset püsivara versiooni.';
+
+  @override
+  String get installStableFirmware => 'Paigalda stabiilne püsivara';
+
+  @override
+  String get alreadyOnStableFirmware => 'Teil on juba uusim stabiilne versioon.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration heli salvestatud kohapeal';
+  }
+
+  @override
+  String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
+
+  @override
+  String get enableLocationTitle => 'Luba asukoht';
+
+  @override
+  String get enableLocationDescription => 'Asukoha luba on vajalik lähedal asuvate Bluetooth-seadmete leidmiseks.';
+
+  @override
+  String get voiceRecordingFound => 'Salvestis leitud';
+
+  @override
+  String get transcriptionConnecting => 'Transkriptsiooni ühendamine...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkriptsiooni uuesti ühendamine...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkriptsioon pole saadaval';
+
+  @override
+  String get audioOutput => 'Heliväljund';
 }

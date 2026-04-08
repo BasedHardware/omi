@@ -216,14 +216,28 @@ struct DashboardPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
+        .onAppear {
+            if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
+                NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
         }
     }
 
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+        VStack(alignment: .leading, spacing: 28) {
+            if shouldShowSuggestionBanner {
+                PromptSuggestionBanner(
+                    suggestions: postOnboardingSuggestions,
+                    onOpen: { NotificationCenter.default.post(name: .showTryAskingPopup, object: nil) },
+                    onAsk: handleSuggestedPrompt,
+                    onDismiss: dismissSuggestionBanner
+                )
+            }
+
+            Grid(horizontalSpacing: 20, verticalSpacing: 20) {
                 // Top row: Tasks + Goals
                 GridRow {
                     TasksWidget(
@@ -275,9 +289,27 @@ struct DashboardPage: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 30)
+        .padding(.top, 40)
+        .padding(.bottom, 16)
+    }
+
+    private var postOnboardingSuggestions: [String] {
+        PostOnboardingPromptSuggestions.suggestions()
+    }
+
+    private var shouldShowSuggestionBanner: Bool {
+        !postOnboardingSuggestions.isEmpty && !PostOnboardingPromptSuggestions.isDismissed
+    }
+
+    private func dismissSuggestionBanner() {
+        PostOnboardingPromptSuggestions.shouldShowPopup = false
+        PostOnboardingPromptSuggestions.isDismissed = true
+    }
+
+    private func handleSuggestedPrompt(_ suggestion: String) {
+        PostOnboardingPromptSuggestions.shouldShowPopup = false
+        FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
     }
 
 }

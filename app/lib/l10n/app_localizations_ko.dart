@@ -1439,7 +1439,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
 
   @override
-  String get freeMinutesMonth => '월 4,800분 무료 포함. ';
+  String get freeMinutesMonth => '월 1,200분 무료 포함. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4678,7 +4678,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 
   @override
-  String get basicPlanDescription => '4,800 프리미엄 분 + 무제한 온디바이스';
+  String get basicPlanDescription => '1,200 프리미엄 분 + 무제한 온디바이스';
 
   @override
   String get minutes => '분';
@@ -5984,7 +5984,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 4,800분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -6062,7 +6062,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 4,800 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -8413,62 +8413,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearAll => '모두 지우기';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => '키패드';
 
   @override
@@ -8540,4 +8484,475 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중...';
+
+  @override
+  String get enableE2ee => 'E2EE 활성화';
+
+  @override
+  String get recoveryKey => '복구 키';
+
+  @override
+  String get saveKeyMessage => '이 키를 안전한 곳에 저장하세요. 기기를 변경할 때 암호화된 기억을 복구하는 데 필요합니다.';
+
+  @override
+  String get savedMyKey => '키를 저장했습니다';
+
+  @override
+  String get showRecoveryKey => '복구 키 표시';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ 복구 키를 잃어버리면 데이터를 복구할 수 없습니다.';
+
+  @override
+  String get e2eeBackupReminder => '활성화 후 키를 백업하세요.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'E2EE 활성화 실패: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => '키가 클립보드에 복사되었습니다';
+
+  @override
+  String get e2eeMemoriesDescription => '서버에 도달하기 전에 기기에서 암호화됩니다. 본인만 읽을 수 있습니다.';
+
+  @override
+  String get e2eeOtherDataDescription => '서버에서 저장 시 암호화됩니다. 서버는 전사를 위해 오디오를 처리하지만 저장된 데이터는 암호화됩니다.';
+
+  @override
+  String get e2eeCardSubtitle => '최대 보호 — 기억은 기기에서 암호화, 기타 데이터는 저장 시 암호화';
+
+  @override
+  String get e2eeUnableToDecrypt => '암호화됨 — 복호화 불가. 복구 키를 확인하세요.';
+
+  @override
+  String get pairWithWeb => '웹과 페어링';
+
+  @override
+  String get scanQrOnWeb => 'omi.me에서 이 QR 코드를 스캔하여 암호화된 데이터를 잠금 해제하세요';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return '$seconds초 후 만료';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ 신뢰할 수 있는 기기에서만 스캔';
+
+  @override
+  String get e2eeEnableDialogIntro => '종단 간 암호화는 가장 높은 수준의 데이터 보호를 제공합니다:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 메모리: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 대화, 채팅 및 기타 데이터: ';
+
+  @override
+  String get switchToSecureEncryption => '보안 암호화로 전환할까요?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      '이 작업은 서버 관리 키로 데이터를 다시 암호화합니다. 종단 간 암호화 키는 더 이상 사용되지 않습니다.\n\n데이터는 저장 중에도 계속 암호화되지만, 서버가 키를 관리합니다.';
+
+  @override
+  String get switchButton => '전환';
+
+  @override
+  String get thirdPartyAppsWarning => '키를 제공하지 않으면 타사 앱 및 통합 기능은 암호화된 데이터에 접근할 수 없습니다.';
+
+  @override
+  String get preparingMigration => '마이그레이션 준비 중...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => '복구 키 필요';
+
+  @override
+  String get e2eeKeyRecoveryBody => 'E2EE 암호화 키가 없습니다. 암호화된 데이터에 대한 접근을 복원하려면 복구 키를 붙여넣으세요.';
+
+  @override
+  String get e2eeKeyRecoveryHint => '복구 키 붙여넣기';
+
+  @override
+  String get e2eeKeyRecoveryButton => '복구';
+
+  @override
+  String get e2eeKeyRecoverySuccess => '키가 성공적으로 복구되었습니다';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => '잘못된 키 — 데이터를 암호화하는 데 사용된 키와 일치하지 않습니다';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => '복구 키를 잃어버렸습니다';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody => '복구 키가 없으면 로그인된 다른 기기에서 E2EE를 비활성화하거나 지원팀에 문의하여 암호화를 재설정해야 합니다.';
+
+  @override
+  String get processingOnServer => '서버에서 처리 중...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '처리 중... $current/$total 세그먼트';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return '공정 사용: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => '연결 개선';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi가 기기와 연결을 유지하는 방식을 개선했습니다. 이를 활성화하려면 기기 정보 페이지로 이동하여 \"기기 연결 해제\"를 탭한 다음 기기를 다시 페어링하세요.';
+
+  @override
+  String get improveConnectionAction => '알겠습니다';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return '기기 시계가 ~$minutes분 차이납니다. 날짜 및 시간 설정을 확인하세요.';
+  }
+
+  @override
+  String get omisStorage => 'Omi 저장소';
+
+  @override
+  String get phoneStorage => '휴대폰 저장소';
+
+  @override
+  String get cloudStorage => '클라우드 저장소';
+
+  @override
+  String get howSyncingWorks => '동기화 작동 방식';
+
+  @override
+  String get noSyncedRecordings => '아직 동기화된 녹음이 없습니다';
+
+  @override
+  String get recordingsSyncAutomatically => '녹음이 자동으로 동기화됩니다 — 별도 작업이 필요 없습니다.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => '이미 다운로드된 파일은 다음에 업로드됩니다.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => '탭하여 보기';
+
+  @override
+  String get syncFailed => '동기화 실패';
+
+  @override
+  String get keepSyncing => '동기화 계속';
+
+  @override
+  String get cancelSyncQuestion => '동기화를 취소하시겠습니까?';
+
+  @override
+  String get omisStorageDesc => 'Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.';
+
+  @override
+  String get phoneStorageDesc => 'Omi가 다시 연결되면 녹음이 업로드 전에 자동으로 휴대폰으로 전송됩니다.';
+
+  @override
+  String get cloudStorageDesc => '업로드 후 녹음이 처리되고 텍스트로 변환됩니다. 대화는 1분 이내에 사용할 수 있습니다.';
+
+  @override
+  String get tipKeepPhoneNearby => '더 빠른 동기화를 위해 휴대폰을 가까이 두세요';
+
+  @override
+  String get tipStableInternet => '안정적인 인터넷으로 클라우드 업로드 속도 향상';
+
+  @override
+  String get tipAutoSync => '녹음이 자동으로 동기화됩니다';
+
+  @override
+  String get storageSection => '저장소';
+
+  @override
+  String get permissions => '권한';
+
+  @override
+  String get permissionEnabled => '활성화됨';
+
+  @override
+  String get permissionEnable => '활성화';
+
+  @override
+  String get permissionsPageDescription => '이 권한들은 Omi 작동의 핵심입니다. 알림, 위치 기반 경험, 오디오 캡처와 같은 주요 기능을 활성화합니다.';
+
+  @override
+  String get permissionsRequiredDescription => 'Omi가 제대로 작동하려면 몇 가지 권한이 필요합니다. 계속하려면 권한을 허용해 주세요.';
+
+  @override
+  String get permissionsSetupTitle => '최고의 경험을 누리세요';
+
+  @override
+  String get permissionsSetupDescription => 'Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.';
+
+  @override
+  String get permissionsChangeAnytime => '설정 > 권한에서 언제든지 변경할 수 있습니다';
+
+  @override
+  String get location => '위치';
+
+  @override
+  String get microphone => '마이크';
+
+  @override
+  String get whyAreYouCanceling => '취소하시는 이유는?';
+
+  @override
+  String get cancelReasonSubtitle => '떠나시는 이유를 알려주시겠어요?';
+
+  @override
+  String get cancelReasonTooExpensive => '너무 비쌈';
+
+  @override
+  String get cancelReasonNotUsing => '충분히 사용하지 않음';
+
+  @override
+  String get cancelReasonMissingFeatures => '누락된 기능';
+
+  @override
+  String get cancelReasonAudioQuality => '오디오/전사 품질';
+
+  @override
+  String get cancelReasonBatteryDrain => '배터리 소모 우려';
+
+  @override
+  String get cancelReasonFoundAlternative => '대안을 찾았음';
+
+  @override
+  String get cancelReasonOther => '기타';
+
+  @override
+  String get tellUsMore => '더 알려주세요 (선택사항)';
+
+  @override
+  String get cancelReasonDetailHint => '모든 피드백을 감사히 여깁니다...';
+
+  @override
+  String get justAMoment => '잠시만요';
+
+  @override
+  String get cancelConsequencesSubtitle => '취소 대신 다른 옵션을 살펴보시길 강력히 권장합니다.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return '플랜은 $date까지 활성 상태로 유지됩니다. 그 후 제한된 기능의 무료 버전으로 전환됩니다.';
+  }
+
+  @override
+  String get ifYouCancel => '취소하면:';
+
+  @override
+  String get cancelConsequenceNoAccess => '청구 기간 종료 시 무제한 액세스가 없어집니다.';
+
+  @override
+  String get cancelConsequenceBattery => '7배 더 많은 배터리 사용량 (기기 내 처리)';
+
+  @override
+  String get cancelConsequenceQuality => '30% 낮은 전사 품질 (기기 내 모델)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7초 처리 지연 (기기 내 모델)';
+
+  @override
+  String get cancelConsequenceSpeakers => '화자를 식별할 수 없습니다.';
+
+  @override
+  String get confirmAndCancel => '확인 및 취소';
+
+  @override
+  String get cancelConsequencePhoneCalls => '실시간 전화 통화 전사 없음';
+
+  @override
+  String get feedbackTitleTooExpensive => '어떤 가격이 적당할까요?';
+
+  @override
+  String get feedbackTitleMissingFeatures => '어떤 기능이 부족한가요?';
+
+  @override
+  String get feedbackTitleAudioQuality => '어떤 문제를 경험하셨나요?';
+
+  @override
+  String get feedbackTitleBatteryDrain => '배터리 문제에 대해 알려주세요';
+
+  @override
+  String get feedbackTitleFoundAlternative => '무엇으로 전환하시나요?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omi를 더 사용하게 만들 것은 무엇인가요?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => '피드백이 적절한 균형을 찾는 데 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '항상 개발 중입니다 — 우선순위 결정에 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '무엇이 잘못되었는지 이해하고 싶습니다.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => '하드웨어 팀의 개선에 도움이 됩니다.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '무엇이 눈길을 끌었는지 알고 싶습니다.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omi를 더 유용하게 만들고 싶습니다.';
+
+  @override
+  String get deviceDiagnostics => '기기 진단';
+
+  @override
+  String get signalStrength => '신호 강도';
+
+  @override
+  String get connectionUptime => '가동 시간';
+
+  @override
+  String get reconnections => '재연결';
+
+  @override
+  String get disconnectHistory => '연결 해제 기록';
+
+  @override
+  String get noDisconnectsRecorded => '기록된 연결 해제 없음';
+
+  @override
+  String get diagnostics => '진단';
+
+  @override
+  String get waitingForData => '데이터 대기 중...';
+
+  @override
+  String get liveRssiOverTime => '실시간 RSSI 추이';
+
+  @override
+  String get noRssiDataYet => '아직 RSSI 데이터 없음';
+
+  @override
+  String get collectingData => '데이터 수집 중...';
+
+  @override
+  String get cleanDisconnect => '정상 연결 해제';
+
+  @override
+  String get connectionTimeout => '연결 시간 초과';
+
+  @override
+  String get remoteDeviceTerminated => '원격 기기가 연결을 종료함';
+
+  @override
+  String get pairedToAnotherPhone => '다른 휴대폰에 페어링됨';
+
+  @override
+  String get linkKeyMismatch => '링크 키 불일치';
+
+  @override
+  String get connectionFailed => '연결 실패';
+
+  @override
+  String get appClosed => '앱 종료됨';
+
+  @override
+  String get manualDisconnect => '수동 연결 해제';
+
+  @override
+  String lastNEvents(int count) {
+    return '최근 $count개 이벤트';
+  }
+
+  @override
+  String get signal => '신호';
+
+  @override
+  String get battery => '배터리';
+
+  @override
+  String get excellent => '우수';
+
+  @override
+  String get good => '양호';
+
+  @override
+  String get fair => '보통';
+
+  @override
+  String get weak => '약함';
+
+  @override
+  String gattError(String code) {
+    return 'GATT 오류 ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => '안정 펌웨어로 롤백';
+
+  @override
+  String get rollbackConfirmTitle => '펌웨어를 롤백하시겠습니까?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '현재 펌웨어가 최신 안정 버전($version)으로 교체됩니다. 업데이트 후 기기가 재시작됩니다.';
+  }
+
+  @override
+  String get stableFirmware => '안정 펌웨어';
+
+  @override
+  String get fetchingStableFirmware => '최신 안정 펌웨어를 가져오는 중...';
+
+  @override
+  String get noStableFirmwareFound => '기기에 맞는 안정 펌웨어 버전을 찾을 수 없습니다.';
+
+  @override
+  String get installStableFirmware => '안정 펌웨어 설치';
+
+  @override
+  String get alreadyOnStableFirmware => '이미 최신 안정 버전을 사용 중입니다.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 오디오가 로컬에 저장됨';
+  }
+
+  @override
+  String get willSyncAutomatically => '자동으로 동기화됩니다';
+
+  @override
+  String get enableLocationTitle => '위치 활성화';
+
+  @override
+  String get enableLocationDescription => '근처 Bluetooth 기기를 찾으려면 위치 권한이 필요합니다.';
+
+  @override
+  String get voiceRecordingFound => '녹음 발견됨';
+
+  @override
+  String get transcriptionConnecting => '전사 연결 중...';
+
+  @override
+  String get transcriptionReconnecting => '전사 재연결 중...';
+
+  @override
+  String get transcriptionUnavailable => '전사를 사용할 수 없습니다';
+
+  @override
+  String get audioOutput => '오디오 출력';
 }

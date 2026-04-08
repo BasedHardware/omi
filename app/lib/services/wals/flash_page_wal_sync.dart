@@ -350,6 +350,19 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           }
         }
 
+        // Send periodic ACK for diagnostic-only pages (no audio accumulated)
+        if (pageData != null && !shouldSave && accumulatedFrames.isEmpty && lastProcessedIndex != null) {
+          if (DateTime.now().difference(lastSaveTime) >= _persistBatchDuration) {
+            try {
+              await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
+              Logger.debug("FlashPageSync: Diagnostic-only ACK sent for page $lastProcessedIndex");
+              lastSaveTime = DateTime.now();
+            } catch (e) {
+              Logger.debug("FlashPageSync: Diagnostic ACK failed: $e");
+            }
+          }
+        }
+
         if (shouldSave && accumulatedFrames.isNotEmpty) {
           final filePath = await _saveBatchToFile(
             accumulatedFrames,

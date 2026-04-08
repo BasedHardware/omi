@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -34,7 +34,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from FoundDevices');
+        context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
   }
@@ -260,8 +260,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
                           : provider.batteryPercentage <= 50
-                          ? Colors.orange
-                          : Colors.green,
+                              ? Colors.orange
+                              : Colors.green,
                     ),
                   ),
                 ),

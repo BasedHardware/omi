@@ -8061,10 +8061,10 @@ abstract class AppLocalizations {
   /// **'Your new key:'**
   String get yourNewKey;
 
-  /// Button to copy text to clipboard
+  /// Tooltip for copy button
   ///
   /// In en, this message translates to:
-  /// **'Copy to Clipboard'**
+  /// **'Copy to clipboard'**
   String get copyToClipboard;
 
   /// Warning to copy key immediately
@@ -15981,108 +15981,6 @@ abstract class AppLocalizations {
   /// **'Clear All'**
   String get clearAll;
 
-  /// Button to enable end-to-end encryption
-  ///
-  /// In en, this message translates to:
-  /// **'Enable E2EE'**
-  String get enableE2ee;
-
-  /// Title for recovery key dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Recovery Key'**
-  String get recoveryKey;
-
-  /// Instructions for backing up E2EE recovery key
-  ///
-  /// In en, this message translates to:
-  /// **'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.'**
-  String get saveKeyMessage;
-
-  /// Confirmation button after saving recovery key
-  ///
-  /// In en, this message translates to:
-  /// **'I\'ve Saved My Key'**
-  String get savedMyKey;
-
-  /// Button to display the E2EE recovery key
-  ///
-  /// In en, this message translates to:
-  /// **'Show Recovery Key'**
-  String get showRecoveryKey;
-
-  /// Warning about E2EE key loss
-  ///
-  /// In en, this message translates to:
-  /// **'⚠️ If you lose your recovery key, your data cannot be recovered.'**
-  String get e2eeKeyWarning;
-
-  /// Reminder to back up E2EE key
-  ///
-  /// In en, this message translates to:
-  /// **'Make sure to back up your key after enabling.'**
-  String get e2eeBackupReminder;
-
-  /// Error message when E2EE enabling fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable E2EE: {error}'**
-  String e2eeFailedToEnable(String error);
-
-  /// Snackbar message after copying E2EE key
-  ///
-  /// In en, this message translates to:
-  /// **'Key copied to clipboard'**
-  String get keyCopiedToClipboard;
-
-  /// Description of E2EE for memories
-  ///
-  /// In en, this message translates to:
-  /// **'Encrypted on your device before reaching the server. Only you can read them.'**
-  String get e2eeMemoriesDescription;
-
-  /// Description of server-side encryption for conversations and chat
-  ///
-  /// In en, this message translates to:
-  /// **'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.'**
-  String get e2eeOtherDataDescription;
-
-  /// Subtitle for E2EE card in data protection settings
-  ///
-  /// In en, this message translates to:
-  /// **'Maximum protection — memories encrypted on-device, all other data encrypted at rest'**
-  String get e2eeCardSubtitle;
-
-  /// Error shown when E2EE decryption fails
-  ///
-  /// In en, this message translates to:
-  /// **'Encrypted — unable to decrypt. Check your recovery key.'**
-  String get e2eeUnableToDecrypt;
-
-  /// Button to pair E2EE key with web UI via QR code
-  ///
-  /// In en, this message translates to:
-  /// **'Pair with Web'**
-  String get pairWithWeb;
-
-  /// Instructions for QR pairing
-  ///
-  /// In en, this message translates to:
-  /// **'Scan this QR code on omi.me to unlock your encrypted data'**
-  String get scanQrOnWeb;
-
-  /// Timer for QR code expiry
-  ///
-  /// In en, this message translates to:
-  /// **'Expires in {seconds}s'**
-  String expiresInSeconds(int seconds);
-
-  /// Warning about scanning QR code
-  ///
-  /// In en, this message translates to:
-  /// **'⚠️ Only scan on a trusted device'**
-  String get onlyTrustedDevice;
-
   /// Label for the keypad/dialpad button during an active phone call
   ///
   /// In en, this message translates to:
@@ -16214,6 +16112,888 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still recording — reconnecting to transcription...'**
   String get transcriptionPausedReconnecting;
+
+  /// Button to enable end-to-end encryption
+  ///
+  /// In en, this message translates to:
+  /// **'Enable E2EE'**
+  String get enableE2ee;
+
+  /// Title for recovery key dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Key'**
+  String get recoveryKey;
+
+  /// Instructions for backing up E2EE recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.'**
+  String get saveKeyMessage;
+
+  /// Confirmation button after saving recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve Saved My Key'**
+  String get savedMyKey;
+
+  /// Button to display the E2EE recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'Show Recovery Key'**
+  String get showRecoveryKey;
+
+  /// Warning about E2EE key loss
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ If you lose your recovery key, your data cannot be recovered.'**
+  String get e2eeKeyWarning;
+
+  /// Reminder to back up E2EE key
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure to back up your key after enabling.'**
+  String get e2eeBackupReminder;
+
+  /// Error message when E2EE enabling fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to enable E2EE: {error}'**
+  String e2eeFailedToEnable(String error);
+
+  /// Snackbar message after copying E2EE key
+  ///
+  /// In en, this message translates to:
+  /// **'Key copied to clipboard'**
+  String get keyCopiedToClipboard;
+
+  /// Description of E2EE for memories
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted on your device before reaching the server. Only you can read them.'**
+  String get e2eeMemoriesDescription;
+
+  /// Description of server-side encryption for conversations and chat
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.'**
+  String get e2eeOtherDataDescription;
+
+  /// Subtitle for E2EE card in data protection settings
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum protection — memories encrypted on-device, all other data encrypted at rest'**
+  String get e2eeCardSubtitle;
+
+  /// Error shown when E2EE decryption fails
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted — unable to decrypt. Check your recovery key.'**
+  String get e2eeUnableToDecrypt;
+
+  /// Button to pair E2EE key with web UI via QR code
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with Web'**
+  String get pairWithWeb;
+
+  /// Instructions for QR pairing
+  ///
+  /// In en, this message translates to:
+  /// **'Scan this QR code on omi.me to unlock your encrypted data'**
+  String get scanQrOnWeb;
+
+  /// Timer for QR code expiry
+  ///
+  /// In en, this message translates to:
+  /// **'Expires in {seconds}s'**
+  String expiresInSeconds(int seconds);
+
+  /// Warning about scanning QR code
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Only scan on a trusted device'**
+  String get onlyTrustedDevice;
+
+  /// Intro text for E2EE enable dialog
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption provides the highest level of data protection:\n\n'**
+  String get e2eeEnableDialogIntro;
+
+  /// Label for memories in E2EE dialog
+  ///
+  /// In en, this message translates to:
+  /// **'🔒 Memories: '**
+  String get e2eeMemoriesLabel;
+
+  /// Label for other data in E2EE dialog
+  ///
+  /// In en, this message translates to:
+  /// **'🔐 Conversations, chat & other data: '**
+  String get e2eeOtherDataLabel;
+
+  /// Title for E2EE downgrade confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Secure Encryption?'**
+  String get switchToSecureEncryption;
+
+  /// Body text for E2EE downgrade confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This will re-encrypt your data with server-managed keys. Your end-to-end encryption key will no longer be used.\n\nYour data will still be encrypted at rest, but the server will manage the keys.'**
+  String get switchToSecureEncryptionBody;
+
+  /// Switch button label for downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Switch'**
+  String get switchButton;
+
+  /// Warning about third-party app access with E2EE
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party apps and integrations won\'t be able to access your encrypted data unless you provide them with your key.'**
+  String get thirdPartyAppsWarning;
+
+  /// Message shown while preparing data migration
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing migration...'**
+  String get preparingMigration;
+
+  /// Title for the E2EE key recovery dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Key Required'**
+  String get e2eeKeyRecoveryTitle;
+
+  /// Body text for the E2EE key recovery dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Your E2EE encryption key is missing. Paste your recovery key to restore access to your encrypted data.'**
+  String get e2eeKeyRecoveryBody;
+
+  /// Hint text for the recovery key input field
+  ///
+  /// In en, this message translates to:
+  /// **'Paste recovery key'**
+  String get e2eeKeyRecoveryHint;
+
+  /// Button text to recover the E2EE key
+  ///
+  /// In en, this message translates to:
+  /// **'Recover'**
+  String get e2eeKeyRecoveryButton;
+
+  /// Success message after key recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Key recovered successfully'**
+  String get e2eeKeyRecoverySuccess;
+
+  /// Error message when the recovery key doesn't match
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong key — doesn\'t match the one used to encrypt your data'**
+  String get e2eeKeyRecoveryWrongKey;
+
+  /// Link text for users who lost their recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'I lost my recovery key'**
+  String get e2eeKeyRecoveryLostKey;
+
+  /// Explanation text for users who lost their recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'Without the recovery key, you\'ll need to disable E2EE from another device where you\'re logged in, or contact support to reset your encryption.'**
+  String get e2eeKeyRecoveryLostKeyBody;
+
+  /// No description provided for @processingOnServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing on server...'**
+  String get processingOnServer;
+
+  /// No description provided for @processingOnServerProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing... {current}/{total} segments'**
+  String processingOnServerProgress(int current, int total);
+
+  /// No description provided for @fairUseBannerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use: {status}'**
+  String fairUseBannerStatus(String status);
+
+  /// No description provided for @improveConnectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Improve Connection'**
+  String get improveConnectionTitle;
+
+  /// No description provided for @improveConnectionContent.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.'**
+  String get improveConnectionContent;
+
+  /// No description provided for @improveConnectionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get improveConnectionAction;
+
+  /// No description provided for @clockSkewWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device clock is off by ~{minutes} min. Check your date & time settings.'**
+  String clockSkewWarning(int minutes);
+
+  /// Label for device storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Omi\'s Storage'**
+  String get omisStorage;
+
+  /// Label for phone storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Storage'**
+  String get phoneStorage;
+
+  /// Label for cloud storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Storage'**
+  String get cloudStorage;
+
+  /// Title for sync info bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'How syncing works'**
+  String get howSyncingWorks;
+
+  /// Empty state for synced recordings list
+  ///
+  /// In en, this message translates to:
+  /// **'No synced recordings yet'**
+  String get noSyncedRecordings;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically — no action needed.'**
+  String get recordingsSyncAutomatically;
+
+  /// Cancel sync confirmation message
+  ///
+  /// In en, this message translates to:
+  /// **'Files already downloaded will be uploaded next time.'**
+  String get filesDownloadedUploadedNextTime;
+
+  /// Shows number of conversations created after sync
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversation{count, plural, =1{} other{s}} created'**
+  String nConversationsCreated(int count);
+
+  /// Subtitle hint for tappable items
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view'**
+  String get tapToView;
+
+  /// Error state text when sync fails
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed'**
+  String get syncFailed;
+
+  /// Button label to dismiss cancel dialog and continue syncing
+  ///
+  /// In en, this message translates to:
+  /// **'Keep syncing'**
+  String get keepSyncing;
+
+  /// Title for cancel sync confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel sync?'**
+  String get cancelSyncQuestion;
+
+  /// Description of device storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.'**
+  String get omisStorageDesc;
+
+  /// Description of phone storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.'**
+  String get phoneStorageDesc;
+
+  /// Description of cloud storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.'**
+  String get cloudStorageDesc;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your phone nearby for faster syncing'**
+  String get tipKeepPhoneNearby;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Stable internet speeds up cloud uploads'**
+  String get tipStableInternet;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically'**
+  String get tipAutoSync;
+
+  /// Section header for storage settings
+  ///
+  /// In en, this message translates to:
+  /// **'STORAGE'**
+  String get storageSection;
+
+  /// Title for the permissions settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get permissions;
+
+  /// Status text when a permission is enabled
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get permissionEnabled;
+
+  /// Action text to enable a permission
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get permissionEnable;
+
+  /// Description text shown at the bottom of the permissions page
+  ///
+  /// In en, this message translates to:
+  /// **'These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.'**
+  String get permissionsPageDescription;
+
+  /// Description for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Omi needs a few permissions to work properly. Please grant them to continue.'**
+  String get permissionsRequiredDescription;
+
+  /// Title for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Get the best experience'**
+  String get permissionsSetupTitle;
+
+  /// Subtitle for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a few permissions so Omi can work its magic.'**
+  String get permissionsSetupDescription;
+
+  /// Reassurance note on the permissions interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'You can change these anytime in Settings > Permissions'**
+  String get permissionsChangeAnytime;
+
+  /// Label for location permission
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get location;
+
+  /// Label for microphone permission
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get microphone;
+
+  /// Title for cancel subscription reason page
+  ///
+  /// In en, this message translates to:
+  /// **'Why are you canceling?'**
+  String get whyAreYouCanceling;
+
+  /// Subtitle for cancel reason page
+  ///
+  /// In en, this message translates to:
+  /// **'Can you tell us why you\'re leaving?'**
+  String get cancelReasonSubtitle;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Too expensive'**
+  String get cancelReasonTooExpensive;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Not using it enough'**
+  String get cancelReasonNotUsing;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Missing features'**
+  String get cancelReasonMissingFeatures;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Audio/transcription quality'**
+  String get cancelReasonAudioQuality;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Battery drain concerns'**
+  String get cancelReasonBatteryDrain;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Found an alternative'**
+  String get cancelReasonFoundAlternative;
+
+  /// Cancel reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get cancelReasonOther;
+
+  /// Label for optional details text field
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more (optional)'**
+  String get tellUsMore;
+
+  /// Hint for cancel reason detail text field
+  ///
+  /// In en, this message translates to:
+  /// **'We appreciate any feedback...'**
+  String get cancelReasonDetailHint;
+
+  /// Title for cancel consequences page
+  ///
+  /// In en, this message translates to:
+  /// **'Just a moment, please'**
+  String get justAMoment;
+
+  /// Subtitle for cancel consequences page
+  ///
+  /// In en, this message translates to:
+  /// **'We highly recommend exploring your other options instead of canceling.'**
+  String get cancelConsequencesSubtitle;
+
+  /// Info about billing period end
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan will remain active until {date}. After that, you\'ll be moved to the free version with limited features.'**
+  String cancelBillingPeriodInfo(String date);
+
+  /// Header for consequences list
+  ///
+  /// In en, this message translates to:
+  /// **'If you cancel:'**
+  String get ifYouCancel;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'No longer have unlimited access at the end of your billing period.'**
+  String get cancelConsequenceNoAccess;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'7x more battery usage (on-device processing)'**
+  String get cancelConsequenceBattery;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'30% lower transcription quality (on-device models)'**
+  String get cancelConsequenceQuality;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second processing delay (on-device models)'**
+  String get cancelConsequenceDelay;
+
+  /// Cancel consequence
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot identify speakers.'**
+  String get cancelConsequenceSpeakers;
+
+  /// Confirm cancellation button text
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm & Cancel'**
+  String get confirmAndCancel;
+
+  /// Cancel consequence - phone calls
+  ///
+  /// In en, this message translates to:
+  /// **'No real-time phone call transcription'**
+  String get cancelConsequencePhoneCalls;
+
+  /// Feedback title when cancel reason is too expensive
+  ///
+  /// In en, this message translates to:
+  /// **'What price would work for you?'**
+  String get feedbackTitleTooExpensive;
+
+  /// Feedback title when cancel reason is missing features
+  ///
+  /// In en, this message translates to:
+  /// **'What features are you missing?'**
+  String get feedbackTitleMissingFeatures;
+
+  /// Feedback title when cancel reason is audio quality
+  ///
+  /// In en, this message translates to:
+  /// **'What issues did you experience?'**
+  String get feedbackTitleAudioQuality;
+
+  /// Feedback title when cancel reason is battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us about the battery issues'**
+  String get feedbackTitleBatteryDrain;
+
+  /// Feedback title when cancel reason is found alternative
+  ///
+  /// In en, this message translates to:
+  /// **'What are you switching to?'**
+  String get feedbackTitleFoundAlternative;
+
+  /// Feedback title when cancel reason is not using enough
+  ///
+  /// In en, this message translates to:
+  /// **'What would make you use Omi more?'**
+  String get feedbackTitleNotUsing;
+
+  /// Feedback subtitle for too expensive
+  ///
+  /// In en, this message translates to:
+  /// **'Your feedback helps us find the right balance.'**
+  String get feedbackSubtitleTooExpensive;
+
+  /// Feedback subtitle for missing features
+  ///
+  /// In en, this message translates to:
+  /// **'We\'re always building — this helps us prioritize.'**
+  String get feedbackSubtitleMissingFeatures;
+
+  /// Feedback subtitle for audio quality
+  ///
+  /// In en, this message translates to:
+  /// **'We\'d love to understand what went wrong.'**
+  String get feedbackSubtitleAudioQuality;
+
+  /// Feedback subtitle for battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'This helps our hardware team improve.'**
+  String get feedbackSubtitleBatteryDrain;
+
+  /// Feedback subtitle for found alternative
+  ///
+  /// In en, this message translates to:
+  /// **'We\'d love to learn what caught your eye.'**
+  String get feedbackSubtitleFoundAlternative;
+
+  /// Feedback subtitle for not using enough
+  ///
+  /// In en, this message translates to:
+  /// **'We want to make Omi more useful for you.'**
+  String get feedbackSubtitleNotUsing;
+
+  /// No description provided for @deviceDiagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Device Diagnostics'**
+  String get deviceDiagnostics;
+
+  /// No description provided for @signalStrength.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal Strength'**
+  String get signalStrength;
+
+  /// No description provided for @connectionUptime.
+  ///
+  /// In en, this message translates to:
+  /// **'Uptime'**
+  String get connectionUptime;
+
+  /// No description provided for @reconnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnections'**
+  String get reconnections;
+
+  /// No description provided for @disconnectHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect History'**
+  String get disconnectHistory;
+
+  /// No description provided for @noDisconnectsRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'No disconnects recorded'**
+  String get noDisconnectsRecorded;
+
+  /// No description provided for @diagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get diagnostics;
+
+  /// No description provided for @waitingForData.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for data...'**
+  String get waitingForData;
+
+  /// No description provided for @liveRssiOverTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Live RSSI over time'**
+  String get liveRssiOverTime;
+
+  /// No description provided for @noRssiDataYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No RSSI data yet'**
+  String get noRssiDataYet;
+
+  /// No description provided for @collectingData.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting data...'**
+  String get collectingData;
+
+  /// No description provided for @cleanDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean disconnect'**
+  String get cleanDisconnect;
+
+  /// No description provided for @connectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timeout'**
+  String get connectionTimeout;
+
+  /// No description provided for @remoteDeviceTerminated.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote device terminated'**
+  String get remoteDeviceTerminated;
+
+  /// No description provided for @pairedToAnotherPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired to another phone'**
+  String get pairedToAnotherPhone;
+
+  /// No description provided for @linkKeyMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Link key mismatch'**
+  String get linkKeyMismatch;
+
+  /// No description provided for @connectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed'**
+  String get connectionFailed;
+
+  /// No description provided for @appClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'App closed'**
+  String get appClosed;
+
+  /// No description provided for @manualDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual disconnect'**
+  String get manualDisconnect;
+
+  /// No description provided for @lastNEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Last {count} events'**
+  String lastNEvents(int count);
+
+  /// No description provided for @signal.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal'**
+  String get signal;
+
+  /// No description provided for @battery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get battery;
+
+  /// No description provided for @excellent.
+  ///
+  /// In en, this message translates to:
+  /// **'Excellent'**
+  String get excellent;
+
+  /// No description provided for @good.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get good;
+
+  /// No description provided for @fair.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair'**
+  String get fair;
+
+  /// No description provided for @weak.
+  ///
+  /// In en, this message translates to:
+  /// **'Weak'**
+  String get weak;
+
+  /// No description provided for @gattError.
+  ///
+  /// In en, this message translates to:
+  /// **'GATT error ({code})'**
+  String gattError(String code);
+
+  /// Action item title for rolling back to the latest stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back to Stable Firmware'**
+  String get rollbackToStableFirmware;
+
+  /// Confirmation dialog title for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back Firmware?'**
+  String get rollbackConfirmTitle;
+
+  /// Confirmation dialog message for firmware rollback
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.'**
+  String rollbackConfirmMessage(String version);
+
+  /// Title for the stable firmware rollback page
+  ///
+  /// In en, this message translates to:
+  /// **'Stable Firmware'**
+  String get stableFirmware;
+
+  /// Loading text while fetching stable firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching latest stable firmware...'**
+  String get fetchingStableFirmware;
+
+  /// Error message when no stable firmware is available
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find a stable firmware version for your device.'**
+  String get noStableFirmwareFound;
+
+  /// Button text to install the stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Install Stable Firmware'**
+  String get installStableFirmware;
+
+  /// Message when device is already on the latest stable firmware
+  ///
+  /// In en, this message translates to:
+  /// **'You are already on the latest stable version.'**
+  String get alreadyOnStableFirmware;
+
+  /// No description provided for @audioSavedLocally.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} audio saved locally'**
+  String audioSavedLocally(String duration);
+
+  /// No description provided for @willSyncAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'will sync automatically'**
+  String get willSyncAutomatically;
+
+  /// No description provided for @enableLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Location'**
+  String get enableLocationTitle;
+
+  /// No description provided for @enableLocationDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission is needed to find nearby Bluetooth devices.'**
+  String get enableLocationDescription;
+
+  /// No description provided for @voiceRecordingFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording found'**
+  String get voiceRecordingFound;
+
+  /// Status when transcription WebSocket is connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting transcription...'**
+  String get transcriptionConnecting;
+
+  /// Status when transcription WebSocket is reconnecting
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting transcription...'**
+  String get transcriptionReconnecting;
+
+  /// Status when transcription WebSocket failed after max retries
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable'**
+  String get transcriptionUnavailable;
+
+  /// Title for audio route picker bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Output'**
+  String get audioOutput;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1464,7 +1464,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get payYourSttProvider => 'Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.';
 
   @override
-  String get freeMinutesMonth => '4.800 gratis minuten/maand inbegrepen. Onbeperkt met ';
+  String get freeMinutesMonth => '1.200 gratis minuten/maand inbegrepen. Onbeperkt met ';
 
   @override
   String get omiUnlimited => 'Omi Onbeperkt';
@@ -1820,7 +1820,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get skipThisQuestion => 'Sla deze vraag over';
 
   @override
-  String get skipForNow => 'Voorlopig overslaan';
+  String get skipForNow => 'Nu overslaan';
 
   @override
   String get connectionError => 'Verbindingsfout';
@@ -4777,7 +4777,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 
   @override
-  String get basicPlanDescription => '4.800 premium minuten + onbeperkt op apparaat';
+  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
 
   @override
   String get minutes => 'minuten';
@@ -6109,7 +6109,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
+      '1.200 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
 
   @override
   String get viewUsage => 'Bekijk gebruik';
@@ -6191,7 +6191,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
+      '1.200 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8583,62 +8583,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearAll => 'Alles wissen';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Toetsenbord';
 
   @override
@@ -8710,4 +8654,489 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
+
+  @override
+  String get enableE2ee => 'E2EE inschakelen';
+
+  @override
+  String get recoveryKey => 'Herstelsleutel';
+
+  @override
+  String get saveKeyMessage =>
+      'Bewaar deze sleutel op een veilige plek. Je hebt hem nodig om versleutelde herinneringen te herstellen als je van apparaat wisselt.';
+
+  @override
+  String get savedMyKey => 'Ik heb mijn sleutel opgeslagen';
+
+  @override
+  String get showRecoveryKey => 'Herstelsleutel tonen';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Als je je herstelsleutel kwijtraakt, kunnen je gegevens niet worden hersteld.';
+
+  @override
+  String get e2eeBackupReminder => 'Maak een back-up van je sleutel na het inschakelen.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'E2EE inschakelen mislukt: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Sleutel gekopieerd naar klembord';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Versleuteld op je apparaat voordat het de server bereikt. Alleen jij kunt ze lezen.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Versleuteld in rust op de server. De server verwerkt audio voor transcriptie maar opgeslagen gegevens zijn versleuteld.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Maximale bescherming — herinneringen versleuteld op apparaat, alle andere gegevens versleuteld in rust';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Versleuteld — kan niet ontsleutelen. Controleer je herstelsleutel.';
+
+  @override
+  String get pairWithWeb => 'Koppelen met web';
+
+  @override
+  String get scanQrOnWeb => 'Scan deze QR-code op omi.me om je versleutelde gegevens te ontgrendelen';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Verloopt over ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Scan alleen op een vertrouwd apparaat';
+
+  @override
+  String get e2eeEnableDialogIntro => 'End-to-endversleuteling biedt het hoogste niveau van gegevensbescherming:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Herinneringen: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Gesprekken, chat en andere gegevens: ';
+
+  @override
+  String get switchToSecureEncryption => 'Overschakelen naar veilige versleuteling?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Hiermee worden je gegevens opnieuw versleuteld met sleutels die door de server worden beheerd. Je end-to-endversleutelingssleutel wordt niet meer gebruikt.\n\nJe gegevens blijven in rust versleuteld, maar de server beheert de sleutels.';
+
+  @override
+  String get switchButton => 'Overschakelen';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Apps en integraties van derden kunnen geen toegang krijgen tot je versleutelde gegevens, tenzij je hun je sleutel geeft.';
+
+  @override
+  String get preparingMigration => 'Migratie voorbereiden...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Herstelsleutel vereist';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Je E2EE-versleutelingssleutel ontbreekt. Plak je herstelsleutel om toegang tot je versleutelde gegevens te herstellen.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Plak herstelsleutel';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Herstellen';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Sleutel succesvol hersteld';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey =>
+      'Verkeerde sleutel — komt niet overeen met de sleutel die is gebruikt om je gegevens te versleutelen';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Ik ben mijn herstelsleutel kwijt';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Zonder de herstelsleutel moet je E2EE uitschakelen vanaf een ander apparaat waarop je bent ingelogd, of contact opnemen met ondersteuning om je versleuteling te resetten.';
+
+  @override
+  String get processingOnServer => 'Verwerken op de server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Verwerken... $current/$total segmenten';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Eerlijk gebruik: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Verbinding verbeteren';
+
+  @override
+  String get improveConnectionContent =>
+      'We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.';
+
+  @override
+  String get improveConnectionAction => 'Begrepen';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'De klok van je apparaat wijkt ~$minutes min. af. Controleer je datum- en tijdinstellingen.';
+  }
+
+  @override
+  String get omisStorage => 'Omi\'s opslag';
+
+  @override
+  String get phoneStorage => 'Telefoonopslag';
+
+  @override
+  String get cloudStorage => 'Cloudopslag';
+
+  @override
+  String get howSyncingWorks => 'Hoe synchronisatie werkt';
+
+  @override
+  String get noSyncedRecordings => 'Nog geen gesynchroniseerde opnames';
+
+  @override
+  String get recordingsSyncAutomatically => 'Opnames worden automatisch gesynchroniseerd — geen actie nodig.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Reeds gedownloade bestanden worden de volgende keer geüpload.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken aangemaakt',
+      one: '1 gesprek aangemaakt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tik om te bekijken';
+
+  @override
+  String get syncFailed => 'Synchronisatie mislukt';
+
+  @override
+  String get keepSyncing => 'Doorgaan met synchroniseren';
+
+  @override
+  String get cancelSyncQuestion => 'Synchronisatie annuleren?';
+
+  @override
+  String get omisStorageDesc =>
+      'Wanneer uw Omi niet verbonden is met uw telefoon, slaat het audio lokaal op in het ingebouwde geheugen. U verliest nooit een opname.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Wanneer Omi opnieuw verbinding maakt, worden opnames automatisch naar uw telefoon overgebracht voor het uploaden.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Na het uploaden worden uw opnames verwerkt en getranscribeerd. Gesprekken zijn binnen een minuut beschikbaar.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Houd uw telefoon dichtbij voor snellere synchronisatie';
+
+  @override
+  String get tipStableInternet => 'Stabiel internet versnelt cloud-uploads';
+
+  @override
+  String get tipAutoSync => 'Opnames worden automatisch gesynchroniseerd';
+
+  @override
+  String get storageSection => 'OPSLAG';
+
+  @override
+  String get permissions => 'Machtigingen';
+
+  @override
+  String get permissionEnabled => 'Ingeschakeld';
+
+  @override
+  String get permissionEnable => 'Inschakelen';
+
+  @override
+  String get permissionsPageDescription =>
+      'Deze machtigingen zijn essentieel voor de werking van Omi. Ze maken belangrijke functies mogelijk zoals meldingen, locatiegebaseerde ervaringen en audio-opname.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi heeft een aantal machtigingen nodig om goed te werken. Verleen ze alsjeblieft om door te gaan.';
+
+  @override
+  String get permissionsSetupTitle => 'Krijg de beste ervaring';
+
+  @override
+  String get permissionsSetupDescription => 'Schakel een paar machtigingen in zodat Omi zijn magie kan doen.';
+
+  @override
+  String get permissionsChangeAnytime => 'Je kunt deze op elk moment wijzigen in Instellingen > Machtigingen';
+
+  @override
+  String get location => 'Locatie';
+
+  @override
+  String get microphone => 'Microfoon';
+
+  @override
+  String get whyAreYouCanceling => 'Waarom annuleer je?';
+
+  @override
+  String get cancelReasonSubtitle => 'Kun je ons vertellen waarom je vertrekt?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Te duur';
+
+  @override
+  String get cancelReasonNotUsing => 'Gebruik het niet genoeg';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Ontbrekende functies';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio-/transcriptiekwaliteit';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Zorgen over batterijverbruik';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Een alternatief gevonden';
+
+  @override
+  String get cancelReasonOther => 'Anders';
+
+  @override
+  String get tellUsMore => 'Vertel ons meer (optioneel)';
+
+  @override
+  String get cancelReasonDetailHint => 'We waarderen alle feedback...';
+
+  @override
+  String get justAMoment => 'Een moment, alsjeblieft';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'We raden je sterk aan om je andere opties te verkennen in plaats van te annuleren.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Je abonnement blijft actief tot $date. Daarna word je overgezet naar de gratis versie met beperkte functies.';
+  }
+
+  @override
+  String get ifYouCancel => 'Als je annuleert:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Geen onbeperkte toegang meer aan het einde van je factureringsperiode.';
+
+  @override
+  String get cancelConsequenceBattery => '7x meer batterijverbruik (verwerking op het apparaat)';
+
+  @override
+  String get cancelConsequenceQuality => '30% lagere transcriptiekwaliteit (modellen op het apparaat)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 seconden verwerkingsvertraging (modellen op het apparaat)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Kan sprekers niet identificeren.';
+
+  @override
+  String get confirmAndCancel => 'Bevestigen en annuleren';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Geen realtime telefoongesprek transcriptie';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Welke prijs zou voor jou werken?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Welke functies mis je?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Welke problemen heb je ervaren?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Vertel ons over de batterijproblemen';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Waarnaar stap je over?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Wat zou je Omi meer laten gebruiken?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Je feedback helpt ons de juiste balans te vinden.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'We bouwen altijd — dit helpt ons prioriteiten te stellen.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'We willen graag begrijpen wat er mis ging.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Dit helpt ons hardwareteam verbeteren.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'We horen graag wat je aandacht trok.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'We willen Omi nuttiger maken voor je.';
+
+  @override
+  String get deviceDiagnostics => 'Apparaatdiagnostiek';
+
+  @override
+  String get signalStrength => 'Signaalsterkte';
+
+  @override
+  String get connectionUptime => 'Uptime';
+
+  @override
+  String get reconnections => 'Herverbindingen';
+
+  @override
+  String get disconnectHistory => 'Ontkoppelingsgeschiedenis';
+
+  @override
+  String get noDisconnectsRecorded => 'Geen ontkoppelingen geregistreerd';
+
+  @override
+  String get diagnostics => 'Diagnostiek';
+
+  @override
+  String get waitingForData => 'Wachten op gegevens...';
+
+  @override
+  String get liveRssiOverTime => 'Live RSSI in de tijd';
+
+  @override
+  String get noRssiDataYet => 'Nog geen RSSI-gegevens';
+
+  @override
+  String get collectingData => 'Gegevens verzamelen...';
+
+  @override
+  String get cleanDisconnect => 'Schone ontkoppeling';
+
+  @override
+  String get connectionTimeout => 'Verbindingstime-out';
+
+  @override
+  String get remoteDeviceTerminated => 'Extern apparaat heeft de verbinding verbroken';
+
+  @override
+  String get pairedToAnotherPhone => 'Gekoppeld aan een andere telefoon';
+
+  @override
+  String get linkKeyMismatch => 'Koppelingssleutel komt niet overeen';
+
+  @override
+  String get connectionFailed => 'Verbinding mislukt';
+
+  @override
+  String get appClosed => 'App gesloten';
+
+  @override
+  String get manualDisconnect => 'Handmatige ontkoppeling';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Laatste $count gebeurtenissen';
+  }
+
+  @override
+  String get signal => 'Signaal';
+
+  @override
+  String get battery => 'Batterij';
+
+  @override
+  String get excellent => 'Uitstekend';
+
+  @override
+  String get good => 'Goed';
+
+  @override
+  String get fair => 'Redelijk';
+
+  @override
+  String get weak => 'Zwak';
+
+  @override
+  String gattError(String code) {
+    return 'GATT-fout ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Terugkeren naar stabiele firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Firmware terugzetten?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Dit vervangt uw huidige firmware door de laatste stabiele versie ($version). Uw apparaat wordt opnieuw opgestart na de update.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabiele firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Laatste stabiele firmware ophalen...';
+
+  @override
+  String get noStableFirmwareFound => 'Kan geen stabiele firmwareversie vinden voor uw apparaat.';
+
+  @override
+  String get installStableFirmware => 'Stabiele firmware installeren';
+
+  @override
+  String get alreadyOnStableFirmware => 'U gebruikt al de laatste stabiele versie.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio lokaal opgeslagen';
+  }
+
+  @override
+  String get willSyncAutomatically => 'wordt automatisch gesynchroniseerd';
+
+  @override
+  String get enableLocationTitle => 'Locatie inschakelen';
+
+  @override
+  String get enableLocationDescription => 'Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden.';
+
+  @override
+  String get voiceRecordingFound => 'Opname gevonden';
+
+  @override
+  String get transcriptionConnecting => 'Transcriptie verbinden...';
+
+  @override
+  String get transcriptionReconnecting => 'Transcriptie opnieuw verbinden...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcriptie niet beschikbaar';
+
+  @override
+  String get audioOutput => 'Audio-uitvoer';
 }

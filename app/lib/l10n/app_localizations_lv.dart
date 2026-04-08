@@ -1463,7 +1463,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payYourSttProvider => 'Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.';
 
   @override
-  String get freeMinutesMonth => '4800 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
+  String get freeMinutesMonth => '1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
   String get omiUnlimited => 'Omi Neierobežots';
@@ -1819,7 +1819,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get skipThisQuestion => 'Izlaist šo jautājumu';
 
   @override
-  String get skipForNow => 'Izlaist pagaidām';
+  String get skipForNow => 'Pagaidām izlaist';
 
   @override
   String get connectionError => 'Savienojuma kļūda';
@@ -3286,7 +3286,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get aboutYou => 'Par jums';
 
   @override
-  String get manual => 'Manuāls';
+  String get manual => 'Manuāli';
 
   @override
   String get loadingYourMemories => 'Ielādē jūsu atmiņas...';
@@ -4771,7 +4771,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 
   @override
-  String get basicPlanDescription => '4800 premium minūtes + neierobežots ierīcē';
+  String get basicPlanDescription => '1200 premium minūtes + neierobežots ierīcē';
 
   @override
   String get minutes => 'minūtes';
@@ -6102,7 +6102,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '1200 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6184,7 +6184,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '1200 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8573,62 +8573,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clearAll => 'Notīrīt visu';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Tastatūra';
 
   @override
@@ -8700,4 +8644,485 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Joprojām ieraksta — atkārtoti savienojas ar transkripciju...';
+
+  @override
+  String get enableE2ee => 'Iespējot E2EE';
+
+  @override
+  String get recoveryKey => 'Atjaunošanas atslēga';
+
+  @override
+  String get saveKeyMessage =>
+      'Saglabājiet šo atslēgu drošā vietā. Tā būs nepieciešama šifrētu atmiņu atjaunošanai, mainot ierīci.';
+
+  @override
+  String get savedMyKey => 'Esmu saglabājis savu atslēgu';
+
+  @override
+  String get showRecoveryKey => 'Rādīt atjaunošanas atslēgu';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Ja pazaudēsiet atjaunošanas atslēgu, jūsu datus nevarēs atjaunot.';
+
+  @override
+  String get e2eeBackupReminder => 'Pēc iespējošanas izveidojiet atslēgas dublējumkopiju.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Neizdevās iespējot E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Atslēga nokopēta starpliktuvē';
+
+  @override
+  String get e2eeMemoriesDescription => 'Šifrēts jūsu ierīcē pirms nonākšanas serverī.';
+
+  @override
+  String get e2eeOtherDataDescription => 'Šifrēts miera stāvoklī serverī.';
+
+  @override
+  String get e2eeCardSubtitle => 'Maksimālā aizsardzība — atmiņas šifrētas ierīcē';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Šifrēts — nevar atšifrēt. Pārbaudiet atjaunošanas atslēgu.';
+
+  @override
+  String get pairWithWeb => 'Savienot ar tīmekli';
+
+  @override
+  String get scanQrOnWeb => 'Skenējiet šo QR kodu vietnē omi.me';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Derīgums beidzas pēc ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Skenējiet tikai uzticamā ierīcē';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Pilnīga šifrēšana nodrošina augstāko datu aizsardzības līmeni:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Atmiņas: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Sarunas, tērzēšana un citi dati: ';
+
+  @override
+  String get switchToSecureEncryption => 'Pārslēgties uz drošu šifrēšanu?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Tas atkārtoti šifrēs jūsu datus ar servera pārvaldītām atslēgām. Jūsu pilnīgās šifrēšanas atslēga vairs netiks izmantota.\n\nJūsu dati joprojām būs šifrēti glabāšanas laikā, bet atslēgas pārvaldīs serveris.';
+
+  @override
+  String get switchButton => 'Pārslēgt';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Trešo pušu lietotnes un integrācijas nevarēs piekļūt jūsu šifrētajiem datiem, ja vien nesniegsiet tām savu atslēgu.';
+
+  @override
+  String get preparingMigration => 'Sagatavo migrāciju...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Nepieciešama atkopšanas atslēga';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Trūkst jūsu E2EE šifrēšanas atslēgas. Ielīmējiet atkopšanas atslēgu, lai atjaunotu piekļuvi šifrētajiem datiem.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Ielīmējiet atkopšanas atslēgu';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Atkopt';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Atslēga veiksmīgi atkopta';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Nepareiza atslēga — tā neatbilst tai, kas izmantota jūsu datu šifrēšanai';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Es pazaudēju savu atkopšanas atslēgu';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Bez atkopšanas atslēgas jums būs jāatspējo E2EE citā ierīcē, kurā esat pierakstījies, vai jāsazinās ar atbalstu, lai atiestatītu šifrēšanu.';
+
+  @override
+  String get processingOnServer => 'Apstrāde serverī...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Apstrāde... $current/$total segmenti';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Godprātīga izmantošana: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Uzlabot savienojumu';
+
+  @override
+  String get improveConnectionContent =>
+      'Mēs esam uzlabojuši veidu, kā Omi paliek savienots ar jūsu ierīci. Lai to aktivizētu, dodieties uz ierīces informācijas lapu, pieskarieties \"Atvienot ierīci\" un savienojiet ierīci pārī no jauna.';
+
+  @override
+  String get improveConnectionAction => 'Sapratu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jūsu ierīces pulkstenis atšķiras par ~$minutes min. Pārbaudiet datuma un laika iestatījumus.';
+  }
+
+  @override
+  String get omisStorage => 'Omi krātuve';
+
+  @override
+  String get phoneStorage => 'Tālruņa krātuve';
+
+  @override
+  String get cloudStorage => 'Mākoņkrātuve';
+
+  @override
+  String get howSyncingWorks => 'Kā darbojas sinhronizācija';
+
+  @override
+  String get noSyncedRecordings => 'Vēl nav sinhronizētu ierakstu';
+
+  @override
+  String get recordingsSyncAutomatically => 'Ieraksti tiek sinhronizēti automātiski — darbība nav nepieciešama.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Jau lejupielādētie faili tiks augšupielādēti nākamreiz.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarunas izveidotas',
+      one: '1 saruna izveidota',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Pieskarieties, lai skatītu';
+
+  @override
+  String get syncFailed => 'Sinhronizācija neizdevās';
+
+  @override
+  String get keepSyncing => 'Turpināt sinhronizāciju';
+
+  @override
+  String get cancelSyncQuestion => 'Atcelt sinhronizāciju?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kad jūsu Omi nav savienots ar tālruni, tas saglabā audio lokāli iebūvētajā atmiņā. Jūs nekad nezaudēsiet ierakstu.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kad Omi atkārtoti pieslēdzas, ieraksti automātiski tiek pārsūtīti uz jūsu tālruni pirms augšupielādes.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Pēc augšupielādes jūsu ieraksti tiek apstrādāti un transkribēti. Sarunas būs pieejamas minūtes laikā.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Turiet tālruni tuvumā ātrākai sinhronizācijai';
+
+  @override
+  String get tipStableInternet => 'Stabils internets paātrina mākoņa augšupielādi';
+
+  @override
+  String get tipAutoSync => 'Ieraksti tiek sinhronizēti automātiski';
+
+  @override
+  String get storageSection => 'KRĀTUVE';
+
+  @override
+  String get permissions => 'Atļaujas';
+
+  @override
+  String get permissionEnabled => 'Iespējota';
+
+  @override
+  String get permissionEnable => 'Iespējot';
+
+  @override
+  String get permissionsPageDescription =>
+      'Šīs atļaujas ir būtiskas Omi darbībai. Tās nodrošina galvenās funkcijas, piemēram, paziņojumus, uz atrašanās vietu balstītas pieredzes un audio ierakstīšanu.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi ir nepieciešamas dažas atļaujas, lai pareizi darbotos. Lūdzu, piešķiriet tās, lai turpinātu.';
+
+  @override
+  String get permissionsSetupTitle => 'Iegūstiet vislabāko pieredzi';
+
+  @override
+  String get permissionsSetupDescription => 'Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.';
+
+  @override
+  String get permissionsChangeAnytime => 'Jūs varat tos mainīt jebkurā laikā sadaļā Iestatījumi > Atļaujas';
+
+  @override
+  String get location => 'Atrašanās vieta';
+
+  @override
+  String get microphone => 'Mikrofons';
+
+  @override
+  String get whyAreYouCanceling => 'Kāpēc jūs atceļat?';
+
+  @override
+  String get cancelReasonSubtitle => 'Vai varat mums pastāstīt, kāpēc aizejat?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Pārāk dārgs';
+
+  @override
+  String get cancelReasonNotUsing => 'Neizmantoju pietiekami';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Trūkstošas funkcijas';
+
+  @override
+  String get cancelReasonAudioQuality => 'Audio/transkripcijas kvalitāte';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Bažas par baterijas iztukšošanos';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Atradu alternatīvu';
+
+  @override
+  String get cancelReasonOther => 'Cits';
+
+  @override
+  String get tellUsMore => 'Pastāstiet mums vairāk (neobligāti)';
+
+  @override
+  String get cancelReasonDetailHint => 'Mēs novērtējam jebkādu atsauksmi...';
+
+  @override
+  String get justAMoment => 'Vienu brīdi, lūdzu';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Mēs ļoti iesakām izpētīt citas iespējas, nevis atcelt.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs tiksiet pārcelts uz bezmaksas versiju ar ierobežotām funkcijām.';
+  }
+
+  @override
+  String get ifYouCancel => 'Ja atcelsiet:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Norēķinu perioda beigās vairs nebūs neierobežotas piekļuves.';
+
+  @override
+  String get cancelConsequenceBattery => '7x lielāks baterijas patēriņš (apstrāde ierīcē)';
+
+  @override
+  String get cancelConsequenceQuality => '30% zemāka transkripcijas kvalitāte (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekunžu apstrādes aizkave (modeļi ierīcē)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nevar identificēt runātājus.';
+
+  @override
+  String get confirmAndCancel => 'Apstiprināt un atcelt';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Nav reāllaika telefona zvanu transkripcijas';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Kāda cena jums derētu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Kādu funkciju jums pietrūkst?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Kādas problēmas jūs pieredzējāt?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pastāstiet mums par baterijas problēmām';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Uz ko jūs pāriejat?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Kas liktu jums vairāk izmantot Omi?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Jūsu atsauksmes palīdz mums atrast pareizo līdzsvaru.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Mēs vienmēr būvējam — tas palīdz mums noteikt prioritātes.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Mēs labprāt saprastu, kas nogāja greizi.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Tas palīdz mūsu aparatūras komandai uzlabot.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Mēs labprāt uzzinātu, kas piesaistīja jūsu uzmanību.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Mēs vēlamies padarīt Omi noderīgāku jums.';
+
+  @override
+  String get deviceDiagnostics => 'Ierīces diagnostika';
+
+  @override
+  String get signalStrength => 'Signāla stiprums';
+
+  @override
+  String get connectionUptime => 'Darbības laiks';
+
+  @override
+  String get reconnections => 'Atkārtoti savienojumi';
+
+  @override
+  String get disconnectHistory => 'Atvienošanas vēsture';
+
+  @override
+  String get noDisconnectsRecorded => 'Nav reģistrētu atvienošanu';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Gaida datus...';
+
+  @override
+  String get liveRssiOverTime => 'Reāllaika RSSI laika gaitā';
+
+  @override
+  String get noRssiDataYet => 'Vēl nav RSSI datu';
+
+  @override
+  String get collectingData => 'Datu vākšana...';
+
+  @override
+  String get cleanDisconnect => 'Tīra atvienošana';
+
+  @override
+  String get connectionTimeout => 'Savienojuma taimauts';
+
+  @override
+  String get remoteDeviceTerminated => 'Attālā ierīce pārtrauca savienojumu';
+
+  @override
+  String get pairedToAnotherPhone => 'Savienots pārī ar citu tālruni';
+
+  @override
+  String get linkKeyMismatch => 'Saites atslēgas neatbilstība';
+
+  @override
+  String get connectionFailed => 'Savienojums neizdevās';
+
+  @override
+  String get appClosed => 'Lietotne aizvērta';
+
+  @override
+  String get manualDisconnect => 'Manuāla atvienošana';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Pēdējie $count notikumi';
+  }
+
+  @override
+  String get signal => 'Signāls';
+
+  @override
+  String get battery => 'Akumulators';
+
+  @override
+  String get excellent => 'Izcili';
+
+  @override
+  String get good => 'Labi';
+
+  @override
+  String get fair => 'Apmierinošs';
+
+  @override
+  String get weak => 'Vājš';
+
+  @override
+  String gattError(String code) {
+    return 'GATT kļūda ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Atgriezties uz stabilo programmaparatūru';
+
+  @override
+  String get rollbackConfirmTitle => 'Atgriezt programmaparatūru?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tas aizstās jūsu pašreizējo programmaparatūru ar jaunāko stabilo versiju ($version). Jūsu ierīce tiks restartēta pēc atjaunināšanas.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabila programmaparatūra';
+
+  @override
+  String get fetchingStableFirmware => 'Tiek iegūta jaunākā stabilā programmaparatūra...';
+
+  @override
+  String get noStableFirmwareFound => 'Jūsu ierīcei nevarēja atrast stabilu programmaparatūras versiju.';
+
+  @override
+  String get installStableFirmware => 'Instalēt stabilo programmaparatūru';
+
+  @override
+  String get alreadyOnStableFirmware => 'Jums jau ir jaunākā stabilā versija.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio saglabāts lokāli';
+  }
+
+  @override
+  String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
+
+  @override
+  String get enableLocationTitle => 'Iespējot atrašanās vietu';
+
+  @override
+  String get enableLocationDescription =>
+      'Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošas Bluetooth ierīces.';
+
+  @override
+  String get voiceRecordingFound => 'Ieraksts atrasts';
+
+  @override
+  String get transcriptionConnecting => 'Savienošanās ar transkripciju...';
+
+  @override
+  String get transcriptionReconnecting => 'Atkārtota savienošanās ar transkripciju...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripcija nav pieejama';
+
+  @override
+  String get audioOutput => 'Audio izvade';
 }

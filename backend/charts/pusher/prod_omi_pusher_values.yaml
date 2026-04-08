@@ -105,11 +105,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
     value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
@@ -264,7 +259,7 @@ env:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "4800"
+    value: "1200"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -297,22 +292,28 @@ resources:
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 5
   periodSeconds: 10
+  timeoutSeconds: 5
 
 readinessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 5
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 60
   periodSeconds: 10
+  timeoutSeconds: 5
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -342,7 +343,7 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
-  activeConnectionsPerPod: 21
+  activeConnectionsPerPod: 22
 
 podDisruptionBudget:
   minAvailable: "80%"
@@ -390,3 +391,7 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: version
+              operator: In
+              values:
+                - v3

@@ -8,6 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
@@ -44,7 +45,6 @@ class PlansSheet extends StatefulWidget {
 
 class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
-  bool _isCancelling = false;
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
@@ -188,46 +188,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _handleCancelSubscription() async {
-    final provider = context.read<UsageProvider>();
-    final sub = provider.subscription?.subscription;
-    if (sub == null) return;
-
-    String renewalDateInfo = 'at the end of your current billing period';
-    if (sub.currentPeriodEnd != null) {
-      final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
-      renewalDateInfo = 'on ${DateFormat.yMMMd().format(date)}';
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ConfirmationDialog(
-        title: context.l10n.cancelSubscriptionQuestion,
-        description: context.l10n.planRemainsActiveUntil(renewalDateInfo),
-        confirmText: context.l10n.confirmCancellation,
-        cancelText: context.l10n.keepMyPlan,
-        onCancel: () => Navigator.of(ctx).pop(false),
-        onConfirm: () => Navigator.of(ctx).pop(true),
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() => _isCancelling = true);
-    try {
-      final provider = context.read<UsageProvider>();
-      final success = await provider.cancelUserSubscription();
-      if (success) {
-        AppSnackbar.showSnackbar(context.l10n.subscriptionSetToCancel);
-      } else {
-        AppSnackbar.showSnackbarError(context.l10n.failedToCancelSubscription);
-      }
-    } catch (e) {
-      AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
-    } finally {
-      if (mounted) {
-        setState(() => _isCancelling = false);
-      }
-    }
+    await CancelSubscriptionFlow.show(context);
   }
 
   Map<String, dynamic>? _getCurrentPlanDetails() {
@@ -944,8 +905,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded =
-                                  sub?.currentPeriodEnd != null &&
+                              final periodEnded = sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1009,8 +969,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption =
-                                _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1338,8 +1297,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton =
-                                !isOnAnnualPlan &&
+                            final shouldShowContinueButton = !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1839,7 +1797,7 @@ class _PlansSheetState extends State<PlansSheet> {
     bool isPopular = false,
     required VoidCallback onTap,
   }) {
-    final title = '${planData['title']} Unlimited';
+    final title = planData['title'] as String;
     final priceString = planData['price_string'] as String;
     final interval = planData['interval'] as String;
     final unitAmount = planData['unit_amount'] as int;

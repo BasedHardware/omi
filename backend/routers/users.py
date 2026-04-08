@@ -8,7 +8,7 @@ import os
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 from database import (
@@ -19,6 +19,7 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
+    users as users_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -76,6 +77,7 @@ router = APIRouter()
 
 def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None, e2ee_key_hash: Optional[str] = None):
     from utils.e2ee_access import verify_e2ee_access
+
     verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
 
 
@@ -305,9 +307,12 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid),
-                   x_e2ee_key_hash: Optional[str] = Header(None),
-                   e2ee_key_hash: Optional[str] = Query(None)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
+    e2ee_key_hash: Optional[str] = Query(None),
+):
     logger.info(f'get_all_people {include_speech_samples}')
     _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     people = get_people(uid)
@@ -380,6 +385,10 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail='Conversation not found')
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
     memory = Conversation(**memory)
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
@@ -1021,8 +1030,10 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
             end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
 
-    # Get conversations for the date
+    # Get conversations for the date, excluding locked conversations
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    if conversations_data:
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
     if not conversations_data or len(conversations_data) == 0:
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
@@ -1066,7 +1077,9 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 
 @router.get('/v1/users/daily-summaries', tags=['v1'])
 def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid),
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    uid: str = Depends(auth.get_current_user_uid),
     x_e2ee_key_hash: Optional[str] = Header(None),
     e2ee_key_hash: Optional[str] = Query(None),
 ):
@@ -1080,9 +1093,12 @@ def get_daily_summaries(
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
-def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid),
-                      x_e2ee_key_hash: Optional[str] = Header(None),
-                      e2ee_key_hash: Optional[str] = Query(None)):
+def get_daily_summary(
+    summary_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
+    e2ee_key_hash: Optional[str] = Query(None),
+):
     """
     Get a single daily summary by ID.
     """
@@ -1216,6 +1232,7 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
 
         # Stream conversations via generator (batched internally, never all in memory)
+        # Note: locked conversations are intentionally included in GDPR/CCPA exports per Art. 15
         yield '  "conversations": [\n'
         first = True
         for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
@@ -1246,3 +1263,165 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
+
+
+# ============================================================================
+# Notification Settings
+# ============================================================================
+
+
+class UpdateNotificationSettingsRequest(BaseModel):
+    enabled: bool | None = None
+    frequency: int | None = Field(None, ge=0, le=5)
+
+
+@router.get('/v1/users/notification-settings', tags=['users'])
+def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_notification_settings(uid)
+
+
+@router.patch('/v1/users/notification-settings', tags=['users'])
+def update_notification_settings(
+    request: UpdateNotificationSettingsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    return users_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
+
+
+# ============================================================================
+# Assistant Settings
+# ============================================================================
+
+
+class SharedAssistantSettings(BaseModel):
+    cooldown_interval: int | None = None
+    glow_overlay_enabled: bool | None = None
+    analysis_delay: int | None = None
+    screen_analysis_enabled: bool | None = None
+
+
+class FocusAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    cooldown_interval: int | None = None
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class TaskAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    allowed_apps: list[str] | None = None
+    browser_keywords: list[str] | None = None
+
+
+class AdviceAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class MemoryAssistantSettings(BaseModel):
+    enabled: bool | None = None
+    analysis_prompt: str | None = Field(None, max_length=10000)
+    extraction_interval: float | None = None
+    min_confidence: float | None = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: bool | None = None
+    excluded_apps: list[str] | None = None
+
+
+class UpdateAssistantSettingsRequest(BaseModel):
+    shared: SharedAssistantSettings | None = None
+    focus: FocusAssistantSettings | None = None
+    task: TaskAssistantSettings | None = None
+    advice: AdviceAssistantSettings | None = None
+    memory: MemoryAssistantSettings | None = None
+    update_channel: str | None = Field(None, max_length=50)
+
+
+@router.get('/v1/users/assistant-settings', tags=['users'])
+def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_assistant_settings(uid)
+
+
+@router.patch('/v1/users/assistant-settings', tags=['users'])
+def update_assistant_settings(
+    request: UpdateAssistantSettingsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    settings = request.model_dump(exclude_unset=True)
+    return users_db.update_assistant_settings(uid, settings)
+
+
+# ============================================================================
+# AI User Profile
+# ============================================================================
+
+
+class UpdateAIUserProfileRequest(BaseModel):
+    profile_text: str | None = Field(None, max_length=50000)
+    generated_at: Optional[str] = None
+    data_sources_used: int | None = Field(None, ge=0)
+
+
+@router.get('/v1/users/ai-profile', tags=['users'])
+def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_ai_user_profile(uid)
+
+
+@router.patch('/v1/users/ai-profile', tags=['users'])
+def update_ai_profile(
+    request: UpdateAIUserProfileRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    return users_db.update_ai_user_profile(
+        uid,
+        profile_text=request.profile_text,
+        generated_at=request.generated_at,
+        data_sources_used=request.data_sources_used,
+    )
+
+
+# ============================================================================
+# Bucket-based LLM Usage (extends existing /v1/users/me/llm-usage endpoints above)
+# ============================================================================
+
+
+class RecordLlmUsageBucketRequest(BaseModel):
+    input_tokens: int = Field(0, ge=0)
+    output_tokens: int = Field(0, ge=0)
+    cache_read_tokens: int = Field(0, ge=0)
+    cache_write_tokens: int = Field(0, ge=0)
+    total_tokens: int = Field(0, ge=0)
+    cost_usd: float = Field(0.0, ge=0.0)
+    account: str = Field('omi', max_length=100)
+
+
+@router.post('/v1/users/me/llm-usage', tags=['users'])
+def record_llm_usage_bucket(
+    request: RecordLlmUsageBucketRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    llm_usage_db.record_llm_usage_bucket(
+        uid,
+        input_tokens=request.input_tokens,
+        output_tokens=request.output_tokens,
+        cache_read_tokens=request.cache_read_tokens,
+        cache_write_tokens=request.cache_write_tokens,
+        total_tokens=request.total_tokens,
+        cost_usd=request.cost_usd,
+        account=request.account,
+    )
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/me/llm-usage/total', tags=['users'])
+def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
+    total = llm_usage_db.get_total_llm_cost(uid)
+    return {'total_cost_usd': total}

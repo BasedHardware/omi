@@ -45,7 +45,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
-
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 

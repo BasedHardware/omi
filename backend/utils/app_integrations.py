@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -108,6 +109,8 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     """ON CONVERSATION CREATED"""
     if not conversation or conversation.discarded:
         return []
+    if conversation.is_locked:
+        return []
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
@@ -188,13 +191,13 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    _trigger_realtime_integrations(uid, segments, conversation_id)
+    await asyncio.to_thread(_trigger_realtime_integrations, uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
-    _trigger_realtime_audio_bytes(uid, sample_rate, data)
+    await asyncio.to_thread(_trigger_realtime_audio_bytes, uid, sample_rate, data)
 
 
 # proactive notification
@@ -213,7 +216,8 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return conversations_db.get_conversations_by_id(uid, memories_id)
+    convos = conversations_db.get_conversations_by_id(uid, memories_id)
+    return [c for c in convos if not c.get('is_locked')]
 
 
 def _hit_proactive_notification_rate_limits(uid: str, app: App):
@@ -337,14 +341,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             if memory_ids:
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
-                    all_past.extend(vector_convos)
+                    all_past.extend([c for c in vector_convos if not c.get('is_locked')])
 
         # Also fetch recent conversations by time for additional context
         recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
         if recent_convos:
             existing_ids = {c.get('id') for c in all_past}
             for rc in recent_convos:
-                if rc.get('id') not in existing_ids:
+                if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
 
         if all_past:

@@ -10,8 +10,6 @@ pub struct Config {
     pub port: u16,
     /// Gemini API key for LLM calls
     pub gemini_api_key: Option<String>,
-    /// Google Application Credentials path for Firestore
-    pub google_application_credentials: Option<String>,
     /// Firebase project ID (used for Firestore)
     pub firebase_project_id: Option<String>,
     /// Firebase project ID for auth token validation (defaults to firebase_project_id)
@@ -71,6 +69,8 @@ pub struct Config {
     pub deepgram_api_key: Option<String>,
     /// Anthropic API key for chat (served to desktop clients)
     pub anthropic_api_key: Option<String>,
+    /// ElevenLabs API key for floating bar voice answers (served to desktop clients)
+    pub elevenlabs_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
 }
@@ -87,7 +87,6 @@ impl Config {
                     10201
                 }),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
-            google_application_credentials: env::var("GOOGLE_APPLICATION_CREDENTIALS").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
             firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
@@ -133,15 +132,13 @@ impl Config {
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
             deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
         }
     }
 
     /// Validate that required configuration is present
     pub fn validate(&self) -> Result<(), String> {
-        if self.google_application_credentials.is_none() {
-            tracing::warn!("GOOGLE_APPLICATION_CREDENTIALS not set - Firestore will use default credentials");
-        }
         if self.gemini_api_key.is_none() {
             tracing::warn!("GEMINI_API_KEY not set - conversation processing will fail");
         }

@@ -75,6 +75,20 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
+def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'cancellation_feedback': {
+                'reason': reason,
+                'reason_details': reason_details or '',
+                'timestamp': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
@@ -264,6 +278,27 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         }
     )
     return True
+
+
+def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
+    """Store speaker embedding for the user's own voice on their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'speaker_embedding_updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_user_speaker_embedding(uid: str) -> Optional[list]:
+    """Get the user's own speaker embedding from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return None
+    return user_doc.to_dict().get('speaker_embedding')
 
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
@@ -1101,3 +1136,122 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+
+
+# ============================================================================
+# DESKTOP USER SETTINGS — fields on users/{uid} document
+# ============================================================================
+
+
+def get_notification_settings(uid: str) -> dict:
+    """Return notification settings with Swift-compatible field names.
+
+    Firestore stores ``notifications_enabled`` / ``notification_frequency`` on
+    the user doc.  The Swift ``NotificationSettingsResponse`` decodes
+    ``enabled`` / ``frequency``, so we map to the wire names here.
+    """
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
+    if not doc.exists:
+        return {'enabled': True, 'frequency': 3}
+    data = doc.to_dict()
+    return {
+        'enabled': data.get('notifications_enabled', True),
+        'frequency': data.get('notification_frequency', 3),
+    }
+
+
+def update_notification_settings(uid: str, enabled: bool = None, frequency: int = None) -> dict:
+    user_ref = db.collection('users').document(uid)
+    updates = {}
+    if enabled is not None:
+        updates['notifications_enabled'] = enabled
+    if frequency is not None:
+        updates['notification_frequency'] = frequency
+    if updates:
+        user_ref.update(updates)
+    return get_notification_settings(uid)
+
+
+def _get_raw_assistant_settings(uid: str) -> dict:
+    """Read only the assistant_settings sub-map (without update_channel injection)."""
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
+    if not doc.exists:
+        return {}
+    return doc.to_dict().get('assistant_settings') or {}
+
+
+def get_assistant_settings(uid: str) -> dict:
+    """Read assistant settings for the API response.
+
+    Injects top-level ``update_channel`` into the response dict (it lives
+    outside ``assistant_settings`` in Firestore but the API returns it together).
+    """
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
+    if not doc.exists:
+        return {}
+    data = doc.to_dict()
+    result = (data.get('assistant_settings') or {}).copy()
+    if data.get('update_channel') is not None:
+        result['update_channel'] = data['update_channel']
+    return result
+
+
+def update_assistant_settings(uid: str, settings: dict) -> dict:
+    """Deep-merge partial settings into existing assistant_settings.
+
+    The Swift client sends tiny partial updates (e.g. {"focus": {"enabled": true}})
+    on every toggle.  A naive overwrite would erase sibling sections.
+
+    ``update_channel`` is a special case — it lives as a top-level field on the
+    user doc (not inside assistant_settings), matching Rust backend behavior.
+    """
+    # Read raw sub-map (without injected update_channel) to avoid leaking it back
+    existing = _get_raw_assistant_settings(uid)
+
+    # Extract update_channel — it goes to a top-level user doc field
+    update_channel = settings.pop('update_channel', None)
+
+    for section, values in settings.items():
+        if isinstance(values, dict) and isinstance(existing.get(section), dict):
+            existing[section].update(values)
+        else:
+            existing[section] = values
+
+    user_ref = db.collection('users').document(uid)
+    updates = {'assistant_settings': existing}
+    if update_channel is not None:
+        updates['update_channel'] = update_channel
+    user_ref.update(updates)
+
+    # Build response (include update_channel for the caller)
+    if update_channel is not None:
+        existing['update_channel'] = update_channel
+    return existing
+
+
+def get_ai_user_profile(uid: str) -> Optional[dict]:
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
+    if not doc.exists:
+        return None
+    return doc.to_dict().get('ai_user_profile')
+
+
+def update_ai_user_profile(
+    uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
+) -> dict:
+    """Update AI user profile.  Only writes non-None fields (partial update)."""
+    # Read existing profile and merge updates
+    existing = get_ai_user_profile(uid) or {}
+    if profile_text is not None:
+        existing['profile_text'] = profile_text
+    if generated_at is not None:
+        existing['generated_at'] = generated_at
+    if data_sources_used is not None:
+        existing['data_sources_used'] = data_sources_used
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'ai_user_profile': existing})
+    return existing

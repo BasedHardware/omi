@@ -1437,7 +1437,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payYourSttProvider => '免费使用 Omi。您只需直接向 STT 提供商付费。';
 
   @override
-  String get freeMinutesMonth => '包含 4,800 免费分钟/月。';
+  String get freeMinutesMonth => '包含 1,200 免费分钟/月。';
 
   @override
   String get omiUnlimited => 'Omi 无限版';
@@ -4669,7 +4669,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 
   @override
-  String get basicPlanDescription => '4,800 高级分钟 + 设备端无限';
+  String get basicPlanDescription => '1,200 高级分钟 + 设备端无限';
 
   @override
   String get minutes => '分钟';
@@ -5972,7 +5972,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 4,800 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 1,200 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -6050,7 +6050,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月4,800分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月1,200分钟高级配额。设备端选项卡提供无限免费转录。';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -8401,62 +8401,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearAll => '全部清除';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => '键盘';
 
   @override
@@ -8527,4 +8471,473 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '仍在录音 — 正在重新连接转录...';
+
+  @override
+  String get enableE2ee => '启用 E2EE';
+
+  @override
+  String get recoveryKey => '恢复密钥';
+
+  @override
+  String get saveKeyMessage => '请将此密钥保存在安全的地方。更换设备时，您将需要它来恢复加密的记忆。没有此密钥，加密数据将无法恢复。';
+
+  @override
+  String get savedMyKey => '我已保存密钥';
+
+  @override
+  String get showRecoveryKey => '显示恢复密钥';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ 如果丢失恢复密钥，您的数据将无法恢复。';
+
+  @override
+  String get e2eeBackupReminder => '启用后请务必备份您的密钥。';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return '启用 E2EE 失败：$error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => '密钥已复制到剪贴板';
+
+  @override
+  String get e2eeMemoriesDescription => '在到达服务器之前在您的设备上加密。只有您能读取。';
+
+  @override
+  String get e2eeOtherDataDescription => '在服务器上静态加密。服务器处理音频进行转录，但存储的数据是加密的。';
+
+  @override
+  String get e2eeCardSubtitle => '最高保护 — 记忆在设备上加密，所有其他数据在静态时加密';
+
+  @override
+  String get e2eeUnableToDecrypt => '已加密 — 无法解密。请检查您的恢复密钥。';
+
+  @override
+  String get pairWithWeb => '与网页配对';
+
+  @override
+  String get scanQrOnWeb => '在 omi.me 上扫描此二维码以解锁您的加密数据';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return '$seconds秒后过期';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ 仅在受信任的设备上扫描';
+
+  @override
+  String get e2eeEnableDialogIntro => '端到端加密提供最高级别的数据保护：\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 记忆：';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 对话、聊天和其他数据：';
+
+  @override
+  String get switchToSecureEncryption => '切换到安全加密？';
+
+  @override
+  String get switchToSecureEncryptionBody => '这将使用服务器管理的密钥重新加密你的数据。你的端到端加密密钥将不再使用。\n\n你的数据在静态存储时仍会被加密，但密钥将由服务器管理。';
+
+  @override
+  String get switchButton => '切换';
+
+  @override
+  String get thirdPartyAppsWarning => '除非你向第三方应用和集成提供密钥，否则它们无法访问你的加密数据。';
+
+  @override
+  String get preparingMigration => '正在准备迁移...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => '需要恢复密钥';
+
+  @override
+  String get e2eeKeyRecoveryBody => '你的 E2EE 加密密钥缺失。粘贴恢复密钥以恢复对加密数据的访问。';
+
+  @override
+  String get e2eeKeyRecoveryHint => '粘贴恢复密钥';
+
+  @override
+  String get e2eeKeyRecoveryButton => '恢复';
+
+  @override
+  String get e2eeKeyRecoverySuccess => '密钥恢复成功';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => '密钥错误 — 与用于加密你数据的密钥不匹配';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => '我丢失了恢复密钥';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody => '如果没有恢复密钥，你需要从已登录的另一台设备禁用 E2EE，或联系支持人员重置加密。';
+
+  @override
+  String get processingOnServer => '正在服务器上处理...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '处理中... $current/$total 个片段';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return '公平使用：$status';
+  }
+
+  @override
+  String get improveConnectionTitle => '改善连接';
+
+  @override
+  String get improveConnectionContent => '我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。';
+
+  @override
+  String get improveConnectionAction => '知道了';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return '您的设备时钟偏差约$minutes分钟。请检查日期和时间设置。';
+  }
+
+  @override
+  String get omisStorage => 'Omi 存储';
+
+  @override
+  String get phoneStorage => '手机存储';
+
+  @override
+  String get cloudStorage => '云存储';
+
+  @override
+  String get howSyncingWorks => '同步如何运作';
+
+  @override
+  String get noSyncedRecordings => '暂无已同步的录音';
+
+  @override
+  String get recordingsSyncAutomatically => '录音自动同步 — 无需任何操作。';
+
+  @override
+  String get filesDownloadedUploadedNextTime => '已下载的文件将在下次上传。';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => '点击查看';
+
+  @override
+  String get syncFailed => '同步失败';
+
+  @override
+  String get keepSyncing => '继续同步';
+
+  @override
+  String get cancelSyncQuestion => '取消同步？';
+
+  @override
+  String get omisStorageDesc => '当 Omi 未连接到手机时，它会将音频存储在内置存储器中。您永远不会丢失任何录音。';
+
+  @override
+  String get phoneStorageDesc => '当 Omi 重新连接时，录音会自动传输到手机，然后再上传。';
+
+  @override
+  String get cloudStorageDesc => '上传后，您的录音将被处理和转录。对话将在一分钟内可用。';
+
+  @override
+  String get tipKeepPhoneNearby => '将手机放在附近以加快同步速度';
+
+  @override
+  String get tipStableInternet => '稳定的网络可加快云上传速度';
+
+  @override
+  String get tipAutoSync => '录音自动同步';
+
+  @override
+  String get storageSection => '存储';
+
+  @override
+  String get permissions => '权限';
+
+  @override
+  String get permissionEnabled => '已启用';
+
+  @override
+  String get permissionEnable => '启用';
+
+  @override
+  String get permissionsPageDescription => '这些权限是Omi运作的核心。它们启用通知、基于位置的体验和音频捕获等关键功能。';
+
+  @override
+  String get permissionsRequiredDescription => 'Omi 需要一些权限才能正常工作。请授予权限以继续。';
+
+  @override
+  String get permissionsSetupTitle => '获得最佳体验';
+
+  @override
+  String get permissionsSetupDescription => '启用一些权限，让 Omi 发挥它的魔力。';
+
+  @override
+  String get permissionsChangeAnytime => '您可以随时在设置 > 权限中更改';
+
+  @override
+  String get location => '位置';
+
+  @override
+  String get microphone => '麦克风';
+
+  @override
+  String get whyAreYouCanceling => '您为什么要取消？';
+
+  @override
+  String get cancelReasonSubtitle => '能告诉我们您为什么要离开吗？';
+
+  @override
+  String get cancelReasonTooExpensive => '太贵了';
+
+  @override
+  String get cancelReasonNotUsing => '使用不够多';
+
+  @override
+  String get cancelReasonMissingFeatures => '缺少功能';
+
+  @override
+  String get cancelReasonAudioQuality => '音频/转录质量';
+
+  @override
+  String get cancelReasonBatteryDrain => '电池消耗问题';
+
+  @override
+  String get cancelReasonFoundAlternative => '找到了替代品';
+
+  @override
+  String get cancelReasonOther => '其他';
+
+  @override
+  String get tellUsMore => '告诉我们更多（可选）';
+
+  @override
+  String get cancelReasonDetailHint => '我们感谢任何反馈...';
+
+  @override
+  String get justAMoment => '请稍等';
+
+  @override
+  String get cancelConsequencesSubtitle => '我们强烈建议您探索其他选项而不是取消。';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return '您的计划将在 $date 之前保持活跃。之后，您将被转移到功能有限的免费版本。';
+  }
+
+  @override
+  String get ifYouCancel => '如果您取消：';
+
+  @override
+  String get cancelConsequenceNoAccess => '计费周期结束后将无法享受无限访问。';
+
+  @override
+  String get cancelConsequenceBattery => '7倍电池消耗（设备端处理）';
+
+  @override
+  String get cancelConsequenceQuality => '转录质量降低30%（设备端模型）';
+
+  @override
+  String get cancelConsequenceDelay => '5-7秒处理延迟（设备端模型）';
+
+  @override
+  String get cancelConsequenceSpeakers => '无法识别说话者。';
+
+  @override
+  String get confirmAndCancel => '确认并取消';
+
+  @override
+  String get cancelConsequencePhoneCalls => '无实时电话转录';
+
+  @override
+  String get feedbackTitleTooExpensive => '什么价格适合您？';
+
+  @override
+  String get feedbackTitleMissingFeatures => '您缺少什么功能？';
+
+  @override
+  String get feedbackTitleAudioQuality => '您遇到了什么问题？';
+
+  @override
+  String get feedbackTitleBatteryDrain => '告诉我们电池问题';
+
+  @override
+  String get feedbackTitleFoundAlternative => '您要换成什么？';
+
+  @override
+  String get feedbackTitleNotUsing => '什么会让您更多地使用 Omi？';
+
+  @override
+  String get feedbackSubtitleTooExpensive => '您的反馈帮助我们找到正确的平衡。';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '我们一直在构建——这有助于我们确定优先级。';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '我们想了解出了什么问题。';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => '这有助于我们的硬件团队改进。';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '我们想了解什么吸引了您。';
+
+  @override
+  String get feedbackSubtitleNotUsing => '我们想让 Omi 对您更有用。';
+
+  @override
+  String get deviceDiagnostics => '设备诊断';
+
+  @override
+  String get signalStrength => '信号强度';
+
+  @override
+  String get connectionUptime => '运行时间';
+
+  @override
+  String get reconnections => '重新连接';
+
+  @override
+  String get disconnectHistory => '断开连接记录';
+
+  @override
+  String get noDisconnectsRecorded => '没有记录到断开连接';
+
+  @override
+  String get diagnostics => '诊断';
+
+  @override
+  String get waitingForData => '等待数据...';
+
+  @override
+  String get liveRssiOverTime => '实时RSSI变化';
+
+  @override
+  String get noRssiDataYet => '暂无RSSI数据';
+
+  @override
+  String get collectingData => '正在收集数据...';
+
+  @override
+  String get cleanDisconnect => '正常断开';
+
+  @override
+  String get connectionTimeout => '连接超时';
+
+  @override
+  String get remoteDeviceTerminated => '远程设备终止了连接';
+
+  @override
+  String get pairedToAnotherPhone => '已配对到其他手机';
+
+  @override
+  String get linkKeyMismatch => '链接密钥不匹配';
+
+  @override
+  String get connectionFailed => '连接失败';
+
+  @override
+  String get appClosed => '应用已关闭';
+
+  @override
+  String get manualDisconnect => '手动断开连接';
+
+  @override
+  String lastNEvents(int count) {
+    return '最近$count个事件';
+  }
+
+  @override
+  String get signal => '信号';
+
+  @override
+  String get battery => '电池';
+
+  @override
+  String get excellent => '优秀';
+
+  @override
+  String get good => '良好';
+
+  @override
+  String get fair => '一般';
+
+  @override
+  String get weak => '弱';
+
+  @override
+  String gattError(String code) {
+    return 'GATT错误 ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => '回滚到稳定固件';
+
+  @override
+  String get rollbackConfirmTitle => '回滚固件？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '这将用最新稳定版本（$version）替换当前固件。更新后设备将重新启动。';
+  }
+
+  @override
+  String get stableFirmware => '稳定固件';
+
+  @override
+  String get fetchingStableFirmware => '正在获取最新稳定固件...';
+
+  @override
+  String get noStableFirmwareFound => '未找到适用于您设备的稳定固件版本。';
+
+  @override
+  String get installStableFirmware => '安装稳定固件';
+
+  @override
+  String get alreadyOnStableFirmware => '您已在最新稳定版本上。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration 音频已本地保存';
+  }
+
+  @override
+  String get willSyncAutomatically => '将自动同步';
+
+  @override
+  String get enableLocationTitle => '启用位置';
+
+  @override
+  String get enableLocationDescription => '需要位置权限才能查找附近的 Bluetooth 设备。';
+
+  @override
+  String get voiceRecordingFound => '找到录音';
+
+  @override
+  String get transcriptionConnecting => '正在连接转录...';
+
+  @override
+  String get transcriptionReconnecting => '正在重新连接转录...';
+
+  @override
+  String get transcriptionUnavailable => '转录不可用';
+
+  @override
+  String get audioOutput => '音频输出';
 }

@@ -1461,7 +1461,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get payYourSttProvider => 'Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.';
 
   @override
-  String get freeMinutesMonth => '4 800 bezplatných minut měsíčně. Neomezené s ';
+  String get freeMinutesMonth => '1 200 bezplatných minut měsíčně. Neomezené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1817,7 +1817,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get skipThisQuestion => 'Přeskočit tuto otázku';
 
   @override
-  String get skipForNow => 'Zatím přeskočit';
+  String get skipForNow => 'Přeskočit';
 
   @override
   String get connectionError => 'Chyba připojení';
@@ -4757,7 +4757,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Není nakonfigurován žádný specifický přístup k datům.';
 
   @override
-  String get basicPlanDescription => '4 800 prémiových minut + neomezené na zařízení';
+  String get basicPlanDescription => '1 200 prémiových minut + neomezené na zařízení';
 
   @override
   String get minutes => 'minut';
@@ -6081,7 +6081,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
+  String get premiumMinutesInfo => '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
@@ -6162,7 +6162,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+      '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8552,62 +8552,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearAll => 'Vymazat vše';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Klávesnice';
 
   @override
@@ -8679,4 +8623,486 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Stále se nahrává — připojování k přepisu...';
+
+  @override
+  String get enableE2ee => 'Povolit E2EE';
+
+  @override
+  String get recoveryKey => 'Obnovovací klíč';
+
+  @override
+  String get saveKeyMessage =>
+      'Uložte tento klíč na bezpečné místo. Budete ho potřebovat k obnovení šifrovaných vzpomínek při změně zařízení. Bez tohoto klíče nelze data obnovit.';
+
+  @override
+  String get savedMyKey => 'Uložil jsem svůj klíč';
+
+  @override
+  String get showRecoveryKey => 'Zobrazit obnovovací klíč';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Pokud ztratíte obnovovací klíč, vaše data nelze obnovit.';
+
+  @override
+  String get e2eeBackupReminder => 'Po aktivaci si klíč zálohujte.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Aktivace E2EE selhala: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Klíč zkopírován do schránky';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Šifrováno na vašem zařízení před odesláním na server. Pouze vy je můžete číst.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Šifrováno v klidu na serveru. Server zpracovává zvuk pro přepis, ale uložená data jsou šifrována.';
+
+  @override
+  String get e2eeCardSubtitle => 'Maximální ochrana — vzpomínky šifrovány na zařízení, ostatní data šifrována v klidu';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Šifrováno — nelze dešifrovat. Zkontrolujte obnovovací klíč.';
+
+  @override
+  String get pairWithWeb => 'Spárovat s webem';
+
+  @override
+  String get scanQrOnWeb => 'Naskenujte tento QR kód na omi.me pro odemčení šifrovaných dat';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Vyprší za ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Skenujte pouze na důvěryhodném zařízení';
+
+  @override
+  String get e2eeEnableDialogIntro => 'End-to-end šifrování poskytuje nejvyšší úroveň ochrany dat:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Vzpomínky: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Konverzace, chat a další data: ';
+
+  @override
+  String get switchToSecureEncryption => 'Přepnout na bezpečné šifrování?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Tím se vaše data znovu zašifrují pomocí klíčů spravovaných serverem. Váš klíč pro end-to-end šifrování se již nebude používat.\n\nVaše data budou stále šifrována v úložišti, ale klíče bude spravovat server.';
+
+  @override
+  String get switchButton => 'Přepnout';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Aplikace a integrace třetích stran nebudou mít přístup k vašim šifrovaným datům, pokud jim neposkytnete svůj klíč.';
+
+  @override
+  String get preparingMigration => 'Připravuje se migrace...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Je vyžadován obnovovací klíč';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Chybí váš šifrovací klíč E2EE. Vložte obnovovací klíč pro obnovení přístupu k šifrovaným datům.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Vložte obnovovací klíč';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Obnovit';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Klíč byl úspěšně obnoven';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Nesprávný klíč — neodpovídá klíči použitému k zašifrování vašich dat';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Ztratil(a) jsem obnovovací klíč';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Bez obnovovacího klíče budete muset E2EE vypnout z jiného zařízení, kde jste přihlášeni, nebo kontaktovat podporu kvůli resetování šifrování.';
+
+  @override
+  String get processingOnServer => 'Zpracování na serveru...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Zpracování... $current/$total segmentů';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Spravedlivé užívání: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Zlepšit připojení';
+
+  @override
+  String get improveConnectionContent =>
+      'Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.';
+
+  @override
+  String get improveConnectionAction => 'Rozumím';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Hodiny vašeho zařízení se liší o ~$minutes min. Zkontrolujte nastavení data a času.';
+  }
+
+  @override
+  String get omisStorage => 'Úložiště Omi';
+
+  @override
+  String get phoneStorage => 'Úložiště telefonu';
+
+  @override
+  String get cloudStorage => 'Cloudové úložiště';
+
+  @override
+  String get howSyncingWorks => 'Jak synchronizace funguje';
+
+  @override
+  String get noSyncedRecordings => 'Zatím žádné synchronizované nahrávky';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nahrávky se synchronizují automaticky — není nutná žádná akce.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Již stažené soubory budou nahrány příště.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konverzací vytvořeno',
+      one: '1 konverzace vytvořena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Klepněte pro zobrazení';
+
+  @override
+  String get syncFailed => 'Synchronizace selhala';
+
+  @override
+  String get keepSyncing => 'Pokračovat v synchronizaci';
+
+  @override
+  String get cancelSyncQuestion => 'Zrušit synchronizaci?';
+
+  @override
+  String get omisStorageDesc =>
+      'Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Po nahrání jsou vaše nahrávky zpracovány a přepsány. Konverzace budou dostupné během minuty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mějte telefon poblíž pro rychlejší synchronizaci';
+
+  @override
+  String get tipStableInternet => 'Stabilní internet urychluje nahrávání do cloudu';
+
+  @override
+  String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
+
+  @override
+  String get storageSection => 'ÚLOŽIŠTĚ';
+
+  @override
+  String get permissions => 'Oprávnění';
+
+  @override
+  String get permissionEnabled => 'Povoleno';
+
+  @override
+  String get permissionEnable => 'Povolit';
+
+  @override
+  String get permissionsPageDescription =>
+      'Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.';
+
+  @override
+  String get permissionsSetupTitle => 'Získejte nejlepší zážitek';
+
+  @override
+  String get permissionsSetupDescription => 'Povolte několik oprávnění, aby Omi mohl fungovat naplno.';
+
+  @override
+  String get permissionsChangeAnytime => 'Toto můžete kdykoli změnit v Nastavení > Oprávnění';
+
+  @override
+  String get location => 'Poloha';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Proč rušíte?';
+
+  @override
+  String get cancelReasonSubtitle => 'Můžete nám říct, proč odcházíte?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Příliš drahé';
+
+  @override
+  String get cancelReasonNotUsing => 'Nepoužívám to dostatečně';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Chybějící funkce';
+
+  @override
+  String get cancelReasonAudioQuality => 'Kvalita zvuku/přepisu';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Obavy z vybíjení baterie';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Našel jsem alternativu';
+
+  @override
+  String get cancelReasonOther => 'Jiné';
+
+  @override
+  String get tellUsMore => 'Řekněte nám více (volitelné)';
+
+  @override
+  String get cancelReasonDetailHint => 'Oceníme jakoukoli zpětnou vazbu...';
+
+  @override
+  String get justAMoment => 'Moment, prosím';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Důrazně doporučujeme prozkoumat vaše další možnosti místo zrušení.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Váš plán zůstane aktivní do $date. Poté budete přesunut na bezplatnou verzi s omezenými funkcemi.';
+  }
+
+  @override
+  String get ifYouCancel => 'Pokud zrušíte:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Na konci fakturačního období již nebudete mít neomezený přístup.';
+
+  @override
+  String get cancelConsequenceBattery => '7x větší spotřeba baterie (zpracování na zařízení)';
+
+  @override
+  String get cancelConsequenceQuality => 'O 30 % nižší kvalita přepisu (modely na zařízení)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 sekundové zpoždění zpracování (modely na zařízení)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nelze identifikovat mluvčí.';
+
+  @override
+  String get confirmAndCancel => 'Potvrdit a zrušit';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Žádný přepis telefonních hovorů v reálném čase';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Jaká cena by vám vyhovovala?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Jaké funkce vám chybí?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Jaké problémy jste zaznamenal?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Řekněte nám o problémech s baterií';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Na co přecházíte?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Co by vás přimělo používat Omi více?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Vaše zpětná vazba nám pomáhá najít správnou rovnováhu.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Stále stavíme — to nám pomáhá stanovit priority.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Rádi bychom pochopili, co se pokazilo.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'To pomáhá našemu hardwarovému týmu se zlepšit.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Rádi bychom se dozvěděli, co vás zaujalo.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Chceme, aby byl Omi pro vás užitečnější.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnostika zařízení';
+
+  @override
+  String get signalStrength => 'Síla signálu';
+
+  @override
+  String get connectionUptime => 'Doba provozu';
+
+  @override
+  String get reconnections => 'Opětovná připojení';
+
+  @override
+  String get disconnectHistory => 'Historie odpojení';
+
+  @override
+  String get noDisconnectsRecorded => 'Žádná odpojení nebyla zaznamenána';
+
+  @override
+  String get diagnostics => 'Diagnostika';
+
+  @override
+  String get waitingForData => 'Čekání na data...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI v reálném čase';
+
+  @override
+  String get noRssiDataYet => 'Zatím žádná data RSSI';
+
+  @override
+  String get collectingData => 'Sbírání dat...';
+
+  @override
+  String get cleanDisconnect => 'Čisté odpojení';
+
+  @override
+  String get connectionTimeout => 'Vypršel časový limit připojení';
+
+  @override
+  String get remoteDeviceTerminated => 'Vzdálené zařízení ukončilo spojení';
+
+  @override
+  String get pairedToAnotherPhone => 'Spárováno s jiným telefonem';
+
+  @override
+  String get linkKeyMismatch => 'Neshoda klíče propojení';
+
+  @override
+  String get connectionFailed => 'Připojení selhalo';
+
+  @override
+  String get appClosed => 'Aplikace zavřena';
+
+  @override
+  String get manualDisconnect => 'Ruční odpojení';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Posledních $count událostí';
+  }
+
+  @override
+  String get signal => 'Signál';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Vynikající';
+
+  @override
+  String get good => 'Dobré';
+
+  @override
+  String get fair => 'Uspokojivé';
+
+  @override
+  String get weak => 'Slabé';
+
+  @override
+  String gattError(String code) {
+    return 'Chyba GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Vrátit se na stabilní firmware';
+
+  @override
+  String get rollbackConfirmTitle => 'Vrátit firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Tím se nahradí aktuální firmware nejnovější stabilní verzí ($version). Po aktualizaci se zařízení restartuje.';
+  }
+
+  @override
+  String get stableFirmware => 'Stabilní firmware';
+
+  @override
+  String get fetchingStableFirmware => 'Načítání nejnovějšího stabilního firmwaru...';
+
+  @override
+  String get noStableFirmwareFound => 'Nepodařilo se najít stabilní verzi firmwaru pro vaše zařízení.';
+
+  @override
+  String get installStableFirmware => 'Nainstalovat stabilní firmware';
+
+  @override
+  String get alreadyOnStableFirmware => 'Již máte nejnovější stabilní verzi.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration zvuku uloženo lokálně';
+  }
+
+  @override
+  String get willSyncAutomatically => 'synchronizuje se automaticky';
+
+  @override
+  String get enableLocationTitle => 'Povolit polohu';
+
+  @override
+  String get enableLocationDescription => 'Oprávnění k poloze je potřeba k vyhledání blízkých zařízení Bluetooth.';
+
+  @override
+  String get voiceRecordingFound => 'Nalezena nahrávka';
+
+  @override
+  String get transcriptionConnecting => 'Připojování přepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opětovné připojování přepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Přepis není dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
 }

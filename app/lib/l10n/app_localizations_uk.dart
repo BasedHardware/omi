@@ -1462,7 +1462,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get payYourSttProvider => 'Вільно користуйтесь omi. Ви платите лише своєму STT-провайдеру безпосередньо.';
 
   @override
-  String get freeMinutesMonth => '4,800 безкоштовних хвилин/місяць включено. Необмежено з ';
+  String get freeMinutesMonth => '1,200 безкоштовних хвилин/місяць включено. Необмежено з ';
 
   @override
   String get omiUnlimited => 'Omi Безлімітний';
@@ -1818,7 +1818,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get skipThisQuestion => 'Пропустити це питання';
 
   @override
-  String get skipForNow => 'Пропустити зараз';
+  String get skipForNow => 'Пропустити поки що';
 
   @override
   String get connectionError => 'Помилка підключення';
@@ -3286,7 +3286,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get aboutYou => 'Про вас';
 
   @override
-  String get manual => 'Ручні';
+  String get manual => 'Ручне';
 
   @override
   String get loadingYourMemories => 'Завантаження ваших спогадів...';
@@ -4768,7 +4768,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 
   @override
-  String get basicPlanDescription => '4 800 преміум хвилин + необмежено на пристрої';
+  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
 
   @override
   String get minutes => 'хвилин';
@@ -6097,7 +6097,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
+      '1200 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
 
   @override
   String get viewUsage => 'Переглянути використання';
@@ -6178,7 +6178,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+      '1200 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8568,62 +8568,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearAll => 'Очистити все';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Клавіатура';
 
   @override
@@ -8696,4 +8640,489 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Запис продовжується — повторне підключення до транскрипції...';
+
+  @override
+  String get enableE2ee => 'Увімкнути E2EE';
+
+  @override
+  String get recoveryKey => 'Ключ відновлення';
+
+  @override
+  String get saveKeyMessage =>
+      'Збережіть цей ключ у безпечному місці. Він знадобиться для відновлення зашифрованих спогадів при зміні пристрою.';
+
+  @override
+  String get savedMyKey => 'Я зберіг свій ключ';
+
+  @override
+  String get showRecoveryKey => 'Показати ключ відновлення';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Якщо ви втратите ключ відновлення, ваші дані неможливо буде відновити.';
+
+  @override
+  String get e2eeBackupReminder => 'Створіть резервну копію ключа після увімкнення.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Не вдалося увімкнути E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Ключ скопійовано в буфер обміну';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Зашифровано на вашому пристрої до відправки на сервер. Тільки ви можете їх прочитати.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Зашифровано у стані спокою на сервері. Сервер обробляє аудіо для транскрипції, але збережені дані зашифровані.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Максимальний захист — спогади зашифровані на пристрої, всі інші дані зашифровані у спокої';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Зашифровано — не вдалося розшифрувати. Перевірте ключ відновлення.';
+
+  @override
+  String get pairWithWeb => 'З\'єднати з вебом';
+
+  @override
+  String get scanQrOnWeb => 'Відскануйте цей QR-код на omi.me, щоб розблокувати зашифровані дані';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Закінчується через $secondsс';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Скануйте лише на довіреному пристрої';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Наскрізне шифрування забезпечує найвищий рівень захисту даних:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Спогади: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Розмови, чат та інші дані: ';
+
+  @override
+  String get switchToSecureEncryption => 'Перейти на безпечне шифрування?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Це повторно зашифрує ваші дані ключами, якими керує сервер. Ваш ключ наскрізного шифрування більше не використовуватиметься.\n\nВаші дані й надалі будуть зашифровані під час зберігання, але ключами керуватиме сервер.';
+
+  @override
+  String get switchButton => 'Перейти';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Сторонні застосунки та інтеграції не зможуть отримати доступ до ваших зашифрованих даних, якщо ви не надасте їм свій ключ.';
+
+  @override
+  String get preparingMigration => 'Підготовка міграції...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Потрібен ключ відновлення';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Ваш ключ шифрування E2EE відсутній. Вставте ключ відновлення, щоб відновити доступ до зашифрованих даних.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Вставте ключ відновлення';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Відновити';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Ключ успішно відновлено';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey =>
+      'Неправильний ключ — він не збігається з ключем, використаним для шифрування ваших даних';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Я втратив ключ відновлення';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Без ключа відновлення вам потрібно буде вимкнути E2EE з іншого пристрою, де ви ввійшли, або звернутися до підтримки, щоб скинути шифрування.';
+
+  @override
+  String get processingOnServer => 'Обробка на сервері...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Обробка... $current/$total сегментів';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Справедливе використання: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Покращити з\'єднання';
+
+  @override
+  String get improveConnectionContent =>
+      'Ми покращили спосіб підключення Omi до вашого пристрою. Щоб активувати це, перейдіть на сторінку інформації про пристрій, натисніть \"Від\'єднати пристрій\" і знову підключіть ваш пристрій.';
+
+  @override
+  String get improveConnectionAction => 'Зрозуміло';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Годинник вашого пристрою відрізняється на ~$minutes хв. Перевірте налаштування дати та часу.';
+  }
+
+  @override
+  String get omisStorage => 'Сховище Omi';
+
+  @override
+  String get phoneStorage => 'Сховище телефону';
+
+  @override
+  String get cloudStorage => 'Хмарне сховище';
+
+  @override
+  String get howSyncingWorks => 'Як працює синхронізація';
+
+  @override
+  String get noSyncedRecordings => 'Ще немає синхронізованих записів';
+
+  @override
+  String get recordingsSyncAutomatically => 'Записи синхронізуються автоматично — жодних дій не потрібно.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Вже завантажені файли будуть вивантажені наступного разу.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count розмов створено',
+      one: '1 розмову створено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Торкніться для перегляду';
+
+  @override
+  String get syncFailed => 'Помилка синхронізації';
+
+  @override
+  String get keepSyncing => 'Продовжити синхронізацію';
+
+  @override
+  String get cancelSyncQuestion => 'Скасувати синхронізацію?';
+
+  @override
+  String get omisStorageDesc =>
+      'Коли ваш Omi не підключений до телефону, він зберігає аудіо локально у вбудованій пам\'яті. Ви ніколи не втратите запис.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Коли Omi знову підключається, записи автоматично переносяться на телефон перед завантаженням.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Після завантаження ваші записи обробляються та транскрибуються. Розмови будуть доступні протягом хвилини.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Тримайте телефон поруч для швидшої синхронізації';
+
+  @override
+  String get tipStableInternet => 'Стабільний інтернет прискорює завантаження в хмару';
+
+  @override
+  String get tipAutoSync => 'Записи синхронізуються автоматично';
+
+  @override
+  String get storageSection => 'СХОВИЩЕ';
+
+  @override
+  String get permissions => 'Дозволи';
+
+  @override
+  String get permissionEnabled => 'Увімкнено';
+
+  @override
+  String get permissionEnable => 'Увімкнути';
+
+  @override
+  String get permissionsPageDescription =>
+      'Ці дозволи є ключовими для роботи Omi. Вони забезпечують основні функції, такі як сповіщення, функції на основі місцезнаходження та запис звуку.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi потребує кількох дозволів для коректної роботи. Будь ласка, надайте їх, щоб продовжити.';
+
+  @override
+  String get permissionsSetupTitle => 'Отримайте найкращий досвід';
+
+  @override
+  String get permissionsSetupDescription => 'Увімкніть кілька дозволів, щоб Omi міг творити свою магію.';
+
+  @override
+  String get permissionsChangeAnytime => 'Ви можете змінити це будь-коли в Налаштування > Дозволи';
+
+  @override
+  String get location => 'Місцезнаходження';
+
+  @override
+  String get microphone => 'Мікрофон';
+
+  @override
+  String get whyAreYouCanceling => 'Чому ви скасовуєте?';
+
+  @override
+  String get cancelReasonSubtitle => 'Чи можете ви розповісти, чому йдете?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Занадто дорого';
+
+  @override
+  String get cancelReasonNotUsing => 'Недостатньо використовую';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Відсутні функції';
+
+  @override
+  String get cancelReasonAudioQuality => 'Якість аудіо/транскрипції';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Занепокоєння щодо витрати батареї';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Знайшов альтернативу';
+
+  @override
+  String get cancelReasonOther => 'Інше';
+
+  @override
+  String get tellUsMore => 'Розкажіть більше (необов\'язково)';
+
+  @override
+  String get cancelReasonDetailHint => 'Ми цінуємо будь-який відгук...';
+
+  @override
+  String get justAMoment => 'Одну хвилинку';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Ми наполегливо рекомендуємо дослідити інші варіанти замість скасування.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Ваш план залишиться активним до $date. Після цього вас буде переведено на безкоштовну версію з обмеженими функціями.';
+  }
+
+  @override
+  String get ifYouCancel => 'Якщо ви скасуєте:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Більше не буде необмеженого доступу наприкінці розрахункового періоду.';
+
+  @override
+  String get cancelConsequenceBattery => 'У 7 разів більше витрата батареї (обробка на пристрої)';
+
+  @override
+  String get cancelConsequenceQuality => 'На 30% нижча якість транскрипції (моделі на пристрої)';
+
+  @override
+  String get cancelConsequenceDelay => 'Затримка обробки 5-7 секунд (моделі на пристрої)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Неможливо ідентифікувати мовців.';
+
+  @override
+  String get confirmAndCancel => 'Підтвердити та скасувати';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Без транскрипції телефонних дзвінків у реальному часі';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Яка ціна була б прийнятною для вас?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Яких функцій вам бракує?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'З якими проблемами ви зіткнулися?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Розкажіть нам про проблеми з батареєю';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'На що ви переходите?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Що змусило б вас використовувати Omi більше?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Ваш відгук допомагає нам знайти правильний баланс.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Ми завжди створюємо — це допомагає нам визначати пріоритети.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Ми хотіли б зрозуміти, що пішло не так.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Це допомагає нашій команді апаратного забезпечення покращуватися.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Нам цікаво дізнатися, що привернуло вашу увагу.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Ми хочемо зробити Omi кориснішим для вас.';
+
+  @override
+  String get deviceDiagnostics => 'Діагностика пристрою';
+
+  @override
+  String get signalStrength => 'Рівень сигналу';
+
+  @override
+  String get connectionUptime => 'Час роботи';
+
+  @override
+  String get reconnections => 'Повторні підключення';
+
+  @override
+  String get disconnectHistory => 'Історія відключень';
+
+  @override
+  String get noDisconnectsRecorded => 'Відключень не зафіксовано';
+
+  @override
+  String get diagnostics => 'Діагностика';
+
+  @override
+  String get waitingForData => 'Очікування даних...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI в реальному часі';
+
+  @override
+  String get noRssiDataYet => 'Даних RSSI поки немає';
+
+  @override
+  String get collectingData => 'Збір даних...';
+
+  @override
+  String get cleanDisconnect => 'Чисте відключення';
+
+  @override
+  String get connectionTimeout => 'Тайм-аут з\'єднання';
+
+  @override
+  String get remoteDeviceTerminated => 'Віддалений пристрій розірвав з\'єднання';
+
+  @override
+  String get pairedToAnotherPhone => 'Сполучено з іншим телефоном';
+
+  @override
+  String get linkKeyMismatch => 'Невідповідність ключа зв\'язку';
+
+  @override
+  String get connectionFailed => 'Помилка підключення';
+
+  @override
+  String get appClosed => 'Додаток закрито';
+
+  @override
+  String get manualDisconnect => 'Ручне відключення';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Останні $count подій';
+  }
+
+  @override
+  String get signal => 'Сигнал';
+
+  @override
+  String get battery => 'Батарея';
+
+  @override
+  String get excellent => 'Відмінно';
+
+  @override
+  String get good => 'Добре';
+
+  @override
+  String get fair => 'Задовільно';
+
+  @override
+  String get weak => 'Слабкий';
+
+  @override
+  String gattError(String code) {
+    return 'Помилка GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Повернутися до стабільної прошивки';
+
+  @override
+  String get rollbackConfirmTitle => 'Повернути прошивку?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Це замінить поточну прошивку на останню стабільну версію ($version). Ваш пристрій перезавантажиться після оновлення.';
+  }
+
+  @override
+  String get stableFirmware => 'Стабільна прошивка';
+
+  @override
+  String get fetchingStableFirmware => 'Отримання останньої стабільної прошивки...';
+
+  @override
+  String get noStableFirmwareFound => 'Не вдалося знайти стабільну версію прошивки для вашого пристрою.';
+
+  @override
+  String get installStableFirmware => 'Встановити стабільну прошивку';
+
+  @override
+  String get alreadyOnStableFirmware => 'Ви вже використовуєте останню стабільну версію.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration аудіо збережено локально';
+  }
+
+  @override
+  String get willSyncAutomatically => 'буде синхронізовано автоматично';
+
+  @override
+  String get enableLocationTitle => 'Увімкнути місцезнаходження';
+
+  @override
+  String get enableLocationDescription =>
+      'Дозвіл на місцезнаходження потрібен, щоб знаходити пристрої Bluetooth поблизу.';
+
+  @override
+  String get voiceRecordingFound => 'Запис знайдено';
+
+  @override
+  String get transcriptionConnecting => 'Підключення транскрипції...';
+
+  @override
+  String get transcriptionReconnecting => 'Повторне підключення транскрипції...';
+
+  @override
+  String get transcriptionUnavailable => 'Транскрипція недоступна';
+
+  @override
+  String get audioOutput => 'Аудіовихід';
 }

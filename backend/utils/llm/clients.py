@@ -13,8 +13,8 @@ from utils.llm.usage_tracker import get_usage_callback
 # Anthropic client for chat agent
 anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
 
-ANTHROPIC_AGENT_MODEL = "claude-opus-4-6"
-ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-opus-4-6"
+ANTHROPIC_AGENT_MODEL = "claude-sonnet-4-6"
+ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()

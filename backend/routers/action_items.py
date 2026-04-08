@@ -7,6 +7,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
+import database.conversations as conversations_db
 import database.users as users_db
 import database.redis_db as redis_db
 from utils.users import get_user_display_name
@@ -45,6 +46,7 @@ class UpdateActionItemRequest(BaseModel):
     exported: Optional[bool] = Field(default=None, description="Whether the item has been exported")
     export_date: Optional[datetime] = Field(default=None, description="When the item was exported")
     export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
+    apple_reminder_id: Optional[str] = Field(default=None, description="EventKit calendarItemIdentifier")
     sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
     indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
 
@@ -62,6 +64,7 @@ class ActionItemResponse(BaseModel):
     exported: bool = False
     export_date: Optional[datetime] = None
     export_platform: Optional[str] = None
+    apple_reminder_id: Optional[str] = None
     sort_order: int = 0
     indent_level: int = 0
 
@@ -100,6 +103,70 @@ def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str =
 
 
 # *****************************
+# ****** REMINDERS SYNC *******
+# *****************************
+
+
+class SyncBatchItem(BaseModel):
+    id: str
+    description: Optional[str] = None
+    completed: Optional[bool] = None
+    due_at: Optional[datetime] = None
+    exported: Optional[bool] = None
+    export_platform: Optional[str] = None
+    apple_reminder_id: Optional[str] = None
+
+
+class SyncBatchRequest(BaseModel):
+    items: List[SyncBatchItem] = Field(..., max_length=100)
+
+
+@router.get("/v1/action-items/pending-sync", tags=['action-items'])
+def get_pending_sync_items(
+    platform: str = Query('apple_reminders', description="Sync platform"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Get action items that need sync: pending export + already synced items for bidirectional sync."""
+    result = action_items_db.get_pending_apple_reminders_sync(uid)
+    return {
+        "pending_export": [ActionItemResponse(**item) for item in result["pending_export"]],
+        "synced_items": [ActionItemResponse(**item) for item in result["synced_items"]],
+    }
+
+
+@router.patch("/v1/action-items/sync-batch", tags=['action-items'])
+def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Batch update action items during reminders sync. Single Firestore batch commit."""
+    if not request.items:
+        return {"status": "ok", "updated_count": 0}
+
+    updates = []
+    for item in request.items:
+        update_data = {}
+        if item.description is not None:
+            update_data['description'] = item.description
+        if item.completed is not None:
+            update_data['completed'] = item.completed
+            if item.completed:
+                update_data['completed_at'] = datetime.now(timezone.utc)
+            else:
+                update_data['completed_at'] = None
+        if item.due_at is not None:
+            update_data['due_at'] = item.due_at
+        if item.exported is not None:
+            update_data['exported'] = item.exported
+        if item.export_platform is not None:
+            update_data['export_platform'] = item.export_platform
+        if item.apple_reminder_id is not None:
+            update_data['apple_reminder_id'] = item.apple_reminder_id
+        if update_data:
+            updates.append({'id': item.id, 'data': update_data})
+
+    action_items_db.batch_sync_update_action_items(uid, updates)
+    return {"status": "ok", "updated_count": len(updates)}
+
+
+# *****************************
 # ******** CRUD ROUTES ********
 # *****************************
 
@@ -130,7 +197,7 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         )
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}))
+        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
     threading.Thread(target=_run_auto_sync, daemon=True).start()
 
@@ -191,9 +258,12 @@ def get_action_items(
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
-def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid),
-                    x_e2ee_key_hash: Optional[str] = Header(None),
-                    e2ee_key_hash: Optional[str] = Query(None)):
+def get_action_item(
+    action_item_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
+    e2ee_key_hash: Optional[str] = Query(None),
+):
     """Get a specific action item by ID."""
     _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     action_item = _get_valid_action_item(uid, action_item_id)
@@ -238,6 +308,8 @@ def update_action_item(
         update_data['export_date'] = request.export_date
     if request.export_platform is not None:
         update_data['export_platform'] = request.export_platform
+    if request.apple_reminder_id is not None:
+        update_data['apple_reminder_id'] = request.apple_reminder_id
     if request.sort_order is not None:
         update_data['sort_order'] = request.sort_order
     if request.indent_level is not None:
@@ -320,11 +392,19 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
 
 @router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
-def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid),
-                                  x_e2ee_key_hash: Optional[str] = Header(None),
-                                  e2ee_key_hash: Optional[str] = Query(None)):
+def get_conversation_action_items(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
+    e2ee_key_hash: Optional[str] = Query(None),
+):
     """Get all action items for a specific conversation."""
     _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
     response_items = [ActionItemResponse(**item) for item in action_items]
 

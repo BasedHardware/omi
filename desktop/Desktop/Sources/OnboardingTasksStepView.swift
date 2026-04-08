@@ -4,6 +4,7 @@ import SwiftUI
 struct OnboardingTasksStepView: View {
     var onComplete: () -> Void
     var onSkip: (() -> Void)? = nil
+    var onForceComplete: (() -> Void)?
 
     @State private var pulseAnimation = false
     @State private var showTasks = false
@@ -18,9 +19,7 @@ struct OnboardingTasksStepView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Tasks")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
                 Spacer()
             }
             .padding(.horizontal, 24)
@@ -35,7 +34,7 @@ struct OnboardingTasksStepView: View {
                 // Icon with glow
                 ZStack {
                     Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .fill(Color.white.opacity(0.15))
                         .frame(width: 100, height: 100)
                         .blur(radius: 20)
                         .scaleEffect(pulseAnimation ? 1.2 : 1.0)
@@ -45,7 +44,7 @@ struct OnboardingTasksStepView: View {
                         .font(.system(size: 44))
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [OmiColors.purplePrimary, OmiColors.purpleSecondary],
+                                colors: [Color.white, Color.gray],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -87,22 +86,14 @@ struct OnboardingTasksStepView: View {
                 Button(action: onComplete) {
                     Text("Take me to my tasks")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .frame(maxWidth: 280)
                         .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary)
+                        .background(Color.white)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
 
-                if let onSkip = onSkip {
-                    Button(action: onSkip) {
-                        Text("Skip")
-                            .font(.system(size: 13))
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .padding(.bottom, 32)
         }

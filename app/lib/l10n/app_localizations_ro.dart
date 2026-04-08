@@ -1468,7 +1468,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '4.800 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -1825,7 +1825,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get skipThisQuestion => 'Sari peste această întrebare';
 
   @override
-  String get skipForNow => 'Sari peste pentru moment';
+  String get skipForNow => 'Omite deocamdată';
 
   @override
   String get connectionError => 'Eroare de conexiune';
@@ -4787,7 +4787,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '4.800 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6119,7 +6119,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6202,7 +6202,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8598,62 +8598,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearAll => 'Șterge tot';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Tastatură';
 
   @override
@@ -8725,4 +8669,489 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Încă înregistrează — reconectare la transcriere...';
+
+  @override
+  String get enableE2ee => 'Activare E2EE';
+
+  @override
+  String get recoveryKey => 'Cheie de recuperare';
+
+  @override
+  String get saveKeyMessage =>
+      'Salvați această cheie într-un loc sigur. Veți avea nevoie de ea pentru a recupera amintirile criptate dacă schimbați dispozitivul.';
+
+  @override
+  String get savedMyKey => 'Am salvat cheia mea';
+
+  @override
+  String get showRecoveryKey => 'Afișează cheia de recuperare';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Dacă pierdeți cheia de recuperare, datele nu pot fi recuperate.';
+
+  @override
+  String get e2eeBackupReminder => 'Faceți o copie de siguranță a cheii după activare.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Activarea E2EE a eșuat: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Cheia a fost copiată în clipboard';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Criptate pe dispozitivul dvs. înainte de a ajunge la server. Doar dvs. le puteți citi.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Criptate în repaus pe server. Serverul procesează audio pentru transcriere, dar datele stocate sunt criptate.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Protecție maximă — amintiri criptate pe dispozitiv, toate celelalte date criptate în repaus';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Criptat — nu se poate decripta. Verificați cheia de recuperare.';
+
+  @override
+  String get pairWithWeb => 'Asociere cu web';
+
+  @override
+  String get scanQrOnWeb => 'Scanați acest cod QR pe omi.me pentru a debloca datele criptate';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Expiră în ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Scanați doar pe un dispozitiv de încredere';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Criptarea end-to-end oferă cel mai înalt nivel de protecție a datelor:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Amintiri: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Conversații, chat și alte date: ';
+
+  @override
+  String get switchToSecureEncryption => 'Comutați la criptare securizată?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Aceasta va recripta datele dvs. cu chei gestionate de server. Cheia dvs. de criptare end-to-end nu va mai fi folosită.\n\nDatele dvs. vor rămâne criptate în repaus, dar serverul va gestiona cheile.';
+
+  @override
+  String get switchButton => 'Comută';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Aplicațiile și integrările terțe nu vor putea accesa datele dvs. criptate decât dacă le furnizați cheia.';
+
+  @override
+  String get preparingMigration => 'Se pregătește migrarea...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Este necesară cheia de recuperare';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Cheia dvs. de criptare E2EE lipsește. Lipiți cheia de recuperare pentru a restabili accesul la datele dvs. criptate.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Lipiți cheia de recuperare';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Recuperează';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Cheia a fost recuperată cu succes';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey =>
+      'Cheie greșită — nu se potrivește cu cea folosită pentru criptarea datelor dvs.';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Mi-am pierdut cheia de recuperare';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Fără cheia de recuperare, va trebui să dezactivați E2EE de pe un alt dispozitiv pe care sunteți autentificat sau să contactați asistența pentru a reseta criptarea.';
+
+  @override
+  String get processingOnServer => 'Procesare pe server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Procesare... $current/$total segmente';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Utilizare echitabilă: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Îmbunătățire conexiune';
+
+  @override
+  String get improveConnectionContent =>
+      'Am îmbunătățit modul în care Omi rămâne conectat la dispozitivul tău. Pentru a activa acest lucru, mergi la pagina Informații dispozitiv, apasă \"Deconectare dispozitiv\" și împerechează din nou dispozitivul.';
+
+  @override
+  String get improveConnectionAction => 'Am înțeles';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Ceasul dispozitivului diferă cu ~$minutes min. Verificați setările de dată și oră.';
+  }
+
+  @override
+  String get omisStorage => 'Stocarea Omi';
+
+  @override
+  String get phoneStorage => 'Stocarea telefonului';
+
+  @override
+  String get cloudStorage => 'Stocare în cloud';
+
+  @override
+  String get howSyncingWorks => 'Cum funcționează sincronizarea';
+
+  @override
+  String get noSyncedRecordings => 'Nicio înregistrare sincronizată încă';
+
+  @override
+  String get recordingsSyncAutomatically => 'Înregistrările se sincronizează automat — nu este necesară nicio acțiune.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Fișierele deja descărcate vor fi încărcate data viitoare.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații create',
+      one: '1 conversație creată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Atingeți pentru a vizualiza';
+
+  @override
+  String get syncFailed => 'Sincronizarea a eșuat';
+
+  @override
+  String get keepSyncing => 'Continuă sincronizarea';
+
+  @override
+  String get cancelSyncQuestion => 'Anulezi sincronizarea?';
+
+  @override
+  String get omisStorageDesc =>
+      'Când Omi nu este conectat la telefon, stochează audio local în memoria sa integrată. Nu veți pierde niciodată o înregistrare.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Când Omi se reconectează, înregistrările sunt transferate automat pe telefon înainte de încărcare.';
+
+  @override
+  String get cloudStorageDesc =>
+      'După încărcare, înregistrările sunt procesate și transcrise. Conversațiile vor fi disponibile într-un minut.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Păstrați telefonul aproape pentru sincronizare mai rapidă';
+
+  @override
+  String get tipStableInternet => 'Internetul stabil accelerează încărcarea în cloud';
+
+  @override
+  String get tipAutoSync => 'Înregistrările se sincronizează automat';
+
+  @override
+  String get storageSection => 'STOCARE';
+
+  @override
+  String get permissions => 'Permisiuni';
+
+  @override
+  String get permissionEnabled => 'Activată';
+
+  @override
+  String get permissionEnable => 'Activare';
+
+  @override
+  String get permissionsPageDescription =>
+      'Aceste permisiuni sunt esențiale pentru funcționarea Omi. Ele activează funcții cheie precum notificări, experiențe bazate pe locație și captură audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi are nevoie de câteva permisiuni pentru a funcționa corect. Te rugăm să le acorzi pentru a continua.';
+
+  @override
+  String get permissionsSetupTitle => 'Obține cea mai bună experiență';
+
+  @override
+  String get permissionsSetupDescription => 'Activează câteva permisiuni pentru ca Omi să își poată face magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Poți schimba oricând din Setări > Permisiuni';
+
+  @override
+  String get location => 'Locație';
+
+  @override
+  String get microphone => 'Microfon';
+
+  @override
+  String get whyAreYouCanceling => 'De ce anulezi?';
+
+  @override
+  String get cancelReasonSubtitle => 'Ne poți spune de ce pleci?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Prea scump';
+
+  @override
+  String get cancelReasonNotUsing => 'Nu-l folosesc suficient';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Funcții lipsă';
+
+  @override
+  String get cancelReasonAudioQuality => 'Calitatea audio/transcrierii';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Preocupări privind consumul bateriei';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Am găsit o alternativă';
+
+  @override
+  String get cancelReasonOther => 'Altele';
+
+  @override
+  String get tellUsMore => 'Spune-ne mai multe (opțional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Apreciem orice feedback...';
+
+  @override
+  String get justAMoment => 'O clipă, te rog';
+
+  @override
+  String get cancelConsequencesSubtitle => 'Recomandăm cu tărie să explorați alte opțiuni în loc să anulați.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planul tău va rămâne activ până la $date. După aceea, vei fi trecut la versiunea gratuită cu funcții limitate.';
+  }
+
+  @override
+  String get ifYouCancel => 'Dacă anulezi:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Nu vei mai avea acces nelimitat la sfârșitul perioadei de facturare.';
+
+  @override
+  String get cancelConsequenceBattery => '7x mai mult consum de baterie (procesare pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceQuality => '30% calitate mai scăzută a transcrierii (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceDelay => 'Întârziere de procesare de 5-7 secunde (modele pe dispozitiv)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Nu poate identifica vorbitorii.';
+
+  @override
+  String get confirmAndCancel => 'Confirmă și anulează';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Fără transcriere apeluri telefonice în timp real';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Ce preț ar fi potrivit pentru tine?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Ce funcții îți lipsesc?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ce probleme ai întâmpinat?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Spune-ne despre problemele cu bateria';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'La ce treci?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Ce te-ar face să folosești Omi mai mult?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Feedback-ul tău ne ajută să găsim echilibrul potrivit.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Construim mereu — acest lucru ne ajută să stabilim priorități.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Am dori să înțelegem ce a mers prost.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Acest lucru ajută echipa noastră hardware să se îmbunătățească.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Am dori să aflăm ce v-a atras atenția.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Vrem să facem Omi mai util pentru tine.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnosticarea dispozitivului';
+
+  @override
+  String get signalStrength => 'Puterea semnalului';
+
+  @override
+  String get connectionUptime => 'Timp de funcționare';
+
+  @override
+  String get reconnections => 'Reconectări';
+
+  @override
+  String get disconnectHistory => 'Istoric deconectări';
+
+  @override
+  String get noDisconnectsRecorded => 'Nicio deconectare înregistrată';
+
+  @override
+  String get diagnostics => 'Diagnosticare';
+
+  @override
+  String get waitingForData => 'Se așteaptă date...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI în timp real';
+
+  @override
+  String get noRssiDataYet => 'Încă nu există date RSSI';
+
+  @override
+  String get collectingData => 'Se colectează date...';
+
+  @override
+  String get cleanDisconnect => 'Deconectare curată';
+
+  @override
+  String get connectionTimeout => 'Expirarea timpului de conectare';
+
+  @override
+  String get remoteDeviceTerminated => 'Dispozitivul la distanță a încheiat conexiunea';
+
+  @override
+  String get pairedToAnotherPhone => 'Asociat cu alt telefon';
+
+  @override
+  String get linkKeyMismatch => 'Nepotrivire cheie de legătură';
+
+  @override
+  String get connectionFailed => 'Conectare eșuată';
+
+  @override
+  String get appClosed => 'Aplicație închisă';
+
+  @override
+  String get manualDisconnect => 'Deconectare manuală';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Ultimele $count evenimente';
+  }
+
+  @override
+  String get signal => 'Semnal';
+
+  @override
+  String get battery => 'Baterie';
+
+  @override
+  String get excellent => 'Excelent';
+
+  @override
+  String get good => 'Bun';
+
+  @override
+  String get fair => 'Acceptabil';
+
+  @override
+  String get weak => 'Slab';
+
+  @override
+  String gattError(String code) {
+    return 'Eroare GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Revenire la firmware-ul stabil';
+
+  @override
+  String get rollbackConfirmTitle => 'Reveniți la firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Acest lucru va înlocui firmware-ul curent cu cea mai recentă versiune stabilă ($version). Dispozitivul se va reporni după actualizare.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware stabil';
+
+  @override
+  String get fetchingStableFirmware => 'Se obține cel mai recent firmware stabil...';
+
+  @override
+  String get noStableFirmwareFound => 'Nu s-a putut găsi o versiune stabilă de firmware pentru dispozitivul dvs.';
+
+  @override
+  String get installStableFirmware => 'Instalare firmware stabil';
+
+  @override
+  String get alreadyOnStableFirmware => 'Sunteți deja pe cea mai recentă versiune stabilă.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration audio salvat local';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se va sincroniza automat';
+
+  @override
+  String get enableLocationTitle => 'Activați locația';
+
+  @override
+  String get enableLocationDescription =>
+      'Permisiunea de locație este necesară pentru a găsi dispozitive Bluetooth din apropiere.';
+
+  @override
+  String get voiceRecordingFound => 'Înregistrare găsită';
+
+  @override
+  String get transcriptionConnecting => 'Se conectează transcrierea...';
+
+  @override
+  String get transcriptionReconnecting => 'Se reconectează transcrierea...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcriere indisponibilă';
+
+  @override
+  String get audioOutput => 'Ieșire audio';
 }

@@ -3,7 +3,7 @@ import 'package:omi/services/wals.dart';
 
 enum SyncStatus { idle, syncing, fetchingConversations, completed, error }
 
-enum SyncPhase { idle, downloadingFromDevice, waitingForInternet, uploadingToCloud }
+enum SyncPhase { idle, downloadingFromDevice, waitingForInternet, uploadingToCloud, processingOnServer }
 
 extension SyncMethodExtension on SyncMethod {
   String get displayName {
@@ -43,6 +43,10 @@ class SyncState {
   final List<SyncedConversationPointer> syncedConversations;
   final double? speedKBps; // Download speed in KB/s
   final SyncMethod? syncMethod; // Current sync method (BLE or WiFi)
+  final int? currentFile; // 1-based index of file being transferred
+  final int? totalFiles; // Total files to transfer
+  final int? uploadedBytes; // Bytes uploaded to cloud so far
+  final int? totalBytesToUpload; // Total bytes to upload to cloud
 
   const SyncState({
     this.status = SyncStatus.idle,
@@ -53,6 +57,10 @@ class SyncState {
     this.syncedConversations = const [],
     this.speedKBps,
     this.syncMethod,
+    this.currentFile,
+    this.totalFiles,
+    this.uploadedBytes,
+    this.totalBytesToUpload,
   });
 
   SyncState copyWith({
@@ -65,6 +73,10 @@ class SyncState {
     double? speedKBps,
     SyncMethod? syncMethod,
     bool clearSyncMethod = false,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -75,6 +87,10 @@ class SyncState {
       syncedConversations: syncedConversations ?? this.syncedConversations,
       speedKBps: speedKBps,
       syncMethod: clearSyncMethod ? null : (syncMethod ?? this.syncMethod),
+      currentFile: currentFile ?? this.currentFile,
+      totalFiles: totalFiles ?? this.totalFiles,
+      uploadedBytes: uploadedBytes,
+      totalBytesToUpload: totalBytesToUpload,
     );
   }
 
@@ -86,23 +102,37 @@ class SyncState {
   bool get isProcessing => isSyncing || isFetchingConversations;
 
   SyncState toIdle() => copyWith(
-    status: SyncStatus.idle,
-    phase: SyncPhase.idle,
-    progress: 0.0,
-    errorMessage: null,
-    failedWal: null,
-    syncedConversations: [],
-    clearSyncMethod: true,
-  );
+        status: SyncStatus.idle,
+        phase: SyncPhase.idle,
+        progress: 0.0,
+        errorMessage: null,
+        failedWal: null,
+        syncedConversations: [],
+        clearSyncMethod: true,
+      );
 
-  SyncState toSyncing({double progress = 0.0, double? speedKBps, SyncMethod? syncMethod, SyncPhase? phase}) => copyWith(
-    status: SyncStatus.syncing,
-    phase: phase,
-    progress: progress,
-    errorMessage: null,
-    speedKBps: speedKBps,
-    syncMethod: syncMethod,
-  );
+  SyncState toSyncing({
+    double progress = 0.0,
+    double? speedKBps,
+    SyncMethod? syncMethod,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
+  }) =>
+      copyWith(
+        status: SyncStatus.syncing,
+        phase: phase,
+        progress: progress,
+        errorMessage: null,
+        speedKBps: speedKBps,
+        syncMethod: syncMethod,
+        currentFile: currentFile,
+        totalFiles: totalFiles,
+        uploadedBytes: uploadedBytes,
+        totalBytesToUpload: totalBytesToUpload,
+      );
 
   SyncState toFetchingConversations() => copyWith(status: SyncStatus.fetchingConversations);
 

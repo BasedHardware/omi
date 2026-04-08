@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -212,67 +210,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Future<void> _showGenerateSummaryPicker() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF6366F1),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1C1C1E),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF1C1C1E),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && mounted) {
-      final dateStr =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
-
-      final summaryId = await generateDailySummary(date: dateStr);
-
-      if (!mounted) return;
-      Navigator.pop(context); // Dismiss loading
-
-      if (summaryId != null) {
-        MixpanelManager().dailySummaryTestGenerated(date: dateStr);
-
-        // Refresh the hasDailySummaries flag so the Recap tab shows
-        Provider.of<ConversationProvider>(context, listen: false).checkHasDailySummaries();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.summaryGeneratedFor('${picked.month}/${picked.day}/${picked.year}')),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
-      } else {
-        MixpanelManager().dailySummaryTestGenerationFailed(date: dateStr);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToGenerateSummary), backgroundColor: Colors.red.shade700),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,29 +218,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         title: Text(context.l10n.notifications),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            color: const Color(0xFF1C1C1E),
-            onSelected: (value) {
-              if (value == 'generate') {
-                _showGenerateSummaryPicker();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'generate',
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                    const SizedBox(width: 12),
-                    Text(context.l10n.generateSummary, style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))

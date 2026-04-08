@@ -15,6 +15,7 @@ Options (via environment variables):
   AUTH_PORT=10200           Auth service port (default: 10200)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
 
@@ -58,6 +59,7 @@ if [ "$1" = "--yolo" ]; then
     export OMI_SKIP_AUTH=1
     export OMI_SKIP_TUNNEL=1
     export OMI_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
+    export OMI_PYTHON_API_URL="https://api.omi.me"
     export OMI_AUTH_URL="https://omi-desktop-auth-208440318997.us-central1.run.app/"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 fi
@@ -140,7 +142,7 @@ AUTH_DIR="$(cd "$(dirname "$0")/Auth-Python" && pwd)"
 BACKEND_PID=""
 AUTH_PID=""
 TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+TUNNEL_URL="${TUNNEL_URL:-}"
 AUTH_PORT="${AUTH_PORT:-10200}"
 
 # Cleanup function to stop backend, auth, and tunnel on exit
@@ -170,7 +172,7 @@ auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSi
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
+# Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
 # Kill any old Rust backend by process name (port-agnostic)
 pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
     substep "Killing old backend (PID: $pid)"
@@ -210,11 +212,22 @@ find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" 
 done
 
 if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
-    step "Starting Cloudflare tunnel..."
+    step "Starting Cloudflare quick tunnel..."
     if command -v cloudflared >/dev/null 2>&1; then
-        cloudflared tunnel run omi-computer-dev &
+        TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+        cloudflared tunnel --url http://localhost:${BACKEND_PORT:-8080} > "$TUNNEL_LOG" 2>&1 &
         TUNNEL_PID=$!
-        sleep 2
+        for i in {1..20}; do
+            TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            sleep 0.5
+        done
+        if [ -n "$TUNNEL_URL" ]; then
+            rm -f "$TUNNEL_LOG"
+            substep "Tunnel URL: $TUNNEL_URL"
+        else
+            substep "Warning: Could not capture tunnel URL (see $TUNNEL_LOG for details)"
+        fi
     else
         substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
     fi
@@ -480,8 +493,8 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Set OMI_API_URL: tunnel URL if tunnel is running, otherwise from .env or local backend
-if [ -n "$TUNNEL_PID" ]; then
+# Set OMI_API_URL: tunnel URL if available, otherwise from .env or local backend
+if [ -n "$TUNNEL_URL" ]; then
     EFFECTIVE_API_URL="$TUNNEL_URL"
 elif [ -n "$OMI_API_URL" ]; then
     EFFECTIVE_API_URL="$OMI_API_URL"
@@ -517,6 +530,20 @@ if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     fi
     echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
     substep "Set OMI_AUTH_URL=$AUTH_URL"
+fi
+# Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
+# Do NOT fall back to OMI_API_URL — that's the Rust desktop-backend which doesn't serve these routes
+if ! grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
+    if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
+        PYTHON_API_URL=$(grep "^OMI_PYTHON_API_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    fi
+    if [ -z "$PYTHON_API_URL" ]; then
+        PYTHON_API_URL="https://api.omi.me"
+        substep "OMI_PYTHON_API_URL not set — defaulting to production: $PYTHON_API_URL"
+    fi
+    echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 fi
 
 substep "Copying app icon"

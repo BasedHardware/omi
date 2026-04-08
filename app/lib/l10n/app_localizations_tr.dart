@@ -1465,7 +1465,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get payYourSttProvider => 'Omi\'yi özgürce kullanın. Sadece STT sağlayıcınıza doğrudan ödeme yaparsınız.';
 
   @override
-  String get freeMinutesMonth => 'Ayda 4.800 ücretsiz dakika dahildir. ';
+  String get freeMinutesMonth => 'Ayda 1.200 ücretsiz dakika dahildir. ';
 
   @override
   String get omiUnlimited => 'Omi Sınırsız';
@@ -1866,7 +1866,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get continueWithoutDevice => 'Cihaz Olmadan Devam Et';
 
   @override
-  String get permissionsRequired => 'İzinler Gerekli';
+  String get permissionsRequired => 'İzinler gerekli';
 
   @override
   String get permissionsRequiredDesc =>
@@ -4773,7 +4773,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 
   @override
-  String get basicPlanDescription => '4.800 premium dakika + cihazda sınırsız';
+  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
 
   @override
   String get minutes => 'dakika';
@@ -6102,7 +6102,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6183,7 +6183,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8568,62 +8568,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearAll => 'Tümünü temizle';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Tuş takımı';
 
   @override
@@ -8695,4 +8639,486 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...';
+
+  @override
+  String get enableE2ee => 'E2EE\'yi Etkinleştir';
+
+  @override
+  String get recoveryKey => 'Kurtarma Anahtarı';
+
+  @override
+  String get saveKeyMessage =>
+      'Bu anahtarı güvenli bir yerde saklayın. Cihaz değiştirdiğinizde şifrelenmiş anılarınızı kurtarmak için gerekecektir.';
+
+  @override
+  String get savedMyKey => 'Anahtarımı Kaydettim';
+
+  @override
+  String get showRecoveryKey => 'Kurtarma Anahtarını Göster';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Kurtarma anahtarınızı kaybederseniz verileriniz kurtarılamaz.';
+
+  @override
+  String get e2eeBackupReminder => 'Etkinleştirdikten sonra anahtarınızı yedekleyin.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'E2EE etkinleştirilemedi: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Anahtar panoya kopyalandı';
+
+  @override
+  String get e2eeMemoriesDescription => 'Sunucuya ulaşmadan önce cihazınızda şifrelenir. Yalnızca siz okuyabilirsiniz.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Sunucuda beklemede şifrelenir. Sunucu transkripsiyon için sesi işler ancak depolanan veriler şifrelidir.';
+
+  @override
+  String get e2eeCardSubtitle => 'Maksimum koruma — anılar cihazda şifrelenir, diğer tüm veriler beklemede şifrelenir';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Şifrelenmiş — şifre çözülemedi. Kurtarma anahtarınızı kontrol edin.';
+
+  @override
+  String get pairWithWeb => 'Web ile Eşleştir';
+
+  @override
+  String get scanQrOnWeb => 'Şifrelenmiş verilerinizin kilidini açmak için omi.me\'de bu QR kodunu tarayın';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return '${seconds}sn içinde sona erer';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Yalnızca güvenilir bir cihazda tarayın';
+
+  @override
+  String get e2eeEnableDialogIntro => 'Uçtan uca şifreleme en yüksek düzeyde veri koruması sağlar:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Anılar: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Konuşmalar, sohbet ve diğer veriler: ';
+
+  @override
+  String get switchToSecureEncryption => 'Güvenli Şifrelemeye geçilsin mi?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Bu işlem verilerinizi sunucu tarafından yönetilen anahtarlarla yeniden şifreleyecek. Uçtan uca şifreleme anahtarınız artık kullanılmayacak.\n\nVerileriniz bekleme durumunda şifreli kalacak, ancak anahtarları sunucu yönetecek.';
+
+  @override
+  String get switchButton => 'Geç';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Üçüncü taraf uygulamalar ve entegrasyonlar, anahtarınızı vermediğiniz sürece şifreli verilerinize erişemeyecek.';
+
+  @override
+  String get preparingMigration => 'Geçiş hazırlanıyor...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Kurtarma Anahtarı Gerekli';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'E2EE şifreleme anahtarınız eksik. Şifreli verilerinize erişimi geri yüklemek için kurtarma anahtarınızı yapıştırın.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Kurtarma anahtarını yapıştır';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Kurtar';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Anahtar başarıyla kurtarıldı';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Yanlış anahtar — verilerinizi şifrelemek için kullanılan anahtarla eşleşmiyor';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Kurtarma anahtarımı kaybettim';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Kurtarma anahtarı olmadan, oturum açtığınız başka bir cihazdan E2EE’yi devre dışı bırakmanız veya şifrelemenizi sıfırlamak için destekle iletişime geçmeniz gerekir.';
+
+  @override
+  String get processingOnServer => 'Sunucuda işleniyor...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'İşleniyor... $current/$total segment';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Adil Kullanım: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Bağlantıyı İyileştir';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi\'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.';
+
+  @override
+  String get improveConnectionAction => 'Anladım';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
+  }
+
+  @override
+  String get omisStorage => 'Omi\'nin Depolaması';
+
+  @override
+  String get phoneStorage => 'Telefon Depolaması';
+
+  @override
+  String get cloudStorage => 'Bulut Depolaması';
+
+  @override
+  String get howSyncingWorks => 'Senkronizasyon nasıl çalışır';
+
+  @override
+  String get noSyncedRecordings => 'Henüz senkronize kayıt yok';
+
+  @override
+  String get recordingsSyncAutomatically => 'Kayıtlar otomatik olarak senkronize edilir — herhangi bir işlem gerekmez.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Zaten indirilen dosyalar bir dahaki sefere yüklenecektir.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma oluşturuldu',
+      one: '1 konuşma oluşturuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Görüntülemek için dokunun';
+
+  @override
+  String get syncFailed => 'Senkronizasyon başarısız';
+
+  @override
+  String get keepSyncing => 'Senkronizasyona devam et';
+
+  @override
+  String get cancelSyncQuestion => 'Senkronizasyon iptal edilsin mi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Omi\'niz telefonunuza bağlı olmadığında, sesi yerleşik belleğinde yerel olarak saklar. Hiçbir kaydı kaybetmezsiniz.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Omi yeniden bağlandığında, kayıtlar yüklenmeden önce otomatik olarak telefonunuza aktarılır.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Yüklendikten sonra kayıtlarınız işlenir ve yazıya dökülür. Konuşmalar bir dakika içinde kullanılabilir olacaktır.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Daha hızlı senkronizasyon için telefonunuzu yakında tutun';
+
+  @override
+  String get tipStableInternet => 'Kararlı internet bulut yüklemelerini hızlandırır';
+
+  @override
+  String get tipAutoSync => 'Kayıtlar otomatik olarak senkronize edilir';
+
+  @override
+  String get storageSection => 'DEPOLAMA';
+
+  @override
+  String get permissions => 'İzinler';
+
+  @override
+  String get permissionEnabled => 'Etkin';
+
+  @override
+  String get permissionEnable => 'Etkinleştir';
+
+  @override
+  String get permissionsPageDescription =>
+      'Bu izinler Omi\'nin çalışması için temeldir. Bildirimler, konum tabanlı deneyimler ve ses yakalama gibi temel özellikleri etkinleştirirler.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi düzgün çalışmak için birkaç izne ihtiyaç duyar. Devam etmek için lütfen bunları verin.';
+
+  @override
+  String get permissionsSetupTitle => 'En iyi deneyimi yaşayın';
+
+  @override
+  String get permissionsSetupDescription => 'Omi büyüsünü gösterebilsin diye birkaç izni etkinleştirin.';
+
+  @override
+  String get permissionsChangeAnytime => 'Bunları istediğiniz zaman Ayarlar > İzinler bölümünden değiştirebilirsiniz';
+
+  @override
+  String get location => 'Konum';
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get whyAreYouCanceling => 'Neden iptal ediyorsunuz?';
+
+  @override
+  String get cancelReasonSubtitle => 'Neden ayrıldığınızı bize söyleyebilir misiniz?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Çok pahalı';
+
+  @override
+  String get cancelReasonNotUsing => 'Yeterince kullanmıyorum';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Eksik özellikler';
+
+  @override
+  String get cancelReasonAudioQuality => 'Ses/transkripsiyon kalitesi';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Pil tükenme endişeleri';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Bir alternatif buldum';
+
+  @override
+  String get cancelReasonOther => 'Diğer';
+
+  @override
+  String get tellUsMore => 'Daha fazla anlatın (isteğe bağlı)';
+
+  @override
+  String get cancelReasonDetailHint => 'Her türlü geri bildirimi takdir ediyoruz...';
+
+  @override
+  String get justAMoment => 'Bir dakika, lütfen';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'İptal etmek yerine diğer seçeneklerinizi keşfetmenizi şiddetle tavsiye ediyoruz.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Planınız $date tarihine kadar aktif kalacaktır. Bundan sonra sınırlı özelliklerle ücretsiz sürüme geçirileceksiniz.';
+  }
+
+  @override
+  String get ifYouCancel => 'İptal ederseniz:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Fatura dönemi sonunda sınırsız erişim olmayacak.';
+
+  @override
+  String get cancelConsequenceBattery => '7 kat daha fazla pil tüketimi (cihazda işleme)';
+
+  @override
+  String get cancelConsequenceQuality => '%30 daha düşük transkripsiyon kalitesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceDelay => '5-7 saniye işleme gecikmesi (cihaz modelleri)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'Konuşmacıları tanımlayamaz.';
+
+  @override
+  String get confirmAndCancel => 'Onayla ve iptal et';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Gerçek zamanlı telefon görüşmesi transkripsiyon yok';
+
+  @override
+  String get feedbackTitleTooExpensive => 'Sizin için hangi fiyat uygun olurdu?';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'Hangi özellikleri kaçırıyorsunuz?';
+
+  @override
+  String get feedbackTitleAudioQuality => 'Ne tür sorunlar yaşadınız?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Pil sorunlarını bize anlatın';
+
+  @override
+  String get feedbackTitleFoundAlternative => 'Neye geçiyorsunuz?';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omi\'yi daha fazla kullanmanızı ne sağlardı?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Geri bildiriminiz doğru dengeyi bulmamıza yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Her zaman inşa ediyoruz — bu önceliklendirmemize yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Neyin yanlış gittiğini anlamak isteriz.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Bu, donanım ekibimizin gelişmesine yardımcı olur.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Dikkatinizi çeken şeyi öğrenmek isteriz.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omi\'yi sizin için daha yararlı hale getirmek istiyoruz.';
+
+  @override
+  String get deviceDiagnostics => 'Cihaz Tanılama';
+
+  @override
+  String get signalStrength => 'Sinyal Gücü';
+
+  @override
+  String get connectionUptime => 'Çalışma Süresi';
+
+  @override
+  String get reconnections => 'Yeniden Bağlantılar';
+
+  @override
+  String get disconnectHistory => 'Bağlantı Kesme Geçmişi';
+
+  @override
+  String get noDisconnectsRecorded => 'Bağlantı kesilmesi kaydedilmedi';
+
+  @override
+  String get diagnostics => 'Tanılama';
+
+  @override
+  String get waitingForData => 'Veri bekleniyor...';
+
+  @override
+  String get liveRssiOverTime => 'Zaman içinde canlı RSSI';
+
+  @override
+  String get noRssiDataYet => 'Henüz RSSI verisi yok';
+
+  @override
+  String get collectingData => 'Veri toplanıyor...';
+
+  @override
+  String get cleanDisconnect => 'Temiz bağlantı kesme';
+
+  @override
+  String get connectionTimeout => 'Bağlantı zaman aşımı';
+
+  @override
+  String get remoteDeviceTerminated => 'Uzak cihaz bağlantıyı sonlandırdı';
+
+  @override
+  String get pairedToAnotherPhone => 'Başka bir telefona eşleştirildi';
+
+  @override
+  String get linkKeyMismatch => 'Bağlantı anahtarı uyuşmazlığı';
+
+  @override
+  String get connectionFailed => 'Bağlantı başarısız';
+
+  @override
+  String get appClosed => 'Uygulama kapatıldı';
+
+  @override
+  String get manualDisconnect => 'Manuel bağlantı kesme';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Son $count olay';
+  }
+
+  @override
+  String get signal => 'Sinyal';
+
+  @override
+  String get battery => 'Pil';
+
+  @override
+  String get excellent => 'Mükemmel';
+
+  @override
+  String get good => 'İyi';
+
+  @override
+  String get fair => 'Orta';
+
+  @override
+  String get weak => 'Zayıf';
+
+  @override
+  String gattError(String code) {
+    return 'GATT hatası ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Kararlı yazılıma geri dön';
+
+  @override
+  String get rollbackConfirmTitle => 'Yazılım geri alınsın mı?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Bu, mevcut yazılımınızı en son kararlı sürümle ($version) değiştirecektir. Güncelleme sonrasında cihazınız yeniden başlatılacaktır.';
+  }
+
+  @override
+  String get stableFirmware => 'Kararlı yazılım';
+
+  @override
+  String get fetchingStableFirmware => 'En son kararlı yazılım alınıyor...';
+
+  @override
+  String get noStableFirmwareFound => 'Cihazınız için kararlı bir yazılım sürümü bulunamadı.';
+
+  @override
+  String get installStableFirmware => 'Kararlı yazılımı yükle';
+
+  @override
+  String get alreadyOnStableFirmware => 'Zaten en son kararlı sürümdesiniz.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration ses yerel olarak kaydedildi';
+  }
+
+  @override
+  String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
+
+  @override
+  String get enableLocationTitle => 'Konumu Etkinleştir';
+
+  @override
+  String get enableLocationDescription => 'Yakındaki Bluetooth cihazlarını bulmak için konum izni gerekir.';
+
+  @override
+  String get voiceRecordingFound => 'Kayıt bulundu';
+
+  @override
+  String get transcriptionConnecting => 'Transkripsiyon bağlanıyor...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkripsiyon yeniden bağlanıyor...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsiyon kullanılamıyor';
+
+  @override
+  String get audioOutput => 'Ses çıkışı';
 }

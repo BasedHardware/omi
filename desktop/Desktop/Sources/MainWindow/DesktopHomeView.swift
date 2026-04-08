@@ -29,6 +29,7 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
+  @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
 
@@ -94,8 +95,8 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — navigating to Tasks page")
-                selectedIndex = SidebarNavItem.tasks.rawValue
+                log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
+                selectedIndex = SidebarNavItem.dashboard.rawValue
               }
             }
           mainContent
@@ -597,13 +598,19 @@ struct DesktopHomeView: View {
       // Main content area with rounded container
       ZStack {
         // Content container background
-        RoundedRectangle(cornerRadius: 16)
-          .fill(OmiColors.backgroundSecondary.opacity(0.4))
-          .overlay(
-            RoundedRectangle(cornerRadius: 16)
-              .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
+        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [OmiColors.backgroundSecondary.opacity(0.96), OmiColors.backgroundPrimary.opacity(0.96)],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
           )
-          .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
+          )
+          .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
 
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
@@ -619,13 +626,35 @@ struct DesktopHomeView: View {
         .id(selectedIndex)
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.easeInOut(duration: 0.2), value: selectedIndex)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(12)
+      .padding(14)
     }
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
+    }
+    .overlay {
+      if showTryAskingPopup {
+        let suggestions = PostOnboardingPromptSuggestions.suggestions()
+        if !suggestions.isEmpty {
+          TryAskingPopupView(
+            suggestions: suggestions,
+            onAsk: { suggestion in
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+              FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+            },
+            onDismiss: {
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+            }
+          )
+        }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+      showTryAskingPopup = true
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
@@ -756,7 +785,7 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider)
+        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
       case 9:
         SettingsPage(
           appState: appState,

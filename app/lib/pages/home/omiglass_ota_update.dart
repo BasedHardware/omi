@@ -78,6 +78,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.setOnFirmwareUpdatePage(false);
+        provider.resetFirmwareUpdateState();
       });
     }
     super.dispose();

@@ -107,6 +107,37 @@ class AppProvider: ObservableObject {
             updateDerivedLists()
 
             log("Fetched \(apps.count) apps via v2: \(popularApps.count) featured, \(integrationApps.count) integrations, \(chatApps.count) chat, \(summaryApps.count) summary, \(notificationApps.count) notifications")
+
+            // Enrich ratings + enabled state in background.
+            // v2/apps returns rating_avg=0 and may not include per-user enabled state.
+            // v1/apps is user-specific and has real ratings + correct enabled field.
+            Task {
+                do {
+                    let ratedApps = try await self.apiClient.getAppsWithRatings()
+                    // Build a map of id → full app (for ratings AND enabled state)
+                    let v1Map = Dictionary(uniqueKeysWithValues: ratedApps.map { ($0.id, $0) })
+                    func enrich(_ list: inout [OmiApp]) {
+                        for index in list.indices {
+                            guard let v1App = v1Map[list[index].id] else { continue }
+                            if v1App.ratingCount > 0 {
+                                list[index].ratingAvg = v1App.ratingAvg
+                                list[index].ratingCount = v1App.ratingCount
+                            }
+                            // Sync enabled state from user-specific v1/apps response
+                            list[index].enabled = v1App.enabled
+                        }
+                    }
+                    enrich(&self.apps)
+                    enrich(&self.popularApps)
+                    enrich(&self.integrationApps)
+                    enrich(&self.chatApps)
+                    enrich(&self.summaryApps)
+                    enrich(&self.notificationApps)
+                    self.updateDerivedLists()
+                } catch {
+                    // silently fail — ratings are supplementary
+                }
+            }
         } catch {
             logError("Failed to fetch apps", error: error)
             errorMessage = "Failed to load apps: \(error.localizedDescription)"

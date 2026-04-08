@@ -2,8 +2,20 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
-    // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
+    // Primary data backend URL — Python backend (api.omi.me) is the single source of truth for all data CRUD.
+    // Override via OMI_PYTHON_API_URL for local dev.
     var baseURL: String {
+        if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        return "https://api.omi.me/"
+    }
+
+    // Rust desktop backend URL — used only for: agent VM provisioning/status,
+    // config/api-keys, Crisp, and local test subscription. All data CRUD,
+    // chat AI, and title generation are on Python.
+    // Set via OMI_API_URL env var (in .env).
+    var rustBackendURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
         if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             let normalized = url.hasSuffix("/") ? url : url + "/"
@@ -14,12 +26,15 @@ actor APIClient {
             let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
             return normalized
         }
-        NSLog("OMI API: OMI_API_URL not set — API calls will fail")
+        NSLog("OMI API: OMI_API_URL not set — Rust backend calls will fail")
         return ""
     }
 
     let session: URLSession
     private let decoder: JSONDecoder
+
+    /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
+    var testAuthHeader: String?
 
     // Short-lived caches to deduplicate simultaneous calls from multiple services
     private var goalsCacheTime: Date?
@@ -32,7 +47,17 @@ actor APIClient {
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
 
-        self.decoder = JSONDecoder()
+        self.decoder = Self.makeDecoder()
+    }
+
+    /// Test-only initializer that accepts a custom URLSession for request interception.
+    init(session: URLSession) {
+        self.session = session
+        self.decoder = Self.makeDecoder()
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
         // Note: Don't use .convertFromSnakeCase - it conflicts with explicit CodingKeys
         // Use custom date strategy to handle ISO8601 with fractional seconds
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -54,6 +79,7 @@ actor APIClient {
 
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateString)")
         }
+        return decoder
     }
 
     // MARK: - Request Building
@@ -66,9 +92,13 @@ actor APIClient {
         ]
 
         if requireAuth {
-            let authService = await MainActor.run { AuthService.shared }
-            let authHeader = try await authService.getAuthHeader()
-            headers["Authorization"] = authHeader
+            if let testHeader = testAuthHeader {
+                headers["Authorization"] = testHeader
+            } else {
+                let authService = await MainActor.run { AuthService.shared }
+                let authHeader = try await authService.getAuthHeader()
+                headers["Authorization"] = authHeader
+            }
         }
 
         return headers
@@ -109,9 +139,11 @@ actor APIClient {
 
     func post<T: Decodable>(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -772,6 +804,7 @@ struct Event: Codable, Identifiable, Equatable {
 
 struct TranscriptSegment: Codable, Identifiable {
     let id: String
+    let backendId: String?
     let text: String
     let speaker: String?
     let isUser: Bool
@@ -797,7 +830,9 @@ struct TranscriptSegment: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        let decodedId = try container.decodeIfPresent(String.self, forKey: .id)
+        id = decodedId ?? UUID().uuidString
+        backendId = decodedId
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
         isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
@@ -809,6 +844,7 @@ struct TranscriptSegment: Codable, Identifiable {
     /// Memberwise initializer for creating from local storage
     init(
         id: String,
+        backendId: String? = nil,
         text: String,
         speaker: String?,
         isUser: Bool,
@@ -817,6 +853,7 @@ struct TranscriptSegment: Codable, Identifiable {
         end: Double
     ) {
         self.id = id
+        self.backendId = backendId
         self.text = text
         self.speaker = speaker
         self.isUser = isUser
@@ -1176,88 +1213,35 @@ struct ServerMemory: Codable, Identifiable {
     }
 }
 
-// MARK: - Create Conversation API
+// MARK: - Force Process Conversation API
 
 extension APIClient {
 
-    /// Request model for creating a conversation from transcript segments
-    struct CreateConversationFromSegmentsRequest: Encodable {
-        let transcriptSegments: [TranscriptSegmentRequest]
-        let source: String
-        let startedAt: String
-        let finishedAt: String
-        let language: String
-        let timezone: String
-        let inputDeviceName: String?
+    /// Response from Python POST /v1/conversations (force-process)
+    struct ForceProcessConversationResponse: Decodable {
+        let conversation: ServerConversation
+    }
 
-        enum CodingKeys: String, CodingKey {
-            case transcriptSegments = "transcript_segments"
-            case source
-            case startedAt = "started_at"
-            case finishedAt = "finished_at"
-            case language
-            case timezone
-            case inputDeviceName = "input_device_name"
+    /// Force-process the current in-progress conversation on the Python backend.
+    /// Endpoint: POST /v1/conversations (Python backend)
+    /// This is the same endpoint the mobile app uses when stopping phone mic recording.
+    /// The Python backend finds the in-progress conversation via Redis and processes it.
+    /// Returns the processed conversation on success, nil on 404 (already processed).
+    /// Throws on other errors.
+    func forceProcessConversation() async throws -> ServerConversation? {
+        struct EmptyBody: Encodable {}
+
+        do {
+            let response: ForceProcessConversationResponse = try await post(
+                "v1/conversations",
+                body: EmptyBody(),
+                customBaseURL: nil
+            )
+            return response.conversation
+        } catch APIError.httpError(let statusCode) where statusCode == 404 {
+            // 404 = no in-progress conversation found — WS close handler already processed it
+            return nil
         }
-    }
-
-    struct TranscriptSegmentRequest: Encodable {
-        let text: String
-        let speaker: String
-        let speakerId: Int
-        let isUser: Bool
-        let personId: String?
-        let start: Double
-        let end: Double
-
-        enum CodingKeys: String, CodingKey {
-            case text, speaker
-            case speakerId = "speaker_id"
-            case isUser = "is_user"
-            case personId = "person_id"
-            case start, end
-        }
-    }
-
-    struct CreateConversationResponse: Decodable {
-        let id: String
-        let status: String
-        let discarded: Bool
-    }
-
-    /// Creates a conversation from transcript segments
-    /// Endpoint: POST /v1/conversations/from-segments (local backend)
-    /// - Parameters:
-    ///   - segments: Transcript segments to include
-    ///   - startedAt: When the recording started
-    ///   - finishedAt: When the recording finished
-    ///   - source: Source of the conversation (e.g., "desktop", "omi", "bee")
-    ///   - language: Language code for transcription
-    ///   - timezone: User's timezone
-    ///   - inputDeviceName: Name of the input device (microphone or BLE device)
-    func createConversationFromSegments(
-        segments: [TranscriptSegmentRequest],
-        startedAt: Date,
-        finishedAt: Date,
-        source: ConversationSource = .desktop,
-        language: String = "en",
-        timezone: String = "UTC",
-        inputDeviceName: String? = nil
-    ) async throws -> CreateConversationResponse {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let request = CreateConversationFromSegmentsRequest(
-            transcriptSegments: segments,
-            source: source.rawValue,
-            startedAt: formatter.string(from: startedAt),
-            finishedAt: formatter.string(from: finishedAt),
-            language: language,
-            timezone: timezone,
-            inputDeviceName: inputDeviceName
-        )
-
-        return try await post("v1/conversations/from-segments", body: request)
     }
 }
 
@@ -1464,13 +1448,25 @@ struct UserProfile: Codable {
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
-struct ActionItemsListResponse: Codable {
+/// Accepts both "action_items" (/v1/action-items) and "items" (/v1/staged-tasks) keys.
+struct ActionItemsListResponse: Decodable {
     let items: [TaskActionItem]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
+        case actionItems = "action_items"
         case items
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
+            self.items = actionItems
+        } else {
+            self.items = try container.decode([TaskActionItem].self, forKey: .items)
+        }
+        self.hasMore = try container.decode(Bool.self, forKey: .hasMore)
     }
 }
 
@@ -1961,10 +1957,10 @@ extension APIClient {
         if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
             return cache
         }
-        let response: GoalsListResponse = try await get("v1/goals/all")
-        goalsCache = response.goals
+        let goals: [Goal] = try await get("v1/goals/all")
+        goalsCache = goals
         goalsCacheTime = Date()
-        return response.goals
+        return goals
     }
 
     /// Creates a new goal
@@ -2062,8 +2058,8 @@ extension APIClient {
 
     /// Gets completed goals for history
     func getCompletedGoals() async throws -> [Goal] {
-        let response: GoalsListResponse = try await get("v1/goals/completed")
-        return response.goals
+        let goals: [Goal] = try await get("v1/goals/completed")
+        return goals
     }
 
     /// Completes a goal (marks as inactive with completed_at)
@@ -2774,8 +2770,8 @@ struct OmiApp: Codable, Identifiable, Sendable {
     let approved: Bool
     let `private`: Bool
     let installs: Int
-    let ratingAvg: Double?
-    let ratingCount: Int
+    var ratingAvg: Double?
+    var ratingCount: Int
     let isPaid: Bool
     let price: Double?
     var enabled: Bool
@@ -2828,7 +2824,7 @@ struct OmiApp: Codable, Identifiable, Sendable {
 
     /// Formatted rating string
     var formattedRating: String? {
-        guard let rating = ratingAvg else { return nil }
+        guard let rating = ratingAvg, ratingCount > 0 else { return nil }
         return String(format: "%.1f", rating)
     }
 
@@ -2874,6 +2870,7 @@ struct OmiAppDetails: Codable, Identifiable {
     let twitter: String?
     let createdAt: Date?
     var enabled: Bool
+    let externalIntegration: ExternalIntegration?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, image, category, author, email, capabilities
@@ -2892,6 +2889,7 @@ struct OmiAppDetails: Codable, Identifiable {
         case username, twitter
         case createdAt = "created_at"
         case enabled
+        case externalIntegration = "external_integration"
     }
 
     init(from decoder: Decoder) throws {
@@ -2921,6 +2919,7 @@ struct OmiAppDetails: Codable, Identifiable {
         twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        externalIntegration = try container.decodeIfPresent(ExternalIntegration.self, forKey: .externalIntegration)
     }
 }
 
@@ -2934,7 +2933,50 @@ struct OmiAppCategory: Codable, Identifiable, Sendable {
 struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
-    let description: String
+    let description: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+    }
+}
+
+/// Auth step for external integration setup
+struct AuthStep: Codable, Sendable {
+    let name: String
+    let url: String
+}
+
+/// External integration setup details
+struct ExternalIntegration: Codable, Sendable {
+    let authSteps: [AuthStep]
+    let setupCompletedUrl: String?
+    let setupInstructionsFilePath: String?
+    let appHomeUrl: String?
+    let isInstructionsUrl: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case authSteps = "auth_steps"
+        case setupCompletedUrl = "setup_completed_url"
+        case setupInstructionsFilePath = "setup_instructions_file_path"
+        case appHomeUrl = "app_home_url"
+        case isInstructionsUrl = "is_instructions_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        authSteps = try container.decodeIfPresent([AuthStep].self, forKey: .authSteps) ?? []
+        setupCompletedUrl = try container.decodeIfPresent(String.self, forKey: .setupCompletedUrl)
+        setupInstructionsFilePath = try container.decodeIfPresent(String.self, forKey: .setupInstructionsFilePath)
+        appHomeUrl = try container.decodeIfPresent(String.self, forKey: .appHomeUrl)
+        isInstructionsUrl = try container.decodeIfPresent(Bool.self, forKey: .isInstructionsUrl)
+    }
 }
 
 /// App review
@@ -3036,7 +3078,12 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    /// Fetches all apps with real rating data from v1/apps
+    func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
+        return try await get("v1/apps?limit=\(limit)")
+    }
+
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
@@ -3057,6 +3104,10 @@ extension APIClient {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> [OmiApp] {
+        struct SearchResponse: Decodable {
+            let data: [OmiApp]
+        }
+
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)"
@@ -3083,7 +3134,8 @@ extension APIClient {
         }
 
         let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        let response: SearchResponse = try await get(endpoint)
+        return response.data
     }
 
     /// Fetches app details by ID
@@ -3103,28 +3155,35 @@ extension APIClient {
 
     /// Enables an app for the current user
     func enableApp(appId: String) async throws {
-        struct EnableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = EnableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/enable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
     }
 
     /// Disables an app for the current user
     func disableApp(appId: String) async throws {
-        struct DisableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = DisableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/disable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
+    }
+
+    /// Checks if an external integration app's setup is complete
+    func isAppSetupCompleted(url: String, uid: String) async -> Bool {
+        guard !url.isEmpty else { return true }
+        guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
+        var request = URLRequest(url: fullUrl)
+        request.httpMethod = "GET"
+        do {
+            let (data, _) = try await session.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json["is_setup_completed"] as? Bool ?? false
+            }
+        } catch {}
+        return false
     }
 
     /// Submits a review for an app
@@ -3629,11 +3688,19 @@ struct UserLanguageResponse: Codable {
 /// Recording permission response
 struct RecordingPermissionResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "store_recording_permission"
+    }
 }
 
 /// Private cloud sync response
 struct PrivateCloudSyncResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "private_cloud_sync_enabled"
+    }
 }
 
 /// Notification settings response
@@ -3883,16 +3950,30 @@ struct MemorySettingsResponse: Codable {
     }
 }
 
+struct FloatingBarSettingsResponse: Codable {
+    var voiceAnswersEnabled: Bool?
+    var elevenLabsApiKey: String?
+    var elevenLabsVoiceID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case voiceAnswersEnabled = "voice_answers_enabled"
+        case elevenLabsApiKey = "elevenlabs_api_key"
+        case elevenLabsVoiceID = "elevenlabs_voice_id"
+    }
+}
+
 struct AssistantSettingsResponse: Codable {
     var shared: SharedAssistantSettingsResponse?
     var focus: FocusSettingsResponse?
     var task: TaskSettingsResponse?
     var advice: AdviceSettingsResponse?
     var memory: MemorySettingsResponse?
+    var floatingBar: FloatingBarSettingsResponse?
     var updateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case shared, focus, task, advice, memory
+        case floatingBar = "floating_bar"
         case updateChannel = "update_channel"
     }
 }
@@ -4101,7 +4182,7 @@ extension APIClient {
             let metadata: String?
         }
         let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
-        return try await post("v2/messages", body: body)
+        return try await post("v2/desktop/messages", body: body)
     }
 
     /// Fetch chat message history
@@ -4119,13 +4200,13 @@ extension APIClient {
             queryItems.append("app_id=\(appId)")
         }
 
-        let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
+        let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
         return try await get(endpoint)
     }
 
     /// Clear chat message history
     func deleteMessages(appId: String? = nil) async throws -> MessageDeleteResponse {
-        var endpoint = "v2/messages"
+        var endpoint = "v2/desktop/messages"
         if let appId = appId {
             endpoint += "?app_id=\(appId)"
         }
@@ -4164,7 +4245,7 @@ extension APIClient {
             "offset=\(offset)"
         ]
 
-        let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
+        let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
         return try await get(endpoint)
     }
 
@@ -4177,13 +4258,39 @@ extension APIClient {
             let rating: Int?
         }
         let body = RateRequest(rating: rating)
-        let _: MessageStatusResponse = try await patch("v2/messages/\(messageId)/rating", body: body)
+        let _: MessageStatusResponse = try await patch("v2/desktop/messages/\(messageId)/rating", body: body)
+    }
+
+    /// Share chat messages and get a shareable URL
+    func shareChatMessages(messageIds: [String]) async throws -> ShareChatResponse {
+        struct ShareRequest: Encodable {
+            let message_ids: [String]
+        }
+        let body = ShareRequest(message_ids: messageIds)
+        return try await post("v2/messages/share", body: body)
+    }
+
+    /// Convenience: get a share link for the current floating bar conversation
+    func getChatShareLink(sessionId: String) async throws -> String {
+        // For session-based chats, share the session
+        struct ShareSessionRequest: Encodable {
+            let session_id: String
+        }
+        let body = ShareSessionRequest(session_id: sessionId)
+        let response: ShareChatResponse = try await post("v2/messages/share", body: body)
+        return response.url
     }
 }
 
 /// Response from rating a message
 struct MessageStatusResponse: Codable {
     let status: String
+}
+
+/// Response from sharing chat messages
+struct ShareChatResponse: Codable {
+    let url: String
+    let token: String
 }
 
 // MARK: - Chat Sessions API
@@ -4421,7 +4528,7 @@ extension APIClient {
 
     /// Provision a cloud agent VM for the current user (fire-and-forget)
     func provisionAgentVM() async throws -> AgentProvisionResponse {
-        return try await post("v2/agent/provision")
+        return try await post("v2/agent/provision", customBaseURL: rustBackendURL)
     }
 
     struct AgentStatusResponse: Decodable {
@@ -4436,7 +4543,7 @@ extension APIClient {
 
     /// Get current agent VM status
     func getAgentStatus() async throws -> AgentStatusResponse? {
-        return try await get("v2/agent/status")
+        return try await get("v2/agent/status", customBaseURL: rustBackendURL)
     }
 }
 
@@ -4605,6 +4712,7 @@ extension APIClient {
         let deepgramApiKey: String?
         let geminiApiKey: String?
         let anthropicApiKey: String?
+        let elevenLabsApiKey: String?
         let firebaseApiKey: String?
         let googleCalendarApiKey: String?
 
@@ -4612,12 +4720,141 @@ extension APIClient {
             case deepgramApiKey = "deepgram_api_key"
             case geminiApiKey = "gemini_api_key"
             case anthropicApiKey = "anthropic_api_key"
+            case elevenLabsApiKey = "elevenlabs_api_key"
             case firebaseApiKey = "firebase_api_key"
             case googleCalendarApiKey = "google_calendar_api_key"
         }
     }
 
     func fetchApiKeys() async throws -> ApiKeysResponse {
-        return try await get("v1/config/api-keys")
+        return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
+    }
+
+    // MARK: - Platform Tools (backend RAG)
+
+    struct ToolResponse: Decodable {
+        let toolName: String
+        let resultText: String
+        let isError: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case toolName = "tool_name"
+            case resultText = "result_text"
+            case isError = "is_error"
+        }
+    }
+
+    struct SearchRequest: Encodable {
+        let query: String
+        let startDate: String?
+        let endDate: String?
+        let limit: Int
+        let includeTranscript: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case query
+            case startDate = "start_date"
+            case endDate = "end_date"
+            case limit
+            case includeTranscript = "include_transcript"
+        }
+    }
+
+    struct MemorySearchRequest: Encodable {
+        let query: String
+        let limit: Int
+    }
+
+    struct CreateActionItemRequest: Encodable {
+        let description: String
+        let dueAt: String?
+        let conversationId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case description
+            case dueAt = "due_at"
+            case conversationId = "conversation_id"
+        }
+    }
+
+    struct UpdateActionItemRequest: Encodable {
+        let completed: Bool?
+        let description: String?
+        let dueAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case completed
+            case description
+            case dueAt = "due_at"
+        }
+    }
+
+    func toolGetConversations(
+        startDate: String? = nil,
+        endDate: String? = nil,
+        limit: Int = 20,
+        offset: Int = 0,
+        includeTranscript: Bool = true
+    ) async throws -> ToolResponse {
+        var params = "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
+        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
+        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        return try await get(params, customBaseURL: nil)
+    }
+
+    func toolSearchConversations(
+        query: String,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        limit: Int = 5,
+        includeTranscript: Bool = true
+    ) async throws -> ToolResponse {
+        let body = SearchRequest(query: query, startDate: startDate, endDate: endDate, limit: limit, includeTranscript: includeTranscript)
+        return try await post("v1/tools/conversations/search", body: body, customBaseURL: nil)
+    }
+
+    func toolGetMemories(
+        limit: Int = 50,
+        offset: Int = 0,
+        startDate: String? = nil,
+        endDate: String? = nil
+    ) async throws -> ToolResponse {
+        var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
+        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
+        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        return try await get(params, customBaseURL: nil)
+    }
+
+    func toolSearchMemories(query: String, limit: Int = 5) async throws -> ToolResponse {
+        let body = MemorySearchRequest(query: query, limit: limit)
+        return try await post("v1/tools/memories/search", body: body, customBaseURL: nil)
+    }
+
+    func toolGetActionItems(
+        limit: Int = 50,
+        offset: Int = 0,
+        completed: Bool? = nil,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        dueStartDate: String? = nil,
+        dueEndDate: String? = nil
+    ) async throws -> ToolResponse {
+        var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
+        if let c = completed { params += "&completed=\(c)" }
+        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
+        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
+        if let dsd = dueStartDate { params += "&due_start_date=\(dsd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? dsd)" }
+        if let ded = dueEndDate { params += "&due_end_date=\(ded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ded)" }
+        return try await get(params, customBaseURL: nil)
+    }
+
+    func toolCreateActionItem(description: String, dueAt: String? = nil, conversationId: String? = nil) async throws -> ToolResponse {
+        let body = CreateActionItemRequest(description: description, dueAt: dueAt, conversationId: conversationId)
+        return try await post("v1/tools/action-items", body: body, customBaseURL: nil)
+    }
+
+    func toolUpdateActionItem(id: String, completed: Bool? = nil, description: String? = nil, dueAt: String? = nil) async throws -> ToolResponse {
+        let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
+        return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
     }
 }

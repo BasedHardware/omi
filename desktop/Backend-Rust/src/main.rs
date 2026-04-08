@@ -32,7 +32,7 @@ mod services;
 
 use auth::{firebase_auth_extension, FirebaseAuth};
 use config::Config;
-use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, config_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, llm_usage_routes, memories_routes, messages_routes, people_routes, personas_routes, screen_activity_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
+use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, config_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, llm_usage_routes, memories_routes, messages_routes, people_routes, personas_routes, proxy_routes, screen_activity_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
 use services::{FirestoreService, IntegrationService, RedisService};
 
 /// Application state shared across handlers
@@ -43,6 +43,7 @@ pub struct AppState {
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
+    pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
 }
 
 #[tokio::main]
@@ -166,12 +167,26 @@ async fn main() {
     };
 
     // Create app state
+    let gemini_rate_limiter = routes::rate_limit::GeminiRateLimiter::new();
+
+    // Spawn background task to evict stale rate limit entries every hour
+    {
+        let limiter = gemini_rate_limiter.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                limiter.evict_stale().await;
+            }
+        });
+    }
+
     let state = AppState {
         firestore,
         integrations,
         redis,
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
+        gemini_rate_limiter,
     };
 
     // Build CORS layer
@@ -210,6 +225,7 @@ async fn main() {
         .merge(webhook_routes())
         .merge(crisp_routes())
         .merge(screen_activity_routes())
+        .merge(proxy_routes())
         .merge(config_routes())
         .with_state(state);
 

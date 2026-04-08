@@ -1456,7 +1456,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get payYourSttProvider => 'Usa Omi gratis. Solo pagas a tu proveedor STT.';
 
   @override
-  String get freeMinutesMonth => '4.800 minutos gratis/mes incluidos.';
+  String get freeMinutesMonth => '1.200 minutos gratis/mes incluidos.';
 
   @override
   String get omiUnlimited => 'Omi Ilimitado';
@@ -1807,7 +1807,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get skipThisQuestion => 'Saltar esta pregunta';
 
   @override
-  String get skipForNow => 'Saltar por ahora';
+  String get skipForNow => 'Omitir por ahora';
 
   @override
   String get connectionError => 'Error de conexión';
@@ -4757,7 +4757,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No hay acceso a datos específico configurado.';
 
   @override
-  String get basicPlanDescription => '4.800 minutos premium + ilimitado en dispositivo';
+  String get basicPlanDescription => '1.200 minutos premium + ilimitado en dispositivo';
 
   @override
   String get minutes => 'minutos';
@@ -6090,7 +6090,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minutos premium/mes. La pestaña En el dispositivo ofrece transcripción gratuita ilimitada.';
+      '1.200 minutos premium/mes. La pestaña En el dispositivo ofrece transcripción gratuita ilimitada.';
 
   @override
   String get viewUsage => 'Ver uso';
@@ -6174,7 +6174,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minutos premium/mes. La pestaña En dispositivo ofrece transcripción gratuita ilimitada. ';
+      '1.200 minutos premium/mes. La pestaña En dispositivo ofrece transcripción gratuita ilimitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8573,62 +8573,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get clearAll => 'Borrar todo';
 
   @override
-  String get enableE2ee => 'Enable E2EE';
-
-  @override
-  String get recoveryKey => 'Recovery Key';
-
-  @override
-  String get saveKeyMessage =>
-      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-
-  @override
-  String get savedMyKey => 'I\'ve Saved My Key';
-
-  @override
-  String get showRecoveryKey => 'Show Recovery Key';
-
-  @override
-  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
-
-  @override
-  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
-
-  @override
-  String e2eeFailedToEnable(String error) {
-    return 'Failed to enable E2EE: $error';
-  }
-
-  @override
-  String get keyCopiedToClipboard => 'Key copied to clipboard';
-
-  @override
-  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
-
-  @override
-  String get e2eeOtherDataDescription =>
-      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
-
-  @override
-  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
-
-  @override
-  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
-
-  @override
-  String get pairWithWeb => 'Pair with Web';
-
-  @override
-  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
-
-  @override
-  String expiresInSeconds(int seconds) {
-    return 'Expires in ${seconds}s';
-  }
-
-  @override
-  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
-
   String get phoneKeypad => 'Teclado';
 
   @override
@@ -8700,4 +8644,490 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Aún grabando — reconectando a la transcripción...';
+
+  @override
+  String get enableE2ee => 'Activar E2EE';
+
+  @override
+  String get recoveryKey => 'Clave de recuperación';
+
+  @override
+  String get saveKeyMessage =>
+      'Guarda esta clave en un lugar seguro. La necesitarás para recuperar tus recuerdos cifrados si cambias de dispositivo. Sin esta clave, los datos cifrados no se pueden recuperar.';
+
+  @override
+  String get savedMyKey => 'He guardado mi clave';
+
+  @override
+  String get showRecoveryKey => 'Mostrar clave de recuperación';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ Si pierdes tu clave de recuperación, tus datos no se pueden recuperar.';
+
+  @override
+  String get e2eeBackupReminder => 'Asegúrate de hacer una copia de seguridad de tu clave después de activar.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Error al activar E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Clave copiada al portapapeles';
+
+  @override
+  String get e2eeMemoriesDescription =>
+      'Cifrados en tu dispositivo antes de llegar al servidor. Solo tú puedes leerlos.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Cifrados en reposo en el servidor. El servidor procesa audio para transcripción pero los datos almacenados están cifrados.';
+
+  @override
+  String get e2eeCardSubtitle =>
+      'Protección máxima — recuerdos cifrados en el dispositivo, todos los demás datos cifrados en reposo';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Cifrado — no se puede descifrar. Verifica tu clave de recuperación.';
+
+  @override
+  String get pairWithWeb => 'Vincular con web';
+
+  @override
+  String get scanQrOnWeb => 'Escanea este código QR en omi.me para desbloquear tus datos cifrados';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Expira en ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Escanea solo en un dispositivo de confianza';
+
+  @override
+  String get e2eeEnableDialogIntro =>
+      'El cifrado de extremo a extremo proporciona el nivel más alto de protección de datos:\n\n';
+
+  @override
+  String get e2eeMemoriesLabel => '🔒 Recuerdos: ';
+
+  @override
+  String get e2eeOtherDataLabel => '🔐 Conversaciones, chat y otros datos: ';
+
+  @override
+  String get switchToSecureEncryption => '¿Cambiar a cifrado seguro?';
+
+  @override
+  String get switchToSecureEncryptionBody =>
+      'Esto volverá a cifrar tus datos con claves administradas por el servidor. Tu clave de cifrado de extremo a extremo ya no se usará.\n\nTus datos seguirán cifrados en reposo, pero el servidor administrará las claves.';
+
+  @override
+  String get switchButton => 'Cambiar';
+
+  @override
+  String get thirdPartyAppsWarning =>
+      'Las apps e integraciones de terceros no podrán acceder a tus datos cifrados a menos que les proporciones tu clave.';
+
+  @override
+  String get preparingMigration => 'Preparando migración...';
+
+  @override
+  String get e2eeKeyRecoveryTitle => 'Se requiere clave de recuperación';
+
+  @override
+  String get e2eeKeyRecoveryBody =>
+      'Falta tu clave de cifrado E2EE. Pega tu clave de recuperación para restaurar el acceso a tus datos cifrados.';
+
+  @override
+  String get e2eeKeyRecoveryHint => 'Pega la clave de recuperación';
+
+  @override
+  String get e2eeKeyRecoveryButton => 'Recuperar';
+
+  @override
+  String get e2eeKeyRecoverySuccess => 'Clave recuperada correctamente';
+
+  @override
+  String get e2eeKeyRecoveryWrongKey => 'Clave incorrecta — no coincide con la que se usó para cifrar tus datos';
+
+  @override
+  String get e2eeKeyRecoveryLostKey => 'Perdí mi clave de recuperación';
+
+  @override
+  String get e2eeKeyRecoveryLostKeyBody =>
+      'Sin la clave de recuperación, tendrás que desactivar E2EE desde otro dispositivo en el que hayas iniciado sesión o contactar con soporte para restablecer el cifrado.';
+
+  @override
+  String get processingOnServer => 'Procesando en el servidor...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Procesando... $current/$total segmentos';
+  }
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso justo: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Mejorar conexión';
+
+  @override
+  String get improveConnectionContent =>
+      'Hemos mejorado cómo Omi se mantiene conectado a tu dispositivo. Para activarlo, ve a la página de Información del dispositivo, toca \"Desconectar dispositivo\" y vuelve a vincular tu dispositivo.';
+
+  @override
+  String get improveConnectionAction => 'Entendido';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'El reloj de tu dispositivo está desfasado ~$minutes min. Revisa la configuración de fecha y hora.';
+  }
+
+  @override
+  String get omisStorage => 'Almacenamiento de Omi';
+
+  @override
+  String get phoneStorage => 'Almacenamiento del teléfono';
+
+  @override
+  String get cloudStorage => 'Almacenamiento en la nube';
+
+  @override
+  String get howSyncingWorks => 'Cómo funciona la sincronización';
+
+  @override
+  String get noSyncedRecordings => 'Aún no hay grabaciones sincronizadas';
+
+  @override
+  String get recordingsSyncAutomatically => 'Las grabaciones se sincronizan automáticamente — no se requiere acción.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Los archivos ya descargados se subirán la próxima vez.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversaciones creadas',
+      one: '1 conversación creada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Toca para ver';
+
+  @override
+  String get syncFailed => 'Error de sincronización';
+
+  @override
+  String get keepSyncing => 'Seguir sincronizando';
+
+  @override
+  String get cancelSyncQuestion => '¿Cancelar sincronización?';
+
+  @override
+  String get omisStorageDesc =>
+      'Cuando tu Omi no está conectado a tu teléfono, almacena el audio localmente en su memoria integrada. Nunca perderás una grabación.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Cuando Omi se reconecta, las grabaciones se transfieren automáticamente a tu teléfono antes de subirlas.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Una vez subidas, tus grabaciones se procesan y transcriben. Las conversaciones estarán disponibles en un minuto.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mantén tu teléfono cerca para una sincronización más rápida';
+
+  @override
+  String get tipStableInternet => 'Internet estable acelera las subidas a la nube';
+
+  @override
+  String get tipAutoSync => 'Las grabaciones se sincronizan automáticamente';
+
+  @override
+  String get storageSection => 'ALMACENAMIENTO';
+
+  @override
+  String get permissions => 'Permisos';
+
+  @override
+  String get permissionEnabled => 'Activado';
+
+  @override
+  String get permissionEnable => 'Activar';
+
+  @override
+  String get permissionsPageDescription =>
+      'Estos permisos son esenciales para el funcionamiento de Omi. Habilitan funciones clave como notificaciones, experiencias basadas en ubicación y captura de audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi necesita algunos permisos para funcionar correctamente. Por favor, concédelos para continuar.';
+
+  @override
+  String get permissionsSetupTitle => 'Obtén la mejor experiencia';
+
+  @override
+  String get permissionsSetupDescription => 'Activa algunos permisos para que Omi pueda hacer su magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Puedes cambiar esto en cualquier momento en Ajustes > Permisos';
+
+  @override
+  String get location => 'Ubicación';
+
+  @override
+  String get microphone => 'Micrófono';
+
+  @override
+  String get whyAreYouCanceling => '¿Por qué cancelas?';
+
+  @override
+  String get cancelReasonSubtitle => '¿Puedes decirnos por qué te vas?';
+
+  @override
+  String get cancelReasonTooExpensive => 'Demasiado caro';
+
+  @override
+  String get cancelReasonNotUsing => 'No lo uso lo suficiente';
+
+  @override
+  String get cancelReasonMissingFeatures => 'Funciones faltantes';
+
+  @override
+  String get cancelReasonAudioQuality => 'Calidad de audio/transcripción';
+
+  @override
+  String get cancelReasonBatteryDrain => 'Preocupaciones por el consumo de batería';
+
+  @override
+  String get cancelReasonFoundAlternative => 'Encontré una alternativa';
+
+  @override
+  String get cancelReasonOther => 'Otro';
+
+  @override
+  String get tellUsMore => 'Cuéntanos más (opcional)';
+
+  @override
+  String get cancelReasonDetailHint => 'Agradecemos cualquier comentario...';
+
+  @override
+  String get justAMoment => 'Un momento, por favor';
+
+  @override
+  String get cancelConsequencesSubtitle =>
+      'Recomendamos encarecidamente explorar tus otras opciones en lugar de cancelar.';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'Tu plan permanecerá activo hasta el $date. Después, serás trasladado a la versión gratuita con funciones limitadas.';
+  }
+
+  @override
+  String get ifYouCancel => 'Si cancelas:';
+
+  @override
+  String get cancelConsequenceNoAccess => 'Ya no tendrás acceso ilimitado al final de tu período de facturación.';
+
+  @override
+  String get cancelConsequenceBattery => '7x más consumo de batería (procesamiento en el dispositivo)';
+
+  @override
+  String get cancelConsequenceQuality => '30% menos calidad de transcripción (modelos en el dispositivo)';
+
+  @override
+  String get cancelConsequenceDelay => 'Retraso de procesamiento de 5-7 segundos (modelos en el dispositivo)';
+
+  @override
+  String get cancelConsequenceSpeakers => 'No puede identificar hablantes.';
+
+  @override
+  String get confirmAndCancel => 'Confirmar y cancelar';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'Sin transcripción de llamadas en tiempo real';
+
+  @override
+  String get feedbackTitleTooExpensive => '¿Qué precio funcionaría para ti?';
+
+  @override
+  String get feedbackTitleMissingFeatures => '¿Qué funciones echas de menos?';
+
+  @override
+  String get feedbackTitleAudioQuality => '¿Qué problemas experimentaste?';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'Cuéntanos sobre los problemas de batería';
+
+  @override
+  String get feedbackTitleFoundAlternative => '¿A qué estás cambiando?';
+
+  @override
+  String get feedbackTitleNotUsing => '¿Qué te haría usar Omi más?';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'Tus comentarios nos ayudan a encontrar el equilibrio correcto.';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => 'Siempre estamos construyendo — esto nos ayuda a priorizar.';
+
+  @override
+  String get feedbackSubtitleAudioQuality => 'Nos encantaría entender qué salió mal.';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'Esto ayuda a nuestro equipo de hardware a mejorar.';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => 'Nos encantaría saber qué te llamó la atención.';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Queremos hacer Omi más útil para ti.';
+
+  @override
+  String get deviceDiagnostics => 'Diagnósticos del dispositivo';
+
+  @override
+  String get signalStrength => 'Intensidad de señal';
+
+  @override
+  String get connectionUptime => 'Tiempo de actividad';
+
+  @override
+  String get reconnections => 'Reconexiones';
+
+  @override
+  String get disconnectHistory => 'Historial de desconexiones';
+
+  @override
+  String get noDisconnectsRecorded => 'No se registraron desconexiones';
+
+  @override
+  String get diagnostics => 'Diagnósticos';
+
+  @override
+  String get waitingForData => 'Esperando datos...';
+
+  @override
+  String get liveRssiOverTime => 'RSSI en tiempo real';
+
+  @override
+  String get noRssiDataYet => 'Aún no hay datos RSSI';
+
+  @override
+  String get collectingData => 'Recopilando datos...';
+
+  @override
+  String get cleanDisconnect => 'Desconexión limpia';
+
+  @override
+  String get connectionTimeout => 'Tiempo de conexión agotado';
+
+  @override
+  String get remoteDeviceTerminated => 'El dispositivo remoto terminó la conexión';
+
+  @override
+  String get pairedToAnotherPhone => 'Emparejado con otro teléfono';
+
+  @override
+  String get linkKeyMismatch => 'Clave de enlace no coincide';
+
+  @override
+  String get connectionFailed => 'Conexión fallida';
+
+  @override
+  String get appClosed => 'Aplicación cerrada';
+
+  @override
+  String get manualDisconnect => 'Desconexión manual';
+
+  @override
+  String lastNEvents(int count) {
+    return 'Últimos $count eventos';
+  }
+
+  @override
+  String get signal => 'Señal';
+
+  @override
+  String get battery => 'Batería';
+
+  @override
+  String get excellent => 'Excelente';
+
+  @override
+  String get good => 'Bueno';
+
+  @override
+  String get fair => 'Aceptable';
+
+  @override
+  String get weak => 'Débil';
+
+  @override
+  String gattError(String code) {
+    return 'Error GATT ($code)';
+  }
+
+  @override
+  String get rollbackToStableFirmware => 'Volver al firmware estable';
+
+  @override
+  String get rollbackConfirmTitle => '¿Volver al firmware?';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return 'Esto reemplazará tu firmware actual con la última versión estable ($version). Tu dispositivo se reiniciará después de la actualización.';
+  }
+
+  @override
+  String get stableFirmware => 'Firmware estable';
+
+  @override
+  String get fetchingStableFirmware => 'Obteniendo el último firmware estable...';
+
+  @override
+  String get noStableFirmwareFound => 'No se pudo encontrar una versión estable del firmware para tu dispositivo.';
+
+  @override
+  String get installStableFirmware => 'Instalar firmware estable';
+
+  @override
+  String get alreadyOnStableFirmware => 'Ya estás en la última versión estable.';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration de audio guardado localmente';
+  }
+
+  @override
+  String get willSyncAutomatically => 'se sincronizará automáticamente';
+
+  @override
+  String get enableLocationTitle => 'Activar ubicación';
+
+  @override
+  String get enableLocationDescription =>
+      'El permiso de ubicación es necesario para encontrar dispositivos Bluetooth cercanos.';
+
+  @override
+  String get voiceRecordingFound => 'Grabación encontrada';
+
+  @override
+  String get transcriptionConnecting => 'Conectando transcripción...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconectando transcripción...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcripción no disponible';
+
+  @override
+  String get audioOutput => 'Salida de audio';
 }

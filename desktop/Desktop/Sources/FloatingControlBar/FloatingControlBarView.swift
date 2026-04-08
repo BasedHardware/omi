@@ -10,6 +10,9 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onClearVisibleConversation: () -> Void
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
 
@@ -125,30 +128,38 @@ struct FloatingControlBarView: View {
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 34, height: 34)
+            Button {
+                FloatingControlBarManager.shared.openNotificationAsChat(notification)
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 34, height: 34)
 
-                Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(notification.title)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Text(notification.message)
+                            .scaledFont(size: 12)
+                            .foregroundColor(.white.opacity(0.72))
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(notification.title)
-                    .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(notification.message)
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.72))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
 
             Button {
                 FloatingControlBarManager.shared.dismissCurrentNotification()
@@ -188,12 +199,12 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
-                    compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
+                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                        compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
                 }
                 .padding(.horizontal, 6)
@@ -251,7 +262,8 @@ struct FloatingControlBarView: View {
                 Text(key)
                     .scaledFont(size: 9)
                     .foregroundColor(.white)
-                    .frame(width: 15, height: 15)
+                    .padding(.horizontal, key.count > 1 ? 4 : 0)
+                    .frame(minWidth: 15, minHeight: 15)
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(3)
             }
@@ -288,7 +300,11 @@ struct FloatingControlBarView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             } else {
-                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
+                Text(
+                    state.isVoiceLocked
+                        ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
+                        : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
+                )
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -301,8 +317,10 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
+            canClearVisibleConversation: state.hasVisibleConversation,
             onSend: { message in
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
@@ -310,7 +328,7 @@ struct FloatingControlBarView: View {
                 }
                 onSendQuery(message)
             },
-            onCancel: onCloseAI,
+            onClearVisibleConversation: onClearVisibleConversation,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -341,21 +359,21 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            onClose: onCloseAI,
+            canClearVisibleConversation: state.hasVisibleConversation,
+            onClearVisibleConversation: onClearVisibleConversation,
             onSendFollowUp: { message in
-                // Archive current exchange to chat history
-                let currentQuery = state.displayedQuery
-                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
-                }
+                archiveCurrentExchange()
 
                 state.displayedQuery = message
+                state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil
                 }
                 onSendQuery(message)
-            }
+            },
+            onRate: onRate,
+            onShareLink: onShareLink
         )
         .transition(
             .asymmetric(
@@ -364,5 +382,17 @@ struct FloatingControlBarView: View {
             ))
     }
 
+    private func archiveCurrentExchange() {
+        guard let currentMessage = state.currentAIMessage else { return }
+        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
+
+        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.chatHistory.append(
+            FloatingChatExchange(
+                question: currentQuery.isEmpty ? nil : currentQuery,
+                aiMessage: currentMessage
+            )
+        )
+    }
 
 }

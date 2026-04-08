@@ -153,12 +153,12 @@ class MixpanelManager {
       track('User Acquisition Source', properties: {'source': source});
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-    'Developer Settings Saved',
-    properties: {
-      'has_webhook_memory_created': hasWebhookConversationCreated,
-      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-    },
-  );
+        'Developer Settings Saved',
+        properties: {
+          'has_webhook_memory_created': hasWebhookConversationCreated,
+          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+        },
+      );
 
   void pageOpened(String name) => track('$name Opened');
 
@@ -368,18 +368,19 @@ class MixpanelManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) => track(
-    'Chat Message Sent',
-    properties: {
-      'message_length': message.length,
-      'message_word_count': message.split(' ').length,
-      'includes_files': includesFiles,
-      'number_of_files': numberOfFiles,
-      'chat_target_id': chatTargetId,
-      'is_persona_chat': isPersonaChat,
-      'is_voice_input': isVoiceInput,
-    },
-  );
+  }) =>
+      track(
+        'Chat Message Sent',
+        properties: {
+          'message_length': message.length,
+          'message_word_count': message.split(' ').length,
+          'includes_files': includesFiles,
+          'number_of_files': numberOfFiles,
+          'chat_target_id': chatTargetId,
+          'is_persona_chat': isPersonaChat,
+          'is_voice_input': isVoiceInput,
+        },
+      );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -400,9 +401,9 @@ class MixpanelManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-    'Short Conversation Threshold Changed',
-    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-  );
+        'Short Conversation Threshold Changed',
+        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+      );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
@@ -410,28 +411,28 @@ class MixpanelManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-    'Conversation Selected For Merge',
-    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-  );
+        'Conversation Selected For Merge',
+        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+      );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-    'Conversation Merge Initiated',
-    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-  );
+        'Conversation Merge Initiated',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-    'Conversation Merge Completed',
-    properties: {
-      'merged_conversation_id': mergedConversationId,
-      'removed_count': removedConversationIds.length,
-      'removed_conversation_ids': removedConversationIds,
-    },
-  );
+        'Conversation Merge Completed',
+        properties: {
+          'merged_conversation_id': mergedConversationId,
+          'removed_count': removedConversationIds.length,
+          'removed_conversation_ids': removedConversationIds,
+        },
+      );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-    'Conversation Merge Failed',
-    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-  );
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -441,14 +442,14 @@ class MixpanelManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-    'Share To Contacts Selected',
-    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-  );
+        'Share To Contacts Selected',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-    'Share To Contacts SMS Opened',
-    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-  );
+        'Share To Contacts SMS Opened',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -512,6 +513,20 @@ class MixpanelManager {
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
 
+  void subscriptionCancelFlowStarted() => track('Subscription Cancel Flow Started');
+
+  void subscriptionCancelReasonSelected({required String reason}) =>
+      track('Subscription Cancel Reason Selected', properties: {'reason': reason});
+
+  void subscriptionCancelConfirmed({required String reason, String? details}) =>
+      track('Subscription Cancel Confirmed', properties: {'reason': reason, 'reason_details': details});
+
+  void subscriptionCancelKeptPlan({required int step, String? reason}) =>
+      track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
+
+  void subscriptionCancelAbandoned({required int step, String? reason}) =>
+      track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
+
   void getFriendClicked() => track('Get Friend Clicked');
 
   void connectFriendClicked() => track('Connect Friend Clicked');
@@ -549,12 +564,12 @@ class MixpanelManager {
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-    if (PlatformService.isMixpanelNativelySupported) {
-      _mixpanel?.getPeople().deleteUser();
-    } else {
-      _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$delete, value: {});
-    }
-  });
+        if (PlatformService.isMixpanelNativelySupported) {
+          _mixpanel?.getPeople().deleteUser();
+        } else {
+          _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$delete, value: {});
+        }
+      });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -1128,6 +1143,37 @@ class MixpanelManager {
     );
   }
 
+  void appleRemindersSyncCompleted({
+    required int pendingExported,
+    required int syncedChecked,
+    required int completionsPulled,
+    required int completionsPushed,
+    required int titleDuePulled,
+    required int titleDuePushed,
+    required int remindersUnlinked,
+  }) {
+    track(
+      'Apple Reminders Sync Completed',
+      properties: {
+        'pending_exported': pendingExported,
+        'synced_checked': syncedChecked,
+        'completions_pulled': completionsPulled,
+        'completions_pushed': completionsPushed,
+        'title_due_pulled': titleDuePulled,
+        'title_due_pushed': titleDuePushed,
+        'reminders_unlinked': remindersUnlinked,
+      },
+    );
+  }
+
+  void appleReminderDirectSync({required String actionItemId}) {
+    track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
+  }
+
+  void appleReminderDeleted({required String actionItemId}) {
+    track('Apple Reminder Deleted', properties: {'action_item_id': actionItemId});
+  }
+
   // ============================================================================
   // SETTINGS PAGE TRACKING
   // ============================================================================
@@ -1442,6 +1488,22 @@ class MixpanelManager {
   // ============================================================================
 
   void dailySummarySettingsOpened() => track('Daily Summary Settings Opened');
+
+  // ============================================================================
+  // Permissions
+  // ============================================================================
+
+  void permissionsSettingsOpened() => track('Permissions Settings Opened');
+
+  void permissionChanged({required String permission, required bool granted}) {
+    track('Permission Changed', properties: {'permission': permission, 'granted': granted});
+  }
+
+  void permissionsInterstitialShown() => track('Permissions Interstitial Shown');
+
+  void permissionsInterstitialCompleted() => track('Permissions Interstitial Completed');
+
+  void permissionsInterstitialSkipped() => track('Permissions Interstitial Skipped');
 
   void dailySummaryToggled({required bool enabled}) {
     track('Daily Summary Toggled', properties: {'enabled': enabled});

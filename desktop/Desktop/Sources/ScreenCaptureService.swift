@@ -8,7 +8,7 @@ final class ScreenCaptureService: Sendable {
   private let maxSize: CGFloat = 3000
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
-  private static let activeWindowCacheTTL: TimeInterval = 10
+  private static let activeWindowCacheTTL: TimeInterval = 2
 
   /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
   /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
@@ -40,11 +40,22 @@ final class ScreenCaptureService: Sendable {
 
   /// Check if we have screen recording permission by actually testing capture
   /// CGPreflightScreenCaptureAccess can return stale data after code signing changes
-  static func checkPermission() -> Bool {
-    // First quick check - if CGPreflight says no, definitely no permission
-    if !CGPreflightScreenCaptureAccess() {
+  static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
+    let preflightGranted = CGPreflightScreenCaptureAccess()
+
+    if !preflightGranted {
       log("Screen capture: CGPreflight says no permission")
-      return false
+
+      guard forceActualTestIfPreflightDenied else {
+        return false
+      }
+
+      log("Screen capture: running forced actual capture test despite denied preflight")
+      let actualPermission = testCapturePermission()
+      if actualPermission {
+        log("Screen capture: actual capture succeeded even though CGPreflight returned false")
+      }
+      return actualPermission
     }
 
     // CGPreflight can return stale data after rebuilds, so test actual capture
@@ -526,6 +537,10 @@ final class ScreenCaptureService: Sendable {
     return (appName, largest.title, largest.windowID)
   }
 
+  /// Private API: get CGWindowID directly from an AXUIElement (avoids fragile position/size matching)
+  @_silgen_name("_AXUIElementGetWindow")
+  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError
+
   /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
   private static func getWindowInfoViaAccessibility(
     pid: pid_t, bundleID: String, windowList: [[String: Any]]
@@ -583,7 +598,20 @@ final class ScreenCaptureService: Sendable {
       windowElement as! AXUIElement, kAXTitleAttribute as CFString, &titleValue)
     let axTitle = titleValue as? String
 
-    // Get window position
+    // Try direct CGWindowID lookup first (handles multiple windows of same app correctly)
+    var directWindowID: CGWindowID = 0
+    let directResult = _AXUIElementGetWindow(windowElement as! AXUIElement, &directWindowID)
+    if directResult == .success && directWindowID != 0 {
+      // Verify the window ID exists in the on-screen window list
+      let existsOnScreen = windowList.contains { window in
+        (window[kCGWindowNumber as String] as? CGWindowID) == directWindowID
+      }
+      if existsOnScreen {
+        return (title: axTitle, windowID: directWindowID)
+      }
+    }
+
+    // Fallback: match by position/size (for apps where _AXUIElementGetWindow fails)
     var positionValue: CFTypeRef?
     let posResult = AXUIElementCopyAttributeValue(
       windowElement as! AXUIElement, kAXPositionAttribute as CFString, &positionValue)
@@ -597,7 +625,6 @@ final class ScreenCaptureService: Sendable {
       return nil
     }
 
-    // Get window size
     var sizeValue: CFTypeRef?
     let sizeResult = AXUIElementCopyAttributeValue(
       windowElement as! AXUIElement, kAXSizeAttribute as CFString, &sizeValue)
@@ -611,12 +638,10 @@ final class ScreenCaptureService: Sendable {
       return nil
     }
 
-    // Skip tiny windows
     guard size.width > 100 && size.height > 100 else {
       return nil
     }
 
-    // Find matching window in CGWindowList by position/size
     for window in windowList {
       guard let windowPID = window[kCGWindowOwnerPID as String] as? Int32,
         windowPID == pid,
@@ -630,12 +655,10 @@ final class ScreenCaptureService: Sendable {
         continue
       }
 
-      // Match by position and size (with small tolerance for rounding)
       let tolerance: CGFloat = 2.0
       if abs(x - position.x) < tolerance && abs(y - position.y) < tolerance
         && abs(width - size.width) < tolerance && abs(height - size.height) < tolerance
       {
-        // Use AX title if available, otherwise fall back to CGWindowList title
         let title = axTitle ?? (window[kCGWindowName as String] as? String)
         return (title: title, windowID: windowNumber)
       }
@@ -722,6 +745,52 @@ final class ScreenCaptureService: Sendable {
   /// Capture the active window and return the raw CGImage (no JPEG encoding).
   /// Use this on macOS 14+ to avoid redundant encode/decode round-trips.
   @available(macOS 14.0, *)
+  /// Capture a specific window by ID (avoids re-resolving the active window)
+  func captureWindowCGImage(windowID: CGWindowID) async -> CGImage? {
+    do {
+      let content = try await SCShareableContent.excludingDesktopWindows(
+        false,
+        onScreenWindowsOnly: true
+      )
+
+      let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
+        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+          return nil
+        }
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let config = SCStreamConfiguration()
+        config.scalesToFit = true
+        config.showsCursor = false
+        let windowWidth = window.frame.width
+        let windowHeight = window.frame.height
+        let aspectRatio = windowWidth / windowHeight
+        var configWidth = min(windowWidth, maxSize)
+        var configHeight = configWidth / aspectRatio
+        if configHeight > maxSize {
+          configHeight = maxSize
+          configWidth = configHeight * aspectRatio
+        }
+        config.width = Int(configWidth)
+        config.height = Int(configHeight)
+        return (filter, config)
+      }
+
+      guard let (filter, config) = filterAndConfig else {
+        log("Window \(windowID) not found in SCShareableContent")
+        return nil
+      }
+
+      return try await SCScreenshotManager.captureImage(
+        contentFilter: filter,
+        configuration: config
+      )
+    } catch {
+      log("ScreenCaptureKit CGImage error for window \(windowID): \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   func captureActiveWindowCGImage() async -> CGImage? {
     let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
     guard let windowID else {

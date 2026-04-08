@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,14 +19,45 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Status of the device's offline storage (new multi-file firmware protocol).
+class StorageStatus {
+  final int totalUsedBytes;
+  final int fileCount;
+  final int freeBytes;
+  final int statusFlags;
+
+  StorageStatus({
+    required this.totalUsedBytes,
+    required this.fileCount,
+    required this.freeBytes,
+    required this.statusFlags,
+  });
+
+  @override
+  String toString() => 'StorageStatus(files=$fileCount, used=$totalUsedBytes, free=$freeBytes, flags=$statusFlags)';
+}
+
+/// Info about a single audio file on the device's offline storage.
+class StorageFileInfo {
+  final int index;
+  final int timestamp; // UTC epoch seconds (from device hex filename)
+  final int sizeBytes;
+
+  StorageFileInfo({required this.index, required this.timestamp, required this.sizeBytes});
+
+  @override
+  String toString() => 'StorageFileInfo(index=$index, ts=$timestamp, size=$sizeBytes)';
+}
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(BtDevice device) {
@@ -39,8 +71,8 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        final needsBond = device.type == DeviceType.limitless;
+        transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 
       case TransportKind.watchConnectivity:
@@ -54,8 +86,7 @@ class DeviceConnectionFactory {
     // Create device connection with transport
     // Use name-based detection as fallback for OmiGlass devices
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass =
-        device.type == DeviceType.openglass ||
+    final isOmiGlass = device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -134,8 +165,9 @@ abstract class DeviceConnection {
     switch (transportState) {
       case DeviceTransportState.connected:
         return DeviceConnectionState.connected;
-      case DeviceTransportState.disconnected:
       case DeviceTransportState.connecting:
+        return DeviceConnectionState.connecting;
+      case DeviceTransportState.disconnected:
       case DeviceTransportState.disconnecting:
         return DeviceConnectionState.disconnected;
     }
@@ -304,6 +336,54 @@ abstract class DeviceConnection {
   }
 
   // storage here
+
+  // --- New multi-file storage protocol (firmware with LittleFS) ---
+
+  Future<StorageStatus?> getStorageFileStats() async {
+    if (await isConnected()) {
+      return await performGetStorageFileStats();
+    }
+    return null;
+  }
+
+  Future<StorageStatus?> performGetStorageFileStats() async {
+    return null;
+  }
+
+  Future<List<StorageFileInfo>> listStorageFiles() async {
+    if (await isConnected()) {
+      return await performListStorageFiles();
+    }
+    return [];
+  }
+
+  Future<List<StorageFileInfo>> performListStorageFiles() async {
+    return [];
+  }
+
+  Future<bool> deleteStorageFile(int fileIndex) async {
+    if (await isConnected()) {
+      return await performDeleteStorageFile(fileIndex);
+    }
+    return false;
+  }
+
+  Future<bool> performDeleteStorageFile(int fileIndex) async {
+    return false;
+  }
+
+  Future<bool> stopStorageSync() async {
+    if (await isConnected()) {
+      return await performStopStorageSync();
+    }
+    return false;
+  }
+
+  Future<bool> performStopStorageSync() async {
+    return false;
+  }
+
+  // --- Legacy storage protocol ---
 
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
@@ -531,7 +611,7 @@ abstract class DeviceConnection {
   }
 
   void _showDeviceDisconnectedNotification() {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     final deviceName = device.name;
     NotificationService.instance.createNotification(
       title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',

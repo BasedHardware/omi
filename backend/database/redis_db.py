@@ -295,18 +295,6 @@ def get_apps_installs_count(app_ids: list) -> dict:
     return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
-def set_user_has_soniox_speech_profile(uid: str):
-    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
-
-
-def get_user_has_soniox_speech_profile(uid: str) -> bool:
-    return r.exists(f'users:{uid}:has_soniox_speech_profile')
-
-
-def remove_user_soniox_speech_profile(uid: str):
-    r.delete(f'users:{uid}:has_soniox_speech_profile')
-
-
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
     r.set(f'users:{uid}:name', name)
     r.expire(f'users:{uid}:name', ttl)
@@ -767,8 +755,46 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 
 
 # ******************************************************
-# *************** LISTEN RATE LIMIT ********************
+# *************** RATE LIMITING ************************
 # ******************************************************
+
+# Lua script: atomic increment + TTL in a single round-trip.
+# Returns [current_count, ttl_remaining].  Sets TTL on first hit
+# and self-heals any key that lost its TTL (prevents permanent buckets).
+_RATE_LIMIT_LUA = r.register_script("""
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+local ttl = redis.call('TTL', key)
+if ttl < 0 then
+    redis.call('EXPIRE', key, window)
+    ttl = window
+end
+return {current, ttl}
+""")
+
+
+def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+    """Check per-key rate limit using a single atomic Lua call.
+
+    Args:
+        key: Rate limit subject (uid, ip, app_id:uid).
+        policy: Policy name (used in Redis key namespace).
+        max_requests: Maximum requests allowed in the window (after boost).
+        window: Window size in seconds.
+
+    Returns:
+        (allowed, remaining, retry_after_seconds)
+    """
+    redis_key = f'rl:{policy}:{key}'
+    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    remaining = max(0, max_requests - current)
+    allowed = current <= max_requests
+    retry_after = max(0, ttl) if not allowed else 0
+    return allowed, remaining, retry_after
 
 
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
@@ -852,6 +878,24 @@ def try_accept_task_share(token: str, uid: str) -> bool:
         r.expire(key, TASK_SHARE_TTL)
         return True
     return False
+
+
+CHAT_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
+
+
+def store_chat_share(token: str, uid: str, display_name: str, message_ids: list):
+    """Store a chat share token in Redis with 30-day TTL."""
+    data = json.dumps({"uid": uid, "display_name": display_name, "message_ids": message_ids})
+    return r.set(f'chat_share:{token}', data, ex=CHAT_SHARE_TTL)
+
+
+@try_catch_decorator
+def get_chat_share(token: str) -> Optional[dict]:
+    """Get chat share data by token. Returns None if expired or not found."""
+    data = r.get(f'chat_share:{token}')
+    if data:
+        return json.loads(data)
+    return None
 
 
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -195,8 +195,8 @@ class HomeProvider extends ChangeNotifier {
 
         // Show language dialog after a short delay to ensure UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (MyApp.navigatorKey.currentContext != null) {
-            showLanguageDialogIfNeeded(MyApp.navigatorKey.currentContext!);
+          if (globalNavigatorKey.currentContext != null) {
+            showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
       } else {

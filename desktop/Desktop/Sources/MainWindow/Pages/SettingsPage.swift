@@ -67,6 +67,7 @@ struct SettingsContentView: View {
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     // Master monitoring state (screen analysis)
     @State private var isMonitoring: Bool
@@ -199,7 +200,6 @@ struct SettingsContentView: View {
     @State private var transcriptionAutoDetect: Bool = true
     @State private var transcriptionLanguage: String = "en"
     @State private var vadGateEnabled: Bool = false
-    @State private var batchTranscriptionEnabled: Bool = true
 
     // Multi-chat mode setting
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -244,6 +244,7 @@ struct SettingsContentView: View {
         case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
         case floatingBar = "Floating Bar"
+        case shortcuts = "Shortcuts"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -308,9 +309,9 @@ struct SettingsContentView: View {
     @State private var deleteAccountError: String?
 
     // Developer API Key overrides
-    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
     @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
     @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
+    @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
 
     init(
         appState: AppState,
@@ -350,7 +351,6 @@ struct SettingsContentView: View {
         _memoryNotificationsEnabled = State(initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
         _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
         _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
-        _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
         _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
         _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
     }
@@ -389,6 +389,8 @@ struct SettingsContentView: View {
                     aiChatSection
                 case .floatingBar:
                     floatingBarSection
+                case .shortcuts:
+                    shortcutsSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -1125,36 +1127,6 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Batch Transcription
-            settingsCard(settingId: "transcription.batch") {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "square.stack.3d.up")
-                            .scaledFont(size: 16)
-                            .foregroundColor(OmiColors.purplePrimary)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Batch Transcription")
-                                .scaledFont(size: 15, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            Text("Transcribes audio in chunks at silence boundaries. Better accuracy, but transcript appears with a few seconds delay.")
-                                .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $batchTranscriptionEnabled)
-                            .toggleStyle(.switch)
-                            .onChange(of: batchTranscriptionEnabled) { _, newValue in
-                                AssistantSettings.shared.batchTranscriptionEnabled = newValue
-                                restartTranscriptionIfNeeded()
-                            }
-                    }
-                }
-            }
         }
     }
 
@@ -1730,7 +1702,6 @@ struct SettingsContentView: View {
 
     private var floatingBarSection: some View {
         VStack(spacing: 20) {
-            // Show floating bar toggle
             settingsCard(settingId: "floatingbar.show") {
                 HStack(spacing: 16) {
                     Circle()
@@ -1753,12 +1724,57 @@ struct SettingsContentView: View {
                             } else {
                                 FloatingControlBarManager.shared.hide()
                             }
-                        }
+                    }
                 }
             }
 
-            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+            settingsCard(settingId: "floatingbar.background") {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Background Style")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    HStack(spacing: 16) {
+                        Text("Transparent")
+                            .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .regular : .semibold)
+                            .foregroundColor(shortcutSettings.solidBackground ? OmiColors.textTertiary : OmiColors.textPrimary)
+
+                        Toggle("", isOn: $shortcutSettings.solidBackground)
+                            .toggleStyle(.switch)
+                            .tint(OmiColors.purplePrimary)
+                            .labelsHidden()
+
+                        Text("Solid Dark")
+                            .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .semibold : .regular)
+                            .foregroundColor(shortcutSettings.solidBackground ? OmiColors.textPrimary : OmiColors.textTertiary)
+
+                        Spacer()
+                    }
+                }
+            }
+
+            settingsCard(settingId: "floatingbar.draggable") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Draggable Floating Bar")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Allow repositioning the floating bar by dragging it.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
+                        .toggleStyle(.switch)
+                        .tint(OmiColors.purplePrimary)
+                }
+            }
+
         }
+    }
+
+    private var shortcutsSection: some View {
+        ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
     }
 
     private var aiChatSection: some View {
@@ -4234,12 +4250,26 @@ struct SettingsContentView: View {
                 }
             }
 
-            developerKeyField(
-                title: "Deepgram API Key",
-                subtitle: "For transcription",
-                settingId: "advanced.devkeys.deepgram",
-                value: $devDeepgramKey
-            )
+            settingsCard(settingId: "advanced.developerkeys.voiceanswers") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Voice Responses")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Speak answers to voice questions aloud. When you ask with voice, Omi responds with voice. Text questions get text-only responses.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: floatingBarVoiceAnswersBinding)
+                        .toggleStyle(.switch)
+                        .tint(OmiColors.purplePrimary)
+                }
+            }
+
+            if shortcutSettings.floatingBarVoiceAnswersEnabled {
+                voiceSpeedSlider
+            }
 
             developerKeyField(
                 title: "Gemini API Key",
@@ -4255,14 +4285,29 @@ struct SettingsContentView: View {
                 value: $devAnthropicKey
             )
 
-            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+            developerKeyField(
+                title: "ElevenLabs API Key",
+                subtitle: "For experimental floating-bar voice answers with the Sloane voice",
+                settingId: "advanced.devkeys.elevenlabs",
+                value: syncedElevenLabsKeyBinding
+            )
+
+            if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
                 settingsCard(settingId: "advanced.devkeys.clear") {
                     HStack {
                         Spacer()
                         Button(action: {
-                            devDeepgramKey = ""
                             devGeminiKey = ""
                             devAnthropicKey = ""
+                            devElevenLabsKey = ""
+                            SettingsSyncManager.shared.pushPartialUpdate(
+                                AssistantSettingsResponse(
+                                    floatingBar: FloatingBarSettingsResponse(
+                                        elevenLabsApiKey: "",
+                                        elevenLabsVoiceID: ""
+                                    )
+                                )
+                            )
                         }) {
                             Text("Clear All Custom Keys")
                                 .scaledFont(size: 13, weight: .medium)
@@ -4290,6 +4335,125 @@ struct SettingsContentView: View {
                     .scaledFont(size: 13)
             }
         }
+    }
+
+    private var floatingBarVoiceAnswersBinding: Binding<Bool> {
+        Binding(
+            get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
+            set: { newValue in
+                shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
+                SettingsSyncManager.shared.pushPartialUpdate(
+                    AssistantSettingsResponse(
+                        floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
+                    )
+                )
+            }
+        )
+    }
+
+    private var voiceSpeedSlider: some View {
+        let steps = ShortcutSettings.voiceSpeedSteps
+        let currentSpeed = shortcutSettings.voicePlaybackSpeed
+        let currentIndex = steps.enumerated().min(by: { abs($0.element - currentSpeed) < abs($1.element - currentSpeed) })?.offset ?? 3
+
+        return settingsCard(settingId: "advanced.developerkeys.voicespeed") {
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ShortcutSettings.voiceSpeedLabel(for: currentSpeed))
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Voice playback speed")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    Spacer()
+                    Text("\(String(format: "%.1f", currentSpeed))×")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(OmiColors.purplePrimary)
+                        .frame(width: 52, height: 52)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(OmiColors.purplePrimary.opacity(0.15))
+                        )
+                }
+
+                VStack(spacing: 6) {
+                    // Stepped slider
+                    GeometryReader { geo in
+                        let trackWidth = geo.size.width
+                        let segmentCount = CGFloat(steps.count - 1)
+
+                        ZStack(alignment: .leading) {
+                            // Track background
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.backgroundQuaternary)
+                                .frame(height: 6)
+
+                            // Filled track
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.purplePrimary)
+                                .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+
+                            // Step dots
+                            ForEach(0..<steps.count, id: \.self) { i in
+                                Circle()
+                                    .fill(i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary)
+                                    .frame(width: 8, height: 8)
+                                    .position(
+                                        x: trackWidth * CGFloat(i) / segmentCount,
+                                        y: 3
+                                    )
+                            }
+
+                            // Thumb
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 22, height: 22)
+                                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                                .position(
+                                    x: trackWidth * CGFloat(currentIndex) / segmentCount,
+                                    y: 3
+                                )
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            let fraction = max(0, min(1, value.location.x / trackWidth))
+                                            let nearestIndex = Int(round(fraction * segmentCount))
+                                            let clamped = max(0, min(steps.count - 1, nearestIndex))
+                                            shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                                        }
+                                )
+                        }
+                    }
+                    .frame(height: 22)
+
+                    HStack {
+                        Text("Slow")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                        Spacer()
+                        Text("Max")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var syncedElevenLabsKeyBinding: Binding<String> {
+        Binding(
+            get: { devElevenLabsKey },
+            set: { newValue in
+                devElevenLabsKey = newValue
+                SettingsSyncManager.shared.pushPartialUpdate(
+                    AssistantSettingsResponse(
+                        floatingBar: FloatingBarSettingsResponse(elevenLabsApiKey: newValue)
+                    )
+                )
+            }
+        )
     }
 
     private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
@@ -5248,7 +5412,6 @@ struct SettingsContentView: View {
         transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
         vocabularyList = AssistantSettings.shared.transcriptionVocabulary
         vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-        batchTranscriptionEnabled = AssistantSettings.shared.batchTranscriptionEnabled
 
         Task {
             do {
@@ -5483,7 +5646,7 @@ struct SettingsContentView: View {
     private func completeLocalTestSubscriptionIfNeeded() async {
         guard let expectedPriceId = pendingSubscriptionPriceId else { return }
         let checkoutSessionId = pendingCheckoutSessionId
-        let baseURL = await APIClient.shared.baseURL
+        let baseURL = await APIClient.shared.rustBackendURL
         guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/") else {
             return
         }

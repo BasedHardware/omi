@@ -113,6 +113,30 @@ class TestSplitIntoSentences:
         result = split_into_sentences("Hello! How are you? Fine, thanks.")
         assert len(result) == 3
 
+    def test_chinese_sentence_enders(self):
+        result = split_into_sentences("你好世界。这是测试。再见！")
+        assert len(result) == 3
+
+    def test_chinese_question_mark(self):
+        result = split_into_sentences("你好吗？我很好。")
+        assert len(result) == 2
+
+    def test_hindi_danda(self):
+        result = split_into_sentences("नमस्ते दुनिया। यह एक परीक्षा है।")
+        assert len(result) == 2
+
+    def test_arabic_question_mark(self):
+        result = split_into_sentences("كيف حالك؟ أنا بخير.")
+        assert len(result) == 2
+
+    def test_mixed_english_cjk(self):
+        result = split_into_sentences("Hello world. 你好世界。")
+        assert len(result) == 2
+
+    def test_cjk_no_punctuation(self):
+        result = split_into_sentences("これはテストです")
+        assert len(result) == 1
+
 
 class TestDetectLanguage:
     def setup_method(self):
@@ -521,16 +545,17 @@ class TestTranslateSegmentGuardWired:
         assert 'from utils.translation_cache import' in source
         assert 'should_persist_translation' in source
 
-    def test_transcribe_calls_should_persist_translation_before_translation_creation(self):
-        """Guard must appear before Translation object creation in _translate_segment."""
+    def test_coordinator_calls_should_persist_translation(self):
+        """Guard must exist in translation_coordinator.py (moved from transcribe.py in #6155)."""
+        coordinator_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'translation_coordinator.py')
+        with open(coordinator_path) as f:
+            source = f.read()
+        assert 'should_persist_translation(' in source, "should_persist_translation guard must exist in coordinator"
+        # Verify transcribe.py uses the coordinator
         transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
         with open(transcribe_path) as f:
-            source = f.read()
-        guard_pos = source.find('should_persist_translation(')
-        translation_create_pos = source.find('trans = Translation(lang=translation_language')
-        assert guard_pos > 0, "should_persist_translation call not found in transcribe.py"
-        assert translation_create_pos > 0, "Translation creation not found in transcribe.py"
-        assert guard_pos < translation_create_pos, "Guard must appear before Translation creation"
+            tsource = f.read()
+        assert 'TranslationCoordinator' in tsource, "transcribe.py must use TranslationCoordinator"
 
 
 class TestTranslateSegmentGuardIntegration:

@@ -15,12 +15,21 @@
 		2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */; };
 		29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
-		422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
+		42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
+		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
+		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
-		42BABFB92F2A81B100E78A3C /* PhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */; };
+		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
+		42BABFC12F2A81B100E78A3C /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
+		42BABFC32F2A81B100E78A3C /* OmiCallError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC42F2A81B100E78A3C /* OmiCallError.swift */; };
+		42BABFC52F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
+		42BABFC72F2A81B100E78A3C /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
+		42BABFC92F2A81B100E78A3C /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
+		42BABFCB2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
+		42BABFCD2F2A81B100E78A3C /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
@@ -71,7 +80,6 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -102,14 +110,23 @@
 		42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalExtension.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Extension/OneSignalExtension.xcframework; sourceTree = "<group>"; };
 		42127D9D2C283C400005AB40 /* OneSignalOSCore.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalOSCore.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_OSCore/OneSignalOSCore.xcframework; sourceTree = "<group>"; };
 		42127DA02C283C4E0005AB40 /* OneSignalOutcomes.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalOutcomes.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Outcomes/OneSignalOutcomes.xcframework; sourceTree = "<group>"; };
-		422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlutterCommunicator.g.swift; sourceTree = "<group>"; };
 		42476A832C5E369200426330 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderHostApiImpl.swift; sourceTree = "<group>"; };
 		426B89AC2C46919D00E24442 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
 		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
+		42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleManager.swift; sourceTree = "<group>"; };
+		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
+		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
-		42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneCallsPlugin.swift; sourceTree = "<group>"; };
+		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
+		42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioLock.swift; sourceTree = "<group>"; };
+		42BABFC42F2A81B100E78A3C /* OmiCallError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallError.swift; sourceTree = "<group>"; };
+		42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinatorProtocol.swift; sourceTree = "<group>"; };
+		42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinator.swift; sourceTree = "<group>"; };
+		42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiProximitySensor.swift; sourceTree = "<group>"; };
+		42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiDirectCallCoordinator.swift; sourceTree = "<group>"; };
+		42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRegionCheck.swift; sourceTree = "<group>"; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
 		585D7D8307721A4D6595AA27 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -201,7 +218,6 @@
 				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
 				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
 			);
-			name = BatteryWidget;
 			path = BatteryWidget;
 			sourceTree = "<group>";
 		};
@@ -290,13 +306,30 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
+			isa = PBXGroup;
+			children = (
+				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
+				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
+				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
+				42BABFC42F2A81B100E78A3C /* OmiCallError.swift */,
+				42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */,
+				42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */,
+				42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */,
+				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
+				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
+			);
+			path = PhoneCalls;
+			sourceTree = "<group>";
+		};
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
-				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
-				42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */,
+				42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */,
+				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
+				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
+				42BABFC02F2A81B100E78A3C /* PhoneCalls */,
 				4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */,
-				422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */,
 				5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */,
 				5FCEB2FE2C2758BD00B17EE8 /* RunnerProfile-dev.entitlements */,
 				5FCEB2FD2C2758BA00B17EE8 /* RunnerDebug-dev.entitlements */,
@@ -381,7 +414,6 @@
 			);
 			dependencies = (
 				468E5B26D379E32080A67B11 /* PBXTargetDependency */,
-				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -590,14 +622,23 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				AB12345678901234567890AB /* AppleRemindersService.swift in Sources */,
 				AB12345678901234567890AC /* AppleHealthService.swift in Sources */,
+				42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */,
 				EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */,
-				422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
-				42BABFB92F2A81B100E78A3C /* PhoneCallsPlugin.swift in Sources */,
+				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,
+				42BABFC12F2A81B100E78A3C /* OmiAudioLock.swift in Sources */,
+				42BABFC52F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift in Sources */,
+				42BABFC72F2A81B100E78A3C /* OmiCallCoordinator.swift in Sources */,
+				42BABFC32F2A81B100E78A3C /* OmiCallError.swift in Sources */,
+				42BABFC92F2A81B100E78A3C /* OmiProximitySensor.swift in Sources */,
+				42BABFCB2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift in Sources */,
+				42BABFCD2F2A81B100E78A3C /* OmiRegionCheck.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
+				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -619,11 +660,6 @@
 			name = BatteryWidget;
 			target = 58BC30995C676AAADF2F0F6A /* BatteryWidget */;
 			targetProxy = 96FE7F95A8A9AF1E9D2E5376 /* PBXContainerItemProxy */;
-		};
-		42A7BA3B2E788BD400138969 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
-			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
