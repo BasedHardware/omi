@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign,
@@ -14,7 +14,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import useSWR from "swr";
-import { useAuth } from "@/components/auth-provider";
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 import {
   Bar,
   Line,
@@ -156,14 +156,7 @@ interface ViralMetrics {
 
 // --- Helpers ---
 
-const authFetcher = async ([url, token]: [string, string | null]) => {
-  if (!token) throw new Error("Auth token not available");
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
-};
+const authFetcher = authenticatedFetcher;
 
 const COLORS = {
   mrr: "#6366f1",
@@ -216,15 +209,8 @@ const tooltipStyle = {
 // --- Component ---
 
 export default function AnalyticsPage() {
-  const { user } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
+  const { token } = useAuthToken();
   const [months, setMonths] = useState(12);
-
-  useEffect(() => {
-    if (user) {
-      user.getIdToken().then(setToken).catch(() => setToken(null));
-    }
-  }, [user]);
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
