@@ -2326,7 +2326,12 @@ class AppState: ObservableObject {
         // Adjust word count: subtract old words, add new words
         let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
         totalWordCount += newSeg.text.split(separator: " ").count - oldWords
-        speakerSegments[existingIdx] = newSeg
+        // Preserve existing translations if the backend didn't send new ones
+        var updatedSeg = newSeg
+        if translations.isEmpty && !speakerSegments[existingIdx].translations.isEmpty {
+          updatedSeg.translations = speakerSegments[existingIdx].translations
+        }
+        speakerSegments[existingIdx] = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
@@ -2500,37 +2505,37 @@ class AppState: ObservableObject {
             [TranscriptionService.BackendSegment].self, from: data)
           log("Transcription: Translation event with \(translatedSegments.count) segments")
           for translated in translatedSegments {
-            guard let segId = translated.id,
-              let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
-            else { continue }
+            guard let segId = translated.id else { continue }
             let newTranslations = (translated.translations ?? []).map {
               SegmentTranslation(lang: $0.lang, text: $0.text)
             }
-            if !newTranslations.isEmpty {
-              speakerSegments[idx].translations = newTranslations
+            guard !newTranslations.isEmpty else { continue }
 
-              // Persist translations to SQLite via upsert (handles race where
-              // the initial segment INSERT hasn't completed yet)
-              if let sessionId = currentSessionId {
-                let seg = speakerSegments[idx]
-                let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
-                var translationsJson: String?
-                if let jsonData = try? JSONEncoder().encode(mapped) {
-                  translationsJson = String(data: jsonData, encoding: .utf8)
-                }
-                Task {
-                  try? await TranscriptionStorage.shared.upsertSegment(
-                    sessionId: sessionId,
-                    backendSegmentId: seg.segmentId,
-                    speaker: seg.speaker,
-                    text: seg.text,
-                    startTime: seg.start,
-                    endTime: seg.end,
-                    isUser: seg.isUser,
-                    personId: seg.personId,
-                    translationsJson: translationsJson
-                  )
-                }
+            // Update in-memory if the segment is still loaded
+            if let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId }) {
+              speakerSegments[idx].translations = newTranslations
+            }
+
+            // Always persist to SQLite — even if the segment was trimmed from
+            // the in-memory window, the event payload has all fields needed
+            if let sessionId = currentSessionId {
+              let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+              var translationsJson: String?
+              if let jsonData = try? JSONEncoder().encode(mapped) {
+                translationsJson = String(data: jsonData, encoding: .utf8)
+              }
+              Task {
+                try? await TranscriptionStorage.shared.upsertSegment(
+                  sessionId: sessionId,
+                  backendSegmentId: segId,
+                  speaker: translated.speaker_id ?? 0,
+                  text: translated.text,
+                  startTime: translated.start,
+                  endTime: translated.end,
+                  isUser: translated.is_user,
+                  personId: translated.person_id,
+                  translationsJson: translationsJson
+                )
               }
             }
           }
