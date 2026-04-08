@@ -2149,6 +2149,13 @@ actor RewindDatabase {
             }
         }
 
+        // Migration: Add translations JSON column to transcription_segments
+        migrator.registerMigration("addSegmentTranslations") { db in
+            try db.alter(table: "transcription_segments") { t in
+                t.add(column: "translationsJson", .text)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
