@@ -10730,5 +10730,21 @@
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
     "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
-    "voiceRecordingFound": "Recording found"
+    "voiceRecordingFound": "Recording found",
+    "transcriptionConnecting": "Connecting transcription...",
+    "@transcriptionConnecting": {
+        "description": "Status when transcription WebSocket is connecting"
+    },
+    "transcriptionReconnecting": "Reconnecting transcription...",
+    "@transcriptionReconnecting": {
+        "description": "Status when transcription WebSocket is reconnecting"
+    },
+    "transcriptionUnavailable": "Transcription unavailable",
+    "@transcriptionUnavailable": {
+        "description": "Status when transcription WebSocket failed after max retries"
+    },
+    "audioOutput": "Audio Output",
+    "@audioOutput": {
+        "description": "Title for audio route picker bottom sheet"
+    }
 }

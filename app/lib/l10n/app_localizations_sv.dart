@@ -8991,4 +8991,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Inspelning hittad';
+
+  @override
+  String get transcriptionConnecting => 'Ansluter transkription...';
+
+  @override
+  String get transcriptionReconnecting => 'Återansluter transkription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkription otillgänglig';
+
+  @override
+  String get audioOutput => 'Ljudutgång';
 }

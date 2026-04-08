@@ -2926,5 +2926,9 @@
         }
     },
     "willSyncAutomatically": "se va sincroniza automat",
-    "voiceRecordingFound": "Înregistrare găsită"
+    "voiceRecordingFound": "Înregistrare găsită",
+    "transcriptionConnecting": "Se conectează transcrierea...",
+    "transcriptionReconnecting": "Se reconectează transcrierea...",
+    "transcriptionUnavailable": "Transcriere indisponibilă",
+    "audioOutput": "Ieșire audio"
 }

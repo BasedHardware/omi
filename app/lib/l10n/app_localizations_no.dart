@@ -8982,4 +8982,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Opptak funnet';
+
+  @override
+  String get transcriptionConnecting => 'Kobler til transkripsjon...';
+
+  @override
+  String get transcriptionReconnecting => 'Kobler til transkripsjon på nytt...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsjon utilgjengelig';
+
+  @override
+  String get audioOutput => 'Lydutgang';
 }

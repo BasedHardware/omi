@@ -2948,5 +2948,9 @@
         }
     },
     "willSyncAutomatically": "将自动同步",
-    "voiceRecordingFound": "找到录音"
+    "voiceRecordingFound": "找到录音",
+    "transcriptionConnecting": "正在连接转录...",
+    "transcriptionReconnecting": "正在重新连接转录...",
+    "transcriptionUnavailable": "转录不可用",
+    "audioOutput": "音频输出"
 }

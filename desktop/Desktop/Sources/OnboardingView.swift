@@ -406,6 +406,10 @@ struct OnboardingView: View {
             AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources")
             currentStep = 16
           },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources_Skipped")
+            currentStep = 16
+          },
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 16 {

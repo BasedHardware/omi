@@ -9000,4 +9000,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Запис знайдено';
+
+  @override
+  String get transcriptionConnecting => 'Підключення транскрипції...';
+
+  @override
+  String get transcriptionReconnecting => 'Повторне підключення транскрипції...';
+
+  @override
+  String get transcriptionUnavailable => 'Транскрипція недоступна';
+
+  @override
+  String get audioOutput => 'Аудіовихід';
 }

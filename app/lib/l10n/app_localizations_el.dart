@@ -9051,4 +9051,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Βρέθηκε εγγραφή';
+
+  @override
+  String get transcriptionConnecting => 'Σύνδεση μεταγραφής...';
+
+  @override
+  String get transcriptionReconnecting => 'Επανασύνδεση μεταγραφής...';
+
+  @override
+  String get transcriptionUnavailable => 'Η μεταγραφή δεν είναι διαθέσιμη';
+
+  @override
+  String get audioOutput => 'Έξοδος ήχου';
 }

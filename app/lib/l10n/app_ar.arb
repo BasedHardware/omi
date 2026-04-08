@@ -2893,5 +2893,9 @@
         }
     },
     "willSyncAutomatically": "ستتم المزامنة تلقائيًا",
-    "voiceRecordingFound": "تسجيل موجود"
+    "voiceRecordingFound": "تسجيل موجود",
+    "transcriptionConnecting": "جاري الاتصال بالنسخ...",
+    "transcriptionReconnecting": "إعادة الاتصال بالنسخ...",
+    "transcriptionUnavailable": "النسخ غير متاح",
+    "audioOutput": "مخرج الصوت"
 }

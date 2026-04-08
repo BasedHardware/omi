@@ -16772,6 +16772,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording found'**
   String get voiceRecordingFound;
+
+  /// Status when transcription WebSocket is connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting transcription...'**
+  String get transcriptionConnecting;
+
+  /// Status when transcription WebSocket is reconnecting
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting transcription...'**
+  String get transcriptionReconnecting;
+
+  /// Status when transcription WebSocket failed after max retries
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable'**
+  String get transcriptionUnavailable;
+
+  /// Title for audio route picker bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Output'**
+  String get audioOutput;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

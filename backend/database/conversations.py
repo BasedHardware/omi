@@ -220,6 +220,16 @@ def get_conversations(
     return conversations
 
 
+def get_conversations_count(uid: str, include_discarded: bool = False, statuses: List[str] = []):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if statuses:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    result = conversations_ref.count().get()
+    return int(result[0][0].value)
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,

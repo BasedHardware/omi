@@ -2926,5 +2926,9 @@
         }
     },
     "willSyncAutomatically": "sünkroniseeritakse automaatselt",
-    "voiceRecordingFound": "Salvestis leitud"
+    "voiceRecordingFound": "Salvestis leitud",
+    "transcriptionConnecting": "Transkriptsiooni ühendamine...",
+    "transcriptionReconnecting": "Transkriptsiooni uuesti ühendamine...",
+    "transcriptionUnavailable": "Transkriptsioon pole saadaval",
+    "audioOutput": "Heliväljund"
 }

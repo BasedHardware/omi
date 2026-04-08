@@ -8837,4 +8837,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => '録音が見つかりました';
+
+  @override
+  String get transcriptionConnecting => '文字起こしに接続中...';
+
+  @override
+  String get transcriptionReconnecting => '文字起こしに再接続中...';
+
+  @override
+  String get transcriptionUnavailable => '文字起こしは利用できません';
+
+  @override
+  String get audioOutput => 'オーディオ出力';
 }

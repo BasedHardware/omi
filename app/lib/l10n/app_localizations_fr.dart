@@ -9067,4 +9067,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Enregistrement trouvé';
+
+  @override
+  String get transcriptionConnecting => 'Connexion de la transcription...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconnexion de la transcription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcription indisponible';
+
+  @override
+  String get audioOutput => 'Sortie audio';
 }

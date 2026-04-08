@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const typesenseUrl = `https://${TYPESENSE_HOST}/collections/${COLLECTION_NAME}`;
+  const typesenseUrl = TYPESENSE_HOST!.startsWith('https://') || TYPESENSE_HOST!.startsWith('http://')
+    ? `${TYPESENSE_HOST}/collections/${COLLECTION_NAME}`
+    : `https://${TYPESENSE_HOST}/collections/${COLLECTION_NAME}`;
 
   try {
     const response = await fetch(typesenseUrl, {

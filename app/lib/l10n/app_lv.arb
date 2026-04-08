@@ -2926,5 +2926,9 @@
         }
     },
     "willSyncAutomatically": "tiks sinhronizēts automātiski",
-    "voiceRecordingFound": "Ieraksts atrasts"
+    "voiceRecordingFound": "Ieraksts atrasts",
+    "transcriptionConnecting": "Savienošanās ar transkripciju...",
+    "transcriptionReconnecting": "Atkārtota savienošanās ar transkripciju...",
+    "transcriptionUnavailable": "Transkripcija nav pieejama",
+    "audioOutput": "Audio izvade"
 }

@@ -8983,4 +8983,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Recording found';
+
+  @override
+  String get transcriptionConnecting => 'Connecting transcription...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconnecting transcription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcription unavailable';
+
+  @override
+  String get audioOutput => 'Audio Output';
 }

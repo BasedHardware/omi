@@ -9004,4 +9004,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Ieraksts atrasts';
+
+  @override
+  String get transcriptionConnecting => 'Savienošanās ar transkripciju...';
+
+  @override
+  String get transcriptionReconnecting => 'Atkārtota savienošanās ar transkripciju...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripcija nav pieejama';
+
+  @override
+  String get audioOutput => 'Audio izvade';
 }

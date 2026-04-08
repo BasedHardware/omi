@@ -216,7 +216,7 @@ def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=100),
     include_reviews: bool = Query(default=False),
 ):
     """Public omi apps, paginated by capability groups.

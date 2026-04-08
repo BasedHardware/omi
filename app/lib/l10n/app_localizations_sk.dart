@@ -8974,4 +8974,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Nahrávka nájdená';
+
+  @override
+  String get transcriptionConnecting => 'Pripájanie prepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opätovné pripájanie prepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Prepis nie je dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
 }

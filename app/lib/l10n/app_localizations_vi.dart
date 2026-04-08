@@ -8988,4 +8988,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Đã tìm thấy bản ghi';
+
+  @override
+  String get transcriptionConnecting => 'Đang kết nối phiên âm...';
+
+  @override
+  String get transcriptionReconnecting => 'Đang kết nối lại phiên âm...';
+
+  @override
+  String get transcriptionUnavailable => 'Phiên âm không khả dụng';
+
+  @override
+  String get audioOutput => 'Đầu ra âm thanh';
 }

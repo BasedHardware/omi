@@ -9025,4 +9025,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Felvétel találva';
+
+  @override
+  String get transcriptionConnecting => 'Átírás csatlakoztatása...';
+
+  @override
+  String get transcriptionReconnecting => 'Átírás újracsatlakoztatása...';
+
+  @override
+  String get transcriptionUnavailable => 'Átírás nem elérhető';
+
+  @override
+  String get audioOutput => 'Hangkimenet';
 }

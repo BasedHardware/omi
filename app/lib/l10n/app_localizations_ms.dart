@@ -9011,4 +9011,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Rakaman ditemui';
+
+  @override
+  String get transcriptionConnecting => 'Menyambung transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menyambung semula transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
 }

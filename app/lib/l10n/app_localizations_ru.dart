@@ -9015,4 +9015,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Запись найдена';
+
+  @override
+  String get transcriptionConnecting => 'Подключение транскрипции...';
+
+  @override
+  String get transcriptionReconnecting => 'Повторное подключение транскрипции...';
+
+  @override
+  String get transcriptionUnavailable => 'Транскрипция недоступна';
+
+  @override
+  String get audioOutput => 'Аудиовыход';
 }

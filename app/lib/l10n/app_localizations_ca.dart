@@ -9038,4 +9038,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Gravació trobada';
+
+  @override
+  String get transcriptionConnecting => 'Connectant la transcripció...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconnectant la transcripció...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcripció no disponible';
+
+  @override
+  String get audioOutput => 'Sortida d\'àudio';
 }

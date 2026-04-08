@@ -2926,5 +2926,9 @@
         }
     },
     "willSyncAutomatically": "буде синхронізовано автоматично",
-    "voiceRecordingFound": "Запис знайдено"
+    "voiceRecordingFound": "Запис знайдено",
+    "transcriptionConnecting": "Підключення транскрипції...",
+    "transcriptionReconnecting": "Повторне підключення транскрипції...",
+    "transcriptionUnavailable": "Транскрипція недоступна",
+    "audioOutput": "Аудіовихід"
 }

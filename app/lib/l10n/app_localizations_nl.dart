@@ -9015,4 +9015,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Opname gevonden';
+
+  @override
+  String get transcriptionConnecting => 'Transcriptie verbinden...';
+
+  @override
+  String get transcriptionReconnecting => 'Transcriptie opnieuw verbinden...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcriptie niet beschikbaar';
+
+  @override
+  String get audioOutput => 'Audio-uitvoer';
 }

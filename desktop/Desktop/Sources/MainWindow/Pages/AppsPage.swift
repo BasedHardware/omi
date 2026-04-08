@@ -301,6 +301,12 @@ struct AppsPage: View {
             if !appProvider.isLoading {
                 NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
             }
+            // Retry fetch if initial load failed and apps are empty
+            if appProvider.apps.isEmpty && !appProvider.isLoading {
+                Task {
+                    await appProvider.fetchApps()
+                }
+            }
         }
         .task {
             await connectorStatusStore.refresh()

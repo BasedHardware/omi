@@ -8986,4 +8986,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Tallenne löytyi';
+
+  @override
+  String get transcriptionConnecting => 'Yhdistetään litterointia...';
+
+  @override
+  String get transcriptionReconnecting => 'Yhdistetään litterointia uudelleen...';
+
+  @override
+  String get transcriptionUnavailable => 'Litterointi ei ole käytettävissä';
+
+  @override
+  String get audioOutput => 'Äänilähtö';
 }

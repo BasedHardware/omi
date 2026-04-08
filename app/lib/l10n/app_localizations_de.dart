@@ -9062,4 +9062,16 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Aufnahme gefunden';
+
+  @override
+  String get transcriptionConnecting => 'Transkription wird verbunden...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkription wird wiederverbunden...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkription nicht verfügbar';
+
+  @override
+  String get audioOutput => 'Audioausgabe';
 }

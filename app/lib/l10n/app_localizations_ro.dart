@@ -9029,4 +9029,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Înregistrare găsită';
+
+  @override
+  String get transcriptionConnecting => 'Se conectează transcrierea...';
+
+  @override
+  String get transcriptionReconnecting => 'Se reconectează transcrierea...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcriere indisponibilă';
+
+  @override
+  String get audioOutput => 'Ieșire audio';
 }

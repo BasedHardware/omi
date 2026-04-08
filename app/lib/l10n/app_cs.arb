@@ -2895,5 +2895,9 @@
         }
     },
     "willSyncAutomatically": "synchronizuje se automaticky",
-    "voiceRecordingFound": "Nalezena nahrávka"
+    "voiceRecordingFound": "Nalezena nahrávka",
+    "transcriptionConnecting": "Připojování přepisu...",
+    "transcriptionReconnecting": "Opětovné připojování přepisu...",
+    "transcriptionUnavailable": "Přepis není dostupný",
+    "audioOutput": "Zvukový výstup"
 }

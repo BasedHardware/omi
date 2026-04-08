@@ -9040,4 +9040,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Registrazione trovata';
+
+  @override
+  String get transcriptionConnecting => 'Connessione trascrizione...';
+
+  @override
+  String get transcriptionReconnecting => 'Riconnessione trascrizione...';
+
+  @override
+  String get transcriptionUnavailable => 'Trascrizione non disponibile';
+
+  @override
+  String get audioOutput => 'Uscita audio';
 }

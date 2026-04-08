@@ -2961,5 +2961,9 @@
         }
     },
     "willSyncAutomatically": "otomatik olarak senkronize edilecek",
-    "voiceRecordingFound": "Kayıt bulundu"
+    "voiceRecordingFound": "Kayıt bulundu",
+    "transcriptionConnecting": "Transkripsiyon bağlanıyor...",
+    "transcriptionReconnecting": "Transkripsiyon yeniden bağlanıyor...",
+    "transcriptionUnavailable": "Transkripsiyon kullanılamıyor",
+    "audioOutput": "Ses çıkışı"
 }

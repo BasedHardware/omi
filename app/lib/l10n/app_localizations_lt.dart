@@ -8994,4 +8994,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Rastas įrašas';
+
+  @override
+  String get transcriptionConnecting => 'Jungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionReconnecting => 'Perjungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripcija nepasiekiama';
+
+  @override
+  String get audioOutput => 'Garso išvestis';
 }

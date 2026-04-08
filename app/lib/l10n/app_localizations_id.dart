@@ -8997,4 +8997,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Rekaman ditemukan';
+
+  @override
+  String get transcriptionConnecting => 'Menghubungkan transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menghubungkan ulang transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
 }

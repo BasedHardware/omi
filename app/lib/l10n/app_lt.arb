@@ -2926,5 +2926,9 @@
         }
     },
     "willSyncAutomatically": "bus sinchronizuota automatiškai",
-    "voiceRecordingFound": "Rastas įrašas"
+    "voiceRecordingFound": "Rastas įrašas",
+    "transcriptionConnecting": "Jungiamasi prie transkripcijos...",
+    "transcriptionReconnecting": "Perjungiamasi prie transkripcijos...",
+    "transcriptionUnavailable": "Transkripcija nepasiekiama",
+    "audioOutput": "Garso išvestis"
 }

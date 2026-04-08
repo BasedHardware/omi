@@ -8984,4 +8984,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get voiceRecordingFound => 'Salvestis leitud';
+
+  @override
+  String get transcriptionConnecting => 'Transkriptsiooni ühendamine...';
+
+  @override
+  String get transcriptionReconnecting => 'Transkriptsiooni uuesti ühendamine...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkriptsioon pole saadaval';
+
+  @override
+  String get audioOutput => 'Heliväljund';
 }
