@@ -282,6 +282,17 @@ class TestParseIsoDate:
         with pytest.raises(ValueError):
             conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00 ", "test")
 
+    def test_percent_encoded_2B_decoded(self):
+        """Proxy/CDN may double-encode %2B→%252B; server decodes once to %2B.
+        parse_iso_date should URL-decode %2B back to +."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00%2B07:00", "test")
+        assert dt.utcoffset().total_seconds() == 7 * 3600
+
+    def test_percent_encoded_2B_negative(self):
+        """URL-encoded negative offset %2D should also decode properly (though unlikely in practice)."""
+        dt = conversations_svc.parse_iso_date("2026-02-01T00:00:00-07:00", "test")
+        assert dt.utcoffset().total_seconds() == -7 * 3600
+
     def test_source_has_encodeQueryDate(self):
         """Verify desktop APIClient.swift uses encodeQueryDate for date params.
         Regression guard: if encodeQueryDate is removed, this test fails."""
