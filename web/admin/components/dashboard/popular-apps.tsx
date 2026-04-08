@@ -9,12 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AddPopularAppDialog } from "./add-popular-app-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth-provider";
+import { useAuthFetch } from "@/hooks/useAuthToken";
 import { useState } from "react";
 
 export function PopularApps() {
   const { apps: allApps, isLoading, error, mutate } = useApps();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { fetchWithAuth } = useAuthFetch();
   const [removingAppId, setRemovingAppId] = useState<string | null>(null);
 
   const popularApps = allApps?.filter((app) => app.is_popular === true) || [];
@@ -33,16 +35,9 @@ export function PopularApps() {
 
     setRemovingAppId(app.id);
     try {
-      // Get the user's ID token
-      const idToken = await user.getIdToken();
-      
       // Call the API endpoint to remove app from popular
-      const response = await fetch(`/api/omi/apps/${app.id}/popular`, {
+      const response = await fetchWithAuth(`/api/omi/apps/${app.id}/popular`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
         body: JSON.stringify({ value: false }),
       });
 
