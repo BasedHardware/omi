@@ -136,7 +136,7 @@ def generate_test_audio(volume_db: float = 0.0, noise_db: float = -999.0) -> Tup
 async def get_ground_truth(wav_data: bytes) -> str:
     """Send full audio to DG prerecorded API as ground truth."""
     print("Getting ground truth from DG prerecorded API...")
-    url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=en"
+    url = "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en"
     headers = {
         "Authorization": f"Token {DG_API_KEY}",
         "Content-Type": "audio/wav",
@@ -188,7 +188,7 @@ async def stream_gated_audio(pcm_data: bytes, threshold: float) -> Tuple[str, di
     wav_data = wav_buf.getvalue()
 
     # Send gated audio to DG prerecorded for transcription
-    url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=en"
+    url = "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en"
     headers = {
         "Authorization": f"Token {DG_API_KEY}",
         "Content-Type": "audio/wav",
