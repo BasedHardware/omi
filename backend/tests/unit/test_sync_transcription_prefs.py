@@ -596,6 +596,13 @@ class TestGetDeepgramModelForLanguage:
         assert lang == 'ta'
         assert model == 'nova-3'
 
+    def test_unsupported_language_falls_back_to_multi(self):
+        from utils.stt.pre_recorded import get_deepgram_model_for_language
+
+        lang, model = get_deepgram_model_for_language('xx-INVALID')
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
 
 # ---------------------------------------------------------------------------
 # Speaker identification for sync path
