@@ -2970,7 +2970,7 @@ extension Notification.Name {
   /// Posted when Focus page finishes loading initial data
   static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
   /// Posted when Advice page finishes loading initial data
-  static let advicePageDidLoad = Notification.Name("advicePageDidLoad")
+  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService

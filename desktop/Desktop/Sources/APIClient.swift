@@ -3914,7 +3914,7 @@ struct TaskSettingsResponse: Codable {
     }
 }
 
-struct AdviceSettingsResponse: Codable {
+struct InsightSettingsResponse: Codable {
     var enabled: Bool?
     var analysisPrompt: String?
     var extractionInterval: Double?
@@ -3966,13 +3966,13 @@ struct AssistantSettingsResponse: Codable {
     var shared: SharedAssistantSettingsResponse?
     var focus: FocusSettingsResponse?
     var task: TaskSettingsResponse?
-    var advice: AdviceSettingsResponse?
+    var insight: InsightSettingsResponse?
     var memory: MemorySettingsResponse?
     var floatingBar: FloatingBarSettingsResponse?
     var updateChannel: String?
 
     enum CodingKeys: String, CodingKey {
-        case shared, focus, task, advice, memory
+        case shared, focus, task, insight = "advice", memory
         case floatingBar = "floating_bar"
         case updateChannel = "update_channel"
     }
@@ -4011,17 +4011,17 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice API
+// MARK: - Insight API
 
 extension APIClient {
 
-    /// Fetches advice history from the backend
-    func getAdvice(
+    /// Fetches insight history from the backend
+    func getInsights(
         limit: Int = 100,
         offset: Int = 0,
         category: String? = nil,
         includeDismissed: Bool = false
-    ) async throws -> [ServerAdvice] {
+    ) async throws -> [ServerInsight] {
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)",
@@ -4036,13 +4036,13 @@ extension APIClient {
         return try await get(endpoint)
     }
 
-    /// Creates a new advice entry
-    func createAdvice(_ request: CreateAdviceRequest) async throws -> ServerAdvice {
+    /// Creates a new insight entry
+    func createInsight(_ request: CreateInsightRequest) async throws -> ServerInsight {
         return try await post("v1/advice", body: request)
     }
 
-    /// Updates advice (mark as read/dismissed)
-    func updateAdvice(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerAdvice {
+    /// Updates insight (mark as read/dismissed)
+    func updateInsight(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerInsight {
         struct UpdateRequest: Encodable {
             let is_read: Bool?
             let is_dismissed: Bool?
@@ -4051,13 +4051,13 @@ extension APIClient {
         return try await patch("v1/advice/\(id)", body: body)
     }
 
-    /// Deletes advice permanently
-    func deleteAdvice(id: String) async throws {
+    /// Deletes insight permanently
+    func deleteInsight(id: String) async throws {
         try await delete("v1/advice/\(id)")
     }
 
-    /// Marks all advice as read
-    func markAllAdviceAsRead() async throws {
+    /// Marks all insights as read
+    func markAllInsightsAsRead() async throws {
         struct StatusResponse: Decodable {
             let status: String
         }
@@ -4065,13 +4065,13 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice Models
+// MARK: - Insight Models
 
-/// Server advice model matching Rust AdviceDB
-struct ServerAdvice: Codable, Identifiable {
+/// Server insight model matching Rust InsightDB
+struct ServerInsight: Codable, Identifiable {
     let id: String
     let content: String
-    let category: ServerAdviceCategory
+    let category: ServerInsightCategory
     let reasoning: String?
     let sourceApp: String?
     let confidence: Double
@@ -4097,7 +4097,7 @@ struct ServerAdvice: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        category = try container.decodeIfPresent(ServerAdviceCategory.self, forKey: .category) ?? .other
+        category = try container.decodeIfPresent(ServerInsightCategory.self, forKey: .category) ?? .other
         reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
         sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
         confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
@@ -4110,16 +4110,16 @@ struct ServerAdvice: Codable, Identifiable {
     }
 }
 
-/// Server advice category enum matching Rust AdviceCategory
-enum ServerAdviceCategory: String, Codable {
+/// Server advice category enum matching Rust InsightCategory
+enum ServerInsightCategory: String, Codable {
     case productivity
     case health
     case communication
     case learning
     case other
 
-    /// Convert to local AdviceCategory
-    var toLocal: AdviceCategory {
+    /// Convert to local InsightCategory
+    var toLocal: InsightCategory {
         switch self {
         case .productivity: return .productivity
         case .health: return .health
@@ -4130,8 +4130,8 @@ enum ServerAdviceCategory: String, Codable {
     }
 }
 
-/// Request to create new advice
-struct CreateAdviceRequest: Encodable {
+/// Request to create new insight
+struct CreateInsightRequest: Encodable {
     let content: String
     let category: String?
     let reasoning: String?
@@ -4142,7 +4142,7 @@ struct CreateAdviceRequest: Encodable {
 
     init(
         content: String,
-        category: AdviceCategory? = nil,
+        category: InsightCategory? = nil,
         reasoning: String? = nil,
         sourceApp: String? = nil,
         confidence: Double? = nil,

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Manages Advice Assistant-specific settings stored in UserDefaults
+/// Manages Insight Assistant-specific settings stored in UserDefaults
 @MainActor
-class AdviceAssistantSettings {
-    static let shared = AdviceAssistantSettings()
+class InsightAssistantSettings {
+    static let shared = InsightAssistantSettings()
 
     // MARK: - UserDefaults Keys
 
@@ -21,7 +21,7 @@ class AdviceAssistantSettings {
     private let defaultMinConfidence: Double = 0.85 // High threshold - only show when very confident
     private let defaultNotificationsEnabled = true
 
-    /// Default system prompt for advice extraction
+    /// Default system prompt for insight extraction
     static let defaultAnalysisPrompt = """
         You analyze screenshots to find ONE specific, high-value insight the user would NOT figure out on their own. The goal is to IMPRESS the user — make them think "wow, I'm glad I have this."
 
@@ -119,23 +119,23 @@ class AdviceAssistantSettings {
         }
     }
 
-    /// The system prompt used for AI advice extraction
+    /// The system prompt used for AI insight extraction
     var analysisPrompt: String {
         get {
             let value = UserDefaults.standard.string(forKey: analysisPromptKey)
-            return value ?? AdviceAssistantSettings.defaultAnalysisPrompt
+            return value ?? InsightAssistantSettings.defaultAnalysisPrompt
         }
         set {
-            let isCustom = newValue != AdviceAssistantSettings.defaultAnalysisPrompt
+            let isCustom = newValue != InsightAssistantSettings.defaultAnalysisPrompt
             UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
             let previewLength = min(newValue.count, 50)
             let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
-            log("Advice analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
+            log("Insight analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
             NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
         }
     }
 
-    /// Interval between advice extraction analyses in seconds
+    /// Interval between insight extraction analyses in seconds
     var extractionInterval: TimeInterval {
         get {
             let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
@@ -143,7 +143,7 @@ class AdviceAssistantSettings {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-            log("Advice extraction interval updated to \(newValue) seconds")
+            log("Insight extraction interval updated to \(newValue) seconds")
             NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
         }
     }
@@ -170,7 +170,7 @@ class AdviceAssistantSettings {
         }
     }
 
-    /// Apps excluded from advice extraction (user's custom list, on top of the shared built-in list)
+    /// Apps excluded from insight extraction (user's custom list, on top of the shared built-in list)
     var excludedApps: Set<String> {
         get {
             if let saved = UserDefaults.standard.array(forKey: excludedAppsKey) as? [String] {
@@ -184,31 +184,31 @@ class AdviceAssistantSettings {
         }
     }
 
-    /// Check if an app is excluded from advice extraction (built-in list + user's custom list)
+    /// Check if an app is excluded from insight extraction (built-in list + user's custom list)
     func isAppExcluded(_ appName: String) -> Bool {
         TaskAssistantSettings.builtInExcludedApps.contains(appName) || excludedApps.contains(appName)
     }
 
-    /// Add an app to the advice extraction exclusion list
+    /// Add an app to the insight extraction exclusion list
     func excludeApp(_ appName: String) {
         var apps = excludedApps
         apps.insert(appName)
         excludedApps = apps
-        log("Advice: Excluded app '\(appName)' from advice extraction")
+        log("Insight: Excluded app '\(appName)' from insight extraction")
     }
 
-    /// Remove an app from the advice extraction exclusion list
+    /// Remove an app from the insight extraction exclusion list
     func includeApp(_ appName: String) {
         var apps = excludedApps
         apps.remove(appName)
         excludedApps = apps
-        log("Advice: Included app '\(appName)' for advice extraction")
+        log("Insight: Included app '\(appName)' for insight extraction")
     }
 
     /// Reset only the analysis prompt to default
     func resetPromptToDefault() {
         UserDefaults.standard.removeObject(forKey: analysisPromptKey)
-        log("Advice analysis prompt reset to default")
+        log("Insight analysis prompt reset to default")
         NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
 
