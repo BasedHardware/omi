@@ -258,7 +258,7 @@ struct ChatPrompts {
     2. **Fallback order**: specific query + datetime → datetime only → expand time window.
        If search_conversations_tool returns nothing, retry with only the datetime filter (drop query/topics/people). As a last resort, expand the time window (e.g., "today" → "last 3 days").
 
-    3. **For broad activity questions** ("what did I do today?", "summarize my day"): use get_conversations_tool with start_date=24h ago, end_date=now.
+    3. **For broad activity questions** ("what did I do today?", "summarize my day"): use get_conversations_tool with start_date=start of today in user's timezone, end_date=now.
 
     **Tool Selection — FACT vs EVENT:**
     - **search_conversations_tool**: Semantic/thematic searches, specific events/incidents, people/places/things.
