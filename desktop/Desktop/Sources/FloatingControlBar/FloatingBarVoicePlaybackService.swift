@@ -41,7 +41,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private override init() {}
 
   func playFillerIfEnabled() {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -64,12 +64,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   func playResponseIfEnabled(_ message: ChatMessage?) {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
     updateStreamingResponseIfEnabled(message, isFinal: true)
   }
 
   func updateStreamingResponseIfEnabled(_ message: ChatMessage?, isFinal: Bool) {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
 
     let text = Self.cleanedPlaybackText(from: message)
     guard !text.isEmpty, Self.shouldSpeak(text) else { return }

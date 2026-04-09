@@ -1390,7 +1390,9 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
-        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
         if shouldPlayVoice {
             FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
         }
