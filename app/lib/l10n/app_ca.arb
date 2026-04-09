@@ -2899,5 +2899,7 @@
     "transcriptionConnecting": "Connectant la transcripció...",
     "transcriptionReconnecting": "Reconnectant la transcripció...",
     "transcriptionUnavailable": "Transcripció no disponible",
-    "audioOutput": "Sortida d'àudio"
+    "audioOutput": "Sortida d'àudio",
+    "enableLocationTitle": "Activa la ubicació",
+    "enableLocationDescription": "Es necessita el permís d'ubicació per trobar dispositius Bluetooth propers."
 }

@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Savienošanās ar transkripciju...",
     "transcriptionReconnecting": "Atkārtota savienošanās ar transkripciju...",
     "transcriptionUnavailable": "Transkripcija nav pieejama",
-    "audioOutput": "Audio izvade"
+    "audioOutput": "Audio izvade",
+    "enableLocationTitle": "Iespējot atrašanās vietu",
+    "enableLocationDescription": "Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces."
 }

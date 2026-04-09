@@ -9060,10 +9060,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get willSyncAutomatically => 'sera synchronisé automatiquement';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activer la localisation';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'L\'autorisation de localisation est nécessaire pour trouver les appareils Bluetooth à proximité.';
 
   @override
   String get voiceRecordingFound => 'Enregistrement trouvé';

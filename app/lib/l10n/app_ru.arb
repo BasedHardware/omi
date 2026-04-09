@@ -2965,5 +2965,7 @@
     "transcriptionConnecting": "Подключение транскрипции...",
     "transcriptionReconnecting": "Повторное подключение транскрипции...",
     "transcriptionUnavailable": "Транскрипция недоступна",
-    "audioOutput": "Аудиовыход"
+    "audioOutput": "Аудиовыход",
+    "enableLocationTitle": "Включить местоположение",
+    "enableLocationDescription": "Разрешение на определение местоположения необходимо для поиска ближайших Bluetooth-устройств."
 }

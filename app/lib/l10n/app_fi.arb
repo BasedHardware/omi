@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Yhdistetään litterointia...",
     "transcriptionReconnecting": "Yhdistetään litterointia uudelleen...",
     "transcriptionUnavailable": "Litterointi ei ole käytettävissä",
-    "audioOutput": "Äänilähtö"
+    "audioOutput": "Äänilähtö",
+    "enableLocationTitle": "Ota sijainti käyttöön",
+    "enableLocationDescription": "Sijaintilupa tarvitaan lähellä olevien Bluetooth-laitteiden löytämiseen."
 }

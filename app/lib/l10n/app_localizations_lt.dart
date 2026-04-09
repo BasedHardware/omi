@@ -8987,10 +8987,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Įjungti vietą';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Vietos leidimas reikalingas norint rasti netoliese esančius Bluetooth įrenginius.';
 
   @override
   String get voiceRecordingFound => 'Rastas įrašas';

@@ -9018,10 +9018,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get willSyncAutomatically => 'automatikusan szinkronizálódik';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Helymeghatározás engedélyezése';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'A helymeghatározási engedély szükséges a közeli Bluetooth-eszközök megtalálásához.';
 
   @override
   String get voiceRecordingFound => 'Felvétel találva';

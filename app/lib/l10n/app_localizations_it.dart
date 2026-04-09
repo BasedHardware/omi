@@ -9033,10 +9033,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get willSyncAutomatically => 'verrà sincronizzato automaticamente';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Attiva posizione';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'L\'autorizzazione alla posizione è necessaria per trovare i dispositivi Bluetooth nelle vicinanze.';
 
   @override
   String get voiceRecordingFound => 'Registrazione trovata';

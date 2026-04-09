@@ -8993,10 +8993,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get willSyncAutomatically => 'буде синхронізовано автоматично';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Увімкнути місцезнаходження';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Дозвіл на визначення місцезнаходження потрібен для пошуку пристроїв Bluetooth поблизу.';
 
   @override
   String get voiceRecordingFound => 'Запис знайдено';

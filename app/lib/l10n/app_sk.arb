@@ -2935,5 +2935,7 @@
     "transcriptionConnecting": "Pripájanie prepisu...",
     "transcriptionReconnecting": "Opätovné pripájanie prepisu...",
     "transcriptionUnavailable": "Prepis nie je dostupný",
-    "audioOutput": "Zvukový výstup"
+    "audioOutput": "Zvukový výstup",
+    "enableLocationTitle": "Povoliť polohu",
+    "enableLocationDescription": "Na nájdenie blízkych Bluetooth zariadení je potrebné povolenie polohy."
 }

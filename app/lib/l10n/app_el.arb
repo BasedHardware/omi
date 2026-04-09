@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Σύνδεση μεταγραφής...",
     "transcriptionReconnecting": "Επανασύνδεση μεταγραφής...",
     "transcriptionUnavailable": "Η μεταγραφή δεν είναι διαθέσιμη",
-    "audioOutput": "Έξοδος ήχου"
+    "audioOutput": "Έξοδος ήχου",
+    "enableLocationTitle": "Ενεργοποίηση τοποθεσίας",
+    "enableLocationDescription": "Απαιτείται άδεια τοποθεσίας για την εύρεση κοντινών συσκευών Bluetooth."
 }

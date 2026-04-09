@@ -9055,10 +9055,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get willSyncAutomatically => 'wird automatisch synchronisiert';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Standort aktivieren';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Standortberechtigung wird benötigt, um Bluetooth-Geräte in der Nähe zu finden.';
 
   @override
   String get voiceRecordingFound => 'Aufnahme gefunden';

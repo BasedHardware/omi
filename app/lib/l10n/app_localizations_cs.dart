@@ -8976,10 +8976,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get willSyncAutomatically => 'synchronizuje se automaticky';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Povolit polohu';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Oprávnění k poloze je potřebné pro nalezení blízkých Bluetooth zařízení.';
 
   @override
   String get voiceRecordingFound => 'Nalezena nahrávka';

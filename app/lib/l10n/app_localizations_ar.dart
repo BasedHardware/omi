@@ -8919,10 +8919,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get willSyncAutomatically => 'ستتم المزامنة تلقائيًا';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'تفعيل الموقع';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'إذن الموقع مطلوب للعثور على أجهزة بلوتوث القريبة.';
 
   @override
   String get voiceRecordingFound => 'تسجيل موجود';

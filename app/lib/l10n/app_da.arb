@@ -2939,5 +2939,7 @@
     "transcriptionConnecting": "Forbinder transskription...",
     "transcriptionReconnecting": "Genopretter transskription...",
     "transcriptionUnavailable": "Transskription ikke tilgængelig",
-    "audioOutput": "Lydudgang"
+    "audioOutput": "Lydudgang",
+    "enableLocationTitle": "Aktivér placering",
+    "enableLocationDescription": "Placeringstilladelse er nødvendig for at finde Bluetooth-enheder i nærheden."
 }

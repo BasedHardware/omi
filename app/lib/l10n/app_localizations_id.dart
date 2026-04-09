@@ -8990,10 +8990,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get willSyncAutomatically => 'akan disinkronkan secara otomatis';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktifkan Lokasi';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di dekatnya.';
 
   @override
   String get voiceRecordingFound => 'Rekaman ditemukan';

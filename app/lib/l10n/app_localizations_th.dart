@@ -8934,10 +8934,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'เปิดใช้งานตำแหน่ง';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'จำเป็นต้องได้รับอนุญาตตำแหน่งเพื่อค้นหาอุปกรณ์ Bluetooth ที่อยู่ใกล้เคียง';
 
   @override
   String get voiceRecordingFound => 'พบการบันทึก';

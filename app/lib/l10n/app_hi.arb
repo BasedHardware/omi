@@ -2931,5 +2931,7 @@
     "transcriptionConnecting": "ट्रांसक्रिप्शन कनेक्ट हो रहा है...",
     "transcriptionReconnecting": "ट्रांसक्रिप्शन फिर से कनेक्ट हो रहा है...",
     "transcriptionUnavailable": "ट्रांसक्रिप्शन उपलब्ध नहीं है",
-    "audioOutput": "ऑडियो आउटपुट"
+    "audioOutput": "ऑडियो आउटपुट",
+    "enableLocationTitle": "स्थान सक्षम करें",
+    "enableLocationDescription": "पास के ब्लूटूथ डिवाइस खोजने के लिए स्थान अनुमति आवश्यक है।"
 }

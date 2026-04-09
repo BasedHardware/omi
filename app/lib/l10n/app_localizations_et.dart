@@ -8977,10 +8977,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Luba asukoht';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Asukoha luba on vajalik läheduses olevate Bluetooth-seadmete leidmiseks.';
 
   @override
   String get voiceRecordingFound => 'Salvestis leitud';

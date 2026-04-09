@@ -8981,10 +8981,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get willSyncAutomatically => 'sẽ tự động đồng bộ';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Bật vị trí';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Cần quyền truy cập vị trí để tìm các thiết bị Bluetooth gần đây.';
 
   @override
   String get voiceRecordingFound => 'Đã tìm thấy bản ghi';

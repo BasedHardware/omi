@@ -8975,10 +8975,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get willSyncAutomatically => 'synkroniseres automatisk';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktiver plassering';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Plasseringstillatelse er nødvendig for å finne Bluetooth-enheter i nærheten.';
 
   @override
   String get voiceRecordingFound => 'Opptak funnet';

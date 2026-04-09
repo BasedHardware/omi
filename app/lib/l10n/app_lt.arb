@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Jungiamasi prie transkripcijos...",
     "transcriptionReconnecting": "Perjungiamasi prie transkripcijos...",
     "transcriptionUnavailable": "Transkripcija nepasiekiama",
-    "audioOutput": "Garso išvestis"
+    "audioOutput": "Garso išvestis",
+    "enableLocationTitle": "Įjungti vietą",
+    "enableLocationDescription": "Vietos leidimas reikalingas norint rasti netoliese esančius Bluetooth įrenginius."
 }

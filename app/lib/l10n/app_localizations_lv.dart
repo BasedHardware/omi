@@ -8997,10 +8997,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Iespējot atrašanās vietu';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces.';
 
   @override
   String get voiceRecordingFound => 'Ieraksts atrasts';

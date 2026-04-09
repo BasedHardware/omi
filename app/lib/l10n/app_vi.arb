@@ -2935,5 +2935,7 @@
     "transcriptionConnecting": "Đang kết nối phiên âm...",
     "transcriptionReconnecting": "Đang kết nối lại phiên âm...",
     "transcriptionUnavailable": "Phiên âm không khả dụng",
-    "audioOutput": "Đầu ra âm thanh"
+    "audioOutput": "Đầu ra âm thanh",
+    "enableLocationTitle": "Bật vị trí",
+    "enableLocationDescription": "Cần quyền truy cập vị trí để tìm các thiết bị Bluetooth gần đây."
 }

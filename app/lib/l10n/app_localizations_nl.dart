@@ -9008,10 +9008,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get willSyncAutomatically => 'wordt automatisch gesynchroniseerd';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Locatie inschakelen';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden.';
 
   @override
   String get voiceRecordingFound => 'Opname gevonden';
