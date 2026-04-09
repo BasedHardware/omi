@@ -10,7 +10,7 @@ import { useAuth } from '@/components/auth-provider';
 let _forceRefreshCallback: (() => Promise<string | null>) | null = null;
 let _forceRefreshRefCount = 0;
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 300_000;
 
 /** Fetch with a timeout. Aborts the request if it exceeds the deadline. */
 function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
@@ -104,7 +104,7 @@ export function useAuthToken() {
 
 /**
  * Authenticated fetcher for SWR — expects key to be [url, token].
- * Includes 30s timeout.
+ * Includes 5min timeout.
  */
 export const authenticatedFetcher = async ([url, token]: [string, string]) => {
   const response = await fetchWithTimeout(url, {
@@ -144,7 +144,7 @@ export const authenticatedFetcher = async ([url, token]: [string, string]) => {
  * Uses a ref so the callback identity never changes — safe for useEffect deps.
  *
  * Features:
- * - 30s request timeout
+ * - 5min request timeout
  * - Auto-refresh token and replay once on 401
  */
 export function useAuthFetch() {
