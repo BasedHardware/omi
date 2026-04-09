@@ -1318,7 +1318,13 @@ class AppState: ObservableObject {
       // diarize per channel: mic → is_user=true, system audio → is_user=false.
       // This is how desktop call recordings get properly split into two speakers.
       let channelCount = useMultiChannel ? 2 : 1
-      transcriptionService = try TranscriptionService(language: effectiveLanguage, channels: channelCount)
+      // Explicit `mode: .conversation` is required to disambiguate from the legacy
+      // `init(language:channels:)` convenience init used by PushToTalkManager, which
+      // hardcodes `.ptt` mode. Without the explicit mode label, Swift picks the
+      // convenience init and we end up connecting to /v2/voice-message/transcribe-stream
+      // instead of /v4/listen — a bug that manifested as "transcription not working".
+      transcriptionService = try TranscriptionService(
+        language: effectiveLanguage, mode: .conversation, channels: channelCount)
 
       // Streaming mode: start transcription service first, then audio on connect
       transcriptionService?.start(
