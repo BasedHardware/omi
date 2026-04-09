@@ -885,7 +885,7 @@ actor RewindDatabase {
                     .references("screenshots", onDelete: .cascade)
                 t.column("type", .text).notNull() // memory, task, advice
                 t.column("content", .text).notNull()
-                t.column("category", .text) // memory: system/interesting, advice: productivity/health/etc
+                t.column("category", .text) // memory: system/interesting, insight: productivity/health/etc
                 t.column("confidence", .double)
                 t.column("reasoning", .text)
                 t.column("sourceApp", .text).notNull()
@@ -2146,6 +2146,13 @@ actor RewindDatabase {
                 t.column("targetNodeId", .text).notNull()
                 t.column("label", .text).notNull()
                 t.column("createdAt", .datetime).notNull()
+            }
+        }
+
+        // Migration: Add translations JSON column to transcription_segments
+        migrator.registerMigration("addSegmentTranslations") { db in
+            try db.alter(table: "transcription_segments") { t in
+                t.add(column: "translationsJson", .text)
             }
         }
 

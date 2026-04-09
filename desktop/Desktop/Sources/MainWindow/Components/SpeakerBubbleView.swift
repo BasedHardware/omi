@@ -92,6 +92,22 @@ struct SpeakerBubbleView: View {
                             .fill(bubbleColor)
                     )
 
+                // Translations from backend
+                if !segment.translations.isEmpty {
+                    ForEach(segment.translations, id: \.lang) { translation in
+                        Text(translation.text)
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .italic()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .fill(bubbleColor.opacity(0.5))
+                            )
+                    }
+                }
+
                 // Timestamp
                 Text(formatTime(segment.start))
                     .scaledFont(size: 11)

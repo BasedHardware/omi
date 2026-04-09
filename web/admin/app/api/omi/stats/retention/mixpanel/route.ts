@@ -11,10 +11,7 @@ export async function GET(request: NextRequest) {
     const apiBase = process.env.MIXPANEL_API_BASE || 'https://mixpanel.com/api/2.0';
 
     if (!secret) {
-      return NextResponse.json(
-        { error: 'Mixpanel credentials not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ data: [], cohorts: [], totalCohorts: 0, totalUsers: 0, unavailable: true });
     }
 
     const searchParams = request.nextUrl.searchParams;

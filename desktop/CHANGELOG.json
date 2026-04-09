@@ -2,6 +2,97 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.270",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.269",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.268",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.267",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.266",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.265",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.264",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.262",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.261",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.260",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.259",
+      "date": "2026-04-08",
+      "changes": [
+        "Fixed date-based tool queries failing for users in positive UTC timezones (UTC+1 through UTC+14)"
+      ]
+    },
+    {
+      "version": "0.11.258",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.257",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.256",
       "date": "2026-04-08",
       "changes": [

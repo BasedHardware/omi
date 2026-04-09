@@ -15,14 +15,13 @@ import database.goals as goals_db
 import database.users as users_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
-from models.conversation import (
+from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
+from models.conversation_enums import (
     CategoryEnum,
-    ExternalIntegrationCreateConversation,
-    ExternalIntegrationConversationSource,
-    Geolocation,
     ConversationSource,
-    CreateConversation,
+    ExternalIntegrationConversationSource,
 )
+from models.geolocation import Geolocation
 from models.conversation import Conversation as ConversationModel
 from models.transcript_segment import TranscriptSegment
 from dependencies import (

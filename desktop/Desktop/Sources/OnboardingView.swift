@@ -477,7 +477,7 @@ struct OnboardingView: View {
 
     // Create welcome task
     Task {
-      let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+      let welcomeDescription = "Run omi for two days to start receiving helpful insights"
       let alreadyExists = await ActionItemStorage.shared.actionItemExists(
         description: welcomeDescription)
       if !alreadyExists {

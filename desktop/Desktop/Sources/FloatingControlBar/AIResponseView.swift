@@ -16,6 +16,7 @@ struct AIResponseView: View {
     var canClearVisibleConversation: Bool = false
 
     var onClearVisibleConversation: (() -> Void)?
+    var onEscape: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
@@ -33,8 +34,9 @@ struct AIResponseView: View {
                             chatExchangeView(exchange)
                         }
 
-                        // Current question
-                        questionBar
+                        if hasUserInput(userInput) {
+                            questionBar
+                        }
 
                         // Current response
                         currentContentView
@@ -83,15 +85,21 @@ struct AIResponseView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            if let shareFeedbackMessage, showShareFeedback {
+                shareFeedbackBanner
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .accessibilityLabel(shareFeedbackMessage)
+            }
+
             if !isLoading && !isVoiceFollowUp {
                 followUpInputView
             }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {
-            guard canClearVisibleConversation else { return }
-            onClearVisibleConversation?()
+            onEscape?()
         }
         .onAppear {
             if !isLoading {
@@ -196,18 +204,19 @@ struct AIResponseView: View {
 
     private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Question bubble
-            HStack(alignment: .top, spacing: 8) {
-                Text(exchange.question)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if hasUserInput(exchange.question) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(exchange.question ?? "")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
 
             // Response with hover actions
             messageWithHoverActions(message: exchange.aiMessage)
@@ -276,6 +285,11 @@ struct AIResponseView: View {
             attributes: attributes
         ).size
         return size.height > font.pointSize * 1.5
+    }
+
+    private func hasUserInput(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var currentContentView: some View {
@@ -352,6 +366,8 @@ struct AIResponseView: View {
     // MARK: - Follow-Up Input
 
     @State private var showShareFeedback = false
+    @State private var shareFeedbackMessage: String?
+    @State private var shareFeedbackHideWorkItem: DispatchWorkItem?
     @State private var isSharingLink = false
 
     private var followUpInputView: some View {
@@ -390,6 +406,28 @@ struct AIResponseView: View {
         }
     }
 
+    private var shareFeedbackBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.green)
+
+            Text("Share link copied to your clipboard")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.green.opacity(0.18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
+        )
+        .cornerRadius(8)
+    }
+
     private func shareLink() {
         guard !isSharingLink else { return }
         isSharingLink = true
@@ -398,13 +436,27 @@ struct AIResponseView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(url, forType: .string)
                 AnalyticsManager.shared.shareAction(category: "floating_bar_share_link")
-                withAnimation { showShareFeedback = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withAnimation { showShareFeedback = false }
-                }
+                showShareSuccessFeedback()
             }
             isSharingLink = false
         }
+    }
+
+    private func showShareSuccessFeedback() {
+        shareFeedbackHideWorkItem?.cancel()
+        shareFeedbackMessage = "Share link copied to your clipboard"
+        withAnimation {
+            showShareFeedback = true
+        }
+
+        let workItem = DispatchWorkItem {
+            withAnimation {
+                showShareFeedback = false
+                shareFeedbackMessage = nil
+            }
+        }
+        shareFeedbackHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
     }
 
     private func sendFollowUp() {
@@ -552,7 +604,13 @@ struct MessageMetadataPopover: View {
                 if let model = metadata.model {
                     metadataRow(label: "Model", value: model)
                 }
-                metadataRow(label: "Screenshot attached", value: metadata.hasScreenshot ? "Yes" : "No")
+                if metadata.hasScreenshot, let size = metadata.screenshotSizeBytes {
+                    let kb = size / 1024
+                    let base64Chars = (size * 4 + 2) / 3  // base64 expansion
+                    metadataRow(label: "Screenshot", value: "1 image (\(kb) KB, ~\(base64Chars / 1024) KB base64)")
+                } else {
+                    metadataRow(label: "Screenshot", value: "None")
+                }
 
                 Divider()
 
@@ -586,6 +644,12 @@ struct MessageMetadataPopover: View {
                                 .scaledFont(size: 11)
                                 .foregroundColor(.secondary)
                                 .textSelection(.enabled)
+                        }
+                        if metadata.sqlQueryCount > 0 {
+                            metadataRow(
+                                label: "SQL queries",
+                                value: "\(metadata.sqlQueryCount) queries, \(metadata.sqlRowsReturned) rows returned"
+                            )
                         }
                     }
                 }

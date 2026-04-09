@@ -2,7 +2,7 @@ import os
 from enum import Enum
 import json
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import logging
 from mcp.server import Server
@@ -117,7 +117,7 @@ class GetConversations(BaseModel):
     start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd)", default=None)
     end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd)", default=None)
     categories: List[ConversationCategory] = Field(description="Filter by conversation categories.", default=[])
-    limit: int = Field(description="The number of conversations to retrieve.", default=20)
+    limit: int = Field(description="The number of conversations to retrieve.", default=100)
     offset: int = Field(description="The offset of the conversations to retrieve.", default=0)
 
 
@@ -186,7 +186,7 @@ def get_conversations(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     categories: List[ConversationCategory] = [],
-    limit: int = 20,
+    limit: int = 100,
     offset: int = 0,
 ) -> List:
     params = {"limit": limit, "offset": offset}
@@ -197,7 +197,8 @@ def get_conversations(
             logger.warning(f"Could not parse start date: {start_date}")
     if end_date:
         try:
-            params["end_date"] = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
+            # Set to end of day (23:59:59) so the entire day is included
+            params["end_date"] = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
         except ValueError:
             logger.warning(f"Could not parse end date: {end_date}")
     if categories:

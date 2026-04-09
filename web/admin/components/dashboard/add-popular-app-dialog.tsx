@@ -10,6 +10,7 @@ import { OmiApp } from "@/lib/services/omi-api/types";
 import { useApps } from "@/hooks/useApps";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth-provider";
+import { useAuthFetch } from "@/hooks/useAuthToken";
 import Image from "next/image";
 
 interface AddPopularAppDialogProps {
@@ -24,6 +25,7 @@ export function AddPopularAppDialog({ children, onAppAdded }: AddPopularAppDialo
   const { apps: allApps, isLoading, error, mutate } = useApps();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { fetchWithAuth } = useAuthFetch();
 
   // Filter apps based on search query, exclude already popular apps, and exclude persona apps
   const filteredApps = allApps?.filter((app) => {
@@ -45,16 +47,9 @@ export function AddPopularAppDialog({ children, onAppAdded }: AddPopularAppDialo
 
     setIsUpdating(true);
     try {
-      // Get the user's ID token
-      const idToken = await user.getIdToken();
-      
       // Call the API endpoint to mark app as popular
-      const response = await fetch(`/api/omi/apps/${app.id}/popular`, {
+      const response = await fetchWithAuth(`/api/omi/apps/${app.id}/popular`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
         body: JSON.stringify({ value: true }),
       });
 

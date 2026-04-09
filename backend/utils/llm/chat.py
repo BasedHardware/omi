@@ -15,7 +15,10 @@ from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
-from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.conversation import Conversation
+from models.conversation_enums import CategoryEnum
+from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
@@ -316,7 +319,6 @@ def _get_qa_rag_prompt(
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
     - You MUST cite the most relevant <memories> that answer the question. \
       - Only cite in <memories> not <user_facts>, not <previous_messages>.

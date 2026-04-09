@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { useAuth } from '@/components/auth-provider';
+import { useAuthToken, authenticatedFetcher, useAuthFetch } from '@/hooks/useAuthToken';
 
 export type AnnouncementType = 'changelog' | 'feature' | 'announcement';
 
@@ -53,7 +52,7 @@ export interface AnnouncementTargeting {
   device_models?: string[];
   platforms?: PlatformType[];
   trigger?: TriggerType;
-  test_uids?: string[];  // If set, only these users see the announcement (for testing)
+  test_uids?: string[]; // If set, only these users see the announcement (for testing)
 }
 
 export interface AnnouncementDisplay {
@@ -106,76 +105,22 @@ export interface UpdateAnnouncementData {
   content?: ChangelogContent | FeatureContent | AnnouncementContent;
 }
 
-const fetcher = async ([url, token]: [string, string | null]) => {
-  if (!token) {
-    throw new Error('Auth token not available');
-  }
-
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const j = await res.json();
-      message = j?.error || j?.message || message;
-    } catch {}
-    throw new Error(message);
-  }
-
-  return res.json();
-};
-
 export function useAnnouncements(typeFilter?: AnnouncementType) {
-  const { user, loading: authLoading } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
+  const { token, loading: tokenLoading } = useAuthToken();
+  const { fetchWithAuth } = useAuthFetch();
 
-  useEffect(() => {
-    const run = async () => {
-      if (user) {
-        try {
-          const idToken = await user.getIdToken();
-          setToken(idToken);
-        } catch (e) {
-          console.error('getIdToken error', e);
-          setToken(null);
-        } finally {
-          setTokenLoading(false);
-        }
-      } else if (!authLoading) {
-        setToken(null);
-        setTokenLoading(false);
-      }
-    };
-    run();
-  }, [user, authLoading]);
+  const url = typeFilter ? `/api/omi/announcements?type=${typeFilter}` : '/api/omi/announcements';
 
-  const url = typeFilter
-    ? `/api/omi/announcements?type=${typeFilter}`
-    : '/api/omi/announcements';
-
-  const swrKey = tokenLoading ? null : [url, token];
-  const { data, error, isLoading, mutate } = useSWR<Announcement[]>(swrKey, fetcher, {
+  const swrKey = token ? [url, token] : null;
+  const { data, error, isLoading, mutate } = useSWR<Announcement[]>(swrKey, authenticatedFetcher, {
     revalidateOnFocus: false,
   });
 
   const createAnnouncement = async (announcementData: CreateAnnouncementData) => {
-    if (!token) {
-      throw new Error('Auth token not available');
-    }
-
     const id = crypto.randomUUID();
 
-    const res = await fetch('/api/omi/announcements', {
+    const res = await fetchWithAuth('/api/omi/announcements', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ ...announcementData, id }),
     });
 
@@ -194,16 +139,8 @@ export function useAnnouncements(typeFilter?: AnnouncementType) {
   };
 
   const updateAnnouncement = async (id: string, updates: UpdateAnnouncementData) => {
-    if (!token) {
-      throw new Error('Auth token not available');
-    }
-
-    const res = await fetch(`/api/omi/announcements/${id}`, {
+    const res = await fetchWithAuth(`/api/omi/announcements/${id}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(updates),
     });
 
@@ -222,15 +159,8 @@ export function useAnnouncements(typeFilter?: AnnouncementType) {
   };
 
   const deleteAnnouncement = async (id: string, hardDelete = false) => {
-    if (!token) {
-      throw new Error('Auth token not available');
-    }
-
-    const res = await fetch(`/api/omi/announcements/${id}?hard=${hardDelete}`, {
+    const res = await fetchWithAuth(`/api/omi/announcements/${id}?hard=${hardDelete}`, {
       method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
     });
 
     if (!res.ok) {
@@ -265,7 +195,7 @@ export function useAnnouncements(typeFilter?: AnnouncementType) {
 
   return {
     announcements: data || [],
-    isLoading: authLoading || tokenLoading || isLoading,
+    isLoading: tokenLoading || isLoading,
     error,
     mutate,
     createAnnouncement,

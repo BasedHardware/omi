@@ -8,7 +8,7 @@ enum SidebarNavItem: Int, CaseIterable {
   case memories = 3
   case tasks = 4
   case focus = 5
-  case advice = 6
+  case insight = 6
   case rewind = 7
   case apps = 8
   case settings = 9
@@ -24,7 +24,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .memories: return "Memories"
     case .tasks: return "Tasks"
     case .focus: return "Focus"
-    case .advice: return "Advice"
+    case .insight: return "Insights"
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .settings: return "Settings"
@@ -42,7 +42,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .memories: return "brain"
     case .tasks: return "checklist"
     case .focus: return "eye.fill"
-    case .advice: return "lightbulb.fill"
+    case .insight: return "lightbulb.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
@@ -77,7 +77,7 @@ struct SidebarView: View {
   @Binding var isCollapsed: Bool
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
-  @ObservedObject private var adviceStorage = AdviceStorage.shared
+  @ObservedObject private var insightStorage = InsightStorage.shared
   @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
@@ -103,7 +103,7 @@ struct SidebarView: View {
   @State private var isConversationsPageLoading = false
   @State private var isTasksPageLoading = false
   @State private var isFocusPageLoading = false
-  @State private var isAdvicePageLoading = false
+  @State private var isInsightPageLoading = false
   @State private var isAppsPageLoading = false
 
   // Drag state
@@ -233,7 +233,7 @@ struct SidebarView: View {
                   isSelected: !locked && selectedIndex == item.rawValue,
                   isCollapsed: isCollapsed,
                   iconWidth: iconWidth,
-                  badge: item == .advice ? adviceStorage.unreadCount : 0,
+                  badge: item == .insight ? insightStorage.unreadCount : 0,
                   statusColor: item == .focus ? focusStatusColor : nil,
                   isLoading: pageLoadingState(for: item),
                   isLocked: locked,
@@ -422,8 +422,8 @@ struct SidebarView: View {
     .onReceive(NotificationCenter.default.publisher(for: .focusPageDidLoad)) { _ in
       isFocusPageLoading = false
     }
-    .onReceive(NotificationCenter.default.publisher(for: .advicePageDidLoad)) { _ in
-      isAdvicePageLoading = false
+    .onReceive(NotificationCenter.default.publisher(for: .insightPageDidLoad)) { _ in
+      isInsightPageLoading = false
     }
     .onReceive(NotificationCenter.default.publisher(for: .appsPageDidLoad)) { _ in
       isAppsPageLoading = false
@@ -1325,7 +1325,7 @@ struct SidebarView: View {
     switch item {
     case .tasks: return isTasksPageLoading
     case .focus: return isFocusPageLoading
-    case .advice: return isAdvicePageLoading
+    case .insight: return isInsightPageLoading
     case .apps: return isAppsPageLoading
     default: return false
     }
@@ -1335,7 +1335,7 @@ struct SidebarView: View {
     switch item {
     case .tasks: isTasksPageLoading = loading
     case .focus: isFocusPageLoading = loading
-    case .advice: isAdvicePageLoading = loading
+    case .insight: isInsightPageLoading = loading
     case .apps: isAppsPageLoading = loading
     default: break
     }

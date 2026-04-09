@@ -10,11 +10,13 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
+    var onEscape: () -> Void
     var onClearVisibleConversation: () -> Void
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
+    private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
 
     var body: some View {
         VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
@@ -43,22 +45,19 @@ struct FloatingControlBarView: View {
 
             // AI conversation view - conditionally visible
             if state.showingAIConversation {
-                Group {
-                    if state.showingAIResponse {
-                        aiResponseView
-                    } else {
-                        aiInputView
-                    }
-                }
+                conversationView
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.showingAIConversation)
+        .animation(conversationTransition, value: state.showingAIResponse)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -111,47 +110,75 @@ struct FloatingControlBarView: View {
         .onHover(perform: handleBarHover)
     }
 
+    private var conversationView: some View {
+        ZStack(alignment: .top) {
+            if state.showingAIResponse {
+                aiResponseView
+                    .id("response")
+                    .zIndex(1)
+            } else {
+                aiInputView
+                    .id("input")
+                    .zIndex(1)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
     private func handleBarHover(_ hovering: Bool) {
-        state.isHoveringBar = hovering
+        if !hovering {
+            state.requiresHoverReset = false
+        }
+
+        let effectiveHover = hovering && !state.requiresHoverReset
+        state.isHoveringBar = effectiveHover
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
         // content never renders in a too-small window (which causes overflow).
-        if hovering {
+        if effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
         }
         withAnimation(.easeInOut(duration: 0.2)) {
-            isHovering = hovering
+            isHovering = effectiveHover
         }
-        if !hovering {
+        if !effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
         }
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 34, height: 34)
+            Button {
+                FloatingControlBarManager.shared.openNotificationAsChat(notification)
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 34, height: 34)
 
-                Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(notification.title)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Text(notification.message)
+                            .scaledFont(size: 12)
+                            .foregroundColor(.white.opacity(0.72))
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(notification.title)
-                    .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(notification.message)
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.72))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
 
             Button {
                 FloatingControlBarManager.shared.dismissCurrentNotification()
@@ -321,6 +348,7 @@ struct FloatingControlBarView: View {
                 onSendQuery(message)
             },
             onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
@@ -329,8 +357,8 @@ struct FloatingControlBarView: View {
         )
         .transition(
             .asymmetric(
-                insertion: .scale(scale: 0.95).combined(with: .opacity),
-                removal: .scale(scale: 0.95).combined(with: .opacity)
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity)
             ))
     }
 
@@ -353,14 +381,12 @@ struct FloatingControlBarView: View {
             ),
             canClearVisibleConversation: state.hasVisibleConversation,
             onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
             onSendFollowUp: { message in
-                // Archive current exchange to chat history
-                let currentQuery = state.displayedQuery
-                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
-                }
+                archiveCurrentExchange()
 
                 state.displayedQuery = message
+                state.currentQuestionMessageId = nil
                 state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
@@ -373,10 +399,23 @@ struct FloatingControlBarView: View {
         )
         .transition(
             .asymmetric(
-                insertion: .scale(scale: 0.95).combined(with: .opacity),
-                removal: .scale(scale: 0.95).combined(with: .opacity)
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
             ))
     }
 
+    private func archiveCurrentExchange() {
+        guard let currentMessage = state.currentAIMessage else { return }
+        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
+
+        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.chatHistory.append(
+            FloatingChatExchange(
+                question: currentQuery.isEmpty ? nil : currentQuery,
+                questionMessageId: state.currentQuestionMessageId,
+                aiMessage: currentMessage
+            )
+        )
+    }
 
 }

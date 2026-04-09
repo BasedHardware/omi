@@ -205,7 +205,12 @@ struct MessageMetadata {
     var costUsd: Double?
     var systemPrompt: String?
     var hasScreenshot: Bool
+    var screenshotSizeBytes: Int?
     var toolNames: [String]
+    /// Total rows returned across all execute_sql tool calls during this response
+    var sqlRowsReturned: Int
+    /// Number of execute_sql tool calls made during this response
+    var sqlQueryCount: Int
 
     var totalTokens: Int? {
         guard let input = inputTokens, let output = outputTokens else { return nil }
@@ -1901,6 +1906,41 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
+    @discardableResult
+    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return nil }
+
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let localId = aiMessage.id
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+
+        messages.append(aiMessage)
+
+        Task { [weak self] in
+            do {
+                let response = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "ai",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId
+                )
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                }
+                log("Saved assistant message to backend: \(response.id)")
+            } catch {
+                logError("Failed to persist assistant message", error: error)
+            }
+        }
+
+        return aiMessage
+    }
+
     // MARK: - Send Message
 
     /// Send a message and get AI response via Claude Agent SDK bridge
@@ -2019,6 +2059,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var sqlRowsReturned = 0
+        var sqlQueryCount = 0
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
@@ -2052,6 +2094,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(toolCall)
                 log("OMI tool \(name) executed for callId=\(callId)")
+                // Track SQL query stats for metadata
+                if name == "execute_sql" {
+                    sqlQueryCount += 1
+                    // Parse row count from result (format: "\nN row(s)" at end)
+                    if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+                        let numStr = result[match].components(separatedBy: " ").first ?? "0"
+                        sqlRowsReturned += Int(numStr) ?? 0
+                    }
+                }
                 return result
             }
             let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
@@ -2157,7 +2208,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     costUsd: queryResult.costUsd,
                     systemPrompt: systemPrompt,
                     hasScreenshot: imageData != nil,
-                    toolNames: toolNames
+                    screenshotSizeBytes: imageData?.count,
+                    toolNames: toolNames,
+                    sqlRowsReturned: sqlRowsReturned,
+                    sqlQueryCount: sqlQueryCount
                 )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {

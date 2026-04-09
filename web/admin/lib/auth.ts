@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { DEV_BYPASS_ENABLED, DEV_BYPASS_TOKEN, DEV_BYPASS_UID } from '@/lib/dev-auth';
 import { verifyFirebaseToken, getDb } from '@/lib/firebase/admin';
 
 /**
@@ -11,6 +12,11 @@ export async function verifyAdmin(request: NextRequest): Promise<
   { uid: string } | NextResponse
 > {
   const authorization = request.headers.get('Authorization');
+
+  if (DEV_BYPASS_ENABLED && authorization === `Bearer ${DEV_BYPASS_TOKEN}`) {
+    return { uid: DEV_BYPASS_UID };
+  }
+
   if (!authorization || !authorization.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
   }

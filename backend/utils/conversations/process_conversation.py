@@ -26,16 +26,17 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
-from models.conversation import *
+from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
-    ExternalIntegrationCreateConversation,
+    AppResult,
     Conversation,
     CreateConversation,
-    ConversationSource,
+    ExternalIntegrationCreateConversation,
 )
-from utils.notifications import send_important_conversation_message
-from models.conversation import CalendarMeetingContext
+from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from models.other import Person
+from models.structured import Structured
+from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage

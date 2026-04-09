@@ -4,7 +4,8 @@ import SwiftUI
 /// A single question/answer exchange in the floating bar chat history.
 struct FloatingChatExchange: Identifiable {
     let id = UUID()
-    let question: String
+    let question: String?
+    let questionMessageId: String?
     let aiMessage: ChatMessage
 }
 
@@ -26,6 +27,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isInitialising: Bool = false
     @Published var isDragging: Bool = false
     @Published var isHoveringBar: Bool = false
+    @Published var requiresHoverReset: Bool = false
     @Published var currentNotification: FloatingBarNotification? = nil
 
     // AI conversation state
@@ -35,6 +37,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var aiInputText: String = ""
     @Published var currentAIMessage: ChatMessage? = nil
     @Published var displayedQuery: String = ""
+    @Published var currentQuestionMessageId: String? = nil
     @Published var inputViewHeight: CGFloat = 120
     @Published var responseContentHeight: CGFloat = 0
     @Published var chatHistory: [FloatingChatExchange] = []
@@ -95,6 +98,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         aiInputText = ""
         displayedQuery = ""
         currentAIMessage = nil
+        currentQuestionMessageId = nil
         chatHistory = []
         showingAIResponse = false
         isAILoading = false
