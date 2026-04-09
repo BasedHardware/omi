@@ -1849,10 +1849,10 @@ struct SettingsContentView: View {
       settingsCard(settingId: "floatingbar.voiceanswers") {
         HStack(spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {
-            Text("Voice Responses")
+            Text("Voice Questions")
               .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Text("Speak answers to voice questions aloud from the floating bar.")
+            Text("Speak answers aloud when you ask with push to talk.")
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textSecondary)
           }
@@ -1863,9 +1863,26 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "floatingbar.typedvoiceanswers") {
+        HStack(spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Typed Questions")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Speak answers aloud when you submit a typed question from the floating bar.")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: floatingBarTypedVoiceAnswersBinding)
+            .toggleStyle(.switch)
+            .tint(OmiColors.purplePrimary)
+        }
+      }
+
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
-        .opacity(shortcutSettings.floatingBarVoiceAnswersEnabled ? 1 : 0.55)
-        .disabled(!shortcutSettings.floatingBarVoiceAnswersEnabled)
+        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
+        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
     }
   }
 
@@ -4786,6 +4803,15 @@ struct SettingsContentView: View {
             floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
           )
         )
+      }
+    )
+  }
+
+  private var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
+    Binding(
+      get: { shortcutSettings.floatingBarTypedQuestionVoiceAnswersEnabled },
+      set: { newValue in
+        shortcutSettings.floatingBarTypedQuestionVoiceAnswersEnabled = newValue
       }
     )
   }
