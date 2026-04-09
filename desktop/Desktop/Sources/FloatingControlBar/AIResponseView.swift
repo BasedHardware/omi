@@ -221,9 +221,6 @@ struct AIResponseView: View {
             // Response with hover actions
             messageWithHoverActions(message: exchange.aiMessage)
                 .padding(.horizontal, 4)
-
-            Divider()
-                .background(Color.white.opacity(0.1))
         }
     }
 
@@ -309,7 +306,7 @@ struct AIResponseView: View {
                     }
                 }
                 .padding(.horizontal, 4)
-                .padding(.vertical, 8)
+                .padding(.bottom, 6)
                 .contextMenu {
                     Button("Copy") {
                         NSPasteboard.general.clearContents()
@@ -485,74 +482,19 @@ struct MessageHoverOverlay<Content: View>: View {
         (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
     }
 
+    private var actionBarWidth: CGFloat {
+        message.metadata == nil ? 56 : 76
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ZStack(alignment: .topTrailing) {
             content()
+                .padding(.trailing, actionBarWidth)
 
-            // Action bar — visible on hover with delayed hide
-            if shouldShowBar {
-                HStack(spacing: 8) {
-                    // Thumbs up
-                    Button(action: {
-                        let newRating = message.rating == 1 ? nil : 1
-                        onRate(newRating)
-                    }) {
-                        Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                            .scaledFont(size: 11)
-                            .foregroundColor(message.rating == 1 ? .green : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Helpful response")
-
-                    // Thumbs down
-                    Button(action: {
-                        let newRating = message.rating == -1 ? nil : -1
-                        onRate(newRating)
-                    }) {
-                        Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                            .scaledFont(size: 11)
-                            .foregroundColor(message.rating == -1 ? .red : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Not helpful")
-
-                    // Copy
-                    Button(action: { copyMessageText() }) {
-                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                            .scaledFont(size: 11)
-                            .foregroundColor(showCopied ? .green : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Copy response")
-
-                    // Info (developer context)
-                    if message.metadata != nil {
-                        Button(action: { showInfoPopover.toggle() }) {
-                            Image(systemName: "info.circle")
-                                .scaledFont(size: 11)
-                                .foregroundColor(showInfoPopover ? .white : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("View response context")
-                        .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                            MessageMetadataPopover(metadata: message.metadata!)
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding(.top, 6)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .onHover { hovering in
-                    isBarHovered = hovering
-                    if hovering {
-                        // Cancel any pending hide
-                        hideWorkItem?.cancel()
-                        hideWorkItem = nil
-                    }
-                }
-            }
+            actionBar
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .onHover { hovering in
             if hovering {
                 // Show immediately
@@ -570,6 +512,70 @@ struct MessageHoverOverlay<Content: View>: View {
                 }
                 hideWorkItem = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+            }
+        }
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 6) {
+            // Thumbs up
+            Button(action: {
+                let newRating = message.rating == 1 ? nil : 1
+                onRate(newRating)
+            }) {
+                Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    .scaledFont(size: 11)
+                    .foregroundColor(message.rating == 1 ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Helpful response")
+
+            // Thumbs down
+            Button(action: {
+                let newRating = message.rating == -1 ? nil : -1
+                onRate(newRating)
+            }) {
+                Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .scaledFont(size: 11)
+                    .foregroundColor(message.rating == -1 ? .red : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Not helpful")
+
+            // Copy
+            Button(action: { copyMessageText() }) {
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                    .scaledFont(size: 11)
+                    .foregroundColor(showCopied ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Copy response")
+
+            // Info (developer context)
+            if message.metadata != nil {
+                Button(action: { showInfoPopover.toggle() }) {
+                    Image(systemName: "info.circle")
+                        .scaledFont(size: 11)
+                        .foregroundColor(showInfoPopover ? .white : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("View response context")
+                .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                    MessageMetadataPopover(metadata: message.metadata!)
+                }
+            }
+        }
+        .frame(width: actionBarWidth, alignment: .trailing)
+        .padding(.top, 1)
+        .opacity(shouldShowBar ? 1 : 0)
+        .allowsHitTesting(shouldShowBar)
+        .animation(.easeInOut(duration: 0.15), value: shouldShowBar)
+        .onHover { hovering in
+            isBarHovered = hovering
+            if hovering {
+                // Cancel any pending hide
+                hideWorkItem?.cancel()
+                hideWorkItem = nil
             }
         }
     }
