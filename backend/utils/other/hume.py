@@ -155,6 +155,7 @@ class HumeClient:
                     'X-Hume-Api-Key': self.api_key,
                 },
                 timeout=300.0,
+                follow_redirects=True,
             )
         except httpx.TimeoutException:
             err = {
@@ -168,10 +169,10 @@ class HumeClient:
                     "message": "TooManyRedirects",
                 },
             }
-        except httpx.HTTPError as e:
+        except httpx.RequestError as e:
             err = {
                 "error": {
-                    "message": f"HTTPError {e}",
+                    "message": f"RequestError {e}",
                 },
             }
         if err is None and resp.status_code != 200:
