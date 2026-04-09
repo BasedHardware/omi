@@ -9008,10 +9008,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get willSyncAutomatically => 'синхронизируется автоматически';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Включить местоположение';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Разрешение на определение местоположения необходимо для поиска ближайших Bluetooth-устройств.';
 
   @override
   String get voiceRecordingFound => 'Запись найдена';

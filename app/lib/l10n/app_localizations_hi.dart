@@ -8961,10 +8961,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'स्थान सक्षम करें';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'पास के ब्लूटूथ डिवाइस खोजने के लिए स्थान अनुमति आवश्यक है।';
 
   @override
   String get voiceRecordingFound => 'रिकॉर्डिंग मिली';

@@ -8998,10 +8998,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get willSyncAutomatically => 'se sincronizará automáticamente';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activar ubicación';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Se necesita permiso de ubicación para encontrar dispositivos Bluetooth cercanos.';
 
   @override
   String get voiceRecordingFound => 'Grabación encontrada';

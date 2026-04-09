@@ -8832,10 +8832,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get willSyncAutomatically => '자동으로 동기화됩니다';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => '위치 활성화';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => '근처 블루투스 기기를 찾으려면 위치 권한이 필요합니다.';
 
   @override
   String get voiceRecordingFound => '녹음 발견됨';

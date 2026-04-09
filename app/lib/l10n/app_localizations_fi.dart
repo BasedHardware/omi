@@ -8979,10 +8979,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get willSyncAutomatically => 'synkronoidaan automaattisesti';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ota sijainti käyttöön';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Sijaintilupa tarvitaan lähellä olevien Bluetooth-laitteiden löytämiseen.';
 
   @override
   String get voiceRecordingFound => 'Tallenne löytyi';

@@ -9022,10 +9022,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get willSyncAutomatically => 'se va sincroniza automat';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activează locația';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Permisiunea de locație este necesară pentru a găsi dispozitivele Bluetooth din apropiere.';
 
   @override
   String get voiceRecordingFound => 'Înregistrare găsită';

@@ -9031,10 +9031,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get willSyncAutomatically => 'es sincronitzarà automàticament';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activa la ubicació';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Es necessita el permís d\'ubicació per trobar dispositius Bluetooth propers.';
 
   @override
   String get voiceRecordingFound => 'Gravació trobada';

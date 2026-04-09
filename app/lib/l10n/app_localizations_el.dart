@@ -9044,10 +9044,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ενεργοποίηση τοποθεσίας';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Απαιτείται άδεια τοποθεσίας για την εύρεση κοντινών συσκευών Bluetooth.';
 
   @override
   String get voiceRecordingFound => 'Βρέθηκε εγγραφή';

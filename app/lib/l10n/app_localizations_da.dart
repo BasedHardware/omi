@@ -8965,10 +8965,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get willSyncAutomatically => 'synkroniseres automatisk';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktivér placering';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Placeringstilladelse er nødvendig for at finde Bluetooth-enheder i nærheden.';
 
   @override
   String get voiceRecordingFound => 'Optagelse fundet';

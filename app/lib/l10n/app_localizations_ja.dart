@@ -8830,10 +8830,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get willSyncAutomatically => '自動的に同期されます';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => '位置情報を有効にする';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => '近くのBluetoothデバイスを検出するには位置情報の許可が必要です。';
 
   @override
   String get voiceRecordingFound => '録音が見つかりました';

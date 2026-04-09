@@ -8984,10 +8984,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get willSyncAutomatically => 'synkroniseras automatiskt';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktivera plats';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Platstillstånd behövs för att hitta Bluetooth-enheter i närheten.';
 
   @override
   String get voiceRecordingFound => 'Inspelning hittad';

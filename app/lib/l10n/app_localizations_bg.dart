@@ -9015,10 +9015,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get willSyncAutomatically => 'ще се синхронизира автоматично';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Активиране на местоположение';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Разрешението за местоположение е необходимо за намиране на близки Bluetooth устройства.';
 
   @override
   String get voiceRecordingFound => 'Намерен запис';

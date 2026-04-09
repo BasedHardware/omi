@@ -8967,10 +8967,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get willSyncAutomatically => 'synchronizuje sa automaticky';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Povoliť polohu';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Na nájdenie blízkych Bluetooth zariadení je potrebné povolenie polohy.';
 
   @override
   String get voiceRecordingFound => 'Nahrávka nájdená';
