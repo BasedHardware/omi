@@ -294,7 +294,7 @@ const executeSqlTool = tool(
 Use when:
 - User asks for app usage stats, screen time, or activity counts
 - Time-based queries like "how long did I spend on X?"
-- Task management: looking up, creating, or updating action items
+- Task management: looking up action items, checking completion status
 - Aggregations, rankings, or structured filters on local data
 
 Don't use when:
@@ -302,10 +302,7 @@ Don't use when:
 - User asks about their preferences or facts about themselves (use get_memories)
 - User asks fuzzy/conceptual questions (use semantic_search instead)
 
-Parameters:
-- SELECT queries auto-limit to 200 rows
-- UPDATE/DELETE require a WHERE clause
-- DROP/ALTER/CREATE are blocked for safety
+Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
 
 Key tables: screenshots (appName, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), action_items (description, completed, priority, dueAt).`,
   { query: z.string().describe("SQL query to execute against omi.db") },
