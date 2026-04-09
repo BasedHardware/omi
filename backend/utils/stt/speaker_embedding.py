@@ -7,7 +7,7 @@ import wave
 from typing import Optional, Tuple
 
 import numpy as np
-import requests
+import httpx
 from scipy.spatial.distance import cdist
 
 from utils.executors import storage_executor
@@ -58,7 +58,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
 
     with open(audio_path, 'rb') as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
-        response = requests.post(f"{api_url}/v2/embedding", files=files, timeout=300)
+        response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
         response.raise_for_status()
 
     result = response.json()
@@ -97,7 +97,7 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = requests.post(f"{api_url}/v2/embedding", files=files, timeout=300)
+    response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
     response.raise_for_status()
 
     result = response.json()
