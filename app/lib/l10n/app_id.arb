@@ -2969,5 +2969,15 @@
             }
         }
     },
-    "willSyncAutomatically": "akan disinkronkan secara otomatis"
+    "willSyncAutomatically": "akan disinkronkan secara otomatis",
+    "voiceRecordingFound": "Rekaman ditemukan",
+    "transcriptionConnecting": "Menghubungkan transkripsi...",
+    "transcriptionReconnecting": "Menghubungkan ulang transkripsi...",
+    "transcriptionUnavailable": "Transkripsi tidak tersedia",
+    "audioOutput": "Output audio",
+    "enableLocationTitle": "Aktifkan Lokasi",
+    "enableLocationDescription": "Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di dekatnya.",
+    "firmwareWarningTitle": "Penting: Baca Sebelum Memperbarui",
+    "firmwareFormatWarning": "Firmware ini akan memformat kartu SD. Pastikan semua data offline telah disinkronkan sebelum memperbarui.\n\nJika Anda melihat lampu merah berkedip setelah menginstal versi ini, jangan khawatir. Cukup hubungkan perangkat ke aplikasi dan lampu akan berubah menjadi biru. Lampu merah berarti jam perangkat belum disinkronkan.",
+    "continueAnyway": "Lanjutkan"
 }

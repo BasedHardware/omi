@@ -8985,8 +8985,33 @@ class AppLocalizationsFi extends AppLocalizations {
   String get willSyncAutomatically => 'synkronoidaan automaattisesti';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ota sijainti käyttöön';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Sijaintilupa tarvitaan lähellä olevien Bluetooth-laitteiden löytämiseen.';
+
+  @override
+  String get voiceRecordingFound => 'Tallenne löytyi';
+
+  @override
+  String get transcriptionConnecting => 'Yhdistetään litterointia...';
+
+  @override
+  String get transcriptionReconnecting => 'Yhdistetään litterointia uudelleen...';
+
+  @override
+  String get transcriptionUnavailable => 'Litterointi ei ole käytettävissä';
+
+  @override
+  String get audioOutput => 'Äänilähtö';
+
+  @override
+  String get firmwareWarningTitle => 'Tärkeää: Lue ennen päivitystä';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Tämä laiteohjelmisto alustaa SD-kortin. Varmista, että kaikki offline-tiedot on synkronoitu ennen päivitystä.\n\nJos näet vilkkuvan punaisen valon tämän version asentamisen jälkeen, älä huoli. Yhdistä laite sovellukseen ja sen pitäisi muuttua siniseksi. Punainen valo tarkoittaa, että laitteen kelloa ei ole vielä synkronoitu.';
+
+  @override
+  String get continueAnyway => 'Jatka';
 }

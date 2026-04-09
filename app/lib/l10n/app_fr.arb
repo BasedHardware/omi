@@ -2962,5 +2962,15 @@
             }
         }
     },
-    "willSyncAutomatically": "sera synchronisé automatiquement"
+    "willSyncAutomatically": "sera synchronisé automatiquement",
+    "voiceRecordingFound": "Enregistrement trouvé",
+    "transcriptionConnecting": "Connexion de la transcription...",
+    "transcriptionReconnecting": "Reconnexion de la transcription...",
+    "transcriptionUnavailable": "Transcription indisponible",
+    "audioOutput": "Sortie audio",
+    "enableLocationTitle": "Activer la localisation",
+    "enableLocationDescription": "L'autorisation de localisation est nécessaire pour trouver les appareils Bluetooth à proximité.",
+    "firmwareWarningTitle": "Important : Lisez avant de mettre à jour",
+    "firmwareFormatWarning": "Ce firmware formatera la carte SD. Veuillez vous assurer que toutes les données hors ligne sont synchronisées avant la mise à jour.\n\nSi vous voyez un voyant rouge clignotant après l'installation de cette version, ne vous inquiétez pas. Connectez simplement l'appareil à l'application et il devrait devenir bleu. Le voyant rouge signifie que l'horloge de l'appareil n'a pas encore été synchronisée.",
+    "continueAnyway": "Continuer"
 }

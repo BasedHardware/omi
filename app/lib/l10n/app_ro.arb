@@ -2927,5 +2927,15 @@
             }
         }
     },
-    "willSyncAutomatically": "se va sincroniza automat"
+    "willSyncAutomatically": "se va sincroniza automat",
+    "voiceRecordingFound": "Înregistrare găsită",
+    "transcriptionConnecting": "Se conectează transcrierea...",
+    "transcriptionReconnecting": "Se reconectează transcrierea...",
+    "transcriptionUnavailable": "Transcriere indisponibilă",
+    "audioOutput": "Ieșire audio",
+    "enableLocationTitle": "Activează locația",
+    "enableLocationDescription": "Permisiunea de locație este necesară pentru a găsi dispozitivele Bluetooth din apropiere.",
+    "firmwareWarningTitle": "Important: Citiți înainte de actualizare",
+    "firmwareFormatWarning": "Acest firmware va formata cardul SD. Vă rugăm să vă asigurați că toate datele offline sunt sincronizate înainte de actualizare.\n\nDacă vedeți o lumină roșie care clipește după instalarea acestei versiuni, nu vă faceți griji. Pur și simplu conectați dispozitivul la aplicație și ar trebui să devină albastru. Lumina roșie înseamnă că ceasul dispozitivului nu a fost încă sincronizat.",
+    "continueAnyway": "Continuă"
 }

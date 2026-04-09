@@ -22,7 +22,7 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-from models.conversation import ConversationSource
+from models.conversation_enums import ConversationSource
 
 
 class TestConversationSourceMissing:
@@ -91,7 +91,8 @@ class TestConversationModelWithUnknownSource:
 
     def test_conversation_with_phone_call_source(self):
         """Conversation model accepts phone_call without ValidationError."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-123',
@@ -105,7 +106,8 @@ class TestConversationModelWithUnknownSource:
 
     def test_conversation_with_known_source(self):
         """Known source values still work in the model."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-456',
@@ -119,7 +121,8 @@ class TestConversationModelWithUnknownSource:
 
     def test_conversation_dict_serialization(self):
         """Conversation with unknown source serializes without error."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-789',

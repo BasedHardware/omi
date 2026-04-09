@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -20,7 +21,8 @@ from database.redis_db import (
 )
 from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
-from models.conversation import Conversation, ConversationSource
+from models.conversation import Conversation
+from models.conversation_enums import ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
@@ -185,13 +187,13 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    _trigger_realtime_integrations(uid, segments, conversation_id)
+    await asyncio.to_thread(_trigger_realtime_integrations, uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
-    _trigger_realtime_audio_bytes(uid, sample_rate, data)
+    await asyncio.to_thread(_trigger_realtime_audio_bytes, uid, sample_rate, data)
 
 
 # proactive notification

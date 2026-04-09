@@ -140,17 +140,17 @@ struct OMIApp: App {
 
       // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
       CommandGroup(after: .sidebar) {
-        Button("Dashboard") {
+        Button("Home") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
             userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
         }
         .keyboardShortcut("1", modifiers: .command)
 
-        Button("Chat") {
+        Button("Conversations") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
         }
         .keyboardShortcut("2", modifiers: .command)
 
@@ -393,6 +393,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
       // Fetch API keys from backend (keys are not bundled in the app)
       APIKeyService.shared.startFetchingKeys()
+
+      // Fetch subscription plan for floating bar usage limits
+      Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
       // Check tier eligibility (at most once per day)
       Task {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/components/auth-provider';
+import { useAuthFetch } from '@/hooks/useAuthToken';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -76,7 +76,7 @@ function formatDate(dateStr?: string) {
 }
 
 export default function FairUsePage() {
-  const { user } = useAuth();
+  const { fetchWithAuth, token } = useAuthFetch();
   const [flaggedUsers, setFlaggedUsers] = useState<FlaggedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [stageFilter, setStageFilter] = useState<string>('');
@@ -87,16 +87,13 @@ export default function FairUsePage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchFlaggedUsers = useCallback(async () => {
-    if (!user) return;
+    if (!token) return;
     try {
       setLoading(true);
       setError(null);
-      const idToken = await user.getIdToken();
       const params = new URLSearchParams();
       if (stageFilter) params.set('stage', stageFilter);
-      const res = await fetch(`/api/omi/fair-use/flagged?${params}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+      const res = await fetchWithAuth(`/api/omi/fair-use/flagged?${params}`);
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const data = await res.json();
       setFlaggedUsers(data.users || []);
@@ -105,21 +102,17 @@ export default function FairUsePage() {
     } finally {
       setLoading(false);
     }
-  }, [user, stageFilter]);
+  }, [fetchWithAuth, stageFilter, token]);
 
   useEffect(() => {
     fetchFlaggedUsers();
   }, [fetchFlaggedUsers]);
 
   const fetchUserDetail = async (uid: string) => {
-    if (!user) return;
     try {
       setUserLoading(true);
       setError(null);
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/omi/fair-use/user/${uid}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}`);
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const data = await res.json();
       setSelectedUser(data);
@@ -131,19 +124,16 @@ export default function FairUsePage() {
   };
 
   const handleSearch = async () => {
-    if (!user || !searchQuery.trim()) return;
+    if (!searchQuery.trim()) return;
     const query = searchQuery.trim();
 
     try {
       setUserLoading(true);
       setError(null);
-      const idToken = await user.getIdToken();
 
       if (query.startsWith('FU-')) {
         // Case ref lookup
-        const res = await fetch(`/api/omi/fair-use/case/${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
+        const res = await fetchWithAuth(`/api/omi/fair-use/case/${encodeURIComponent(query)}`);
         if (!res.ok) {
           if (res.status === 404) {
             setError(`Case ${query} not found`);
@@ -168,14 +158,12 @@ export default function FairUsePage() {
   };
 
   const handleReset = async (uid: string) => {
-    if (!user || !confirm('Reset this user\'s fair use state to clean? This will clear all enforcement.')) return;
+    if (!confirm('Reset this user\'s fair use state to clean? This will clear all enforcement.')) return;
     try {
       setActionLoading('reset');
       setError(null);
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/omi/fair-use/user/${uid}/reset`, {
+      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/reset`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);
@@ -188,14 +176,12 @@ export default function FairUsePage() {
   };
 
   const handleSetStage = async (uid: string, stage: string) => {
-    if (!user || !confirm(`Set this user's stage to "${stage}"?`)) return;
+    if (!confirm(`Set this user's stage to "${stage}"?`)) return;
     try {
       setActionLoading(`stage-${stage}`);
       setError(null);
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/omi/fair-use/user/${uid}/set-stage?stage=${stage}`, {
+      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/set-stage?stage=${stage}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);
@@ -208,14 +194,12 @@ export default function FairUsePage() {
   };
 
   const handleResolveEvent = async (uid: string, eventId: string) => {
-    if (!user || !confirm('Mark this event as resolved?')) return;
+    if (!confirm('Mark this event as resolved?')) return;
     try {
       setActionLoading(`resolve-${eventId}`);
       setError(null);
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/omi/fair-use/user/${uid}/resolve-event/${eventId}`, {
+      const res = await fetchWithAuth(`/api/omi/fair-use/user/${uid}/resolve-event/${eventId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await fetchUserDetail(uid);

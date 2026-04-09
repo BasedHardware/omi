@@ -8989,8 +8989,34 @@ class AppLocalizationsPt extends AppLocalizations {
   String get willSyncAutomatically => 'será sincronizado automaticamente';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ativar localização';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'A permissão de localização é necessária para encontrar dispositivos Bluetooth próximos.';
+
+  @override
+  String get voiceRecordingFound => 'Gravação encontrada';
+
+  @override
+  String get transcriptionConnecting => 'Conectando transcrição...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconectando transcrição...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcrição indisponível';
+
+  @override
+  String get audioOutput => 'Saída de áudio';
+
+  @override
+  String get firmwareWarningTitle => 'Importante: Leia antes de atualizar';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Este firmware irá formatar o cartão SD. Certifique-se de que todos os dados offline estão sincronizados antes de atualizar.\n\nSe vir uma luz vermelha a piscar após instalar esta versão, não se preocupe. Basta ligar o dispositivo à aplicação e deverá ficar azul. A luz vermelha significa que o relógio do dispositivo ainda não foi sincronizado.';
+
+  @override
+  String get continueAnyway => 'Continuar';
 }

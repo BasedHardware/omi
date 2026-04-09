@@ -195,6 +195,93 @@ enum ToolCallStatus {
 
 // MARK: - Chat Message Model
 
+/// Metadata about the context and resources used to generate an AI response
+struct MessageMetadata {
+    var model: String?
+    var inputTokens: Int?
+    var outputTokens: Int?
+    var cacheReadTokens: Int?
+    var cacheWriteTokens: Int?
+    var costUsd: Double?
+    var systemPrompt: String?
+    var hasScreenshot: Bool
+    var screenshotSizeBytes: Int?
+    var toolNames: [String]
+    /// Total rows returned across all execute_sql tool calls during this response
+    var sqlRowsReturned: Int
+    /// Number of execute_sql tool calls made during this response
+    var sqlQueryCount: Int
+
+    var totalTokens: Int? {
+        guard let input = inputTokens, let output = outputTokens else { return nil }
+        return input + output + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
+    }
+
+    // MARK: - Dynamic context sections from system prompt
+
+    /// A single tagged section found in the system prompt
+    struct PromptSection {
+        let tag: String
+        let itemCount: Int
+        let charCount: Int
+
+        /// Human-readable label derived from the XML tag name
+        var label: String {
+            tag.replacingOccurrences(of: "_", with: " ")
+                .localizedCapitalized
+        }
+    }
+
+    /// Dynamically discovers all XML-tagged sections in the system prompt and counts items in each.
+    /// This is future-proof: any new `<some_tag>...</some_tag>` section automatically appears.
+    var promptSections: [PromptSection] {
+        guard let prompt = systemPrompt else { return [] }
+        var sections: [PromptSection] = []
+        var seen = Set<String>()
+
+        // Find all <tag>...</tag> pairs
+        let pattern = try! NSRegularExpression(pattern: #"<([a-z][a-z0-9_]*)>"#, options: [])
+        let matches = pattern.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
+
+        for match in matches {
+            guard let tagRange = Range(match.range(at: 1), in: prompt) else { continue }
+            let tag = String(prompt[tagRange])
+
+            // Skip duplicates
+            guard !seen.contains(tag) else { continue }
+            seen.insert(tag)
+
+            let openTag = "<\(tag)>"
+            let closeTag = "</\(tag)>"
+            guard let openRange = prompt.range(of: openTag),
+                  let closeRange = prompt.range(of: closeTag),
+                  openRange.upperBound < closeRange.lowerBound else { continue }
+
+            let content = String(prompt[openRange.upperBound..<closeRange.lowerBound])
+            let charCount = content.count
+
+            // Count meaningful lines (items starting with "- ", or role-prefixed lines for conversation)
+            let lines = content.components(separatedBy: "\n")
+            let itemCount: Int
+            if tag == "conversation_history" {
+                itemCount = lines.filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }.count
+            } else {
+                let bulletLines = lines.filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
+                // If no bullet items, count non-empty non-header lines
+                if bulletLines > 0 {
+                    itemCount = bulletLines
+                } else {
+                    itemCount = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+                }
+            }
+
+            sections.append(PromptSection(tag: tag, itemCount: itemCount, charCount: charCount))
+        }
+
+        return sections
+    }
+}
+
 /// A single chat message
 struct ChatMessage: Identifiable {
     var id: String  // Mutable to sync with server-generated ID
@@ -210,8 +297,10 @@ struct ChatMessage: Identifiable {
     var citations: [Citation]
     /// Structured content blocks for AI messages (text interspersed with tool calls)
     var contentBlocks: [ChatContentBlock]
+    /// Metadata about context used to generate this response (AI messages only)
+    var metadata: MessageMetadata?
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = []) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -221,6 +310,7 @@ struct ChatMessage: Identifiable {
         self.isSynced = isSynced
         self.citations = citations
         self.contentBlocks = contentBlocks
+        self.metadata = metadata
     }
 }
 
@@ -281,10 +371,12 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
+ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
 If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
-Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
+Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 ================================================================================
 """
@@ -1814,6 +1906,41 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
+    @discardableResult
+    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return nil }
+
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let localId = aiMessage.id
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+
+        messages.append(aiMessage)
+
+        Task { [weak self] in
+            do {
+                let response = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "ai",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId
+                )
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                }
+                log("Saved assistant message to backend: \(response.id)")
+            } catch {
+                logError("Failed to persist assistant message", error: error)
+            }
+        }
+
+        return aiMessage
+    }
+
     // MARK: - Send Message
 
     /// Send a message and get AI response via Claude Agent SDK bridge
@@ -1932,6 +2059,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var sqlRowsReturned = 0
+        var sqlQueryCount = 0
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
@@ -1965,6 +2094,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(toolCall)
                 log("OMI tool \(name) executed for callId=\(callId)")
+                // Track SQL query stats for metadata
+                if name == "execute_sql" {
+                    sqlQueryCount += 1
+                    // Parse row count from result (format: "\nN row(s)" at end)
+                    if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+                        let numStr = result[match].components(separatedBy: " ").first ?? "0"
+                        sqlRowsReturned += Int(numStr) ?? 0
+                    }
+                }
                 return result
             }
             let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
@@ -2061,6 +2199,20 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                 messages[index].text = messageText
                 messages[index].isStreaming = false
+                messages[index].metadata = MessageMetadata(
+                    model: model ?? modelOverride,
+                    inputTokens: queryResult.inputTokens,
+                    outputTokens: queryResult.outputTokens,
+                    cacheReadTokens: queryResult.cacheReadTokens,
+                    cacheWriteTokens: queryResult.cacheWriteTokens,
+                    costUsd: queryResult.costUsd,
+                    systemPrompt: systemPrompt,
+                    hasScreenshot: imageData != nil,
+                    screenshotSizeBytes: imageData?.count,
+                    toolNames: toolNames,
+                    sqlRowsReturned: sqlRowsReturned,
+                    sqlQueryCount: sqlQueryCount
+                )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {
                 // Message no longer in memory (user switched away from this session).

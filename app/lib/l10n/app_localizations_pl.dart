@@ -9004,8 +9004,34 @@ class AppLocalizationsPl extends AppLocalizations {
   String get willSyncAutomatically => 'zsynchronizuje się automatycznie';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Włącz lokalizację';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Uprawnienie do lokalizacji jest potrzebne, aby znaleźć pobliskie urządzenia Bluetooth.';
+
+  @override
+  String get voiceRecordingFound => 'Znaleziono nagranie';
+
+  @override
+  String get transcriptionConnecting => 'Łączenie transkrypcji...';
+
+  @override
+  String get transcriptionReconnecting => 'Ponowne łączenie transkrypcji...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkrypcja niedostępna';
+
+  @override
+  String get audioOutput => 'Wyjście audio';
+
+  @override
+  String get firmwareWarningTitle => 'Ważne: Przeczytaj przed aktualizacją';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ten firmware sformatuje kartę SD. Upewnij się, że wszystkie dane offline są zsynchronizowane przed aktualizacją.\n\nJeśli po zainstalowaniu tej wersji zobaczysz migającą czerwoną diodę, nie martw się. Po prostu podłącz urządzenie do aplikacji, a powinno zmienić kolor na niebieski. Czerwona dioda oznacza, że zegar urządzenia nie został jeszcze zsynchronizowany.';
+
+  @override
+  String get continueAnyway => 'Kontynuuj';
 }

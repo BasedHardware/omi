@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from models.conversation import AppResult, CategoryEnum, Conversation, Structured
+from models.conversation import AppResult, Conversation
+from models.conversation_enums import CategoryEnum
+from models.structured import Structured
 
 
 def _make_conversation(overview="Test overview", apps_results=None, title="Test Title"):

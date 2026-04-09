@@ -9,26 +9,25 @@ import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_memory_vector
 from utils.other.storage import delete_conversation_audio_files
+from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
-    BaseModel,
-    CalendarMeetingContext,
+    BulkAssignSegmentsRequest,
     Conversation,
-    ConversationPhoto,
-    ConversationStatus,
-    ConversationVisibility,
     CreateConversationResponse,
-    Geolocation,
+    DeleteActionItemRequest,
     MergeConversationsRequest,
     MergeConversationsResponse,
-    SetConversationEventsStateRequest,
-    SetConversationActionItemsStateRequest,
-    UpdateActionItemDescriptionRequest,
-    DeleteActionItemRequest,
-    BulkAssignSegmentsRequest,
-    UpdateSegmentTextRequest,
     SearchRequest,
+    SetConversationActionItemsStateRequest,
+    SetConversationEventsStateRequest,
     TestPromptRequest,
+    UpdateActionItemDescriptionRequest,
+    UpdateSegmentTextRequest,
 )
+from models.conversation_enums import ConversationStatus, ConversationVisibility
+from models.conversation_photo import ConversationPhoto
+from models.geolocation import Geolocation
+from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
@@ -158,6 +157,17 @@ def get_conversations(
             conv['suggested_summarization_apps'] = []
             conv['transcript_segments'] = []
     return conversations
+
+
+@router.get('/v1/conversations/count', tags=['conversations'])
+def get_conversations_count(
+    statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
+    include_discarded: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    return {'count': count}
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])

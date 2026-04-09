@@ -9066,8 +9066,34 @@ class AppLocalizationsFr extends AppLocalizations {
   String get willSyncAutomatically => 'sera synchronisé automatiquement';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activer la localisation';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'L\'autorisation de localisation est nécessaire pour trouver les appareils Bluetooth à proximité.';
+
+  @override
+  String get voiceRecordingFound => 'Enregistrement trouvé';
+
+  @override
+  String get transcriptionConnecting => 'Connexion de la transcription...';
+
+  @override
+  String get transcriptionReconnecting => 'Reconnexion de la transcription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transcription indisponible';
+
+  @override
+  String get audioOutput => 'Sortie audio';
+
+  @override
+  String get firmwareWarningTitle => 'Important : Lisez avant de mettre à jour';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ce firmware formatera la carte SD. Veuillez vous assurer que toutes les données hors ligne sont synchronisées avant la mise à jour.\n\nSi vous voyez un voyant rouge clignotant après l\'installation de cette version, ne vous inquiétez pas. Connectez simplement l\'appareil à l\'application et il devrait devenir bleu. Le voyant rouge signifie que l\'horloge de l\'appareil n\'a pas encore été synchronisée.';
+
+  @override
+  String get continueAnyway => 'Continuer';
 }

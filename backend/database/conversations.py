@@ -11,13 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
-from models.conversation import (
-    ConversationPhoto,
-    PostProcessingStatus,
-    PostProcessingModel,
-    ConversationStatus,
-    AudioFile,
-)
+from models.audio_file import AudioFile
+from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
+from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
@@ -218,6 +214,16 @@ def get_conversations(
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
+
+
+def get_conversations_count(uid: str, include_discarded: bool = False, statuses: List[str] = []):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if statuses:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    result = conversations_ref.count().get()
+    return int(result[0][0].value)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)

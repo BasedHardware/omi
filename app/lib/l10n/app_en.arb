@@ -10731,5 +10731,25 @@
     },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
-    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+    "voiceRecordingFound": "Recording found",
+    "transcriptionConnecting": "Connecting transcription...",
+    "@transcriptionConnecting": {
+        "description": "Status when transcription WebSocket is connecting"
+    },
+    "transcriptionReconnecting": "Reconnecting transcription...",
+    "@transcriptionReconnecting": {
+        "description": "Status when transcription WebSocket is reconnecting"
+    },
+    "transcriptionUnavailable": "Transcription unavailable",
+    "@transcriptionUnavailable": {
+        "description": "Status when transcription WebSocket failed after max retries"
+    },
+    "audioOutput": "Audio Output",
+    "@audioOutput": {
+        "description": "Title for audio route picker bottom sheet"
+    },
+    "firmwareWarningTitle": "Important: Read Before Updating",
+    "firmwareFormatWarning": "This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device's clock hasn't been synced yet.",
+    "continueAnyway": "Continue"
 }

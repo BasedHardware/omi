@@ -8996,8 +8996,33 @@ class AppLocalizationsId extends AppLocalizations {
   String get willSyncAutomatically => 'akan disinkronkan secara otomatis';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktifkan Lokasi';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di dekatnya.';
+
+  @override
+  String get voiceRecordingFound => 'Rekaman ditemukan';
+
+  @override
+  String get transcriptionConnecting => 'Menghubungkan transkripsi...';
+
+  @override
+  String get transcriptionReconnecting => 'Menghubungkan ulang transkripsi...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
+
+  @override
+  String get audioOutput => 'Output audio';
+
+  @override
+  String get firmwareWarningTitle => 'Penting: Baca Sebelum Memperbarui';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Firmware ini akan memformat kartu SD. Pastikan semua data offline telah disinkronkan sebelum memperbarui.\n\nJika Anda melihat lampu merah berkedip setelah menginstal versi ini, jangan khawatir. Cukup hubungkan perangkat ke aplikasi dan lampu akan berubah menjadi biru. Lampu merah berarti jam perangkat belum disinkronkan.';
+
+  @override
+  String get continueAnyway => 'Lanjutkan';
 }

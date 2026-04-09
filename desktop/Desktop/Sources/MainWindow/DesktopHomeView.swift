@@ -29,6 +29,7 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
+  @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
 
@@ -422,7 +423,8 @@ struct DesktopHomeView: View {
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
-    if currentTierLevel >= 4 { visibleRawValues.insert(SidebarNavItem.chat.rawValue) }
+    // Conversations replaced Chat in the sidebar; tier 1 unlocks it.
+    if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.conversations.rawValue) }
 
     if !visibleRawValues.contains(selectedIndex) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
@@ -515,8 +517,8 @@ struct DesktopHomeView: View {
       return .tasks
     case "focus":
       return .focus
-    case "advice":
-      return .advice
+    case "insight":
+      return .insight
     case "rewind":
       return .rewind
     case "apps", "integrations":
@@ -600,7 +602,10 @@ struct DesktopHomeView: View {
         RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
           .fill(
             LinearGradient(
-              colors: [OmiColors.backgroundSecondary.opacity(0.96), OmiColors.backgroundPrimary.opacity(0.96)],
+              colors: [
+                OmiColors.backgroundSecondary.opacity(0.96),
+                OmiColors.backgroundPrimary.opacity(0.96),
+              ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             )
@@ -633,6 +638,28 @@ struct DesktopHomeView: View {
       // Goal completion celebration overlay
       GoalCelebrationView()
     }
+    .overlay {
+      if showTryAskingPopup {
+        let suggestions = PostOnboardingPromptSuggestions.suggestions()
+        if !suggestions.isEmpty {
+          TryAskingPopupView(
+            suggestions: suggestions,
+            onAsk: { suggestion in
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+              FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+            },
+            onDismiss: {
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+            }
+          )
+        }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+      showTryAskingPopup = true
+    }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
       selectedSettingsSection = .rewind
@@ -660,7 +687,7 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
-      selectedSettingsSection = .aiChat
+      selectedSettingsSection = .advanced
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
@@ -683,8 +710,9 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+      // Chat now lives on the Dashboard page.
       withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.chat.rawValue
+        selectedIndex = SidebarNavItem.dashboard.rawValue
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
@@ -738,12 +766,13 @@ private struct PageContentView: View {
       switch selectedIndex {
       case 0:
         DashboardPage(
-          viewModel: viewModelContainer.dashboardViewModel, appState: appState,
+          viewModel: viewModelContainer.dashboardViewModel,
+          appState: appState,
+          appProvider: viewModelContainer.appProvider,
+          chatProvider: viewModelContainer.chatProvider,
           selectedIndex: $selectedTabIndex)
       case 1:
-        DashboardPage(
-          viewModel: viewModelContainer.dashboardViewModel, appState: appState,
-          selectedIndex: $selectedTabIndex)
+        ConversationsPageHost(appState: appState)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
@@ -758,11 +787,11 @@ private struct PageContentView: View {
       case 5:
         FocusPage()
       case 6:
-        AdvicePage()
+        InsightPage()
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider)
+        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
       case 9:
         SettingsPage(
           appState: appState,
@@ -778,10 +807,24 @@ private struct PageContentView: View {
         HelpPage()
       default:
         DashboardPage(
-          viewModel: viewModelContainer.dashboardViewModel, appState: appState,
+          viewModel: viewModelContainer.dashboardViewModel,
+          appState: appState,
+          appProvider: viewModelContainer.appProvider,
+          chatProvider: viewModelContainer.chatProvider,
           selectedIndex: $selectedTabIndex)
       }
     }
+  }
+}
+
+/// Hosts the standalone Conversations page with its own selection state
+/// so tapping a row navigates to the detail view.
+private struct ConversationsPageHost: View {
+  let appState: AppState
+  @State private var selectedConversation: ServerConversation? = nil
+
+  var body: some View {
+    ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
   }
 }
 

@@ -6,7 +6,7 @@ import SwiftUI
 
 @MainActor
 final class OnboardingPagedIntroCoordinator: ObservableObject {
-  struct ScanSnapshot {
+  struct ScanSnapshot: Equatable {
     let fileCount: Int
     let projectNames: [String]
     let applications: [String]
@@ -146,50 +146,35 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   }
 
   var connectedContextSummary: String {
-    var sentences: [String] = []
+    let candidateSummaries = [
+      condensedProfileSentence(from: webResearchSummary),
+      condensedProfileSentence(from: emailSummary),
+      condensedProfileSentence(from: calendarSummary),
+      condensedProfileSentence(from: appleNotesSummary),
+      condensedProfileSentence(from: chatGPTImportSummary),
+      condensedProfileSentence(from: claudeImportSummary),
+    ].compactMap { $0 }
+
+    if !candidateSummaries.isEmpty {
+      return candidateSummaries.prefix(2).joined(separator: " ")
+    }
 
     if let snapshot = scanSnapshot, snapshot.fileCount > 0 {
-      if !snapshot.projectNames.isEmpty {
-        let featuredProjects = snapshot.projectNames.prefix(2).joined(separator: " and ")
-        sentences.append(
-          "Your local files center around \(featuredProjects), with \(snapshot.fileCount.formatted()) files mapped and \(localFileMemoriesSaved.formatted()) memories extracted."
-        )
-      } else {
-        sentences.append(
-          "Omi has already mapped \(snapshot.fileCount.formatted()) local files from your workspace and extracted \(localFileMemoriesSaved.formatted()) memories."
-        )
+      let name = preferredName == "there" ? "This person" : preferredName
+      let projects = snapshot.projectNames.prefix(2)
+      let technologies = snapshot.technologies.prefix(2)
+
+      if !projects.isEmpty && !technologies.isEmpty {
+        return
+          "\(name) appears to be building around \(projects.joined(separator: " and ")), with daily work in \(technologies.joined(separator: " and "))."
+      }
+
+      if !projects.isEmpty {
+        return "\(name) appears focused on \(projects.joined(separator: " and "))."
       }
     }
 
-    if gmailInsightCount > 0 || calendarInsightCount > 0 {
-      let emailText =
-        gmailInsightCount > 0
-        ? "\(gmailInsightCount.formatted()) emails" : nil
-      let calendarText =
-        calendarInsightCount > 0
-        ? "\(calendarInsightCount.formatted()) calendar events" : nil
-      let joined = [emailText, calendarText].compactMap { $0 }.joined(separator: " and ")
-      sentences.append("Your recent communication history adds \(joined) to the picture.")
-    }
-
-    if appleNotesInsightCount > 0 {
-      sentences.append(
-        "Apple Notes contributes \(appleNotesInsightCount.formatted()) notes and \(appleNotesMemoriesSaved.formatted()) extracted memories."
-      )
-    }
-
-    let importedMemories = chatGPTImportedMemoriesCount + claudeImportedMemoriesCount
-    if importedMemories > 0 {
-      sentences.append(
-        "Imported memory logs add \(importedMemories.formatted()) durable memories from ChatGPT and Claude."
-      )
-    }
-
-    if sentences.isEmpty {
-      return "Omi is still gathering signal from your connected sources."
-    }
-
-    return sentences.prefix(3).joined(separator: " ")
+    return "Omi is still building a clearer picture from the sources connected so far."
   }
 
   func importedMemoryCount(for source: OnboardingMemoryLogSource) -> Int {
@@ -441,8 +426,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return appState.hasFullDiskAccess
     case "microphone":
       return appState.hasMicrophonePermission
-    case "notifications":
-      return appState.hasNotificationPermission
     case "accessibility":
       return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
     case "automation":
@@ -575,7 +558,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           projectScores[project, default: 0] += 1
         }
 
-        let projects = projectScores
+        let projects =
+          projectScores
           .sorted {
             if $0.value == $1.value {
               return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
@@ -611,8 +595,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
 
       guard let snapshot else { return }
+      let previousSnapshot = scanSnapshot
       scanSnapshot = snapshot
       suggestedGoals = buildSuggestedGoals(from: snapshot)
+
+      guard previousSnapshot != snapshot else { return }
 
       var nodes: [[String: Any]] = []
       var edges: [[String: Any]] = []
@@ -971,6 +958,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       CALENDAR SUMMARY:
       \(calendarSummary.isEmpty ? "None" : calendarSummary)
 
+      APPLE NOTES SUMMARY:
+      \(appleNotesSummary.isEmpty ? "None" : appleNotesSummary)
+
       WEB RESULTS:
       \(webLines)
 
@@ -987,6 +977,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
       RULES:
       - Use only facts grounded in the provided context
+      - summary must describe who the user is in 1-2 crisp sentences, not source counts
+      - summary should be readable in a small UI footer and must avoid bloated phrasing
       - entities: at most 12
       - node_type must be one of: person, organization, place, thing, concept
       - relation must connect the user to the entity, like works_on, uses, works_with, follows, plans_with, researches
@@ -1091,6 +1083,30 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return firstResult.snippet
     }
     return firstResult.title
+  }
+
+  private func condensedProfileSentence(from raw: String) -> String? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    let cleaned =
+      trimmed
+      .replacingOccurrences(of: "\n", with: " ")
+      .replacingOccurrences(of: "  ", with: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let sentence = cleaned.split(whereSeparator: \.isNewline).first.map(String.init) ?? cleaned
+    let normalized = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else { return nil }
+
+    let capped =
+      normalized.count > 170
+      ? String(normalized.prefix(167)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+      : normalized
+
+    return capped.hasSuffix(".") || capped.hasSuffix("!") || capped.hasSuffix("?")
+      ? capped
+      : capped + "."
   }
 
   private func sanitizeJSONResponse(_ text: String) -> String {
@@ -1312,7 +1328,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private func buildLocalFileMemoryDrafts(from snapshot: ScanSnapshot) async -> [MemoryDraft] {
     var drafts: [MemoryDraft] = [
       MemoryDraft(
-        content: "The user has \(snapshot.fileCount.formatted()) local files indexed across their machine.",
+        content:
+          "The user has \(snapshot.fileCount.formatted()) local files indexed across their machine.",
         tags: ["local_files", "onboarding", "profile"],
         source: "local_files",
         headline: "Local Files Overview"
@@ -1401,7 +1418,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         drafts.append(contentsOf: projectDrafts)
       } catch {
-        log("OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
+        log(
+          "OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
       }
     }
 
@@ -1523,7 +1541,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let components = normalized.split(separator: "/").map(String.init)
 
     func component(after name: String) -> String? {
-      guard let index = components.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }),
+      guard
+        let index = components.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }
+        ),
         index + 1 < components.count
       else {
         return nil

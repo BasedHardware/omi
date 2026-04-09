@@ -10,7 +10,6 @@ enum OnboardingFlow {
     "FullDiskAccess",
     "FileScan",
     "Microphone",
-    "Notifications",
     "Accessibility",
     "Automation",
     "FloatingBarShortcut",
@@ -18,6 +17,7 @@ enum OnboardingFlow {
     "VoiceShortcut",
     "VoiceDemo",
     "DataSources",
+    "Exports",
     "Goal",
     "Tasks",
   ]
@@ -36,6 +36,7 @@ enum OnboardingFlow {
     hasReorderedTrustStep: Bool,
     hasInsertedHowDidYouHearStep: Bool = true,
     hasInsertedDataSourcesStep: Bool = true,
+    hasInsertedExportsStep: Bool = true,
     hasInsertedSecondBrainStep: Bool = false,
     hasRemovedResearchStep: Bool = false
   ) -> Int {
@@ -77,6 +78,10 @@ enum OnboardingFlow {
       migratedStep += 1
     }
 
+    if !hasInsertedExportsStep, migratedStep >= 16 {
+      migratedStep += 1
+    }
+
     // Research step was merged into DataSources. Keep users on that stage if they were
     // already there, and shift later steps down by one.
     if !hasRemovedResearchStep, migratedStep > 15 {
@@ -84,7 +89,7 @@ enum OnboardingFlow {
     }
 
     // Temporary SecondBrainLive step was removed; shift users at Goal+ down
-    if hasInsertedSecondBrainStep, migratedStep >= 17 {
+    if hasInsertedSecondBrainStep, migratedStep >= 18 {
       migratedStep -= 1
     }
 

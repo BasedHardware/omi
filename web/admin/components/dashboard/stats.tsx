@@ -1,20 +1,21 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Loader2, MessageSquare, CreditCard, Smartphone } from "lucide-react";
-import { useAuth } from "@/components/auth-provider";
-import { useState, useEffect } from "react";
+import { Package, Loader2, MessageSquare, CreditCard, Smartphone, AlertTriangle } from "lucide-react";
 import useSWR from 'swr';
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 
 interface AppStats {
   total: number;
   approved: number;
   inReview: number;
   paid: number;
+  partial?: boolean;
 }
 
 interface SubscriptionStats {
   totalSubscriptions: number;
+  partial?: boolean;
   priceIdOne: {
     count: number;
     priceId: string;
@@ -32,6 +33,13 @@ interface AppSubscriptionStats {
   uniquePriceIds: number;
 }
 
+const PartialDataBadge = () => (
+  <span className="inline-flex items-center gap-1 text-xs text-amber-600" title="Some data sources failed to load. Numbers may be incomplete.">
+    <AlertTriangle className="h-3 w-3" />
+    <span>Partial</span>
+  </span>
+);
+
 const StatItem = ({ color, count, label }: { color: string; count: number; label: string }) => (
   <div className="flex items-center gap-2 text-sm text-muted-foreground">
     <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
@@ -40,52 +48,8 @@ const StatItem = ({ color, count, label }: { color: string; count: number; label
   </div>
 );
 
-// Authenticated fetcher for SWR
-const authenticatedFetcher = async ([url, token]: [string, string]) => {
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const error = new Error('An error occurred while fetching the data.')
-    try {
-        (error as any).info = await response.json();
-    } catch (e) {
-        (error as any).info = { message: 'Could not parse error JSON.' };
-    }
-    (error as any).status = response.status;
-    throw error;
-  }
-  return response.json();
-};
-
 export function DashboardStats() {
-  const { user, loading: authLoading } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
-
-  useEffect(() => {
-    const getToken = async () => {
-        if (user) {
-            try {
-                const idToken = await user.getIdToken();
-                setToken(idToken);
-            } catch (error) {
-                console.error("Error getting ID token:", error);
-                setToken(null);
-            } finally {
-                setTokenLoading(false);
-            }
-        } else if (!authLoading) {
-            setToken(null);
-            setTokenLoading(false);
-        }
-    };
-    getToken();
-  }, [user, authLoading]);
+  const { token, loading: tokenLoading } = useAuthToken();
 
   // Fetch app stats using SWR with authentication
   const { 
@@ -99,35 +63,35 @@ export function DashboardStats() {
   );
 
   // Fetch conversation count using SWR
-  const { 
+  const {
     data: conversationData,
     error: conversationError,
-    isLoading: conversationLoading 
+    isLoading: conversationLoading
   } = useSWR<{ totalConversations: number }>(
-    '/api/omi/stats/conversation-count',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/conversation-count', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
   // Fetch subscription stats using SWR
-  const { 
+  const {
     data: subscriptionData,
     error: subscriptionError,
-    isLoading: subscriptionLoading 
+    isLoading: subscriptionLoading
   } = useSWR<SubscriptionStats>(
-    '/api/omi/stats/subscriptions',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/subscriptions', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
   // Fetch app subscription stats using SWR
-  const { 
+  const {
     data: appSubscriptionData,
     error: appSubscriptionError,
-    isLoading: appSubscriptionLoading 
+    isLoading: appSubscriptionLoading
   } = useSWR<AppSubscriptionStats>(
-    '/api/omi/stats/app-subscriptions',
-    (url) => fetch(url).then(res => res.json()),
+    token ? ['/api/omi/stats/app-subscriptions', token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
@@ -162,12 +126,15 @@ export function DashboardStats() {
       {/* --- Apps Card --- */}
       {appStatsError ? (
         <ErrorCard title="Apps" error={appStatsError} />
-      ) : authLoading || tokenLoading || appStatsLoading ? (
+      ) : tokenLoading || appStatsLoading ? (
         <LoadingCard />
       ) : appStats && appStats.total !== undefined ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium text-muted-foreground">Apps</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-medium text-muted-foreground">Apps</CardTitle>
+              {appStats.partial && <PartialDataBadge />}
+            </div>
             <Package className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-3 pt-0 pb-6 px-6">
@@ -193,7 +160,7 @@ export function DashboardStats() {
       {/* --- Conversations Card --- */}
       {conversationError ? (
         <ErrorCard title="Conversations" error={conversationError} />
-      ) : conversationLoading ? (
+      ) : tokenLoading || conversationLoading ? (
         <LoadingCard />
       ) : conversationData && conversationData.totalConversations !== undefined ? (
         <Card>
@@ -219,12 +186,15 @@ export function DashboardStats() {
       {/* --- Subscriptions Card --- */}
       {subscriptionError ? (
         <ErrorCard title="Active OMI Subscriptions" error={subscriptionError} />
-      ) : subscriptionLoading ? (
+      ) : tokenLoading || subscriptionLoading ? (
         <LoadingCard />
       ) : subscriptionData && subscriptionData.totalSubscriptions !== undefined ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium text-muted-foreground">Active OMI Subscriptions</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-medium text-muted-foreground">Active OMI Subscriptions</CardTitle>
+              {subscriptionData.partial && <PartialDataBadge />}
+            </div>
             <CreditCard className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-3 pt-0 pb-6 px-6">
@@ -249,7 +219,7 @@ export function DashboardStats() {
       {/* --- App Subscriptions Card --- */}
       {appSubscriptionError ? (
         <ErrorCard title="App Subscriptions" error={appSubscriptionError} />
-      ) : appSubscriptionLoading ? (
+      ) : tokenLoading || appSubscriptionLoading ? (
         <LoadingCard />
       ) : appSubscriptionData && appSubscriptionData.totalAppSubscriptions !== undefined ? (
         <Card>

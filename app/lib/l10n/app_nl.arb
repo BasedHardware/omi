@@ -2927,5 +2927,15 @@
             }
         }
     },
-    "willSyncAutomatically": "wordt automatisch gesynchroniseerd"
+    "willSyncAutomatically": "wordt automatisch gesynchroniseerd",
+    "voiceRecordingFound": "Opname gevonden",
+    "transcriptionConnecting": "Transcriptie verbinden...",
+    "transcriptionReconnecting": "Transcriptie opnieuw verbinden...",
+    "transcriptionUnavailable": "Transcriptie niet beschikbaar",
+    "audioOutput": "Audio-uitvoer",
+    "enableLocationTitle": "Locatie inschakelen",
+    "enableLocationDescription": "Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden.",
+    "firmwareWarningTitle": "Belangrijk: Lees voor het updaten",
+    "firmwareFormatWarning": "Deze firmware zal de SD-kaart formatteren. Zorg ervoor dat alle offline gegevens gesynchroniseerd zijn voor de upgrade.\n\nAls u na het installeren van deze versie een knipperend rood lampje ziet, maak u geen zorgen. Verbind het apparaat gewoon met de app en het zou blauw moeten worden. Het rode lampje betekent dat de klok van het apparaat nog niet is gesynchroniseerd.",
+    "continueAnyway": "Doorgaan"
 }

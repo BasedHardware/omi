@@ -289,11 +289,24 @@ async function performSemanticSearch(searchQuery, days = 7, appFilter = null) {
 
 const executeSqlTool = tool(
   "execute_sql",
-  `Run SQL on the user's omi.db SQLite database.
-Supports: SELECT, INSERT, UPDATE, DELETE.
-SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
-  { query: z.string().describe("SQL query to execute") },
+  `Run SQL on the user's local omi.db SQLite database for structured data queries.
+
+Use when:
+- User asks for app usage stats, screen time, or activity counts
+- Time-based queries like "how long did I spend on X?"
+- Task management: looking up action items, checking completion status
+- Aggregations, rankings, or structured filters on local data
+
+Don't use when (if those tools are available):
+- User asks about conversation content or transcripts (prefer get_conversations or search_conversations)
+- User asks about their preferences or facts about themselves (prefer get_memories)
+- User asks fuzzy/conceptual questions (use semantic_search instead)
+- If backend tools are not available, fall back to execute_sql on the local transcription_sessions table
+
+Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
+
+Key tables: screenshots (appName, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), action_items (description, completed, priority, dueAt).`,
+  { query: z.string().describe("SQL query to execute against omi.db") },
   async ({ query }) => {
     const result = executeSqlQuery(query);
     return { content: [{ type: "text", text: result }] };
@@ -302,13 +315,26 @@ Use for: app usage stats, time queries, task management, aggregations, anything 
 
 const semanticSearchTool = tool(
   "semantic_search",
-  `Vector similarity search on screen history.
-Use for: fuzzy conceptual queries where exact SQL keywords won't work.
-e.g. "reading about machine learning", "working on design mockups"`,
+  `Vector similarity search on the user's screen history (what they saw on their computer).
+
+Use when:
+- Fuzzy or conceptual queries where exact SQL keywords won't work
+- User asks "when was I reading about X?" or "find where I was working on Y"
+- Theme-based recall: "design mockups", "code reviews", "email about project Z"
+
+Don't use when:
+- User asks about spoken conversations or transcripts (prefer search_conversations if available)
+- User asks for structured counts or stats (use execute_sql)
+- User wants a broad daily recap (use get_daily_recap)
+
+Parameter guidance:
+- days: Start with 7 (default). Use 1-3 for recent activity, 14-30 for older searches.
+- app_filter: Set when user specifies an app (e.g., "in Chrome", "in VS Code"). Omit for cross-app searches.
+- Results are ranked by semantic similarity — top 15 returned.`,
   {
-    query: z.string().describe("Natural language search query"),
-    days: z.number().optional().default(7).describe("Number of days to search back (default: 7)"),
-    app_filter: z.string().optional().describe("Filter results to a specific app name"),
+    query: z.string().describe("Natural language search query describing what the user was doing or viewing"),
+    days: z.number().optional().default(7).describe("Days to search back: 1-3 for recent, 7 default, 14-30 for older"),
+    app_filter: z.string().optional().describe("Filter to a specific app (e.g., 'Chrome', 'VS Code'). Omit for all apps"),
   },
   async ({ query, days, app_filter }) => {
     const result = await performSemanticSearch(query, days, app_filter);
@@ -318,11 +344,26 @@ e.g. "reading about machine learning", "working on design mockups"`,
 
 const getDailyRecapTool = tool(
   "get_daily_recap",
-  `Get a pre-formatted daily activity recap from the local database.
-Use for: "what did I do today/yesterday/this week", activity summaries, daily reviews.
-Runs app usage, conversations, and action items queries in one call — much faster than multiple execute_sql calls.`,
+  `Get a pre-formatted daily activity recap combining app usage, conversations, and tasks.
+
+Use when:
+- User asks "what did I do today/yesterday/this week?"
+- Broad activity summaries or daily reviews
+- User wants a quick overview without specifying a topic
+
+Don't use when:
+- User asks about a specific topic or event (prefer search_conversations if available)
+- User needs detailed transcript content (prefer get_conversations if available)
+- User wants structured data or counts (use execute_sql)
+
+This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
+
+Parameter guidance:
+- days_ago=0: today's activity so far
+- days_ago=1: yesterday (default, most common)
+- days_ago=7: past week overview`,
   {
-    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week"),
+    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week. Default 1"),
   },
   async ({ days_ago }) => {
     if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };

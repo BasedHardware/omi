@@ -16,6 +16,7 @@ struct OnboardingVoiceDemoView: View {
     @State private var waitingForResponse = false
     @State private var showContinue = false
     @State private var previousTranscriptionMode: ShortcutSettings.PTTTranscriptionMode?
+    @State private var voiceResponsesEnabled: Bool = ShortcutSettings.shared.floatingBarVoiceAnswersEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +43,7 @@ struct OnboardingVoiceDemoView: View {
 
             VStack(spacing: 24) {
                 VStack(spacing: 12) {
-                    Text("Hold and Ask")
+                    Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
@@ -51,6 +52,24 @@ struct OnboardingVoiceDemoView: View {
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
+
+                // Voice responses checkbox
+                HStack(spacing: 8) {
+                    Toggle("", isOn: $voiceResponsesEnabled)
+                        .toggleStyle(.checkbox)
+                        .onChange(of: voiceResponsesEnabled) { _, newValue in
+                            ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = newValue
+                            SettingsSyncManager.shared.pushPartialUpdate(
+                                AssistantSettingsResponse(
+                                    floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
+                                )
+                            )
+                        }
+                    Text("Speak answers aloud for voice questions")
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textSecondary)
+                }
+                .padding(.top, 4)
 
                 if !observedShortcutPress {
                     VStack(spacing: 12) {

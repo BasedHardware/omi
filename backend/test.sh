@@ -28,6 +28,7 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_conversations_to_string.py -v
+pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_task_sharing.py -v
@@ -41,6 +42,7 @@ pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
+pytest tests/unit/test_conversation_model_split.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_pusher_batch_upload.py -v
@@ -76,6 +78,9 @@ pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_vision_stream_async.py -v
 pytest tests/unit/test_desktop_transcribe.py -v
+pytest tests/unit/test_desktop_migration.py -v
+pytest tests/unit/test_staged_tasks_batch_scores.py -v
+pytest tests/unit/test_dg_start_guard.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

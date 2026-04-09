@@ -13,7 +13,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   nonisolated private static let minimumChunkLength = 40
   nonisolated private static let preferredChunkLength = 120
   nonisolated private static let emergencyChunkLength = 200
-  nonisolated private static let playbackRate: Float = 1.2
+  private var playbackRate: Float { ShortcutSettings.shared.voicePlaybackSpeed }
 
   nonisolated private static let fillerPhrases: [String] = [
     "Let me check.",
@@ -41,7 +41,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private override init() {}
 
   func playFillerIfEnabled() {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -64,12 +64,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   func playResponseIfEnabled(_ message: ChatMessage?) {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
     updateStreamingResponseIfEnabled(message, isFinal: true)
   }
 
   func updateStreamingResponseIfEnabled(_ message: ChatMessage?, isFinal: Bool) {
-    guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
+    guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
 
     let text = Self.cleanedPlaybackText(from: message)
     guard !text.isEmpty, Self.shouldSpeak(text) else { return }
@@ -205,7 +205,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       let player = try AVAudioPlayer(data: data)
       player.delegate = self
       player.enableRate = true
-      player.rate = Self.playbackRate
+      player.rate = playbackRate
       player.prepareToPlay()
       player.play()
       audioPlayer = player

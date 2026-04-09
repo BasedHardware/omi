@@ -27,7 +27,9 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, ConversationStatus, Geolocation
+from models.conversation import Conversation
+from models.conversation_enums import ConversationStatus
+from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
     trigger_realtime_integrations,

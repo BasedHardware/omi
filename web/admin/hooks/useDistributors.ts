@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Distributor, ShopifyLocation } from '@/types/distributor'
+import { useAuthFetch } from '@/hooks/useAuthToken'
 
 export interface CreateDistributorData {
   email: string
@@ -20,15 +21,17 @@ export const useDistributors = () => {
   const [locations, setLocations] = useState<ShopifyLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { fetchWithAuth, token } = useAuthFetch()
 
   const fetchDistributors = async () => {
+    if (!token) return
     try {
       setLoading(true)
       setError(null)
 
       const [distRes, locRes] = await Promise.all([
-        fetch('/api/distributors'),
-        fetch('/api/distributors/locations'),
+        fetchWithAuth('/api/distributors'),
+        fetchWithAuth('/api/distributors/locations'),
       ])
 
       if (!distRes.ok) throw new Error('Failed to fetch distributors')
@@ -51,9 +54,8 @@ export const useDistributors = () => {
   const createDistributor = async (data: CreateDistributorData) => {
     try {
       setError(null)
-      const response = await fetch('/api/distributors', {
+      const response = await fetchWithAuth('/api/distributors', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
 
@@ -74,9 +76,8 @@ export const useDistributors = () => {
   const updateDistributor = async (data: UpdateDistributorData) => {
     try {
       setError(null)
-      const response = await fetch('/api/distributors', {
+      const response = await fetchWithAuth('/api/distributors', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
 
@@ -95,8 +96,11 @@ export const useDistributors = () => {
   }
 
   useEffect(() => {
-    fetchDistributors()
-  }, [])
+    if (token) {
+      fetchDistributors()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   return {
     distributors,

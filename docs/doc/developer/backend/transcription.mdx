@@ -155,17 +155,15 @@ The system uses Deepgram for all transcription:
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
-    Lang -->|English| DG3[Deepgram Nova-3]
-    Lang -->|Unsupported by Nova-3| DG2[Deepgram Nova-2]
-    DG3 -->|Fallback on error| DG2
+    Lang -->|Supported| DG3[Deepgram Nova-3]
+    Lang -->|Unsupported| Fallback[Fallback to English Nova-3]
 ```
 
 ### Provider Capabilities
 
 | Provider | Languages | Model | Best For |
 |----------|-----------|-------|----------|
-| **Deepgram Nova-3** | 30+ | `nova-3` | Primary English, major languages |
-| **Deepgram Nova-2** | 40+ | `nova-2-general` | Broader language support |
+| **Deepgram Nova-3** | 50+ | `nova-3` | All supported languages |
 
 ## Deepgram Configuration
 

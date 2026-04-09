@@ -8838,8 +8838,33 @@ class AppLocalizationsKo extends AppLocalizations {
   String get willSyncAutomatically => '자동으로 동기화됩니다';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => '위치 활성화';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => '근처 블루투스 기기를 찾으려면 위치 권한이 필요합니다.';
+
+  @override
+  String get voiceRecordingFound => '녹음 발견됨';
+
+  @override
+  String get transcriptionConnecting => '전사 연결 중...';
+
+  @override
+  String get transcriptionReconnecting => '전사 재연결 중...';
+
+  @override
+  String get transcriptionUnavailable => '전사를 사용할 수 없습니다';
+
+  @override
+  String get audioOutput => '오디오 출력';
+
+  @override
+  String get firmwareWarningTitle => '중요: 업데이트 전 확인사항';
+
+  @override
+  String get firmwareFormatWarning =>
+      '이 펌웨어는 SD 카드를 포맷합니다. 업그레이드 전에 모든 오프라인 데이터가 동기화되었는지 확인하세요.\n\n이 버전 설치 후 빨간 불이 깜빡이더라도 걱정하지 마세요. 기기를 앱에 연결하면 파란색으로 바뀝니다. 빨간 불은 기기의 시계가 아직 동기화되지 않았다는 의미입니다.';
+
+  @override
+  String get continueAnyway => '계속';
 }

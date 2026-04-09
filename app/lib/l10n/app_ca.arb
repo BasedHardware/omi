@@ -2896,5 +2896,15 @@
             }
         }
     },
-    "willSyncAutomatically": "es sincronitzarà automàticament"
+    "willSyncAutomatically": "es sincronitzarà automàticament",
+    "voiceRecordingFound": "Gravació trobada",
+    "transcriptionConnecting": "Connectant la transcripció...",
+    "transcriptionReconnecting": "Reconnectant la transcripció...",
+    "transcriptionUnavailable": "Transcripció no disponible",
+    "audioOutput": "Sortida d'àudio",
+    "enableLocationTitle": "Activa la ubicació",
+    "enableLocationDescription": "Es necessita el permís d'ubicació per trobar dispositius Bluetooth propers.",
+    "firmwareWarningTitle": "Important: Llegiu abans d'actualitzar",
+    "firmwareFormatWarning": "Aquest firmware formatarà la targeta SD. Assegureu-vos que totes les dades fora de línia estiguin sincronitzades abans d'actualitzar.\n\nSi veieu una llum vermella parpellejant després d'instal·lar aquesta versió, no us preocupeu. Simplement connecteu el dispositiu a l'aplicació i hauria de tornar-se blau. La llum vermella significa que el rellotge del dispositiu encara no s'ha sincronitzat.",
+    "continueAnyway": "Continuar"
 }

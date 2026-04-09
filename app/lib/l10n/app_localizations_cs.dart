@@ -8982,8 +8982,33 @@ class AppLocalizationsCs extends AppLocalizations {
   String get willSyncAutomatically => 'synchronizuje se automaticky';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Povolit polohu';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Oprávnění k poloze je potřebné pro nalezení blízkých Bluetooth zařízení.';
+
+  @override
+  String get voiceRecordingFound => 'Nalezena nahrávka';
+
+  @override
+  String get transcriptionConnecting => 'Připojování přepisu...';
+
+  @override
+  String get transcriptionReconnecting => 'Opětovné připojování přepisu...';
+
+  @override
+  String get transcriptionUnavailable => 'Přepis není dostupný';
+
+  @override
+  String get audioOutput => 'Zvukový výstup';
+
+  @override
+  String get firmwareWarningTitle => 'Důležité: Přečtěte si před aktualizací';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Tento firmware naformátuje SD kartu. Před aktualizací se prosím ujistěte, že jsou všechna offline data synchronizována.\n\nPokud po instalaci této verze uvidíte blikající červené světlo, nedělejte si starosti. Jednoduše připojte zařízení k aplikaci a mělo by se rozsvítit modře. Červené světlo znamená, že hodiny zařízení ještě nebyly synchronizovány.';
+
+  @override
+  String get continueAnyway => 'Pokračovat';
 }

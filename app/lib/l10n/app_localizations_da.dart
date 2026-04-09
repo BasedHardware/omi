@@ -8971,8 +8971,34 @@ class AppLocalizationsDa extends AppLocalizations {
   String get willSyncAutomatically => 'synkroniseres automatisk';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktivér placering';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Placeringstilladelse er nødvendig for at finde Bluetooth-enheder i nærheden.';
+
+  @override
+  String get voiceRecordingFound => 'Optagelse fundet';
+
+  @override
+  String get transcriptionConnecting => 'Forbinder transskription...';
+
+  @override
+  String get transcriptionReconnecting => 'Genopretter transskription...';
+
+  @override
+  String get transcriptionUnavailable => 'Transskription ikke tilgængelig';
+
+  @override
+  String get audioOutput => 'Lydudgang';
+
+  @override
+  String get firmwareWarningTitle => 'Vigtigt: Læs inden opdatering';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Denne firmware vil formatere SD-kortet. Sørg venligst for, at alle offline-data er synkroniseret inden opgradering.\n\nHvis du ser et blinkende rødt lys efter installation af denne version, skal du ikke bekymre dig. Tilslut blot enheden til appen, og den skulle blive blå. Det røde lys betyder, at enhedens ur endnu ikke er synkroniseret.';
+
+  @override
+  String get continueAnyway => 'Fortsæt';
 }

@@ -2896,5 +2896,15 @@
             }
         }
     },
-    "willSyncAutomatically": "synchronizuje se automaticky"
+    "willSyncAutomatically": "synchronizuje se automaticky",
+    "voiceRecordingFound": "Nalezena nahrávka",
+    "transcriptionConnecting": "Připojování přepisu...",
+    "transcriptionReconnecting": "Opětovné připojování přepisu...",
+    "transcriptionUnavailable": "Přepis není dostupný",
+    "audioOutput": "Zvukový výstup",
+    "enableLocationTitle": "Povolit polohu",
+    "enableLocationDescription": "Oprávnění k poloze je potřebné pro nalezení blízkých Bluetooth zařízení.",
+    "firmwareWarningTitle": "Důležité: Přečtěte si před aktualizací",
+    "firmwareFormatWarning": "Tento firmware naformátuje SD kartu. Před aktualizací se prosím ujistěte, že jsou všechna offline data synchronizována.\n\nPokud po instalaci této verze uvidíte blikající červené světlo, nedělejte si starosti. Jednoduše připojte zařízení k aplikaci a mělo by se rozsvítit modře. Červené světlo znamená, že hodiny zařízení ještě nebyly synchronizovány.",
+    "continueAnyway": "Pokračovat"
 }

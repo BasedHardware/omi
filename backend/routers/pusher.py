@@ -13,7 +13,9 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, ConversationStatus, Geolocation
+from models.conversation import Conversation
+from models.conversation_enums import ConversationStatus
+from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
     trigger_realtime_integrations,
@@ -82,7 +84,9 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
-                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+                conversation.geolocation = await asyncio.to_thread(
+                    get_google_maps_location, geolocation.latitude, geolocation.longitude
+                )
 
             # Run blocking operations in thread pool to avoid blocking event loop
             conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)

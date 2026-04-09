@@ -298,7 +298,6 @@ struct OnboardingChatView: View {
                 switch pending {
                 case "screen_recording": return !appState.hasScreenRecordingPermission
                 case "microphone": return !appState.hasMicrophonePermission
-                case "notifications": return !appState.hasNotificationPermission
                 case "accessibility": return !appState.hasAccessibilityPermission
                 case "automation": return !appState.hasAutomationPermission
                 case "full_disk_access": return !appState.hasFullDiskAccess
@@ -439,7 +438,6 @@ struct OnboardingChatView: View {
       startChat()
     }
     .onReceive(permissionCheckTimer) { _ in
-      appState.checkNotificationPermission()
       appState.checkScreenRecordingPermission()
       appState.checkMicrophonePermission()
       appState.checkAccessibilityPermission()
@@ -452,9 +450,6 @@ struct OnboardingChatView: View {
     }
     .onChange(of: appState.hasMicrophonePermission) { _, granted in
       if granted { handlePermissionGranted("microphone", label: "Microphone") }
-    }
-    .onChange(of: appState.hasNotificationPermission) { _, granted in
-      if granted { handlePermissionGranted("notifications", label: "Notifications") }
     }
     .onChange(of: appState.hasAccessibilityPermission) { _, granted in
       if granted { handlePermissionGranted("accessibility", label: "Accessibility") }
@@ -522,7 +517,6 @@ struct OnboardingChatView: View {
     case "microphone": return "Microphone"
     case "accessibility": return "Accessibility"
     case "automation": return "Automation"
-    case "notifications": return "Notification"
     case "full_disk_access": return "Full Disk Access"
     default: return "System"
     }
@@ -540,8 +534,6 @@ struct OnboardingChatView: View {
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
       case "automation":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
-      case "notifications":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"
       case "full_disk_access":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
       default:
@@ -744,7 +736,8 @@ struct OnboardingChatView: View {
           !chatProvider.isSending
         else { return }
 
-        guard OnboardingChatPersistence.isGoalCompleted || OnboardingChatPersistence.isToolCompleted else {
+        guard OnboardingChatPersistence.isGoalCompleted || OnboardingChatPersistence.isToolCompleted
+        else {
           log("OnboardingChatView: Skipping auto-unlock — goal not yet completed")
           return
         }
@@ -826,7 +819,6 @@ struct OnboardingChatView: View {
       ("disk access", "full_disk_access"),
       ("microphone", "microphone"),
       ("mic", "microphone"),
-      ("notifications", "notifications"),
       ("accessibility", "accessibility"),
       ("automation", "automation"),
     ]
@@ -853,9 +845,6 @@ struct OnboardingChatView: View {
         if result.contains("granted") {
           // Granted immediately — tell the AI
           await chatProvider.sendMessage("\(option) — done!")
-        } else if result.contains("move omi to /Applications first") {
-          await chatProvider.sendMessage(
-            "Move omi to Applications, reopen it, then tap Grant Notifications again.")
         } else {
           // Pending — wait silently for the permission check timer to detect it
           // The onChange handlers for appState.has*Permission will send the message
@@ -1238,7 +1227,8 @@ struct OnboardingChatView: View {
       let gemini = try GeminiClient()
       let prompt =
         "The user needs to grant \(permLabel) permission to the Omi app. Look at the screenshot. Tell them exactly where to click in ONE short sentence, max 15 words."
-      let systemPrompt = "You are a concise macOS setup helper. Give only the essential click instruction, nothing else."
+      let systemPrompt =
+        "You are a concise macOS setup helper. Give only the essential click instruction, nothing else."
 
       let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
         type: "object",
@@ -1271,7 +1261,9 @@ struct OnboardingChatView: View {
       try? FileManager.default.removeItem(at: screenshotURL)
       return fallback
     } catch {
-      log("OnboardingChat: Gemini request failed for permission help: \(error.localizedDescription), using fallback")
+      log(
+        "OnboardingChat: Gemini request failed for permission help: \(error.localizedDescription), using fallback"
+      )
       try? FileManager.default.removeItem(at: screenshotURL)
       return fallback
     }
@@ -1282,7 +1274,6 @@ struct OnboardingChatView: View {
     switch permType {
     case "screen_recording": return "Screen Recording"
     case "microphone": return "Microphone"
-    case "notifications": return "Notifications"
     case "accessibility": return "Accessibility"
     case "automation": return "Automation"
     case "full_disk_access": return "Full Disk Access"
@@ -2076,8 +2067,6 @@ struct OnboardingPermissionImage: View {
     switch permissionType {
     case "microphone":
       return ("microphone-settings", "png")
-    case "notifications":
-      return ("enable_notifications", "gif")
     case "accessibility":
       return ("accessibility_permission", "gif")
     case "screen_recording":

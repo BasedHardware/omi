@@ -39,12 +39,15 @@ from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
-from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit
+from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
+from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
+from utils.users import get_user_display_name
+from utils.observability import submit_langsmith_feedback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -259,13 +262,22 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-def initial_message_util(uid: str, app_id: Optional[str] = None):
+def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     logger.info(f'initial_message_util {app_id}')
 
-    # init chat session
-    chat_session = acquire_chat_session(uid, app_id=app_id)
+    # init chat session — use provided session_id if available, otherwise acquire by app_id
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if chat_session is None:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = acquire_chat_session(uid, app_id=app_id)
 
-    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
+    # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
+    if chat_session_id:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
+    else:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
 
     app = get_available_app_by_id(app_id, uid)
@@ -870,3 +882,103 @@ def create_initial_message(
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
+
+
+# MARK: - Message Rating
+
+
+@router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
+def rate_message(
+    message_id: str,
+    data: dict,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Rate a chat message (thumbs up/down). Used by desktop client."""
+    rating = data.get('rating')
+
+    # Update rating on the message document
+    chat_db.update_message_rating(uid, message_id, rating)
+
+    # Also store in analytics collection
+    value = rating if rating is not None else 0
+    set_chat_message_rating_score(uid, message_id, value)
+
+    # Try to submit feedback to LangSmith
+    try:
+        message_result = chat_db.get_message(uid, message_id)
+        if message_result:
+            message, _ = message_result
+            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+            if not langsmith_run_id and isinstance(message, dict):
+                langsmith_run_id = message.get('langsmith_run_id')
+
+            if langsmith_run_id:
+                score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
+                submit_langsmith_feedback(
+                    run_id=langsmith_run_id,
+                    score=score,
+                    key="chat_message_rating",
+                )
+    except Exception as e:
+        logger.error(f"LangSmith feedback submission error (non-fatal): {e}")
+
+    return {'status': 'ok'}
+
+
+# MARK: - Chat Sharing
+
+
+@router.post('/v2/messages/share', tags=['chat'])
+def share_chat_messages(
+    data: dict,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Create a shareable link for chat messages."""
+    message_ids = data.get('message_ids', [])
+    if not message_ids:
+        raise HTTPException(status_code=400, detail='No message IDs provided')
+
+    # Validate messages belong to user
+    for mid in message_ids:
+        msg = chat_db.get_message(uid, mid)
+        if not msg:
+            raise HTTPException(status_code=404, detail=f'Message {mid} not found')
+
+    display_name = get_user_display_name(uid)
+    token = uuid.uuid4().hex
+    result = store_chat_share(token, uid, display_name, message_ids)
+    if result is None:
+        raise HTTPException(status_code=500, detail='Failed to create share link')
+
+    return {"url": f"https://h.omi.me/chat/{token}", "token": token}
+
+
+@router.get('/v2/messages/shared/{token}', tags=['chat'])
+def get_shared_chat_messages(token: str):
+    """Public endpoint — get shared chat messages (no auth required)."""
+    share_data = get_chat_share(token)
+    if not share_data:
+        raise HTTPException(status_code=404, detail='Share link expired or not found')
+
+    sender_uid = share_data['uid']
+    message_ids = share_data['message_ids']
+
+    messages = []
+    for mid in message_ids:
+        msg_result = chat_db.get_message(sender_uid, mid)
+        if msg_result:
+            message, _ = msg_result
+            messages.append(
+                {
+                    "id": message.id,
+                    "text": message.text,
+                    "sender": message.sender,
+                    "created_at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
+
+    return {
+        "sender_name": share_data['display_name'],
+        "messages": messages,
+        "count": len(messages),
+    }

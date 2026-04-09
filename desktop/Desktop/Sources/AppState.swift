@@ -4,6 +4,13 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+/// Translation from backend (e.g., Japanese speech translated to English)
+struct SegmentTranslation: Identifiable {
+  var id: String { lang }
+  let lang: String
+  let text: String
+}
+
 /// Speaker segment for diarized transcription
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
@@ -15,6 +22,7 @@ struct SpeakerSegment: Identifiable {
   var end: Double
   var isUser: Bool = false
   var personId: String?    // Backend-assigned person ID from speaker identification
+  var translations: [SegmentTranslation] = []
 }
 
 /// Result of finalizing a conversation
@@ -26,10 +34,17 @@ enum FinishConversationResult {
 
 @MainActor
 class AppState: ObservableObject {
+  /// Weak reference to the current AppState instance, set on init.
+  /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
+  static weak var current: AppState?
+
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
   @Published var isTranscribing = false
+  /// Monotonically increasing counter — incremented each time a new recording starts.
+  /// Used to detect if a new recording began during the post-stop force-process delay.
+  private(set) var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed
   private var currentTranscript: String = ""
@@ -195,6 +210,9 @@ class AppState: ObservableObject {
   private var bluetoothStateCancellable: AnyCancellable?
 
   init() {
+    // Register as the current instance so background services can check recording state
+    AppState.current = self
+
     // Load API key from environment or .env file
     loadEnvironment()
 
@@ -727,7 +745,11 @@ class AppState: ObservableObject {
 
   /// Check notification permission status and alert style
   func checkNotificationPermission() {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
+    // Dispatch async to avoid calling UNUserNotificationCenter.current() during
+    // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
       DispatchQueue.main.async {
         let isNowGranted = settings.authorizationStatus == .authorized
         self.hasNotificationPermission = isNowGranted
@@ -795,6 +817,7 @@ class AppState: ObservableObject {
 
       }
     }
+    }  // end DispatchQueue.main.async
   }
 
   /// Check screen recording permission status
@@ -838,14 +861,18 @@ class AppState: ObservableObject {
       // Stale TCC entry from old developer signing: CGPreflight says granted but
       // actual capture fails. The user must toggle OFF then ON in System Settings
       // to update the code signing requirement (csreq) stored in the TCC database.
+      // NOTE: Do NOT call tccutil reset here — it wipes the user's permission entry
+      // entirely and forces them to re-grant manually. This was the root cause of
+      // users' screen recording permission getting reset "for no reason" after
+      // local rebuilds of Omi Beta (binary hash changes → stale csreq → self-reset).
+      // The correct recovery is for the user to toggle the permission in System
+      // Settings, which refreshes csreq in place. See PR #5616 / a2bc4471d for history.
       if !realPermission && !isScreenRecordingStale {
         log("Screen capture: stale TCC entry detected (developer signing changed)")
+        log(
+          "Screen capture: please toggle Screen Recording OFF then ON for this app in System Settings → Privacy & Security → Screen Recording"
+        )
         isScreenRecordingStale = true
-        // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
-        Task.detached {
-          ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-          _ = ScreenCaptureService.resetScreenCapturePermission()
-        }
       } else if realPermission {
         // Permission recovered (user toggled off/on in System Settings)
         isScreenRecordingStale = false
@@ -1331,6 +1358,7 @@ class AppState: ObservableObject {
       )
 
       isTranscribing = true
+      recordingGeneration &+= 1
       AssistantSettings.shared.transcriptionEnabled = true
       audioSource = effectiveSource
       currentTranscript = ""
@@ -1538,19 +1566,86 @@ class AppState: ObservableObject {
 
   /// Stop real-time transcription
   /// The Python backend handles conversation lifecycle automatically — disconnecting the WebSocket
-  /// triggers conversation processing on the backend side.
+  /// triggers conversation processing on the backend side. We also call force-process to ensure
+  /// the conversation is finalized, preventing the retry service from creating duplicates.
   func stopTranscription() {
+    // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
+    let capturedSessionId = currentSessionId
+    let capturedStartTime = recordingStartTime
+    let generationAtStop = recordingGeneration
+
     stopAudioCapture()
     clearTranscriptionState()
 
-    // Backend processes the conversation when WebSocket disconnects.
-    // The local session stays as pendingUpload — the retry service will either:
-    // 1. Find the conversation on the backend (duplicate check) and mark it completed, or
-    // 2. Re-upload if backend processing failed (recovery path).
-    // We don't optimistically mark as completed because that orphans the session if backend fails.
+    // After WS close, the Python backend processes the conversation automatically.
+    // Call force-process to ensure finalization and get the backend conversation ID.
+    // This prevents the retry service from picking up the pendingUpload session.
     Task {
-      try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5s for backend to process
+      try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s for backend to process after WS close
+
+      // If a new recording started during the delay, skip force-process — it would
+      // finalize the NEW conversation instead of the one we just stopped.
+      // The retry service will reconcile the old session by timestamp matching.
+      guard self.recordingGeneration == generationAtStop else {
+        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
+        return
+      }
+
+      do {
+        if let conversation = try await APIClient.shared.forceProcessConversation() {
+          // Validate the returned conversation matches the session we just stopped
+          if let sessionId = capturedSessionId, let startTime = capturedStartTime,
+             let convStarted = conversation.startedAt,
+             abs(convStarted.timeIntervalSince(startTime)) < 10,
+             conversation.source == .desktop {
+            try? await TranscriptionStorage.shared.markSessionCompleted(
+              id: sessionId, backendId: conversation.id)
+            log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
+          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+            // Force-process returned a different conversation — fall back to reconciliation
+            log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
+            await reconcileSession(sessionId: sessionId, startTime: startTime)
+          }
+        } else {
+          // 404: No in-progress conversation — WS close handler already processed it.
+          // Reconcile by checking if a matching conversation exists on the backend.
+          if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+            await reconcileSession(sessionId: sessionId, startTime: startTime)
+          }
+        }
+      } catch {
+        // Other error — leave session as pendingUpload for retry service to reconcile
+        logError("Transcription: Force-process failed, retry service will reconcile", error: error)
+      }
+
       await loadConversations()
+    }
+  }
+
+  /// Reconcile a local session by checking if a matching conversation exists on the backend.
+  /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
+  private func reconcileSession(sessionId: Int64, startTime: Date) async {
+    do {
+      let conversations = try await APIClient.shared.getConversations(
+        limit: 5,
+        includeDiscarded: true,
+        startDate: startTime.addingTimeInterval(-5),
+        endDate: Date().addingTimeInterval(5)
+      )
+      if let match = conversations.first(where: { conv in
+        guard let convStarted = conv.startedAt else { return false }
+        // Must be a desktop conversation with matching start time
+        guard conv.source == .desktop else { return false }
+        return abs(convStarted.timeIntervalSince(startTime)) < 10
+      }) {
+        try await TranscriptionStorage.shared.markSessionCompleted(
+          id: sessionId, backendId: match.id)
+        log("Transcription: Reconciled session \(sessionId) → backend conversation \(match.id)")
+      } else {
+        log("Transcription: No matching backend conversation found for session \(sessionId), leaving for retry")
+      }
+    } catch {
+      logError("Transcription: Reconciliation failed for session \(sessionId)", error: error)
     }
   }
 
@@ -2174,6 +2269,32 @@ class AppState: ObservableObject {
         personId: personId
       )
       log("People: Assigned \(segmentIds.count) segments in conversation \(conversationId)")
+      // Update in-memory conversations list so the prop is fresh on next open
+      let idSet = Set(segmentIds)
+      if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+        for segIdx in conversations[idx].transcriptSegments.indices
+          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+          let old = conversations[idx].transcriptSegments[segIdx]
+          conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
+            id: old.id,
+            backendId: old.backendId,
+            text: old.text,
+            speaker: old.speaker,
+            isUser: isUser,
+            personId: isUser ? nil : personId,
+            start: old.start,
+            end: old.end,
+            translations: old.translations
+          )
+        }
+      }
+      // Also update local SQLite cache so changes persist across app restarts
+      try? await TranscriptionStorage.shared.updateSegmentSpeakerAssignment(
+        backendConversationId: conversationId,
+        segmentIds: segmentIds,
+        personId: personId,
+        isUser: isUser
+      )
       return true
     } catch {
       logError("People: Failed to assign segments", error: error)
@@ -2193,6 +2314,9 @@ class AppState: ObservableObject {
       let speakerId = segment.speaker_id ?? 0
 
       // Convert backend segment to local SpeakerSegment
+      let translations = (segment.translations ?? []).map {
+        SegmentTranslation(lang: $0.lang, text: $0.text)
+      }
       let newSeg = SpeakerSegment(
         segmentId: segment.id,
         speaker: speakerId,
@@ -2200,7 +2324,8 @@ class AppState: ObservableObject {
         start: segment.start,
         end: segment.end,
         isUser: segment.is_user,
-        personId: segment.person_id
+        personId: segment.person_id,
+        translations: translations
       )
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
@@ -2210,7 +2335,12 @@ class AppState: ObservableObject {
         // Adjust word count: subtract old words, add new words
         let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
         totalWordCount += newSeg.text.split(separator: " ").count - oldWords
-        speakerSegments[existingIdx] = newSeg
+        // Preserve existing translations if the backend didn't send new ones
+        var updatedSeg = newSeg
+        if translations.isEmpty && !speakerSegments[existingIdx].translations.isEmpty {
+          updatedSeg.translations = speakerSegments[existingIdx].translations
+        }
+        speakerSegments[existingIdx] = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
@@ -2243,6 +2373,13 @@ class AppState: ObservableObject {
         for segment in segments {
           guard !segment.text.isEmpty else { continue }
           let speakerId = segment.speaker_id ?? 0
+          var translationsJson: String?
+          if let translations = segment.translations, !translations.isEmpty {
+            let mapped = translations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+            if let data = try? JSONEncoder().encode(mapped) {
+              translationsJson = String(data: data, encoding: .utf8)
+            }
+          }
           do {
             try await TranscriptionStorage.shared.upsertSegment(
               sessionId: sessionId,
@@ -2252,7 +2389,9 @@ class AppState: ObservableObject {
               startTime: segment.start,
               endTime: segment.end,
               isUser: segment.is_user,
-              personId: segment.person_id
+              personId: segment.person_id,
+              speakerLabel: segment.speaker,
+              translationsJson: translationsJson
             )
           } catch {
             logError("Transcription: Failed to persist segment to DB", error: error)
@@ -2369,7 +2508,55 @@ class AppState: ObservableObject {
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
 
     case "translating":
-      log("Transcription: Translation event received")
+      if let segmentsArray = event.raw["segments"] as? [[String: Any]] {
+        do {
+          let data = try JSONSerialization.data(withJSONObject: segmentsArray)
+          let translatedSegments = try JSONDecoder().decode(
+            [TranscriptionService.BackendSegment].self, from: data)
+          log("Transcription: Translation event with \(translatedSegments.count) segments")
+          for translated in translatedSegments {
+            guard let segId = translated.id else { continue }
+            let newTranslations = (translated.translations ?? []).map {
+              SegmentTranslation(lang: $0.lang, text: $0.text)
+            }
+            guard !newTranslations.isEmpty else { continue }
+
+            // Update in-memory if the segment is still loaded
+            if let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId }) {
+              speakerSegments[idx].translations = newTranslations
+            }
+
+            // Always persist to SQLite — even if the segment was trimmed from
+            // the in-memory window, the event payload has all fields needed
+            if let sessionId = currentSessionId {
+              let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+              var translationsJson: String?
+              if let jsonData = try? JSONEncoder().encode(mapped) {
+                translationsJson = String(data: jsonData, encoding: .utf8)
+              }
+              Task {
+                try? await TranscriptionStorage.shared.upsertSegment(
+                  sessionId: sessionId,
+                  backendSegmentId: segId,
+                  speaker: translated.speaker_id ?? 0,
+                  text: translated.text,
+                  startTime: translated.start,
+                  endTime: translated.end,
+                  isUser: translated.is_user,
+                  personId: translated.person_id,
+                  speakerLabel: translated.speaker,
+                  translationsJson: translationsJson
+                )
+              }
+            }
+          }
+          LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+        } catch {
+          logError("Transcription: Failed to parse translation event", error: error)
+        }
+      } else {
+        log("Transcription: Translation event received (no segments)")
+      }
 
     case "last_memory":
       let memoryId = event.raw["memory_id"] as? String ?? "?"
@@ -2834,6 +3021,8 @@ extension Notification.Name {
   static let screenCapturePermissionLost = Notification.Name("screenCapturePermissionLost")
   /// Posted when ScreenCaptureKit is broken (TCC granted but SCK declined)
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
+  /// Posted to show the "Try asking" popup centered over the full window
+  static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
   /// Posted to navigate to Rewind settings
   static let navigateToRewindSettings = Notification.Name("navigateToRewindSettings")
   /// Posted to navigate to Rewind page (global hotkey: Cmd+Option+R)
@@ -2861,7 +3050,7 @@ extension Notification.Name {
   /// Posted when Focus page finishes loading initial data
   static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
   /// Posted when Advice page finishes loading initial data
-  static let advicePageDidLoad = Notification.Name("advicePageDidLoad")
+  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService

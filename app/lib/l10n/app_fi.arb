@@ -2927,5 +2927,15 @@
             }
         }
     },
-    "willSyncAutomatically": "synkronoidaan automaattisesti"
+    "willSyncAutomatically": "synkronoidaan automaattisesti",
+    "voiceRecordingFound": "Tallenne löytyi",
+    "transcriptionConnecting": "Yhdistetään litterointia...",
+    "transcriptionReconnecting": "Yhdistetään litterointia uudelleen...",
+    "transcriptionUnavailable": "Litterointi ei ole käytettävissä",
+    "audioOutput": "Äänilähtö",
+    "enableLocationTitle": "Ota sijainti käyttöön",
+    "enableLocationDescription": "Sijaintilupa tarvitaan lähellä olevien Bluetooth-laitteiden löytämiseen.",
+    "firmwareWarningTitle": "Tärkeää: Lue ennen päivitystä",
+    "firmwareFormatWarning": "Tämä laiteohjelmisto alustaa SD-kortin. Varmista, että kaikki offline-tiedot on synkronoitu ennen päivitystä.\n\nJos näet vilkkuvan punaisen valon tämän version asentamisen jälkeen, älä huoli. Yhdistä laite sovellukseen ja sen pitäisi muuttua siniseksi. Punainen valo tarkoittaa, että laitteen kelloa ei ole vielä synkronoitu.",
+    "continueAnyway": "Jatka"
 }

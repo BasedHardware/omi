@@ -243,7 +243,6 @@ def _get_agentic_module():
         "create_action_item_tool",
         "update_action_item_tool",
         "get_omi_product_info_tool",
-        "perplexity_web_search_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
         "update_calendar_event_tool",
@@ -493,10 +492,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_25_tools():
-    """CORE_TOOLS must contain exactly 25 tools."""
+def test_core_tools_has_24_tools():
+    """CORE_TOOLS must contain exactly 24 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
+    assert len(agentic_mod.CORE_TOOLS) == 24, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 24"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -519,9 +518,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 26
-    assert len(tools_b) == 25
-    assert len(agentic_mod.CORE_TOOLS) == 25, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 25
+    assert len(tools_b) == 24
+    assert len(agentic_mod.CORE_TOOLS) == 24, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -540,7 +539,6 @@ def test_core_tools_order_matches_exports():
         "create_action_item_tool",
         "update_action_item_tool",
         "get_omi_product_info_tool",
-        "perplexity_web_search_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
         "update_calendar_event_tool",
@@ -668,10 +666,14 @@ def test_convert_tools_produces_valid_anthropic_schemas():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per tool"
-    assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all tools"
+    # +1 for web_search server tool
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
+    assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all client tools"
 
-    for schema in tool_schemas:
+    # First schema should be web_search server tool
+    assert tool_schemas[0]["type"] == "web_search_20260209"
+
+    for schema in tool_schemas[1:]:  # Skip web_search server tool
         assert "name" in schema, "Schema must have a name"
         assert "description" in schema, "Schema must have a description"
         assert "input_schema" in schema, "Schema must have input_schema"
@@ -698,11 +700,13 @@ def test_convert_tools_defers_app_tools():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    # Should have tool_search_tool + core tools + 1 app tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 2  # +1 search tool, +1 app tool
+    # Should have web_search + tool_search_tool + core tools + 1 app tool
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
 
-    # First should be tool_search_tool
-    assert tool_schemas[0]["type"] == "tool_search_tool_regex_20251119"
+    # First should be web_search server tool
+    assert tool_schemas[0]["type"] == "web_search_20260209"
+    # Second should be tool_search_tool
+    assert tool_schemas[1]["type"] == "tool_search_tool_regex_20251119"
 
     # Last should be the deferred app tool
     assert tool_schemas[-1]["name"] == "custom_weather_app"
@@ -721,7 +725,8 @@ def test_convert_tools_preserves_core_tool_order():
 
     tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    schema_names = [s["name"] for s in tool_schemas]
+    # Skip web_search server tool (first element) when checking core tool order
+    schema_names = [s["name"] for s in tool_schemas[1:]]
     core_names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 

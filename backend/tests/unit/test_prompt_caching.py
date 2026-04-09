@@ -18,7 +18,8 @@ sys.modules.setdefault("database._client", MagicMock())
 _mock_clients = MagicMock()
 sys.modules.setdefault("utils.llm.clients", _mock_clients)
 
-from models.conversation import CalendarMeetingContext, MeetingParticipant, ConversationPhoto
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.conversation_photo import ConversationPhoto
 from utils.llm.conversation_processing import (
     _build_conversation_context,
     extract_action_items,

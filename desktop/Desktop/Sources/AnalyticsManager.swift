@@ -710,9 +710,9 @@ class AnalyticsManager {
     PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
   }
 
-  func adviceGenerated(category: String?) {
-    MixpanelManager.shared.adviceGenerated(category: category)
-    PostHogManager.shared.adviceGenerated(category: category)
+  func insightGenerated(category: String?) {
+    MixpanelManager.shared.insightGenerated(category: category)
+    PostHogManager.shared.insightGenerated(category: category)
   }
 
   // MARK: - Apps Events
@@ -770,25 +770,25 @@ class AnalyticsManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String) {
+  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String) {
+  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String) {
+  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
@@ -918,16 +918,16 @@ class AnalyticsManager {
     props["memory_prompt_length"] = memory.analysisPrompt.count
     props["memory_excluded_apps_count"] = memory.excludedApps.count
 
-    // -- Advice Assistant --
-    let advice = AdviceAssistantSettings.shared
-    props["advice_enabled"] = advice.isEnabled
-    props["advice_notifications_enabled"] = advice.notificationsEnabled
-    props["advice_extraction_interval"] = advice.extractionInterval
-    props["advice_min_confidence"] = advice.minConfidence
-    props["advice_has_custom_prompt"] =
-      advice.analysisPrompt != AdviceAssistantSettings.defaultAnalysisPrompt
-    props["advice_prompt_length"] = advice.analysisPrompt.count
-    props["advice_excluded_apps_count"] = advice.excludedApps.count
+    // -- Insight Assistant --
+    let insight = InsightAssistantSettings.shared
+    props["insight_enabled"] = insight.isEnabled
+    props["insight_notifications_enabled"] = insight.notificationsEnabled
+    props["insight_extraction_interval"] = insight.extractionInterval
+    props["insight_min_confidence"] = insight.minConfidence
+    props["insight_has_custom_prompt"] =
+      insight.analysisPrompt != InsightAssistantSettings.defaultAnalysisPrompt
+    props["insight_prompt_length"] = insight.analysisPrompt.count
+    props["insight_excluded_apps_count"] = insight.excludedApps.count
 
     // -- Task Agent --
     let agent = TaskAgentSettings.shared

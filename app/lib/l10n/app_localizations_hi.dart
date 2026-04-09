@@ -8967,8 +8967,33 @@ class AppLocalizationsHi extends AppLocalizations {
   String get willSyncAutomatically => 'स्वचालित रूप से सिंक होगा';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'स्थान सक्षम करें';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'पास के ब्लूटूथ डिवाइस खोजने के लिए स्थान अनुमति आवश्यक है।';
+
+  @override
+  String get voiceRecordingFound => 'रिकॉर्डिंग मिली';
+
+  @override
+  String get transcriptionConnecting => 'ट्रांसक्रिप्शन कनेक्ट हो रहा है...';
+
+  @override
+  String get transcriptionReconnecting => 'ट्रांसक्रिप्शन फिर से कनेक्ट हो रहा है...';
+
+  @override
+  String get transcriptionUnavailable => 'ट्रांसक्रिप्शन उपलब्ध नहीं है';
+
+  @override
+  String get audioOutput => 'ऑडियो आउटपुट';
+
+  @override
+  String get firmwareWarningTitle => 'महत्वपूर्ण: अपडेट करने से पहले पढ़ें';
+
+  @override
+  String get firmwareFormatWarning =>
+      'यह फर्मवेयर SD कार्ड को फॉर्मेट करेगा। कृपया अपग्रेड करने से पहले सुनिश्चित करें कि सभी ऑफ़लाइन डेटा सिंक हो गया है।\n\nयदि इस संस्करण को इंस्टॉल करने के बाद लाल बत्ती चमकती दिखाई दे, तो चिंता न करें। बस डिवाइस को ऐप से कनेक्ट करें और यह नीला हो जाना चाहिए। लाल बत्ती का मतलब है कि डिवाइस की घड़ी अभी तक सिंक नहीं हुई है।';
+
+  @override
+  String get continueAnyway => 'जारी रखें';
 }

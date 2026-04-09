@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign,
@@ -8,8 +8,19 @@ import {
   Users,
   MessageSquare,
   Loader2,
+  Activity,
+  Zap,
+  Target,
+  Monitor,
+  Bell,
+  BellOff,
+  Send,
+  MousePointerClick,
+  Percent,
+  AlertTriangle,
 } from "lucide-react";
 import useSWR from "swr";
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 import {
   Bar,
   Line,
@@ -23,6 +34,11 @@ import {
   LineChart,
   Area,
   AreaChart,
+  ComposedChart,
+  ReferenceLine,
+  Cell,
+  PieChart,
+  Pie,
 } from "recharts";
 import {
   Select,
@@ -32,9 +48,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// --- Types ---
+
 interface RevenueData {
   mrr: number;
   arr: number;
+  partial?: boolean;
 }
 
 interface MrrTrendPoint {
@@ -52,6 +71,7 @@ interface SubscriptionTrendPoint {
 
 interface SubscriptionCounts {
   totalSubscriptions: number;
+  partial?: boolean;
   priceIdOne: { count: number; priceId: string };
   priceIdTwo: { count: number; priceId: string };
 }
@@ -79,47 +99,138 @@ interface RetentionData {
 }
 
 interface DailyNewUsersData {
-  data: { date: string; users: number }[];
+  data: { date: string; users: number; cumulative: number }[];
   totalUsers: number;
   days: number;
 }
 
-interface OnboardingStepData {
-  key: string;
+interface MessageRatingsData {
+  data: { date: string; thumbs_up: number; thumbs_down: number; ratio: number }[];
+  days: number;
+}
+
+interface FloatingBarUsageData {
+  data: {
+    date: string;
+    total_queries: number;
+    text_queries: number;
+    voice_queries: number;
+    unique_users: number;
+    avg_per_user: number;
+  }[];
+  days: number;
+  summary: {
+    totalQueries: number;
+    totalVoice: number;
+    totalText: number;
+    overallAvgPerUserPerDay: number;
+    activeDays: number;
+  };
+}
+
+interface NotificationDailyData {
+  date: string;
+  mentorSent: number;
+  marketplaceMentorSent: number;
+  uniqueUsersMentor: number;
+  uniqueUsersMarketplace: number;
+}
+
+interface NotificationWeeklyData {
+  week: string;
+  mentorSent: number;
+  marketplaceMentorSent: number;
+  uniqueUsersMentor: number;
+  uniqueUsersMarketplace: number;
+}
+
+interface NotificationHourlyData {
+  hour: string;
+  mentor: number;
+  marketplace: number;
+  total: number;
+}
+
+interface NotificationStats {
+  dailyData: NotificationDailyData[];
+  weeklyData: NotificationWeeklyData[];
+  hourlyData: NotificationHourlyData[];
+  floatingBarCtr: {
+    dailyData: {
+      date: string;
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+    }[];
+    summary: {
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+      uniqueClickers: number;
+      mode: "surface_tagged" | "all_notifications_fallback";
+    };
+  } | null;
+  enabledDisabled: {
+    enabled: number;
+    disabled: number;
+    total: number;
+  };
+}
+
+interface DauTrendsData {
+  data: { date: string; dau: number }[];
+  days: number;
+}
+
+interface ViralMetrics {
+  growthAccounting: {
+    week: string;
+    active: number;
+    newUsers: number;
+    retained: number;
+    resurrected: number;
+    churned: number;
+  }[];
+  stickinessTrend: {
+    week: string;
+    avgDau: number;
+    wau: number;
+    dauWau: number;
+  }[];
+  dailyDau: { date: string; dau: number }[];
+  powerUserCurve: { daysActive: number; users: number; pct: number }[];
+  activation: { date: string; signups: number; activated: number; rate: number }[];
+  summary: {
+    quickRatio: number | null;
+    activationRate: number | null;
+    dauMau: number;
+    dauWau: number;
+    dau: number;
+    wau: number;
+    mau: number;
+    l5PlusPct: number;
+    totalUsers: number;
+  };
+}
+
+interface MacosVersionBreakdown {
   label: string;
-  users: number;
-  completionRate: number;
+  value: number;
+  color: string;
 }
 
-interface OnboardingData {
-  days: number;
-  totalUsers: number;
-  methodology?: string;
-  steps: OnboardingStepData[];
+interface MacosVersionStatsData {
+  date: string;
+  activeUsers: number;
+  channelBreakdown: MacosVersionBreakdown[];
+  versionBreakdown: MacosVersionBreakdown[];
 }
 
-interface KFactorProxyData {
-  newUsers: number;
-  sharers: number;
-  shareEvents: number;
-  shareRatePct: number;
-  sharesPerSharer: number;
-  sharesPerNewUser: number;
-}
+// --- Helpers ---
 
-interface KFactorData {
-  days: number;
-  available: boolean;
-  kFactor: number | null;
-  reason: string;
-  proxy: KFactorProxyData;
-}
-
-const fetcher = (url: string) =>
-  fetch(url).then((res) => {
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
-  });
+const authFetcher = authenticatedFetcher;
 
 const COLORS = {
   mrr: "#6366f1",
@@ -149,80 +260,112 @@ function formatCompact(value: number): string {
 }
 
 function formatCohortDate(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function shortDate(v: string): string {
+  const d = new Date(v + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function fullDate(v: string): string {
+  const d = new Date(v + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatWeek(v: string): string {
+  const d = new Date(v + "T00:00:00Z");
+  return `W/O ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function weekStartKey(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  const weekStart = new Date(d);
+  weekStart.setUTCDate(diff);
+  return weekStart.toISOString().split("T")[0];
+}
+
+function formatHourKey(v: string): string {
+  const d = new Date(v + ":00:00Z");
+  const mon = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const hour = d.getUTCHours();
+  const label = hour === 0 ? "12am" : hour === 12 ? "12pm" : hour < 12 ? `${hour}am` : `${hour - 12}pm`;
+  return `${mon} ${label}`;
+}
+
+function formatHourTick(v: string): string {
+  const d = new Date(v + ":00:00Z");
+  return d.getUTCHours() === 0
+    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    : "";
+}
+
+const tooltipStyle = {
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: "8px",
+};
+
+// --- Component ---
+
 export default function AnalyticsPage() {
+  const { token } = useAuthToken();
   const [months, setMonths] = useState(12);
-  const [retentionDays, setRetentionDays] = useState(15);
+  const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
-  const retentionIntervals = 10;
-  const swrOptions = {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-    revalidateIfStale: false,
-    shouldRetryOnError: false,
-    errorRetryCount: 0,
-    refreshInterval: 0,
-  };
 
-  const { data: revenue, isLoading: revenueLoading } = useSWR<RevenueData>(
-    "/api/omi/stats/revenue",
-    fetcher,
-    swrOptions
+  const swrOpts = { revalidateOnFocus: false };
+
+  const { data: revenue, isLoading: revenueLoading, error: revenueError } = useSWR<RevenueData>(
+    token ? ["/api/omi/stats/revenue", token] : null, authFetcher, swrOpts
   );
 
-  const { data: mrrTrends, isLoading: mrrLoading } = useSWR<{
+  const { data: mrrTrends, isLoading: mrrLoading, error: mrrError } = useSWR<{
     data: MrrTrendPoint[];
-  }>(`/api/omi/stats/mrr-trends?months=${months}`, fetcher, swrOptions);
+  }>(token ? [`/api/omi/stats/mrr-trends?months=${months}`, token] : null, authFetcher, swrOpts);
 
-  const { data: subTrends, isLoading: subTrendsLoading } = useSWR<{
+  const { data: subTrends, isLoading: subTrendsLoading, error: subTrendsError } = useSWR<{
     data: SubscriptionTrendPoint[];
-  }>(`/api/omi/stats/subscription-trends?months=${months}`, fetcher, swrOptions);
+  }>(token ? [`/api/omi/stats/subscription-trends?months=${months}`, token] : null, authFetcher, swrOpts);
 
-  const { data: subCounts, isLoading: subCountsLoading } = useSWR<SubscriptionCounts>(
-    "/api/omi/stats/subscriptions",
-    fetcher,
-    swrOptions
-  );
+  const { data: subCounts, isLoading: subCountsLoading, error: subCountsError } =
+    useSWR<SubscriptionCounts>(token ? ["/api/omi/stats/subscriptions", token] : null, authFetcher, swrOpts);
 
-  const { data: convCount, isLoading: convLoading } = useSWR<ConversationCount>(
-    "/api/omi/stats/conversation-count",
-    fetcher,
-    swrOptions
-  );
+  const { data: convCount, isLoading: convLoading, error: convError } =
+    useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", token] : null, authFetcher, swrOpts);
 
-  const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } = useSWR<DailyNewUsersData>(
-    "/api/omi/stats/daily-new-users?days=30",
-    fetcher,
-    swrOptions
-  );
+  const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } =
+    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=60", token] : null, authFetcher, swrOpts);
 
-  const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : "";
+  const { data: dauTrends, isLoading: dauLoading } =
+    useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", token] : null, authFetcher, swrOpts);
 
-  const { data: onboardingData, isLoading: onboardingLoading } = useSWR<OnboardingData>(
-    `/api/omi/stats/onboarding/posthog?days=${retentionDays}`,
-    fetcher,
-    swrOptions
-  );
+  const { data: messageRatings, isLoading: ratingsLoading } =
+    useSWR<MessageRatingsData>(token ? ["/api/omi/stats/message-ratings?days=30", token] : null, authFetcher, swrOpts);
 
-  const { data: retentionData, isLoading: retentionLoading } = useSWR<RetentionData>(
-    `/api/omi/stats/retention/posthog?days=${retentionDays}&intervals=${retentionIntervals}${retentionPlatformParam}`,
-    fetcher,
-    swrOptions
-  );
+  const { data: floatingBarUsage, isLoading: fbUsageLoading } =
+    useSWR<FloatingBarUsageData>(token ? ["/api/omi/stats/floating-bar-usage?days=30", token] : null, authFetcher, swrOpts);
 
-  const { data: kFactorData, isLoading: kFactorLoading } = useSWR<KFactorData>(
-    `/api/omi/stats/k-factor/posthog?days=${retentionDays}`,
-    fetcher,
-    swrOptions
-  );
+  const { data: notificationStats, isLoading: notificationStatsLoading } =
+    useSWR<NotificationStats>(token ? ["/api/omi/stats/notifications?days=30", token] : null, authFetcher, swrOpts);
+
+  const { data: viralMetrics, isLoading: viralLoading } =
+    useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", token] : null, authFetcher, swrOpts);
+
+  const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
+    useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
+
+  const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
+
+  const { data: mixpanelRetention, isLoading: mixpanelRetLoading } =
+    useSWR<RetentionData>(
+      token ? [`/api/omi/stats/retention/mixpanel?days=${retentionDays}${retentionPlatformParam}`, token] : null,
+      authFetcher, swrOpts
+    );
 
   const isLoading =
     revenueLoading ||
@@ -231,26 +374,17 @@ export default function AnalyticsPage() {
     subCountsLoading ||
     convLoading;
 
-  if (isLoading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const hasError = revenueError || mrrError || subTrendsError || subCountsError || convError;
 
   const mrr = revenue?.mrr ?? 0;
   const arr = revenue?.arr ?? 0;
   const totalSubs = subCounts?.totalSubscriptions ?? 0;
   const monthlySubs = subCounts?.priceIdOne?.count ?? 0;
   const annualSubs = subCounts?.priceIdTwo?.count ?? 0;
+  const hasPartialData = !!(revenue?.partial || subCounts?.partial || (mrrTrends as any)?.partial || (subTrends as any)?.partial);
   const totalConversations = convCount?.totalConversations ?? 0;
   const mrrData = mrrTrends?.data ?? [];
   const subData = subTrends?.data ?? [];
-  const dailyData = dailyNewUsers?.data ?? [];
-  const onboardingSteps = onboardingData?.steps ?? [];
-  const cohorts = retentionData?.cohorts ?? [];
-  const kFactorProxy = kFactorData?.proxy;
 
   let mrrGrowthPct: number | null = null;
   if (mrrData.length >= 2) {
@@ -261,17 +395,101 @@ export default function AnalyticsPage() {
     }
   }
 
+  const cohorts = mixpanelRetention?.cohorts ?? [];
   let cohortMaxDays = 0;
-  for (const cohort of cohorts) {
-    if (cohort.data.length > cohortMaxDays) {
-      cohortMaxDays = cohort.data.length;
+  for (const c of cohorts) {
+    if (c.data.length > cohortMaxDays) cohortMaxDays = c.data.length;
+  }
+
+  const allDailyData = dailyNewUsers?.data ?? [];
+  const dailyData = allDailyData.slice(-30);
+  const dauData = dauTrends?.data?.slice(-30) ?? [];
+  const ratingsData = messageRatings?.data ?? [];
+  const totalThumbsUp = ratingsData.reduce((s, d) => s + d.thumbs_up, 0);
+  const totalThumbsDown = ratingsData.reduce((s, d) => s + d.thumbs_down, 0);
+  const totalRatings = totalThumbsUp + totalThumbsDown;
+  const overallRatio = totalRatings > 0 ? Math.round((totalThumbsUp / totalRatings) * 100) : 0;
+  const fbUsageData = floatingBarUsage?.data ?? [];
+  const fbSummary = floatingBarUsage?.summary;
+  const notificationDailyData = notificationStats?.dailyData ?? [];
+  const notificationWeeklyData = notificationStats?.weeklyData ?? [];
+  const notificationHourlyData = notificationStats?.hourlyData ?? [];
+  const notificationEnabledDisabled = notificationStats?.enabledDisabled;
+  const floatingBarCtr = notificationStats?.floatingBarCtr;
+  const macosChannelData = macosVersionStats?.channelBreakdown ?? [];
+  const macosVersionData = macosVersionStats?.versionBreakdown ?? [];
+  const notificationLast7Days = notificationDailyData.slice(-7);
+  const notificationMentorLast7 = notificationLast7Days.reduce((sum, day) => sum + day.mentorSent, 0);
+  const notificationMarketplaceLast7 = notificationLast7Days.reduce((sum, day) => sum + day.marketplaceMentorSent, 0);
+  const floatingBarCtrSummary = floatingBarCtr?.summary;
+  const notificationDailyCombined = notificationDailyData.map((day) => ({
+    ...day,
+    totalSent: day.mentorSent + day.marketplaceMentorSent,
+    totalUsers: Math.max(day.uniqueUsersMentor, day.uniqueUsersMarketplace),
+  }));
+  const notificationWeeklyCombined = notificationWeeklyData.map((week) => ({
+    ...week,
+    totalSent: week.mentorSent + week.marketplaceMentorSent,
+    totalUniqueUsers: week.uniqueUsersMentor + week.uniqueUsersMarketplace,
+  }));
+  const weeklyRatingsData = useMemo(() => {
+    const buckets = new Map<string, { thumbs_up: number; thumbs_down: number }>();
+    for (const point of ratingsData) {
+      const key = weekStartKey(point.date);
+      const bucket = buckets.get(key) ?? { thumbs_up: 0, thumbs_down: 0 };
+      bucket.thumbs_up += point.thumbs_up;
+      bucket.thumbs_down += point.thumbs_down;
+      buckets.set(key, bucket);
     }
+
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, counts]) => {
+        const total = counts.thumbs_up + counts.thumbs_down;
+        return {
+          week,
+          thumbs_up: counts.thumbs_up,
+          thumbs_down: counts.thumbs_down,
+          ratio: total > 0 ? Math.round((counts.thumbs_up / total) * 100) : 0,
+        };
+      });
+  }, [ratingsData]);
+
+  // 7-day rolling average for daily new users
+  const dailyWithRollingAvg = useMemo(() => {
+    return allDailyData.map((point, i) => {
+      if (i < 6) return { ...point, rollingAvg: undefined };
+      const slice = allDailyData.slice(i - 6, i + 1);
+      const avg = slice.reduce((s, p) => s + p.users, 0) / 7;
+      return { ...point, rollingAvg: Math.round(avg * 10) / 10 };
+    }).slice(-30);
+  }, [allDailyData]);
+
+  // Retention values for summary cards
+  const retentionD1 = mixpanelRetention?.data?.find((p) => p.day === 1)?.retention ?? null;
+  const retentionD7 = mixpanelRetention?.data?.find((p) => p.day === 7)?.retention ?? null;
+
+  // Viral metrics
+  const vm = viralMetrics;
+  const ga = vm?.growthAccounting ?? [];
+  const powerCurve = vm?.powerUserCurve ?? [];
+  const activationData = vm?.activation ?? [];
+  const stickinessData = vm?.stickinessTrend ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Analytics Dashboard
+        </h1>
         <div className="flex gap-2">
           {[6, 12, 24].map((m) => (
             <button
@@ -289,30 +507,37 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {hasError && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5">
+          <p className="text-sm text-destructive">Some data failed to load. Showing available data.</p>
+        </Card>
+      )}
+
+      {/* Revenue Summary Cards */}
+      {hasPartialData && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Some data sources failed to load. Numbers may be incomplete.</span>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Monthly Recurring Revenue
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">MRR</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(mrr)}</div>
             {mrrGrowthPct !== null && (
               <p className={`text-xs ${mrrGrowthPct >= 0 ? "text-green-600" : "text-red-600"}`}>
-                {mrrGrowthPct >= 0 ? "+" : ""}
-                {mrrGrowthPct.toFixed(1)}% from last month
+                {mrrGrowthPct >= 0 ? "+" : ""}{mrrGrowthPct.toFixed(1)}% from last month
               </p>
             )}
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Annual Run Rate
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">ARR</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -320,42 +545,35 @@ export default function AnalyticsPage() {
             <p className="text-xs text-muted-foreground">Based on current MRR</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active Subscriptions
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Subscriptions</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalSubs.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {monthlySubs.toLocaleString()} monthly &middot; {annualSubs.toLocaleString()} annual
+              {monthlySubs} monthly &middot; {annualSubs} annual
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Conversations
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Conversations</CardTitle>
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCompact(totalConversations)}</div>
-            <p className="text-xs text-muted-foreground">All time (Typesense)</p>
+            <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* MRR Trend */}
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-1">MRR Over Time</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Monthly recurring revenue from Stripe (monthly + annualized)
-        </p>
-        <div className="h-[400px]">
+        <p className="text-sm text-muted-foreground mb-4">Monthly recurring revenue from Stripe</p>
+        <div className="h-[350px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={mrrData}>
               <defs>
@@ -365,277 +583,907 @@ export default function AnalyticsPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="month"
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-              />
-              <YAxis
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={(v) => `$${formatCompact(v)}`}
-              />
-              <Tooltip
-                formatter={(value: number) => [formatCurrency(value), "MRR"]}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="mrr"
-                stroke={COLORS.mrr}
-                strokeWidth={2}
-                fill="url(#mrrGradient)"
-                dot={{ r: 3, fill: COLORS.mrr }}
-                activeDot={{ r: 5 }}
-              />
+              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${formatCompact(v)}`} />
+              <Tooltip formatter={(value: number) => [formatCurrency(value), "MRR"]} contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="mrr" stroke={COLORS.mrr} strokeWidth={2} fill="url(#mrrGradient)" dot={{ r: 3, fill: COLORS.mrr }} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </Card>
 
+      {/* Subscription Growth */}
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-1">New Subscriptions</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          New monthly vs annual subscriptions created each month
-        </p>
-        <div className="h-[400px]">
+        <p className="text-sm text-muted-foreground mb-4">Monthly vs annual subscriptions created each month</p>
+        <div className="h-[350px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={subData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="month"
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-              />
+              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
               <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                }}
-              />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend />
-              <Bar
-                dataKey="monthly"
-                name="Monthly Plan"
-                fill={COLORS.monthly}
-                radius={[2, 2, 0, 0]}
-                stackId="a"
-              />
-              <Bar
-                dataKey="annual"
-                name="Annual Plan"
-                fill={COLORS.annual}
-                radius={[2, 2, 0, 0]}
-                stackId="a"
-              />
+              <Bar dataKey="monthly" name="Monthly" fill={COLORS.monthly} radius={[2, 2, 0, 0]} stackId="a" />
+              <Bar dataKey="annual" name="Annual" fill={COLORS.annual} radius={[2, 2, 0, 0]} stackId="a" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </Card>
 
+      {/* ─────────────────────────────────────────────────── */}
+      {/* macOS Growth Metrics */}
+      {/* ─────────────────────────────────────────────────── */}
+      <h2 className="text-2xl font-bold tracking-tight pt-4">macOS Growth Metrics</h2>
+
+      {/* Key Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">DAU</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{vm?.summary.dau ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">avg last 7 days</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">WAU</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{vm?.summary.wau ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">last 7 days</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">MAU</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{vm?.summary.mau ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">last 30 days</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">DAU/MAU</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(vm?.summary.dauMau ?? 0) >= 20 ? "text-green-600" : ""}`}>
+              {vm?.summary.dauMau != null ? `${vm.summary.dauMau}%` : "--"}
+            </div>
+            <p className="text-xs text-muted-foreground">Stickiness (good: 20%+)</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Quick Ratio</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(vm?.summary.quickRatio ?? 0) >= 1 ? "text-green-600" : "text-red-600"}`}>
+              {vm?.summary.quickRatio != null ? `${vm.summary.quickRatio}x` : "--"}
+            </div>
+            <p className="text-xs text-muted-foreground">Growing if &gt;1x</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Activation</CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(vm?.summary.activationRate ?? 0) >= 50 ? "text-green-600" : ""}`}>
+              {vm?.summary.activationRate != null ? `${vm.summary.activationRate}%` : "--"}
+            </div>
+            <p className="text-xs text-muted-foreground">Memory within 7d</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Floating Bar Sessions per User */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h2 className="text-lg font-semibold">macOS Active Versions</h2>
+            <p className="text-sm text-muted-foreground">
+              Active users for {macosVersionStats?.date ?? "today"}, split by release channel and app version
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">{macosVersionStats?.activeUsers?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">active macOS users today</p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">Beta vs Production</h3>
+            <div className="h-[280px]">
+              {macosVersionStatsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : macosChannelData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No active-user channel data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={macosChannelData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      paddingAngle={3}
+                      dataKey="value"
+                      nameKey="label"
+                      label={({ label, percent }) => `${label} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {macosChannelData.map((entry) => (
+                        <Cell key={entry.label} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                        Number(value).toLocaleString(),
+                        entry?.payload?.label ?? "Users",
+                      ]}
+                      contentStyle={tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">By Version</h3>
+            <div className="h-[280px]">
+              {macosVersionStatsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : macosVersionData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No active-user version data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={macosVersionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      paddingAngle={2}
+                      dataKey="value"
+                      nameKey="label"
+                    >
+                      {macosVersionData.map((entry) => (
+                        <Cell key={entry.label} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                        Number(value).toLocaleString(),
+                        entry?.payload?.label ?? "Version",
+                      ]}
+                      contentStyle={tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] mt-4">
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Monitor className="h-4 w-4 text-muted-foreground" />
+              <h3 className="font-medium">Channel Counts</h3>
+            </div>
+            <div className="space-y-3">
+              {macosChannelData.map((entry) => (
+                <div key={entry.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-sm">{entry.label}</span>
+                  </div>
+                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <h3 className="font-medium mb-3">Version Counts</h3>
+            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+              {macosVersionData.map((entry) => (
+                <div key={entry.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-sm">{entry.label}</span>
+                  </div>
+                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Floating Bar Sessions per User */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Floating Bar Sessions per User</h2>
+          {fbSummary && (
+            <span className="text-sm text-muted-foreground">
+              Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay ?? "—"}</span> sessions/user/day
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Times floating bar was opened and a question asked, per user per day (follow-ups don&apos;t count)
+        </p>
+        <div className="h-[300px]">
+          {fbUsageLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : fbUsageData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              No usage data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={fbUsageData}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                  }}
+                />
+                <Legend />
+                <Line dataKey="avg_sessions_per_user" name="Sessions/User" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      <h2 className="text-2xl font-bold tracking-tight pt-4">Notification Analytics</h2>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Notifications Enabled</CardTitle>
+            <Bell className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">
+              {notificationEnabledDisabled
+                ? `of ${notificationEnabledDisabled.total.toLocaleString()} users (${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%)`
+                : "Loading notification adoption"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Notifications Disabled</CardTitle>
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">Explicitly disabled desktop notifications</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">"Omi says" Sent (7d)</CardTitle>
+            <Send className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationMentorLast7.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Built-in mentor notifications</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Marketplace Mentor (7d)</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationMarketplaceLast7.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Marketplace "Omi Mentor" app</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Floating Bar Clicks</CardTitle>
+            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{floatingBarCtrSummary?.clicked?.toLocaleString() ?? "0"}</div>
+            <p className="text-xs text-muted-foreground">Explicit notification opens from the floating bar</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Floating Bar CTR</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{floatingBarCtrSummary ? `${floatingBarCtrSummary.ctr.toFixed(1)}%` : "0.0%"}</div>
+            <p className="text-xs text-muted-foreground">
+              {floatingBarCtrSummary
+                ? floatingBarCtrSummary.mode === "surface_tagged"
+                  ? `${floatingBarCtrSummary.sent.toLocaleString()} tagged sends, ${floatingBarCtrSummary.uniqueClickers.toLocaleString()} unique clickers`
+                  : `Fallback: all desktop notifications, ${floatingBarCtrSummary.sent.toLocaleString()} sent`
+                : "Waiting for new surface-tagged events"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Daily Notifications Sent</h2>
+        <div className="h-[350px]">
+          {notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={notificationDailyCombined}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar dataKey="mentorSent" name="Omi says (built-in)" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar dataKey="marketplaceMentorSent" name="Marketplace Mentor" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Notifications Sent, Last 168 Hours</h2>
+          <p className="text-sm text-muted-foreground mb-4">Hourly volume, with dates marked at midnight UTC.</p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={notificationHourlyData} barCategoryGap={0} barGap={0}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="hour" tickFormatter={formatHourTick} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} interval={0} minTickGap={40} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip labelFormatter={(value) => formatHourKey(value as string)} contentStyle={tooltipStyle} />
+                  <Legend />
+                  <Bar dataKey="mentor" name="Omi Says" fill="#6366f1" stackId="a" />
+                  <Bar dataKey="marketplace" name="Marketplace Mentor" fill="#f59e0b" stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Floating Bar Notification CTR</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            {floatingBarCtrSummary?.mode === "surface_tagged"
+              ? "Sent vs clicked proactive notifications in the desktop floating bar."
+              : "Surface-tagged floating-bar events are not populated yet, so this is currently using all desktop notification clicks as a fallback."}
+          </p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={floatingBarCtr?.dailyData ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    labelFormatter={fullDate}
+                    formatter={(value: number, name: string) => name === "CTR" ? [`${value}%`, name] : [value.toLocaleString(), name]}
+                    contentStyle={tooltipStyle}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="sent" name="Sent" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="clicked" name="Clicked" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Weekly Notification Reach</h2>
+          <p className="text-sm text-muted-foreground mb-4">Volume and unique recipients in one view.</p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={notificationWeeklyCombined}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="week" tickFormatter={formatWeek} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip labelFormatter={formatWeek} contentStyle={tooltipStyle} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="mentorSent" name="Omi says sent" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                  <Bar yAxisId="left" dataKey="marketplaceMentorSent" name="Marketplace sent" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMarketplace" name="Marketplace unique users" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Notification Settings</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Based on the desktop <code className="text-xs">notifications_enabled</code> toggle. Missing values default to enabled.
+          </p>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Enabled share</div>
+                  <div className="text-3xl font-semibold">
+                    {notificationEnabledDisabled ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%` : "--"}
+                  </div>
+                </div>
+                <div className="text-right text-sm text-muted-foreground">
+                  <div>{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"} enabled</div>
+                  <div>{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"} disabled</div>
+                </div>
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-green-500"
+                  style={{
+                    width: notificationEnabledDisabled
+                      ? `${(notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100}%`
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Message Ratings — macOS Floating Bar */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Chat Response Ratings</h2>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span className="text-green-500 font-medium">{totalThumbsUp} up</span>
+            <span className="text-red-500 font-medium">{totalThumbsDown} down</span>
+            <span>{overallRatio}% positive</span>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Weekly thumbs up/down from macOS floating bar. The overall positive rate is shown above.
+        </p>
+        <div className="h-[300px]">
+          {ratingsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : weeklyRatingsData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              No rating data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyRatingsData}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="week"
+                  tickFormatter={formatWeek}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={formatWeek}
+                  formatter={(value: number, name: string) => [value, name === "thumbs_up" ? "Thumbs Up" : "Thumbs Down"]}
+                />
+                <Legend />
+                <Bar dataKey="thumbs_up" name="Thumbs Up" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="thumbs_down" name="Thumbs Down" fill="#ef4444" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      {/* Floating Bar Usage — Queries per Day (Voice vs Text) */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Floating Bar Usage</h2>
+          {fbSummary && (
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span>{fbSummary.totalQueries} total</span>
+              <span className="text-blue-500 font-medium">{fbSummary.totalText} text</span>
+              <span className="text-orange-500 font-medium">{fbSummary.totalVoice} voice</span>
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Daily queries by input type — text vs voice (last 30 days)
+        </p>
+        <div className="h-[300px]">
+          {fbUsageLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : fbUsageData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              No usage data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={fbUsageData}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="text_queries" name="Text" stackId="queries" fill="#6366f1" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="voice_queries" name="Voice" stackId="queries" fill="#f97316" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      {/* Floating Bar — Avg Queries per User per Day */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Avg Queries per User per Day</h2>
+          {fbSummary && (
+            <span className="text-sm text-muted-foreground">
+              Overall: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay}</span> queries/user/day
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Average floating bar queries per active user, daily (last 30 days)
+        </p>
+        <div className="h-[300px]">
+          {fbUsageLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : fbUsageData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              No usage data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={fbUsageData}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis yAxisId="avg" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="users" orientation="right" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  labelFormatter={(v) => {
+                    const d = new Date(v + "T00:00:00");
+                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                  }}
+                  formatter={(value: number, name: string) => {
+                    if (name === "Avg/User") return [value, "Avg queries per user"];
+                    return [value, "Active users"];
+                  }}
+                />
+                <Legend />
+                <Bar yAxisId="users" dataKey="unique_users" name="Active Users" fill="#e2e8f0" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="avg" dataKey="avg_per_user" name="Avg/User" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      {/* Growth Accounting */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-1">Growth Accounting</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Weekly breakdown: where do active users come from? (Churned shown as negative)
+        </p>
+        <div className="h-[350px]">
+          {viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : ga.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ga} stackOffset="sign">
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(value: number, name: string) => {
+                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  return [Math.abs(value), labels[name] || name];
+                }} />
+                <Legend formatter={(value) => {
+                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  return labels[value] || value;
+                }} />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                <Bar dataKey="newUsers" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="resurrected" stackId="a" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="retained" stackId="a" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="churned" stackId="a" fill="#ef4444" radius={[0, 0, 2, 2]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )}
+        </div>
+      </Card>
+
+      {/* Two charts side by side: Cumulative Users + DAU */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Cumulative Total Users */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Cumulative Users</h2>
+          <p className="text-sm text-muted-foreground mb-4">Total macOS users over time</p>
+          <div className="h-[300px]">
+            {dailyNewUsersLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : dailyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailyData}>
+                  <defs>
+                    <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} />
+                  <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+            )}
+          </div>
+        </Card>
+
+        {/* Daily Active Users */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Daily Active Users</h2>
+          <p className="text-sm text-muted-foreground mb-4">Unique macOS users per day</p>
+          <div className="h-[300px]">
+            {dauLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : dauData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dauData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip formatter={(value: number) => [value.toLocaleString(), "DAU"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                  <Bar dataKey="dau" name="DAU" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Daily New Users + Rolling Avg */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold">Daily New Users</h2>
           {dailyNewUsers?.totalUsers != null && (
             <span className="text-sm text-muted-foreground">
-              {dailyNewUsers.totalUsers.toLocaleString()} total in last {dailyNewUsers.days} days
+              {dailyNewUsers.totalUsers.toLocaleString()} in last {dailyNewUsers.days}d
             </span>
           )}
         </div>
-        <p className="text-sm text-muted-foreground mb-4">New user signups per day from Firebase</p>
-        <div className="h-[400px]">
+        <p className="text-sm text-muted-foreground mb-4">First-time sign-ins with 7-day rolling average</p>
+        <div className="h-[350px]">
           {dailyNewUsersLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : dailyData.length > 0 ? (
+          ) : dailyWithRollingAvg.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyData}>
+              <ComposedChart data={dailyWithRollingAvg}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="date"
-                  className="text-xs"
-                  tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={(v) => {
-                    const d = new Date(`${v}T00:00:00`);
-                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
-                />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
                 <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
                 <Tooltip
-                  formatter={(value: number) => [value.toLocaleString(), "New Users"]}
-                  labelFormatter={(label) => {
-                    const d = new Date(`${label}T00:00:00`);
-                    return d.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    });
-                  }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                  }}
+                  formatter={(value: number, name: string) => [value.toLocaleString(), name === "rollingAvg" ? "7-Day Avg" : "New Users"]}
+                  labelFormatter={fullDate}
+                  contentStyle={tooltipStyle}
                 />
-                <Bar
-                  dataKey="users"
-                  name="New Users"
-                  fill="#6366f1"
-                  radius={[2, 2, 0, 0]}
-                />
-              </BarChart>
+                <Legend />
+                <Bar dataKey="users" name="New Users" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                <Line type="monotone" dataKey="rollingAvg" name="7-Day Avg" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              No data available
-            </div>
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
           )}
         </div>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+      {/* Two charts side by side: Stickiness + Power Users */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* DAU/WAU Stickiness Trend */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-semibold">Onboarding Completion Funnel</h2>
-            {onboardingData?.totalUsers != null && (
-              <span className="text-sm text-muted-foreground">
-                {onboardingData.totalUsers.toLocaleString()} first-time entrants
-              </span>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold mb-1">Stickiness (DAU/WAU)</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Sequential macOS onboarding completion rate for users whose first recorded current-flow
-            onboarding event was `Name` in the last {retentionDays} days
+            How often weekly users come back daily (good: 30%+)
           </p>
-          {onboardingData?.methodology && (
-            <p className="text-xs text-muted-foreground mb-4">{onboardingData.methodology}</p>
-          )}
-          <div className="h-[360px]">
-            {onboardingLoading ? (
+          <div className="h-[300px]">
+            {viralLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : onboardingSteps.length > 0 ? (
+            ) : stickinessData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={onboardingSteps} margin={{ left: 8, right: 24, top: 12, bottom: 70 }}>
+                <LineChart data={stickinessData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="label"
-                    angle={-35}
-                    textAnchor="end"
-                    interval={0}
-                    height={80}
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    formatter={(value: number, name) =>
-                      name === "completionRate"
-                        ? [`${value}%`, "Completion"]
-                        : [formatCompact(value), "Users"]
-                    }
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="completionRate"
-                    stroke="#0f766e"
-                    strokeWidth={3}
-                    dot={{ r: 3, fill: "#0f766e" }}
-                    activeDot={{ r: 5 }}
-                  />
+                  <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, "auto"]} />
+                  <Tooltip formatter={(value: number) => [`${value}%`, "DAU/WAU"]} labelFormatter={(l) => `Week of ${fullDate(l)}`} contentStyle={tooltipStyle} />
+                  <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Good", fill: "#22c55e", fontSize: 11 }} />
+                  <Line type="monotone" dataKey="dauWau" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: "#6366f1" }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                No onboarding data available
-              </div>
+              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
             )}
           </div>
         </Card>
 
+        {/* Power User Curve */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-semibold">K-Factor</h2>
-            <span className="text-sm text-muted-foreground">macOS only</span>
-          </div>
+          <h2 className="text-lg font-semibold mb-1">Power User Curve</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Viral growth requires invite and accepted referral tracking
+            Days active per user in last 30 days (right-skew = healthy)
           </p>
-          {kFactorLoading ? (
-            <div className="flex items-center justify-center h-[280px]">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="text-sm font-medium">Current Status</div>
-                <div className="mt-1 text-2xl font-semibold">
-                  {kFactorData?.available ? `${kFactorData.kFactor?.toFixed(2)}%` : "Unavailable"}
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">{kFactorData?.reason}</p>
+          <div className="h-[300px]">
+            {viralLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Share Rate
-                  </div>
-                  <div className="mt-1 text-xl font-semibold">
-                    {kFactorProxy ? `${kFactorProxy.shareRatePct.toFixed(1)}%` : "0%"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Sharers / new users</div>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Share Events
-                  </div>
-                  <div className="mt-1 text-xl font-semibold">
-                    {kFactorProxy ? formatCompact(kFactorProxy.shareEvents) : "0"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Last {retentionDays} days</div>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Shares / Sharer
-                  </div>
-                  <div className="mt-1 text-xl font-semibold">
-                    {kFactorProxy ? kFactorProxy.sharesPerSharer.toFixed(2) : "0.00"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Proxy only</div>
-                </div>
-              </div>
-            </div>
-          )}
+            ) : powerCurve.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={powerCurve}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="daysActive" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} label={{ value: "Days Active", position: "insideBottom", offset: -5, fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip formatter={(value: number, _: string, entry: any) => [`${value} users (${entry.payload.pct}%)`, "Users"]} labelFormatter={(l) => `${l} days active`} contentStyle={tooltipStyle} />
+                  <Bar dataKey="users" radius={[2, 2, 0, 0]}>
+                    {powerCurve.map((entry, index) => (
+                      <Cell key={index} fill={entry.daysActive >= 20 ? "#22c55e" : entry.daysActive >= 10 ? "#3b82f6" : "#6366f1"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+            )}
+          </div>
         </Card>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Retention by Cohort</h2>
-          <p className="text-sm text-muted-foreground">
-            PostHog-backed macOS retention from the `App Became Active` event
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Matching PostHog daily cohorts with simple mean and {retentionIntervals}-day return window
-          </p>
+      {/* Activation Rate */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-1">Activation Rate</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          % of new users who create a Memory within 7 days of signing up
+        </p>
+        <div className="h-[350px]">
+          {viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : activationData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={activationData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={fullDate}
+                  formatter={(value: number, name: string) => {
+                    if (name === "rate") return [`${value}%`, "Activation Rate"];
+                    if (name === "activated") return [value, "Activated"];
+                    return [value, "Signups"];
+                  }}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.5} />
+                <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )}
         </div>
+      </Card>
+
+      {/* ─────────────────────────────────────────────────── */}
+      {/* Retention Section */}
+      {/* ─────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between pt-4">
+        <h2 className="text-2xl font-bold tracking-tight">Retention</h2>
         <div className="flex items-center gap-2">
           <div className="flex rounded-md border border-input overflow-hidden">
             <button
@@ -660,21 +1508,16 @@ export default function AnalyticsPage() {
             </button>
           </div>
           <Select value={retentionPlatform} onValueChange={setRetentionPlatform}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="macos">macOS</SelectItem>
               <SelectItem value="all">All Platforms</SelectItem>
             </SelectContent>
           </Select>
           <Select value={String(retentionDays)} onValueChange={(v) => setRetentionDays(parseInt(v, 10))}>
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="14">14 days</SelectItem>
-              <SelectItem value="15">15 days</SelectItem>
               <SelectItem value="30">30 days</SelectItem>
               <SelectItem value="60">60 days</SelectItem>
               <SelectItem value="90">90 days</SelectItem>
@@ -683,7 +1526,30 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {retentionLoading ? (
+      {/* Retention D1/D7 Summary */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">D1 Retention</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{retentionD1 !== null ? `${retentionD1.toFixed(1)}%` : "--"}</div>
+            <p className={`text-xs ${retentionD1 !== null && retentionD1 >= 25 ? "text-green-600" : "text-muted-foreground"}`}>Good: 25%+</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">D7 Retention</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{retentionD7 !== null ? `${retentionD7.toFixed(1)}%` : "--"}</div>
+            <p className={`text-xs ${retentionD7 !== null && retentionD7 >= 15 ? "text-green-600" : "text-muted-foreground"}`}>Good: 15%+</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Retention Chart / Cohort Table */}
+      {mixpanelRetLoading ? (
         <Card className="p-6">
           <div className="flex items-center justify-center h-[400px]">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -692,57 +1558,27 @@ export default function AnalyticsPage() {
       ) : retentionView === "average" ? (
         <Card className="p-6">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-semibold">Average Retention</h2>
-            {retentionData?.totalUsers != null && (
+            <h2 className="text-lg font-semibold">Average Retention Curve</h2>
+            {mixpanelRetention?.totalUsers != null && (
               <span className="text-sm text-muted-foreground">
-                {retentionData.totalCohorts} cohorts &middot;{" "}
-                {retentionData.totalUsers.toLocaleString()} users
+                {mixpanelRetention.totalCohorts} cohorts &middot; {mixpanelRetention.totalUsers.toLocaleString()} users
               </span>
             )}
           </div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Simple mean daily retention across visible cohorts
-          </p>
-          <div className="h-[400px]">
-            {retentionData?.data && retentionData.data.length > 0 ? (
+          <p className="text-sm text-muted-foreground mb-4">Weighted average retention across all cohorts</p>
+          <div className="h-[350px]">
+            {mixpanelRetention?.data && mixpanelRetention.data.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={retentionData.data}>
+                <LineChart data={mixpanelRetention.data}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="day"
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={(v) => `D${v}`}
-                  />
-                  <YAxis
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={(v) => `${v}%`}
-                    domain={[0, 100]}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [`${value}%`, "Retention"]}
-                    labelFormatter={(label) => `Day ${label}`}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="retention"
-                    stroke="#f97316"
-                    strokeWidth={2}
-                    dot={{ r: 2, fill: "#f97316" }}
-                    activeDot={{ r: 5 }}
-                  />
+                  <XAxis dataKey="day" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `D${v}`} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                  <Tooltip formatter={(value: number) => [`${value}%`, "Retention"]} labelFormatter={(label) => `Day ${label}`} contentStyle={tooltipStyle} />
+                  <Line type="monotone" dataKey="retention" stroke="#f97316" strokeWidth={2} dot={{ r: 2, fill: "#f97316" }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                No retention data available
-              </div>
+              <div className="flex items-center justify-center h-full text-muted-foreground">No retention data available</div>
             )}
           </div>
         </Card>
@@ -752,63 +1588,36 @@ export default function AnalyticsPage() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b">
-                  <th className="sticky left-0 z-10 bg-card px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">
-                    Date
-                  </th>
-                  <th className="px-3 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">
-                    Users
-                  </th>
+                  <th className="sticky left-0 z-10 bg-card px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">Date</th>
+                  <th className="px-3 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">Users</th>
                   {Array.from({ length: cohortMaxDays }, (_, i) => (
-                    <th
-                      key={i}
-                      className="px-3 py-3 text-center font-medium text-muted-foreground whitespace-nowrap min-w-[64px]"
-                    >
+                    <th key={i} className="px-3 py-3 text-center font-medium text-muted-foreground whitespace-nowrap min-w-[64px]">
                       {i === 0 ? "< 1 Day" : `Day ${i}`}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {retentionData?.data && retentionData.data.length > 0 && (
+                {mixpanelRetention?.data && mixpanelRetention.data.length > 0 && (
                   <tr className="border-b font-semibold">
-                    <td className="sticky left-0 z-10 bg-card px-4 py-2.5 whitespace-nowrap">
-                      Weighted Avg
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-muted-foreground">
-                      {retentionData.totalUsers.toLocaleString()}
-                    </td>
-                    {retentionData.data.map((point) => (
-                      <td
-                        key={point.day}
-                        className="px-3 py-2.5 text-center"
-                        style={{ backgroundColor: retentionHeatColor(point.retention) }}
-                      >
-                        <span className={point.retention > 50 ? "text-white" : ""}>
-                          {point.retention.toFixed(1)}%
-                        </span>
+                    <td className="sticky left-0 z-10 bg-card px-4 py-2.5 whitespace-nowrap">Weighted Avg</td>
+                    <td className="px-3 py-2.5 text-right text-muted-foreground">{mixpanelRetention.totalUsers.toLocaleString()}</td>
+                    {mixpanelRetention.data.map((p) => (
+                      <td key={p.day} className="px-3 py-2.5 text-center" style={{ backgroundColor: retentionHeatColor(p.retention) }}>
+                        <span className={p.retention > 50 ? "text-white" : ""}>{p.retention.toFixed(1)}%</span>
                       </td>
                     ))}
                   </tr>
                 )}
-                {cohorts.map((cohort) => (
-                  <tr key={cohort.date} className="border-b last:border-b-0 hover:bg-muted/30">
-                    <td className="sticky left-0 z-10 bg-card px-4 py-2 whitespace-nowrap">
-                      {formatCohortDate(cohort.date)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">{cohort.users}</td>
+                {cohorts.map((c) => (
+                  <tr key={c.date} className="border-b last:border-b-0 hover:bg-muted/30">
+                    <td className="sticky left-0 z-10 bg-card px-4 py-2 whitespace-nowrap">{formatCohortDate(c.date)}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">{c.users}</td>
                     {Array.from({ length: cohortMaxDays }, (_, i) => {
-                      const val = i < cohort.data.length ? cohort.data[i].retention : null;
+                      const val = i < c.data.length ? c.data[i].retention : null;
                       return (
-                        <td
-                          key={i}
-                          className="px-3 py-2 text-center"
-                          style={val !== null ? { backgroundColor: retentionHeatColor(val) } : {}}
-                        >
-                          {val !== null ? (
-                            <span className={val > 50 ? "text-white" : ""}>
-                              {val.toFixed(1)}%
-                            </span>
-                          ) : null}
+                        <td key={i} className="px-3 py-2 text-center" style={val !== null ? { backgroundColor: retentionHeatColor(val) } : {}}>
+                          {val !== null ? <span className={val > 50 ? "text-white" : ""}>{val.toFixed(1)}%</span> : null}
                         </td>
                       );
                     })}

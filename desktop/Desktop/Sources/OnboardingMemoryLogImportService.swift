@@ -34,7 +34,7 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
   }
 
   var tags: [String] {
-    [rawValue, "onboarding", "memory_log"]
+    [rawValue, "import", "memory_log"]
   }
 
   var memorySource: String {
