@@ -311,6 +311,7 @@ def extract_action_items(
     photos: List[ConversationPhoto] = None,
     existing_action_items: List[dict] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
+    output_language_code: str = None,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -578,9 +579,10 @@ def extract_action_items(
         '    ', ''
     ).strip()
 
+    response_language = output_language_code or language_code
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. Use the same language {language_code} for your response.\n\nContent:\n{conversation_context}{existing_items_context}'
+    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-extract-actions") | action_items_parser
 
@@ -592,6 +594,7 @@ def extract_action_items(
                 'conversation_context': conversation_context,
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
+                'response_language': response_language,
                 'started_at': started_at.isoformat(),
                 'current_time': current_time.isoformat(),
                 'tz': tz,
@@ -629,14 +632,17 @@ def get_transcript_structure(
     tz: str,
     photos: List[ConversationPhoto] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
+    output_language_code: str = None,
 ) -> Structured:
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
+    response_language = output_language_code or language_code
+
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
-    The content language is {language_code}. Use the same language {language_code} for your response.
+    The content language is {language_code}. You MUST respond entirely in {response_language}.
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
@@ -690,6 +696,7 @@ def get_transcript_structure(
             'conversation_context': conversation_context,
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
+            'response_language': response_language,
             'started_at': started_at.isoformat(),
             'tz': tz,
         }
@@ -710,6 +717,7 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
+    output_language_code: str = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -724,9 +732,10 @@ def get_reprocess_transcript_structure(
         return Structured()
 
     full_context = "\n\n".join(context_parts)
+    response_language = output_language_code or language_code
 
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
-    The content language is {language_code}. Use the same language {language_code} for your response.
+    The content language is {language_code}. You MUST respond entirely in {response_language}.
 
     For the title, use ```{title}```, if it is empty, use the main topic of the content.
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
@@ -772,6 +781,7 @@ def get_reprocess_transcript_structure(
             'title': title,
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
+            'response_language': response_language,
             'started_at': started_at.isoformat(),
             'tz': tz,
         }
