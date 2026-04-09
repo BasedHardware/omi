@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/auth-provider';
 
+// Module-level callback so the standalone authenticatedFetcher can
+// trigger a token force-refresh on 401 without being a React hook.
+// Set by the single useAuthToken() instance in the component tree.
+let _forceRefreshCallback: (() => Promise<string | null>) | null = null;
+
 const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Fetch with a timeout. Aborts the request if it exceeds the deadline. */
@@ -77,6 +82,15 @@ export function useAuthToken() {
     }
   }, [user]);
 
+  // Register the forceRefresh callback at module level so authenticatedFetcher
+  // (a non-hook standalone function) can trigger token refresh on 401.
+  useEffect(() => {
+    _forceRefreshCallback = forceRefresh;
+    return () => {
+      _forceRefreshCallback = null;
+    };
+  }, [forceRefresh]);
+
   return { token, loading: authLoading || tokenLoading, forceRefresh };
 }
 
@@ -91,6 +105,25 @@ export const authenticatedFetcher = async ([url, token]: [string, string]) => {
       'Content-Type': 'application/json',
     },
   });
+
+  // On 401, force-refresh the token and replay once.
+  // Without this, SWR skips retry on 401 (see swr-provider onErrorRetry)
+  // and the dashboard card stays broken until a manual page reload.
+  if (response.status === 401 && _forceRefreshCallback) {
+    const freshToken = await _forceRefreshCallback();
+    if (freshToken) {
+      const retryResponse = await fetchWithTimeout(url, {
+        headers: {
+          Authorization: `Bearer ${freshToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!retryResponse.ok) {
+        throw await buildResponseError(retryResponse);
+      }
+      return retryResponse.json();
+    }
+  }
 
   if (!response.ok) {
     throw await buildResponseError(response);
