@@ -62,6 +62,13 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscriptions:', results[1].reason);
     }
 
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All revenue data sources failed' },
+        { status: 502 }
+      );
+    }
+
     let monthlyMRR = 0;
     let annualMRR = 0;
     let monthlyARR = 0;
