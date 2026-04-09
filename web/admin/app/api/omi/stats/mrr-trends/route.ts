@@ -92,6 +92,13 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscriptions for MRR:', results[1].reason);
     }
 
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All MRR trend data sources failed' },
+        { status: 502 }
+      );
+    }
+
     // Group MRR by month
     const mrrByMonth: Record<string, number> = {};
 
