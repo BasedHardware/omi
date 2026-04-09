@@ -10755,7 +10755,9 @@
     "tasksDeleteSelected": "Delete {count} task(s)",
     "@tasksDeleteSelected": {
         "placeholders": {
-            "count": {"type": "int"}
+            "count": {
+                "type": "int"
+            }
         }
     },
     "tasksMarkComplete": "Marked as complete"
