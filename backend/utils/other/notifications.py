@@ -1,7 +1,7 @@
 import asyncio
-import concurrent.futures
-import threading
 from datetime import datetime, time, timedelta
+
+from utils.executors import critical_executor
 
 import pytz
 
@@ -158,7 +158,7 @@ def _send_summary_notification(user_data: tuple):
     )
 
     # Also send webhook with the full summary data
-    threading.Thread(target=day_summary_webhook, args=(uid, str(summary_data))).start()
+    critical_executor.submit(day_summary_webhook, uid, str(summary_data))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -168,9 +168,8 @@ def _send_summary_notification(user_data: tuple):
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [loop.run_in_executor(pool, _send_summary_notification, user_tokens) for user_tokens in users]
-        await asyncio.gather(*tasks)
+    tasks = [loop.run_in_executor(critical_executor, _send_summary_notification, user_tokens) for user_tokens in users]
+    await asyncio.gather(*tasks)
 
 
 async def send_daily_notification():
