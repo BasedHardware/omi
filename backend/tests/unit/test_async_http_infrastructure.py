@@ -336,3 +336,75 @@ class TestShutdownLifecycle:
 
         # After close, semaphore cache should be cleared
         assert len(_semaphores) == 0
+
+
+# ============================================================================
+# Client configuration assertions (tester-requested)
+# ============================================================================
+
+
+class TestWebhookClientConfig:
+    """Verify webhook client is configured with correct timeout and limits."""
+
+    def test_webhook_client_read_timeout_is_30s(self):
+        """Webhook client must use 30s read timeout to match previous per-call behavior."""
+        from utils.http_client import get_webhook_client, _webhook_client
+
+        # Force fresh client creation
+        import utils.http_client as hc
+
+        old_client = hc._webhook_client
+        hc._webhook_client = None
+        try:
+            client = get_webhook_client()
+            assert client.timeout.read == 30.0
+        finally:
+            if hc._webhook_client is not None and hc._webhook_client is not old_client:
+                asyncio.run(hc._webhook_client.aclose())
+            hc._webhook_client = old_client
+
+    def test_webhook_client_connect_timeout_is_2s(self):
+        """Webhook client must use aggressive 2s connect timeout."""
+        from utils.http_client import get_webhook_client as gwc
+        import utils.http_client as hc
+
+        old_client = hc._webhook_client
+        hc._webhook_client = None
+        try:
+            client = gwc()
+            assert client.timeout.connect == 2.0
+        finally:
+            if hc._webhook_client is not None and hc._webhook_client is not old_client:
+                asyncio.run(hc._webhook_client.aclose())
+            hc._webhook_client = old_client
+
+
+class TestExecutorConfiguration:
+    """Verify executor pool sizing cannot silently regress."""
+
+    def test_critical_executor_has_8_workers(self):
+        """critical_executor documented as 8 workers for latency-sensitive work."""
+        assert critical_executor._max_workers == 8
+
+    def test_storage_executor_has_4_workers(self):
+        """storage_executor documented as 4 workers for batch I/O."""
+        assert storage_executor._max_workers == 4
+
+
+class TestNotificationWebhookWiring:
+    """Verify async webhook is correctly wired through storage_executor."""
+
+    def test_send_summary_calls_storage_executor_with_asyncio_run(self):
+        """_send_summary_notification must submit asyncio.run(day_summary_webhook(...)) to storage_executor."""
+        import os
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        # Read source to verify pattern without triggering Firestore imports
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
+            src = f.read()
+
+        # Verify the exact wiring pattern
+        assert 'storage_executor.submit(asyncio.run, day_summary_webhook(' in src
+        assert 'critical_executor' not in src
