@@ -23,7 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  Users
+  Users,
+  AlertTriangle
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthFetch } from "@/hooks/useAuthToken";
@@ -99,6 +100,7 @@ export default function SubscriptionsPage() {
   const [subscriptionCounts, setSubscriptionCounts] = useState<SubscriptionCounts | null>(null);
   const [subscriptionTrends, setSubscriptionTrends] = useState<SubscriptionTrendData[]>([]);
   const [mrrTrends, setMrrTrends] = useState<MRRTrendData[]>([]);
+  const [hasPartialData, setHasPartialData] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +195,7 @@ export default function SubscriptionsPage() {
   };
 
   const handleRefresh = () => {
+    setHasPartialData(false);
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
@@ -206,7 +209,8 @@ export default function SubscriptionsPage() {
       const response = await fetchWithAuth('/api/omi/stats/revenue');
 
       if (response.ok) {
-        const data: RevenueMetrics = await response.json();
+        const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setRevenueMetrics(data);
       }
     } catch (err) {
@@ -220,6 +224,7 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setSubscriptionCounts({
           monthly: data.priceIdOne?.count || 0,
           annual: data.priceIdTwo?.count || 0,
@@ -236,6 +241,7 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setSubscriptionTrends(data.data || []);
       }
     } catch (err) {
@@ -249,6 +255,7 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setMrrTrends(data.data || []);
       }
     } catch (err) {
@@ -318,6 +325,12 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="space-y-6">
+      {hasPartialData && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Some data sources failed to load. Numbers may be incomplete.</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
