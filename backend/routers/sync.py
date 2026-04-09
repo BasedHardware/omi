@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import requests
+import httpx
 
 from utils.executors import critical_executor, storage_executor
 
@@ -741,7 +741,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
-        resp = requests.get(url, timeout=60)
+        resp = httpx.get(url, timeout=60.0)
         resp.raise_for_status()
         return resp.content
     except Exception as e:
