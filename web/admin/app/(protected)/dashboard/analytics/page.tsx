@@ -17,6 +17,7 @@ import {
   Send,
   MousePointerClick,
   Percent,
+  AlertTriangle,
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -52,6 +53,7 @@ import {
 interface RevenueData {
   mrr: number;
   arr: number;
+  partial?: boolean;
 }
 
 interface MrrTrendPoint {
@@ -69,6 +71,7 @@ interface SubscriptionTrendPoint {
 
 interface SubscriptionCounts {
   totalSubscriptions: number;
+  partial?: boolean;
   priceIdOne: { count: number; priceId: string };
   priceIdTwo: { count: number; priceId: string };
 }
@@ -378,6 +381,7 @@ export default function AnalyticsPage() {
   const totalSubs = subCounts?.totalSubscriptions ?? 0;
   const monthlySubs = subCounts?.priceIdOne?.count ?? 0;
   const annualSubs = subCounts?.priceIdTwo?.count ?? 0;
+  const hasPartialData = !!(revenue?.partial || subCounts?.partial || (mrrTrends as any)?.partial || (subTrends as any)?.partial);
   const totalConversations = convCount?.totalConversations ?? 0;
   const mrrData = mrrTrends?.data ?? [];
   const subData = subTrends?.data ?? [];
@@ -510,6 +514,12 @@ export default function AnalyticsPage() {
       )}
 
       {/* Revenue Summary Cards */}
+      {hasPartialData && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Some data sources failed to load. Numbers may be incomplete.</span>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
