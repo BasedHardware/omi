@@ -65,10 +65,12 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscriptions:', results[1].reason);
     }
 
+    const partial = results.some((r) => r.status === 'rejected');
     const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
 
     return NextResponse.json({
       totalSubscriptions,
+      partial,
       priceIdOne: {
         count: subscriptionsOne.length,
         priceId: priceIdOne,
