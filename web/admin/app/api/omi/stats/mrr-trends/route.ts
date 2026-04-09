@@ -77,10 +77,20 @@ export async function GET(request: NextRequest) {
       return allSubscriptions;
     };
 
-    const [monthlySubscriptions, annualSubscriptions] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchAllSubscriptions(monthlyPriceId),
       fetchAllSubscriptions(annualPriceId),
     ]);
+
+    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
+    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
+
+    if (results[0].status === 'rejected') {
+      console.error('Error fetching monthly subscriptions for MRR:', results[0].reason);
+    }
+    if (results[1].status === 'rejected') {
+      console.error('Error fetching annual subscriptions for MRR:', results[1].reason);
+    }
 
     // Group MRR by month
     const mrrByMonth: Record<string, number> = {};
