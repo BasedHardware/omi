@@ -5,8 +5,10 @@ import { useAuth } from '@/components/auth-provider';
 
 // Module-level callback so the standalone authenticatedFetcher can
 // trigger a token force-refresh on 401 without being a React hook.
-// Set by the single useAuthToken() instance in the component tree.
+// Multiple useAuthToken() instances may be mounted simultaneously —
+// ref-counting ensures the callback survives until the last one unmounts.
 let _forceRefreshCallback: (() => Promise<string | null>) | null = null;
+let _forceRefreshRefCount = 0;
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -84,10 +86,16 @@ export function useAuthToken() {
 
   // Register the forceRefresh callback at module level so authenticatedFetcher
   // (a non-hook standalone function) can trigger token refresh on 401.
+  // Ref-counted: multiple hooks can mount/unmount independently without
+  // clearing the callback while other instances are still alive.
   useEffect(() => {
     _forceRefreshCallback = forceRefresh;
+    _forceRefreshRefCount++;
     return () => {
-      _forceRefreshCallback = null;
+      _forceRefreshRefCount--;
+      if (_forceRefreshRefCount === 0) {
+        _forceRefreshCallback = null;
+      }
     };
   }, [forceRefresh]);
 
