@@ -40,6 +40,13 @@ export async function GET(request: NextRequest) {
       console.error('[API Route] Error fetching unapproved apps:', results[1].reason);
     }
 
+    if (results.every((r) => r.status === 'rejected')) {
+      return withCors(NextResponse.json(
+        { error: 'All app data sources failed' },
+        { status: 502 }
+      ));
+    }
+
     // Filter out persona apps from regular apps
     const filteredApps = apps.filter(app =>
       !app.capabilities?.includes('persona')
