@@ -85,12 +85,19 @@ struct AIResponseView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            if let shareFeedbackMessage, showShareFeedback {
+                shareFeedbackBanner
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .accessibilityLabel(shareFeedbackMessage)
+            }
+
             if !isLoading && !isVoiceFollowUp {
                 followUpInputView
             }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {
             onEscape?()
         }
@@ -359,6 +366,8 @@ struct AIResponseView: View {
     // MARK: - Follow-Up Input
 
     @State private var showShareFeedback = false
+    @State private var shareFeedbackMessage: String?
+    @State private var shareFeedbackHideWorkItem: DispatchWorkItem?
     @State private var isSharingLink = false
 
     private var followUpInputView: some View {
@@ -397,6 +406,28 @@ struct AIResponseView: View {
         }
     }
 
+    private var shareFeedbackBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.green)
+
+            Text("Share link copied to your clipboard")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.green.opacity(0.18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
+        )
+        .cornerRadius(8)
+    }
+
     private func shareLink() {
         guard !isSharingLink else { return }
         isSharingLink = true
@@ -405,13 +436,27 @@ struct AIResponseView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(url, forType: .string)
                 AnalyticsManager.shared.shareAction(category: "floating_bar_share_link")
-                withAnimation { showShareFeedback = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withAnimation { showShareFeedback = false }
-                }
+                showShareSuccessFeedback()
             }
             isSharingLink = false
         }
+    }
+
+    private func showShareSuccessFeedback() {
+        shareFeedbackHideWorkItem?.cancel()
+        shareFeedbackMessage = "Share link copied to your clipboard"
+        withAnimation {
+            showShareFeedback = true
+        }
+
+        let workItem = DispatchWorkItem {
+            withAnimation {
+                showShareFeedback = false
+                shareFeedbackMessage = nil
+            }
+        }
+        shareFeedbackHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
     }
 
     private func sendFollowUp() {

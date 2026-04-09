@@ -386,6 +386,7 @@ struct FloatingControlBarView: View {
                 archiveCurrentExchange()
 
                 state.displayedQuery = message
+                state.currentQuestionMessageId = nil
                 state.markConversationActivity()
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
@@ -411,6 +412,7 @@ struct FloatingControlBarView: View {
         state.chatHistory.append(
             FloatingChatExchange(
                 question: currentQuery.isEmpty ? nil : currentQuery,
+                questionMessageId: state.currentQuestionMessageId,
                 aiMessage: currentMessage
             )
         )
