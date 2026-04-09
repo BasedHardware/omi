@@ -1,9 +1,11 @@
 from typing import List, Dict, Any, Optional
+import threading
 import uuid
 import logging
 import json
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
+
+from utils.executors import critical_executor
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -246,14 +248,13 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(process_memory, m) for m in memories]
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                all_nodes.extend(result.get('nodes', []))
-                all_edges.extend(result.get('edges', []))
-            except Exception:
-                logging.exception("Error in concurrent memory extraction")
+    futures = [critical_executor.submit(process_memory, m) for m in memories]
+    for future in as_completed(futures):
+        try:
+            result = future.result()
+            all_nodes.extend(result.get('nodes', []))
+            all_edges.extend(result.get('edges', []))
+        except Exception:
+            logging.exception("Error in concurrent memory extraction")
 
     return kg_db.get_knowledge_graph(uid)
