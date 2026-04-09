@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional
 
-import requests
+import httpx
 
 from database.redis_db import r
 from models.geolocation import Geolocation
@@ -30,7 +30,7 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
-    response = requests.get(url)
+    response = httpx.get(url)
     data = response.json()
     if data['status'] != 'OK' or not data.get('results'):
         return None
