@@ -5,7 +5,7 @@ import logging
 import json
 from concurrent.futures import as_completed
 
-from utils.executors import critical_executor
+from utils.executors import critical_executor, storage_executor
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -248,7 +248,7 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
-    futures = [critical_executor.submit(process_memory, m) for m in memories]
+    futures = [storage_executor.submit(process_memory, m) for m in memories]
     for future in as_completed(futures):
         try:
             result = future.result()
