@@ -348,15 +348,25 @@ class TestPostprocessExecutorMigration:
 
 
 class TestNotificationsExecutorMigration:
-    """Verify notifications uses critical_executor, not threading.Thread."""
+    """Verify notifications uses storage_executor for batch cron work, not threading.Thread."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/other/notifications.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_storage_executor(self):
         src = _read_source('utils/other/notifications.py')
-        assert 'critical_executor' in src
+        assert 'storage_executor' in src
+
+    def test_does_not_use_critical_executor(self):
+        """Batch cron work must not use critical_executor (would starve request-path)."""
+        src = _read_source('utils/other/notifications.py')
+        assert 'critical_executor' not in src
+
+    def test_async_webhook_wrapped_in_asyncio_run(self):
+        """day_summary_webhook is async; must be wrapped in asyncio.run for executor."""
+        src = _read_source('utils/other/notifications.py')
+        assert 'asyncio.run' in src
 
 
 class TestStorageExecutorMigration:
