@@ -861,14 +861,18 @@ class AppState: ObservableObject {
       // Stale TCC entry from old developer signing: CGPreflight says granted but
       // actual capture fails. The user must toggle OFF then ON in System Settings
       // to update the code signing requirement (csreq) stored in the TCC database.
+      // NOTE: Do NOT call tccutil reset here — it wipes the user's permission entry
+      // entirely and forces them to re-grant manually. This was the root cause of
+      // users' screen recording permission getting reset "for no reason" after
+      // local rebuilds of Omi Beta (binary hash changes → stale csreq → self-reset).
+      // The correct recovery is for the user to toggle the permission in System
+      // Settings, which refreshes csreq in place. See PR #5616 / a2bc4471d for history.
       if !realPermission && !isScreenRecordingStale {
         log("Screen capture: stale TCC entry detected (developer signing changed)")
+        log(
+          "Screen capture: please toggle Screen Recording OFF then ON for this app in System Settings → Privacy & Security → Screen Recording"
+        )
         isScreenRecordingStale = true
-        // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
-        Task.detached {
-          ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-          _ = ScreenCaptureService.resetScreenCapturePermission()
-        }
       } else if realPermission {
         // Permission recovered (user toggled off/on in System Settings)
         isScreenRecordingStale = false
