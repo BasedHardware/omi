@@ -266,7 +266,7 @@ Don't use when:
 Parameter guidance:
 - start_date/end_date: MUST be ISO format with timezone offset (e.g. 2024-01-19T15:00:00-08:00). Always include timezone.
 - limit: default 20. For summaries/recaps, set limit=5000 to get all conversations in the range.
-- include_transcript: default true. Set false for broad/summary queries to avoid flooding context.
+- include_transcript: default true. Enables transcript-derived summaries and action items. Set false for faster, lighter results when only metadata is needed.
 - Prefer narrower time windows first (hours > day > week > month) for better relevance.`,
     inputSchema: {
       type: "object" as const,
@@ -275,7 +275,7 @@ Parameter guidance:
         end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T23:59:59-08:00)" },
         limit: { type: "number" as const, description: "Number of conversations: 20 default, 5000 for summaries/recaps" },
         offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
-        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true, set false for summaries)" },
+        include_transcript: { type: "boolean" as const, description: "Process transcript data for summaries/action items (default: true). Set false for faster, lighter results." },
       },
       required: [],
     },
@@ -306,7 +306,7 @@ Parameter guidance:
 - query: Descriptive phrase about the event or concept — semantic search works best with natural language.
 - start_date/end_date: ISO format with timezone offset. Use to narrow the time range when known.
 - limit: default 5, max 20. Usually 5 is enough for specific events.
-- include_transcript: default true. Set false if you only need conversation metadata.`,
+- include_transcript: default true. Includes transcript-derived summaries. Set false for faster, lighter results.`,
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -314,7 +314,7 @@ Parameter guidance:
         start_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T00:00:00+07:00)" },
         end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-31T23:59:59+07:00)" },
         limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
-        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true)" },
+        include_transcript: { type: "boolean" as const, description: "Include transcript-derived summaries (default: true). Set false for lighter results." },
       },
       required: ["query"],
     },
