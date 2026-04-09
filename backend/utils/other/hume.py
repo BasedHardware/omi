@@ -1,6 +1,6 @@
 import os
 
-import requests
+import httpx
 import logging
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,6 @@ class HumeClient:
         self.callback_url = callback_url
 
     def request_user_expression_mersurement(self, urls: [str]):
-        resp: requests.Response
         err = None
 
         # Model
@@ -147,7 +146,7 @@ class HumeClient:
             "callback_url": self.callback_url,
         }
         try:
-            resp = requests.post(
+            resp = httpx.post(
                 "https://api.hume.ai/v0/batch/jobs",
                 json=data,
                 headers={
@@ -155,32 +154,24 @@ class HumeClient:
                     'Accept': 'application/json; charset=utf-8',
                     'X-Hume-Api-Key': self.api_key,
                 },
-                timeout=300,
+                timeout=300.0,
             )
-        except requests.exceptions.HTTPError:
-            resp_text = f"{resp}"
-            err = {
-                "error": {
-                    "status": resp.status_code,
-                    "message": resp_text,
-                },
-            }
-        except requests.exceptions.Timeout:
+        except httpx.TimeoutException:
             err = {
                 "error": {
                     "message": "Timeout",
                 },
             }
-        except requests.exceptions.TooManyRedirects:
+        except httpx.TooManyRedirects:
             err = {
                 "error": {
                     "message": "TooManyRedirects",
                 },
             }
-        except requests.exceptions.RequestException as e:
+        except httpx.HTTPError as e:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": f"HTTPError {e}",
                 },
             }
         if err is None and resp.status_code != 200:
