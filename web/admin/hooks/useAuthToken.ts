@@ -3,9 +3,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/components/auth-provider';
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Fetch with a timeout. Aborts the request if it exceeds the deadline. */
+function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+/** Build a typed error from a non-ok response. */
+async function buildResponseError(response: Response): Promise<Error> {
+  const error = new Error('An error occurred while fetching the data.');
+  try {
+    (error as any).info = await response.json();
+  } catch {
+    (error as any).info = { message: 'Could not parse error JSON.' };
+  }
+  (error as any).status = response.status;
+  return error;
+}
+
 /**
  * Shared hook that retrieves a Firebase ID token for authenticated API requests.
- * Returns { token, loading } — pass `token` into SWR keys or fetch headers.
+ * Returns { token, loading, forceRefresh } — pass `token` into SWR keys or fetch headers.
  */
 export function useAuthToken() {
   const { user, loading: authLoading } = useAuth();
@@ -44,14 +65,27 @@ export function useAuthToken() {
     }
   }, [user, authLoading]);
 
-  return { token, loading: authLoading || tokenLoading };
+  /** Force-refresh the token (e.g. after a 401). Returns the new token or null. */
+  const forceRefresh = useCallback(async (): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      const freshToken = await user.getIdToken(true);
+      setToken(freshToken);
+      return freshToken;
+    } catch {
+      return null;
+    }
+  }, [user]);
+
+  return { token, loading: authLoading || tokenLoading, forceRefresh };
 }
 
 /**
  * Authenticated fetcher for SWR — expects key to be [url, token].
+ * Includes 30s timeout.
  */
 export const authenticatedFetcher = async ([url, token]: [string, string]) => {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -59,14 +93,7 @@ export const authenticatedFetcher = async ([url, token]: [string, string]) => {
   });
 
   if (!response.ok) {
-    const error = new Error('An error occurred while fetching the data.');
-    try {
-      (error as any).info = await response.json();
-    } catch {
-      (error as any).info = { message: 'Could not parse error JSON.' };
-    }
-    (error as any).status = response.status;
-    throw error;
+    throw await buildResponseError(response);
   }
   return response.json();
 };
@@ -74,11 +101,17 @@ export const authenticatedFetcher = async ([url, token]: [string, string]) => {
 /**
  * Hook that returns a stable fetch wrapper adding the Bearer token.
  * Uses a ref so the callback identity never changes — safe for useEffect deps.
+ *
+ * Features:
+ * - 30s request timeout
+ * - Auto-refresh token and replay once on 401
  */
 export function useAuthFetch() {
-  const { token } = useAuthToken();
+  const { token, forceRefresh } = useAuthToken();
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const forceRefreshRef = useRef(forceRefresh);
+  forceRefreshRef.current = forceRefresh;
 
   const fetchWithAuth = useCallback(async (url: string, init?: RequestInit) => {
     const isFormData = init?.body instanceof FormData;
@@ -89,7 +122,20 @@ export function useAuthFetch() {
     if (tokenRef.current) {
       headers['Authorization'] = `Bearer ${tokenRef.current}`;
     }
-    return fetch(url, { ...init, headers });
+
+    const response = await fetchWithTimeout(url, { ...init, headers });
+
+    // On 401, force-refresh the token and replay the request once
+    if (response.status === 401 && tokenRef.current) {
+      const freshToken = await forceRefreshRef.current();
+      if (freshToken) {
+        tokenRef.current = freshToken;
+        headers['Authorization'] = `Bearer ${freshToken}`;
+        return fetchWithTimeout(url, { ...init, headers });
+      }
+    }
+
+    return response;
   }, []);
 
   return { fetchWithAuth, token };
