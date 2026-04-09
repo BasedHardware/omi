@@ -9032,4 +9032,18 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Nastavi';
+
+  @override
+  String get tasksClearCompleted => 'Clear Completed';
+
+  @override
+  String get tasksSelectAll => 'Select All';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Delete $count task(s)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Marked as complete';
 }
