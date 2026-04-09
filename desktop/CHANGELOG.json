@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Replaced Conversations on Dashboard with embedded Chat (Ask omi anything) and moved the Conversations list to its own sidebar page"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.276",
+      "date": "2026-04-09",
+      "changes": [
+        "Replaced Conversations on Dashboard with embedded Chat (Ask omi anything) and moved the Conversations list to its own sidebar page"
+      ]
+    },
     {
       "version": "0.11.275",
       "date": "2026-04-09",
