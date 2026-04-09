@@ -68,11 +68,13 @@ export async function GET(request: NextRequest) {
       !app.capabilities?.includes('persona')
     );
 
+    const partial = results.some((r) => r.status === 'rejected');
     const stats = {
       total: filteredApps.length,
       approved: approvedCount,
       inReview: filteredUnapprovedApps.length, // Only public apps awaiting review
       paid: paidCount,
+      partial,
     };
 
     return withCors(NextResponse.json(stats));
