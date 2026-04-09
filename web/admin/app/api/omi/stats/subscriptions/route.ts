@@ -50,15 +50,35 @@ export async function GET(request: NextRequest) {
       return allSubscriptions;
     };
 
-    const [subscriptionsOne, subscriptionsTwo] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchAllSubscriptions(priceIdOne),
       fetchAllSubscriptions(priceIdTwo),
     ]);
 
+    const subscriptionsOne = results[0].status === 'fulfilled' ? results[0].value : [];
+    const subscriptionsTwo = results[1].status === 'fulfilled' ? results[1].value : [];
+
+    if (results[0].status === 'rejected') {
+      console.error('Error fetching monthly subscriptions:', results[0].reason);
+    }
+    if (results[1].status === 'rejected') {
+      console.error('Error fetching annual subscriptions:', results[1].reason);
+    }
+
+    // If ALL legs failed, return an error — don't serve fabricated zeros
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All subscription data sources failed' },
+        { status: 502 }
+      );
+    }
+
+    const partial = results.some((r) => r.status === 'rejected');
     const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
 
     return NextResponse.json({
       totalSubscriptions,
+      partial,
       priceIdOne: {
         count: subscriptionsOne.length,
         priceId: priceIdOne,
