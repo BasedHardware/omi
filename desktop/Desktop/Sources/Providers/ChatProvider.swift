@@ -205,61 +205,80 @@ struct MessageMetadata {
     var costUsd: Double?
     var systemPrompt: String?
     var hasScreenshot: Bool
+    var screenshotSizeBytes: Int?
     var toolNames: [String]
+    /// Total rows returned across all execute_sql tool calls during this response
+    var sqlRowsReturned: Int
+    /// Number of execute_sql tool calls made during this response
+    var sqlQueryCount: Int
 
     var totalTokens: Int? {
         guard let input = inputTokens, let output = outputTokens else { return nil }
         return input + output + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
     }
 
-    // MARK: - Parsed context counts from system prompt
+    // MARK: - Dynamic context sections from system prompt
 
-    /// Count of user facts/memories in the prompt
-    var memoriesCount: Int {
-        guard let prompt = systemPrompt else { return 0 }
-        // Count lines starting with "- " inside <user_facts> section
-        guard let factsStart = prompt.range(of: "<user_facts>"),
-              let factsEnd = prompt.range(of: "</user_facts>") else { return 0 }
-        let factsSection = String(prompt[factsStart.upperBound..<factsEnd.lowerBound])
-        return factsSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
-    }
+    /// A single tagged section found in the system prompt
+    struct PromptSection {
+        let tag: String
+        let itemCount: Int
+        let charCount: Int
 
-    /// Count of conversation turns in the prompt
-    var conversationTurns: Int {
-        guard let prompt = systemPrompt else { return 0 }
-        guard let histStart = prompt.range(of: "<conversation_history>"),
-              let histEnd = prompt.range(of: "</conversation_history>") else { return 0 }
-        let histSection = String(prompt[histStart.upperBound..<histEnd.lowerBound])
-        return histSection.components(separatedBy: "\n").filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }.count
-    }
-
-    /// Count of tasks in the prompt
-    var tasksCount: Int {
-        guard let prompt = systemPrompt else { return 0 }
-        guard let tasksStart = prompt.range(of: "<user_tasks>"),
-              let tasksEnd = prompt.range(of: "</user_tasks>") else { return 0 }
-        let tasksSection = String(prompt[tasksStart.upperBound..<tasksEnd.lowerBound])
-        return tasksSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
-    }
-
-    /// Count of goals in the prompt
-    var goalsCount: Int {
-        guard let prompt = systemPrompt else { return 0 }
-        guard let goalsStart = prompt.range(of: "<user_goals>"),
-              let goalsEnd = prompt.range(of: "</user_goals>") else { return 0 }
-        let goalsSection = String(prompt[goalsStart.upperBound..<goalsEnd.lowerBound])
-        return goalsSection.components(separatedBy: "\n").filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
-    }
-
-    /// Count of tools/skills available in the prompt
-    var availableToolsCount: Int {
-        guard let prompt = systemPrompt else { return 0 }
-        // Count tool definitions like **tool_name**:
-        var count = 0
-        for name in ["execute_sql", "semantic_search", "get_daily_recap", "complete_task", "delete_task", "save_knowledge_graph"] {
-            if prompt.contains("**\(name)**") { count += 1 }
+        /// Human-readable label derived from the XML tag name
+        var label: String {
+            tag.replacingOccurrences(of: "_", with: " ")
+                .localizedCapitalized
         }
-        return count
+    }
+
+    /// Dynamically discovers all XML-tagged sections in the system prompt and counts items in each.
+    /// This is future-proof: any new `<some_tag>...</some_tag>` section automatically appears.
+    var promptSections: [PromptSection] {
+        guard let prompt = systemPrompt else { return [] }
+        var sections: [PromptSection] = []
+        var seen = Set<String>()
+
+        // Find all <tag>...</tag> pairs
+        let pattern = try! NSRegularExpression(pattern: #"<([a-z][a-z0-9_]*)>"#, options: [])
+        let matches = pattern.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
+
+        for match in matches {
+            guard let tagRange = Range(match.range(at: 1), in: prompt) else { continue }
+            let tag = String(prompt[tagRange])
+
+            // Skip duplicates
+            guard !seen.contains(tag) else { continue }
+            seen.insert(tag)
+
+            let openTag = "<\(tag)>"
+            let closeTag = "</\(tag)>"
+            guard let openRange = prompt.range(of: openTag),
+                  let closeRange = prompt.range(of: closeTag),
+                  openRange.upperBound < closeRange.lowerBound else { continue }
+
+            let content = String(prompt[openRange.upperBound..<closeRange.lowerBound])
+            let charCount = content.count
+
+            // Count meaningful lines (items starting with "- ", or role-prefixed lines for conversation)
+            let lines = content.components(separatedBy: "\n")
+            let itemCount: Int
+            if tag == "conversation_history" {
+                itemCount = lines.filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }.count
+            } else {
+                let bulletLines = lines.filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
+                // If no bullet items, count non-empty non-header lines
+                if bulletLines > 0 {
+                    itemCount = bulletLines
+                } else {
+                    itemCount = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+                }
+            }
+
+            sections.append(PromptSection(tag: tag, itemCount: itemCount, charCount: charCount))
+        }
+
+        return sections
     }
 }
 
@@ -2040,6 +2059,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var sqlRowsReturned = 0
+        var sqlQueryCount = 0
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
@@ -2073,6 +2094,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(toolCall)
                 log("OMI tool \(name) executed for callId=\(callId)")
+                // Track SQL query stats for metadata
+                if name == "execute_sql" {
+                    sqlQueryCount += 1
+                    // Parse row count from result (format: "\nN row(s)" at end)
+                    if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+                        let numStr = result[match].components(separatedBy: " ").first ?? "0"
+                        sqlRowsReturned += Int(numStr) ?? 0
+                    }
+                }
                 return result
             }
             let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
@@ -2178,7 +2208,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     costUsd: queryResult.costUsd,
                     systemPrompt: systemPrompt,
                     hasScreenshot: imageData != nil,
-                    toolNames: toolNames
+                    screenshotSizeBytes: imageData?.count,
+                    toolNames: toolNames,
+                    sqlRowsReturned: sqlRowsReturned,
+                    sqlQueryCount: sqlQueryCount
                 )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {
