@@ -37,6 +37,8 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
+import 'package:omi/services/audio_sources/wearos_source.dart';
+import 'package:omi/services/wearos_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -80,6 +82,10 @@ class CaptureProvider extends ChangeNotifier
   IWalService get _wal => ServiceManager.instance().wal;
 
   AudioSource? _activeSource;
+
+  // WearOS watch audio streaming
+  StreamSubscription<WearOsAudioEvent>? _wearOsAudioSubscription;
+  bool _wearOsActive = false;
 
   bool _isWalSupported = false;
 
@@ -654,6 +660,9 @@ class CaptureProvider extends ChangeNotifier
 
   Future _cleanupCurrentState() async {
     await _closeBleStream();
+    _wearOsAudioSubscription?.cancel();
+    _wearOsAudioSubscription = null;
+    _wearOsActive = false;
     _activeSource = null;
     notifyListeners();
   }
@@ -975,6 +984,77 @@ class CaptureProvider extends ChangeNotifier
     ServiceManager.instance().mic.stop();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
+  }
+
+  /// Start streaming audio from a WearOS watch via Wear Data Layer.
+  ///
+  /// The watch app (omi4wearOS) performs VAD and Opus encoding on-device,
+  /// then sends speech segments through the Data Layer. This method wires
+  /// the incoming audio into the same pipeline used by BLE devices and
+  /// the phone microphone (WAL + WebSocket transcription).
+  Future<void> streamWearOsRecording() async {
+    updateRecordingState(RecordingState.initialising);
+
+    // Send current location when conversation starts
+    _sendCurrentGeolocation();
+
+    // Get watch device info
+    final deviceInfo = await WearOsService().getWatchDeviceInfo();
+    final deviceId = deviceInfo['deviceId'] as String? ?? 'wearos-watch';
+    final deviceModel = deviceInfo['deviceModel'] as String? ?? 'WearOS Watch';
+
+    // Initialize WebSocket for transcription
+    await _initiateWebsocket(
+      audioCodec: BleAudioCodec.opus,
+      sampleRate: 16000,
+      force: true,
+      source: 'wearos',
+    );
+
+    // Initialize audio source and WAL
+    _activeSource = WearOsSource(deviceId: deviceId, deviceModel: deviceModel);
+    _wearOsActive = true;
+    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.opus);
+    _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
+    setIsWalSupported(true);
+
+    // Start listening for watch audio
+    final wearOsService = WearOsService();
+    wearOsService.startListening();
+
+    _wearOsAudioSubscription = wearOsService.audioStream.listen((event) {
+      if (event.audioData.isEmpty) return;
+
+      final bytes = event.audioData.toList();
+
+      // Process through AudioSource for WAL frame generation
+      final frames = _activeSource?.processBytes(bytes) ?? [];
+      for (final frame in frames) {
+        _wal.getSyncs().phone.onFrameCaptured(frame);
+
+        // Send to WebSocket for real-time transcription
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(frame.payload);
+          _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+        }
+      }
+    });
+
+    updateRecordingState(RecordingState.record);
+    notifyListeners();
+  }
+
+  /// Stop streaming audio from the WearOS watch.
+  Future<void> stopWearOsRecording() async {
+    if (_wearOsActive) {
+      _wearOsAudioSubscription?.cancel();
+      _wearOsAudioSubscription = null;
+      _wearOsActive = false;
+      WearOsService().stopListening();
+    }
+    await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop wearos recording');
   }
 
   Future streamDeviceRecording({BtDevice? device}) async {

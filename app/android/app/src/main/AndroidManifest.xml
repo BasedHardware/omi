@@ -13,6 +13,9 @@
     <uses-feature
         android:name="android.software.companion_device_setup"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.type.watch"
+        android:required="false" />
 
     <!-- New Bluetooth permissions in Android 12
     https://developer.android.com/about/versions/12/features/bluetooth-permissions -->
@@ -193,6 +196,17 @@
             android:name="com.friend.ios.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
             android:exported="false" />
+
+        <!-- WearOS Data Layer Listener — receives audio from omi4wearOS watch -->
+        <service
+            android:name=".WearOsListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi4wos/" />
+            </intent-filter>
+        </service>
+
 
     </application>
 </manifest>
