@@ -556,15 +556,23 @@ struct MessageMetadataPopover: View {
 
                 Divider()
 
-                // Context fed into the prompt
+                // Context fed into the prompt — dynamically discovered sections
                 Text("Context in Prompt")
                     .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(.primary)
-                metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
-                metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
-                metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
-                metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
-                metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
+                let sections = metadata.promptSections
+                if sections.isEmpty {
+                    Text("No tagged sections found")
+                        .scaledFont(size: 11)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(sections, id: \.tag) { section in
+                        metadataRow(
+                            label: section.label,
+                            value: "\(section.itemCount) items (\(section.charCount) chars)"
+                        )
+                    }
+                }
 
                 // Tool calls
                 if !metadata.toolNames.isEmpty {
