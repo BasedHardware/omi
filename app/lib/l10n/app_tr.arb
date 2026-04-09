@@ -2967,5 +2967,8 @@
     "transcriptionUnavailable": "Transkripsiyon kullanılamıyor",
     "audioOutput": "Ses çıkışı",
     "enableLocationTitle": "Konumu Etkinleştir",
-    "enableLocationDescription": "Yakındaki Bluetooth cihazlarını bulmak için konum izni gereklidir."
+    "enableLocationDescription": "Yakındaki Bluetooth cihazlarını bulmak için konum izni gereklidir.",
+    "firmwareWarningTitle": "Önemli: Güncellemeden Önce Okuyun",
+    "firmwareFormatWarning": "Bu yazılım SD kartı biçimlendirecektir. Lütfen yükseltmeden önce tüm çevrimdışı verilerin senkronize edildiğinden emin olun.\n\nBu sürümü yükledikten sonra yanıp sönen kırmızı bir ışık görürseniz endişelenmeyin. Cihazı uygulamaya bağlamanız yeterlidir ve mavi renğe dönmelidir. Kırmızı ışık, cihazın saatinin henüz senkronize edilmediği anlamına gelir.",
+    "continueAnyway": "Devam Et"
 }

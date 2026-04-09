@@ -8927,4 +8927,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get audioOutput => 'פלט אודיו';
+
+  @override
+  String get firmwareWarningTitle => 'חשוב: קראו לפני העדכון';
+
+  @override
+  String get firmwareFormatWarning =>
+      'קושחה זו תפרמט את כרטיס ה-SD. אנא ודאו שכל הנתונים הלא מקוונים מסונכרנים לפני השדרוג.\n\nאם אתם רואים אור אדום מהבהב לאחר התקנת גרסה זו, אל תדאגו. פשוט חברו את המכשיר לאפליקציה והוא אמור להפוך לכחול. האור האדום אומר שהשעון של המכשיר עדיין לא סונכרן.';
+
+  @override
+  String get continueAnyway => 'המשך';
 }

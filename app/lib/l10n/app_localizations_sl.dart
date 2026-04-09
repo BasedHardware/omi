@@ -9024,4 +9024,14 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Avdio izhod';
+
+  @override
+  String get firmwareWarningTitle => 'Pomembno: Preberite pred posodobitvijo';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ta vdelana programska oprema bo formatirala kartico SD. Pred nadgradnjo se prepričajte, da so vsi podatki brez povezave sinhronizirani.\n\nČe po namestitvi te različice vidite utripajočo rdečo lučko, ne skrbite. Preprosto povežite napravo z aplikacijo in morala bi postati modra. Rdeča lučka pomeni, da ura naprave še ni bila sinhronizirana.';
+
+  @override
+  String get continueAnyway => 'Nadaljuj';
 }

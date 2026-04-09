@@ -8995,4 +8995,14 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get audioOutput => 'Lydutgang';
+
+  @override
+  String get firmwareWarningTitle => 'Viktig: Les før oppdatering';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Denne fastvaren vil formatere SD-kortet. Sørg for at alle offline-data er synkronisert før oppgradering.\n\nHvis du ser et blinkende rødt lys etter installasjon av denne versjonen, ikke bekymre deg. Koble enheten til appen, og den skal bli blå. Det røde lyset betyr at enhetens klokke ikke er synkronisert ennå.';
+
+  @override
+  String get continueAnyway => 'Fortsett';
 }

@@ -9029,4 +9029,14 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get audioOutput => 'Izlaz audio-a';
+
+  @override
+  String get firmwareWarningTitle => 'Važno: Pročitajte prije ažuriranja';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ovaj firmware će formatirati SD karticu. Molimo osigurajte da su svi offline podaci sinkronizirani prije nadogradnje.\n\nAko vidite trepćuće crveno svjetlo nakon instaliranja ove verzije, ne brinite. Jednostavno povežite uređaj s aplikacijom i trebao bi postati plav. Crveno svjetlo znači da sat uređaja još nije sinkroniziran.';
+
+  @override
+  String get continueAnyway => 'Nastavi';
 }

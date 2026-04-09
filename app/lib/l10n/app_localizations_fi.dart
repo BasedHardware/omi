@@ -8998,4 +8998,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get audioOutput => 'Äänilähtö';
+
+  @override
+  String get firmwareWarningTitle => 'Tärkeää: Lue ennen päivitystä';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Tämä laiteohjelmisto alustaa SD-kortin. Varmista, että kaikki offline-tiedot on synkronoitu ennen päivitystä.\n\nJos näet vilkkuvan punaisen valon tämän version asentamisen jälkeen, älä huoli. Yhdistä laite sovellukseen ja sen pitäisi muuttua siniseksi. Punainen valo tarkoittaa, että laitteen kelloa ei ole vielä synkronoitu.';
+
+  @override
+  String get continueAnyway => 'Jatka';
 }

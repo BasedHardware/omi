@@ -8849,4 +8849,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioOutput => 'オーディオ出力';
+
+  @override
+  String get firmwareWarningTitle => '重要：更新前にお読みください';
+
+  @override
+  String get firmwareFormatWarning =>
+      'このファームウェアはSDカードをフォーマットします。アップグレード前にすべてのオフラインデータが同期されていることを確認してください。\n\nこのバージョンのインストール後に赤いライトが点滅しても心配しないでください。デバイスをアプリに接続するだけで青に変わるはずです。赤いライトはデバイスの時計がまだ同期されていないことを意味します。';
+
+  @override
+  String get continueAnyway => '続行';
 }

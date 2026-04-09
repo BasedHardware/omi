@@ -9031,4 +9031,14 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get audioOutput => 'ಆಡಿಯೋ ವಿನಿಯೋಗ';
+
+  @override
+  String get firmwareWarningTitle => 'ಮುಖ್ಯ: ನವೀಕರಿಸುವ ಮೊದಲು ಓದಿ';
+
+  @override
+  String get firmwareFormatWarning =>
+      'ಈ ಫರ್ಮ್‌ವೇರ್ SD ಕಾರ್ಡ್ ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡುತ್ತದೆ. ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೊದಲು ಎಲ್ಲಾ ಆಫ್‌ಲೈನ್ ಡೇಟಾ ಸಿಂಕ್ ಆಗಿದೆ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.\n\nಈ ಆವೃತ್ತಿಯನ್ನು ಸ್ಥಾಪಿಸಿದ ನಂತರ ಕೆಂಪು ಬೆಳಕು ಮಿನುಗುತ್ತಿದ್ದರೆ ಚಿಂತಿಸಬೇಡಿ. ಸಾಧನವನ್ನು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಸಂಪರ್ಕಿಸಿ ಮತ್ತು ಅದು ನೀಲಿ ಬಣ್ಣಕ್ಕೆ ಬದಲಾಗಬೇಕು.';
+
+  @override
+  String get continueAnyway => 'ಮುಂದುವರಿಸಿ';
 }
