@@ -552,7 +552,13 @@ struct MessageMetadataPopover: View {
                 if let model = metadata.model {
                     metadataRow(label: "Model", value: model)
                 }
-                metadataRow(label: "Screenshot attached", value: metadata.hasScreenshot ? "Yes" : "No")
+                if metadata.hasScreenshot, let size = metadata.screenshotSizeBytes {
+                    let kb = size / 1024
+                    let base64Chars = (size * 4 + 2) / 3  // base64 expansion
+                    metadataRow(label: "Screenshot", value: "1 image (\(kb) KB, ~\(base64Chars / 1024) KB base64)")
+                } else {
+                    metadataRow(label: "Screenshot", value: "None")
+                }
 
                 Divider()
 
