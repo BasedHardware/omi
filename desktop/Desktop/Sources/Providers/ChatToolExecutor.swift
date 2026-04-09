@@ -1030,6 +1030,24 @@ class ChatToolExecutor {
         return "Onboarding completed successfully! The app is now set up."
     }
 
+    // MARK: - Date Validation
+
+    /// Validates an ISO 8601 date string has a timezone offset by parsing it.
+    /// Catches format errors (missing timezone, garbage input). Calendar validity
+    /// (e.g. Feb 30 → Mar 1 normalization) is left to the backend's datetime parser.
+    static func validateISODate(_ dateStr: String, paramName: String) -> (valid: String?, error: String?) {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if formatter.date(from: dateStr) != nil {
+            return (dateStr, nil)
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        if formatter.date(from: dateStr) != nil {
+            return (dateStr, nil)
+        }
+        return (nil, "Error: \(paramName) must be ISO format with timezone offset (e.g. 2024-01-19T15:00:00-08:00 or 2024-01-19T15:00:00+07:00). Got: \(dateStr)")
+    }
+
     // MARK: - Backend RAG Tools
 
     private static func executeBackendTool(_ toolCall: ToolCall) async -> String {
@@ -1037,11 +1055,25 @@ class ChatToolExecutor {
             let api = APIClient.shared
             let args = toolCall.arguments
 
+            // Validate date parameters before sending to backend
+            var validatedStartDate: String? = nil
+            var validatedEndDate: String? = nil
+            if let sd = args["start_date"] as? String {
+                let result = validateISODate(sd, paramName: "start_date")
+                if let error = result.error { return error }
+                validatedStartDate = result.valid
+            }
+            if let ed = args["end_date"] as? String {
+                let result = validateISODate(ed, paramName: "end_date")
+                if let error = result.error { return error }
+                validatedEndDate = result.valid
+            }
+
             switch toolCall.name {
             case "get_conversations":
                 let resp = try await api.toolGetConversations(
-                    startDate: args["start_date"] as? String,
-                    endDate: args["end_date"] as? String,
+                    startDate: validatedStartDate,
+                    endDate: validatedEndDate,
                     limit: args["limit"] as? Int ?? 20,
                     offset: args["offset"] as? Int ?? 0,
                     includeTranscript: args["include_transcript"] as? Bool ?? true
@@ -1054,8 +1086,8 @@ class ChatToolExecutor {
                 }
                 let resp = try await api.toolSearchConversations(
                     query: query,
-                    startDate: args["start_date"] as? String,
-                    endDate: args["end_date"] as? String,
+                    startDate: validatedStartDate,
+                    endDate: validatedEndDate,
                     limit: args["limit"] as? Int ?? 5,
                     includeTranscript: args["include_transcript"] as? Bool ?? true
                 )
@@ -1065,8 +1097,8 @@ class ChatToolExecutor {
                 let resp = try await api.toolGetMemories(
                     limit: args["limit"] as? Int ?? 50,
                     offset: args["offset"] as? Int ?? 0,
-                    startDate: args["start_date"] as? String,
-                    endDate: args["end_date"] as? String
+                    startDate: validatedStartDate,
+                    endDate: validatedEndDate
                 )
                 return resp.resultText
 
@@ -1081,14 +1113,27 @@ class ChatToolExecutor {
                 return resp.resultText
 
             case "get_action_items":
+                // Validate additional due date params for action items
+                var validatedDueStart: String? = nil
+                var validatedDueEnd: String? = nil
+                if let ds = args["due_start_date"] as? String {
+                    let result = validateISODate(ds, paramName: "due_start_date")
+                    if let error = result.error { return error }
+                    validatedDueStart = result.valid
+                }
+                if let de = args["due_end_date"] as? String {
+                    let result = validateISODate(de, paramName: "due_end_date")
+                    if let error = result.error { return error }
+                    validatedDueEnd = result.valid
+                }
                 let resp = try await api.toolGetActionItems(
                     limit: args["limit"] as? Int ?? 50,
                     offset: args["offset"] as? Int ?? 0,
                     completed: args["completed"] as? Bool,
-                    startDate: args["start_date"] as? String,
-                    endDate: args["end_date"] as? String,
-                    dueStartDate: args["due_start_date"] as? String,
-                    dueEndDate: args["due_end_date"] as? String
+                    startDate: validatedStartDate,
+                    endDate: validatedEndDate,
+                    dueStartDate: validatedDueStart,
+                    dueEndDate: validatedDueEnd
                 )
                 return resp.resultText
 
@@ -1096,9 +1141,16 @@ class ChatToolExecutor {
                 guard let desc = args["description"] as? String, !desc.isEmpty else {
                     return "Error: description is required"
                 }
+                // Validate due_at if provided
+                var validatedDueAt: String? = nil
+                if let da = args["due_at"] as? String {
+                    let result = validateISODate(da, paramName: "due_at")
+                    if let error = result.error { return error }
+                    validatedDueAt = result.valid
+                }
                 let resp = try await api.toolCreateActionItem(
                     description: desc,
-                    dueAt: args["due_at"] as? String,
+                    dueAt: validatedDueAt,
                     conversationId: args["conversation_id"] as? String
                 )
                 return resp.resultText
@@ -1107,11 +1159,18 @@ class ChatToolExecutor {
                 guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
                     return "Error: action_item_id is required"
                 }
+                // Validate due_at if provided
+                var validatedUpdateDueAt: String? = nil
+                if let da = args["due_at"] as? String {
+                    let result = validateISODate(da, paramName: "due_at")
+                    if let error = result.error { return error }
+                    validatedUpdateDueAt = result.valid
+                }
                 let resp = try await api.toolUpdateActionItem(
                     id: itemId,
                     completed: args["completed"] as? Bool,
                     description: args["description"] as? String,
-                    dueAt: args["due_at"] as? String
+                    dueAt: validatedUpdateDueAt
                 )
                 return resp.resultText
 
