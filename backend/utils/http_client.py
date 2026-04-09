@@ -190,13 +190,13 @@ _stt_client: httpx.AsyncClient | None = None
 def get_webhook_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client for webhook delivery.
 
-    Uses aggressive connect timeout (2s) and modest read timeout (15s)
-    to match existing semantics while avoiding thread pool exhaustion.
+    Uses aggressive connect timeout (2s) and 30s read timeout to match
+    the previous per-call timeout=30 that partner webhooks relied on.
     """
     global _webhook_client
     if _webhook_client is None:
         _webhook_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(15.0, connect=2.0),
+            timeout=httpx.Timeout(30.0, connect=2.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
         )
     return _webhook_client
