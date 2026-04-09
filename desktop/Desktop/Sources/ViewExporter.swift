@@ -55,7 +55,11 @@ enum ViewExporter {
         {
           AnyView(
             DashboardPage(
-              viewModel: DashboardViewModel(), appState: AppState(), selectedIndex: .constant(0)))
+              viewModel: DashboardViewModel(),
+              appState: AppState(),
+              appProvider: AppProvider(),
+              chatProvider: ChatProvider(),
+              selectedIndex: .constant(0)))
         },
         CGSize(width: 900, height: 700)
       ),
@@ -279,7 +283,11 @@ enum ViewExporter {
         {
           AnyView(
             DashboardPage(
-              viewModel: DashboardViewModel(), appState: AppState(), selectedIndex: .constant(0)))
+              viewModel: DashboardViewModel(),
+              appState: AppState(),
+              appProvider: AppProvider(),
+              chatProvider: ChatProvider(),
+              selectedIndex: .constant(0)))
         }
       ),
       (

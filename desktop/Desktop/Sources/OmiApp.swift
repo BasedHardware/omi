@@ -147,10 +147,10 @@ struct OMIApp: App {
         }
         .keyboardShortcut("1", modifiers: .command)
 
-        Button("Chat") {
+        Button("Conversations") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
         }
         .keyboardShortcut("2", modifiers: .command)
 

@@ -37,25 +37,11 @@ struct GoalsWidget: View {
 
 
             if goals.isEmpty {
-                // Empty state with AI suggestion
-                VStack(spacing: 16) {
-                    Button(action: { showingCreateSheet = true }) {
-                        HStack {
-                            Spacer()
-                            Image(systemName: "plus")
-                                .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
-                            Text("Tap to add goal")
-                                .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                    }
-                    .buttonStyle(.plain)
+                // Empty state — header already has a + button, so just offer
+                // the AI generation action centered in the empty area.
+                VStack {
+                    Spacer(minLength: 0)
 
-                    // AI goal generation button
                     Button(action: { triggerGoalGeneration() }) {
                         HStack(spacing: 6) {
                             if isGeneratingGoal {
@@ -67,7 +53,7 @@ struct GoalsWidget: View {
                                     .scaledFont(size: 12)
                             }
                             Text(isGeneratingGoal ? "Generating..." : "Generate AI Goal")
-                                .scaledFont(size: 12, weight: .medium)
+                                .scaledFont(size: 13, weight: .medium)
                         }
                         .foregroundColor(OmiColors.purplePrimary)
                         .padding(.horizontal, 14)
@@ -76,8 +62,10 @@ struct GoalsWidget: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isGeneratingGoal)
+
+                    Spacer(minLength: 0)
                 }
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // Goals list
                 VStack(spacing: 14) {

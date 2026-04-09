@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed call recordings being labeled as a single speaker by re-enabling system audio capture (now with drift compensation, no more crackling)"
+    "Fixed call recordings being labeled as a single speaker by re-enabling system audio capture (now with drift compensation, no more crackling)",
+    "Replaced Conversations on Dashboard with embedded Chat (Ask omi anything) and moved the Conversations list to its own sidebar page"
   ],
   "releases": [
     {
