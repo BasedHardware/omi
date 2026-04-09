@@ -65,6 +65,14 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscriptions:', results[1].reason);
     }
 
+    // If ALL legs failed, return an error — don't serve fabricated zeros
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All subscription data sources failed' },
+        { status: 502 }
+      );
+    }
+
     const partial = results.some((r) => r.status === 'rejected');
     const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
 
