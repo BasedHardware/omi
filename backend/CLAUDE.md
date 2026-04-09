@@ -135,13 +135,23 @@ black --line-length 120 --skip-string-normalization <files>
 
 `--skip-string-normalization` is critical — without it, black flips all quotes and diffs explode.
 
+## Async I/O (3-Lane Architecture)
+
+Never block the event loop — it freezes health checks, HPA scaling, and all concurrent connections.
+
+- **Lane 1 — Async HTTP** (`utils/http_client.py`): Use shared `httpx.AsyncClient` pools (`get_webhook_client()`, `get_maps_client()`, `get_auth_client()`, `get_stt_client()`). Never `requests.*` in async. Webhooks have per-URL circuit breakers and semaphore-bounded concurrency. Audio byte calls use latest-wins dropping.
+- **Lane 2 — Executors** (`utils/executors.py`): Use `critical_executor` (8 workers) or `storage_executor` (4 workers). Never ad-hoc `Thread`/`ThreadPoolExecutor`. Coordinators that fan out to `critical_executor` must run in default executor (`None`) to avoid deadlock.
+- **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
+- **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
+
 ## Common Gotchas
 
 1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)
-2. **Never `time.sleep()` in async handlers** — blocks uvicorn's event loop. Use `asyncio.sleep()`. For blocking work, use `asyncio.to_thread()` + semaphore
+2. **Never `time.sleep()` in async handlers** — blocks event loop. Use `asyncio.sleep()`. For blocking work: `loop.run_in_executor(critical_executor, fn)`
 3. **WAL files must be opus-encoded** — opus decoder silently errors on raw PCM but returns HTTP 200, so sync tests pass for the wrong reason
 4. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 5. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 6. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
 7. **Unbounded queues for user data** — `deque(maxlen=N)` silently drops audio; data-safety queues must stay unbounded
 8. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
+9. **Coordinator deadlock** — functions submitting to `critical_executor` must not themselves run in `critical_executor` — use default executor (`None`)

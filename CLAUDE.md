@@ -92,6 +92,13 @@ Rules:
 - Keep UIDs, IPs, status codes, and structural info visible for debugging.
 - Never put raw `response.text` in exception messages.
 
+### Async I/O (3-Lane Architecture)
+- Never use `requests.*` in async — use shared `httpx.AsyncClient` pools from `utils/http_client.py`.
+- Never use `Thread().start().join()` or ad-hoc `ThreadPoolExecutor` — use `critical_executor` or `storage_executor` from `utils/executors.py`.
+- Never `time.sleep()` in async — use `asyncio.sleep()`. For blocking work: `loop.run_in_executor(executor, fn)`.
+- Coordinators that fan out to `critical_executor` must run in default executor (`None`) to avoid deadlock.
+- Run `python scripts/lint_async_blockers.py` to catch violations before committing.
+
 ### Backend Service Map
 
 ```
