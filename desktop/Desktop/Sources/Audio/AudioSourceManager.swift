@@ -97,11 +97,13 @@ final class AudioSourceManager: ObservableObject {
     // MARK: - Initialization
 
     private init() {
-        // System audio capture disabled by default — the aggregate device it creates
-        // causes clock drift vs the output device, producing periodic crackling/artifacts
-        // in all system audio (music, calls, etc.). Users can opt in via:
-        //   defaults write <bundleID> disableSystemAudioCapture -bool false
-        UserDefaults.standard.register(defaults: ["disableSystemAudioCapture": true])
+        // System audio capture is enabled by default. The aggregate-device tap previously
+        // caused clock drift vs the output device, producing periodic crackling on music
+        // and calls. That is now mitigated by enabling per-tap drift compensation in
+        // SystemAudioCaptureService (kAudioSubTapDriftCompensationKey). Users who hit
+        // any remaining audio glitch can still opt out via:
+        //   defaults write <bundleID> disableSystemAudioCapture -bool true
+        UserDefaults.standard.register(defaults: ["disableSystemAudioCapture": false])
         setupBindings()
     }
 

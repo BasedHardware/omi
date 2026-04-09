@@ -139,12 +139,26 @@ class SystemAudioCaptureService: @unchecked Sendable {
         log("SystemAudioCapture: Created tap with ID \(tapID)")
 
         // 3. Create aggregate device with tap
+        //
+        // IMPORTANT: drift compensation is enabled per-tap via kAudioSubTapDriftCompensationKey.
+        // Without it, the aggregate device's clock can drift relative to the real output device,
+        // and the system resamples on every IO cycle to compensate. That resampling produces
+        // periodic crackling/artifacts in *all* system audio playback (music, calls, etc.) even
+        // though we're only reading from the tap. Enabling drift compensation tells CoreAudio
+        // to reconcile clocks at the sub-tap level, eliminating the artifacts.
+        // CoreAudio expects a CFNumber here ("non-zero value indicates that drift compensation
+        // is enabled" — see <CoreAudio/AudioHardware.h>), not a CFBoolean.
         let aggregateDescription: [String: Any] = [
             kAudioAggregateDeviceNameKey as String: "OMI System Audio Tap Device",
             kAudioAggregateDeviceUIDKey as String: "omi.systemaudio.\(tapUUID.uuidString)",
             kAudioAggregateDeviceIsPrivateKey as String: true,
             kAudioAggregateDeviceTapListKey as String: [
-                [kAudioSubTapUIDKey as String: tapUUID.uuidString]
+                [
+                    kAudioSubTapUIDKey as String: tapUUID.uuidString,
+                    kAudioSubTapDriftCompensationKey as String: NSNumber(value: 1),
+                    kAudioSubTapDriftCompensationQualityKey as String:
+                        NSNumber(value: kAudioAggregateDriftCompensationMaxQuality),
+                ]
             ],
             kAudioAggregateDeviceTapAutoStartKey as String: true
         ]
