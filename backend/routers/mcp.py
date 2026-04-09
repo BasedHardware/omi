@@ -163,7 +163,7 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
-    limit: int = 25,
+    limit: int = 100,
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
