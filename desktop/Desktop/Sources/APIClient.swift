@@ -321,7 +321,7 @@ extension APIClient {
 
   /// Fetches a single conversation by ID
   func getConversation(id: String) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)", customBaseURL: pythonBackendURL)
+    return try await get("v1/conversations/\(id)")
   }
 
   /// Deletes a conversation by ID
