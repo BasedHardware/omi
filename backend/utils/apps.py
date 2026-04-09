@@ -1,11 +1,13 @@
 import asyncio
+import hashlib
 import math
 import os
+import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
-import hashlib
-import secrets
+
+import httpx
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -1339,8 +1341,6 @@ def fetch_app_chat_tools_from_manifest(
         }
     }
     """
-    import requests
-
     if not manifest_url:
         return None
 
@@ -1355,8 +1355,10 @@ def fetch_app_chat_tools_from_manifest(
     try:
         logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
-        response = requests.get(
-            manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
+        response = httpx.get(
+            manifest_url,
+            timeout=float(timeout),
+            headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'},
         )
 
         if response.status_code != 200:
@@ -1409,10 +1411,10 @@ def fetch_app_chat_tools_from_manifest(
 
         return result
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
         return None
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"⚠️ Manifest fetch request error: {e}")
         return None
     except ValueError as e:
