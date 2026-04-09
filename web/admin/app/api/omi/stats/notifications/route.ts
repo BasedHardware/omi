@@ -7,6 +7,44 @@ export const dynamic = 'force-dynamic';
 const MENTOR_APP_ID = 'mentor';
 const MARKETPLACE_MENTOR_APP_ID = 'omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1';
 
+type FloatingBarCtrPoint = {
+  date: string;
+  sent: number;
+  clicked: number;
+  dismissed: number;
+  ctr: number;
+};
+
+type FloatingBarCtrStats = {
+  dailyData: FloatingBarCtrPoint[];
+  summary: {
+    sent: number;
+    clicked: number;
+    dismissed: number;
+    ctr: number;
+    uniqueClickers: number;
+  };
+};
+
+async function queryPostHog(host: string, projectId: string, apiKey: string, query: string) {
+  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PostHog API error ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -15,6 +53,9 @@ export async function GET(request: NextRequest) {
     const db = getDb();
     const searchParams = request.nextUrl.searchParams;
     const days = parseInt(searchParams.get('days') || '30', 10);
+    const posthogHost = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
+    const posthogApiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+    const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
 
     const endDate = new Date();
     const startDate = new Date();
@@ -158,6 +199,7 @@ export async function GET(request: NextRequest) {
     };
 
     const enabledUserIdsSet = new Set<string>();
+    let floatingBarCtr: FloatingBarCtrStats | null = null;
 
     const fetchNotifications = async () => {
       // Try collection group first
@@ -256,12 +298,87 @@ export async function GET(request: NextRequest) {
       usersRef.count().get(),
     ]);
 
+    const fetchFloatingBarCtr = async () => {
+      if (!posthogApiKey || !posthogProjectId) return null;
+
+      const dailyCtrQuery = `
+        SELECT
+          toDate(timestamp) as day,
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND properties.notification_surface = 'floating_bar'
+          AND timestamp >= now() - interval ${days} day
+        GROUP BY day
+        ORDER BY day
+      `;
+
+      const summaryQuery = `
+        SELECT
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed,
+          count(DISTINCT if(event = 'Notification Clicked', distinct_id, null)) as unique_clickers
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND properties.notification_surface = 'floating_bar'
+          AND timestamp >= now() - interval ${days} day
+      `;
+
+      const [dailyResult, summaryResult] = await Promise.all([
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, dailyCtrQuery),
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, summaryQuery),
+      ]);
+
+      const dailyRows: [string, number, number, number][] = dailyResult?.results ?? [];
+      const summaryRow: [number, number, number, number] | undefined = summaryResult?.results?.[0];
+
+      const ctrByDate = new Map(
+        dailyRows.map(([date, sent, clicked, dismissed]) => {
+          const normalizedDate = date.slice(0, 10);
+          return [normalizedDate, { sent, clicked, dismissed }];
+        })
+      );
+
+      const dailyData = dateKeys.map((date) => {
+        const row = ctrByDate.get(date) ?? { sent: 0, clicked: 0, dismissed: 0 };
+        return {
+          date,
+          sent: row.sent,
+          clicked: row.clicked,
+          dismissed: row.dismissed,
+          ctr: row.sent > 0 ? Math.round((row.clicked / row.sent) * 1000) / 10 : 0,
+        };
+      });
+
+      const [sent = 0, clicked = 0, dismissed = 0, uniqueClickers = 0] = summaryRow ?? [];
+      return {
+        dailyData,
+        summary: {
+          sent,
+          clicked,
+          dismissed,
+          ctr: sent > 0 ? Math.round((clicked / sent) * 1000) / 10 : 0,
+          uniqueClickers,
+        },
+      };
+    };
+
     // Run counts, notifications, and DAU all in parallel
-    const [countResults] = await Promise.all([
+    const [countResults, , , floatingBarCtrResult] = await Promise.all([
       countsPromise,
       fetchNotifications(),
       fetchDAU(),
+      fetchFloatingBarCtr().catch((error) => {
+        console.error('Error fetching floating bar CTR from PostHog:', error);
+        return null;
+      }),
     ]);
+    floatingBarCtr = floatingBarCtrResult;
 
     const [enabledSnap, disabledSnap, totalSnap] = countResults;
     const enabledCount = enabledSnap.data().count;
@@ -350,6 +467,7 @@ export async function GET(request: NextRequest) {
       dailyData,
       weeklyData,
       hourlyData,
+      floatingBarCtr,
       enabledDisabled: {
         enabled: enabledCount,
         disabled: disabledCount + (totalUsers - enabledCount - disabledCount),

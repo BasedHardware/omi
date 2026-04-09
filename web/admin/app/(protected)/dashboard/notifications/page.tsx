@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, BellOff, Users, Send, Loader2 } from "lucide-react";
+import { Bell, BellOff, Users, Send, Loader2, MousePointerClick, Percent } from "lucide-react";
 import PromptTester from "./prompt-tester";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -53,6 +53,22 @@ interface NotificationStats {
   dailyData: DailyData[];
   weeklyData: WeeklyData[];
   hourlyData: HourlyData[];
+  floatingBarCtr: {
+    dailyData: {
+      date: string;
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+    }[];
+    summary: {
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+      uniqueClickers: number;
+    };
+  } | null;
   enabledDisabled: {
     enabled: number;
     disabled: number;
@@ -112,12 +128,14 @@ export default function NotificationsPage() {
   const dailyData = data?.dailyData;
   const weeklyData = data?.weeklyData;
   const hourlyData = data?.hourlyData;
+  const floatingBarCtr = data?.floatingBarCtr;
   const enabledDisabled = data?.enabledDisabled;
 
   // Compute summary stats (only when data is ready)
   const last7Days = dailyData?.slice(-7) ?? [];
   const totalMentorLast7 = last7Days.reduce((s, d) => s + d.mentorSent, 0);
   const totalMarketplaceLast7 = last7Days.reduce((s, d) => s + d.marketplaceMentorSent, 0);
+  const floatingBarCtrSummary = floatingBarCtr?.summary;
 
   const pieData = enabledDisabled
     ? [
@@ -175,7 +193,7 @@ export default function NotificationsPage() {
       )}
 
       {/* Summary Cards */}
-      {statsReady && enabledDisabled && <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {statsReady && enabledDisabled && <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -233,6 +251,42 @@ export default function NotificationsPage() {
             <div className="text-2xl font-bold">{totalMarketplaceLast7.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Marketplace "Omi Mentor" app
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Floating Bar Clicks
+            </CardTitle>
+            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {floatingBarCtrSummary ? floatingBarCtrSummary.clicked.toLocaleString() : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Explicit notification opens from the floating bar ({days}d)
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Floating Bar CTR
+            </CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {floatingBarCtrSummary ? `${floatingBarCtrSummary.ctr.toFixed(1)}%` : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {floatingBarCtrSummary
+                ? `${floatingBarCtrSummary.sent.toLocaleString()} sent, ${floatingBarCtrSummary.uniqueClickers.toLocaleString()} unique clickers`
+                : "PostHog notification CTR data unavailable"}
             </p>
           </CardContent>
         </Card>
@@ -555,13 +609,83 @@ export default function NotificationsPage() {
             </div>
             <div className="pt-2 border-t">
               <p className="text-sm text-muted-foreground">
-                Note: Notification click tracking is not yet implemented. The app currently does not
-                track when users tap on proactive notifications.
+                Floating-bar CTR tracks explicit notification clicks that open the floating chat.
+                Native macOS notification clicks are tracked separately.
               </p>
             </div>
           </div>
         </div>
       </Card>
+
+      {floatingBarCtr && (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Floating Bar Notification CTR</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Sent vs clicked proactive notifications in the desktop floating bar, with daily click-through rate.
+          </p>
+          <div className="h-[360px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={floatingBarCtr.dailyData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDate}
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip
+                  labelFormatter={(label) => formatDate(label as string)}
+                  formatter={(value: any, name: string) => {
+                    if (name === "CTR") return [`${value}%`, name];
+                    return [Number(value).toLocaleString(), name];
+                  }}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                  }}
+                />
+                <Legend />
+                <Bar
+                  yAxisId="left"
+                  dataKey="sent"
+                  name="Sent"
+                  fill={COLORS.mentor}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  yAxisId="left"
+                  dataKey="clicked"
+                  name="Clicked"
+                  fill={COLORS.enabled}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="ctr"
+                  name="CTR"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
       </>}
     </div>
   );
