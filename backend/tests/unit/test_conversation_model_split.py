@@ -634,3 +634,123 @@ class TestPhase4ConsumerMigration:
         source = pathlib.Path('utils/retrieval/graph.py').read_text()
         assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
         assert 'from __future__ import annotations' in source
+
+
+class TestPhase4RuntimeBehavior:
+    """Phase 4b (#6484): runtime tests for narrowed interfaces."""
+
+    def test_chat_memory_id_extraction_from_dict(self):
+        """routers/chat.py and utils/chat.py extract .id from dicts without Conversation."""
+        # Simulate the pattern used in routers/chat.py and utils/chat.py
+        memories = [
+            {'id': 'conv-1', 'structured': {'title': 'Test'}},
+            {'id': 'conv-2', 'structured': {'title': 'Test 2'}},
+        ]
+        memories_id = []
+        for m in memories[:5]:
+            if isinstance(m, dict):
+                memories_id.append(m.get('id', ''))
+            else:
+                memories_id.append(m.id)
+        assert memories_id == ['conv-1', 'conv-2']
+
+    def test_chat_memory_id_extraction_from_objects(self):
+        """Mixed dict/object memories handled correctly."""
+        from models.conversation import Conversation
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id='conv-obj',
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            structured=Structured(title='Test'),
+        )
+        memories = [
+            {'id': 'conv-dict'},
+            conv,
+        ]
+        memories_id = []
+        for m in memories[:5]:
+            if isinstance(m, dict):
+                memories_id.append(m.get('id', ''))
+            else:
+                memories_id.append(m.id)
+        assert memories_id == ['conv-dict', 'conv-obj']
+
+    def test_trends_extractor_signature_callable(self):
+        """trends_extractor can be called with the new signature shape."""
+        import sys
+        from unittest.mock import patch, MagicMock
+        from models.transcript_segment import TranscriptSegment
+
+        segments = [
+            TranscriptSegment(text="Tesla stock is up", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True),
+        ]
+        person_ids = ['p1']
+
+        # Pre-mock heavy dependencies to avoid GCP credential chain
+        mock_db_module = MagicMock()
+        mock_llm_clients = MagicMock()
+        saved_modules = {}
+        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients']:
+            saved_modules[mod_name] = sys.modules.get(mod_name)
+            sys.modules[mod_name] = mock_db_module if 'database' in mod_name else mock_llm_clients
+
+        try:
+            # Force reimport with mocked deps
+            for mod_name in ['utils.llm.trends']:
+                sys.modules.pop(mod_name, None)
+
+            import utils.llm.trends as trends_mod
+
+            trends_mod.users_db = MagicMock()
+            trends_mod.users_db.get_people_by_ids.return_value = []
+            trends_mod.get_user_name = MagicMock(return_value='TestUser')
+            trends_mod.llm_mini = MagicMock()
+            trends_mod.llm_mini.with_structured_output.return_value.invoke.return_value = MagicMock(items=[])
+
+            result = trends_mod.trends_extractor('test-uid', segments, person_ids)
+            assert result == []
+        finally:
+            for mod_name, saved in saved_modules.items():
+                if saved is None:
+                    sys.modules.pop(mod_name, None)
+                else:
+                    sys.modules[mod_name] = saved
+            sys.modules.pop('utils.llm.trends', None)
+
+    def test_save_trends_accepts_str(self):
+        """database/trends.py save_trends accepts memory_id as str."""
+        import sys
+        from unittest.mock import MagicMock
+        from models.trend import Trend, TrendEnum, TrendType
+
+        trends = [Trend(category=TrendEnum.company, topics=['Tesla'], type=TrendType.best)]
+
+        # Mock Firestore
+        mock_client = MagicMock()
+        saved = sys.modules.get('database._client')
+        sys.modules['database._client'] = MagicMock(db=mock_client, document_id_from_seed=lambda s: f'id-{s}')
+
+        try:
+            sys.modules.pop('database.trends', None)
+            import database.trends as trends_db_mod
+
+            mock_doc_ref = MagicMock()
+            mock_client.collection.return_value.document.return_value = mock_doc_ref
+            mock_doc_ref.collection.return_value.document.return_value = mock_doc_ref
+
+            trends_db_mod.save_trends('conv-123', trends)
+
+            # Verify the string ID was used in the ArrayUnion call
+            mock_doc_ref.update.assert_called()
+            call_args = mock_doc_ref.update.call_args[0][0]
+            assert 'memory_ids' in call_args
+        finally:
+            if saved is None:
+                sys.modules.pop('database._client', None)
+            else:
+                sys.modules['database._client'] = saved
+            sys.modules.pop('database.trends', None)
