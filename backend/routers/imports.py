@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from utils.executors import critical_executor, storage_executor
+from utils.executors import storage_executor
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -73,7 +73,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
     # Start background processing
-    critical_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
+    storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
 
     return ImportJobResponse(
         job_id=job.id,
