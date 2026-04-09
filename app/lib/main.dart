@@ -352,7 +352,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
         ChangeNotifierProvider(create: (context) => FolderProvider()),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
-        ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+        ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()..checkPendingRecording()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(create: (context) => PhoneCallProvider()),
       ],

@@ -22,6 +22,7 @@ struct OnboardingView: View {
   @AppStorage("onboardingHowDidYouHearStepInserted") private var hasInsertedHowDidYouHearStep =
     false
   @AppStorage("onboardingDataSourcesStepInserted") private var hasInsertedDataSourcesStep = false
+  @AppStorage("onboardingExportsStepInserted") private var hasInsertedExportsStep = false
   @AppStorage("onboardingSecondBrainStepInserted") private var hasInsertedSecondBrainStep = false
   @AppStorage("onboardingResearchStepRemoved") private var hasRemovedResearchStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
@@ -72,6 +73,7 @@ struct OnboardingView: View {
           hasReorderedTrustStep: hasReorderedTrustStep,
           hasInsertedHowDidYouHearStep: hasInsertedHowDidYouHearStep,
           hasInsertedDataSourcesStep: hasInsertedDataSourcesStep,
+          hasInsertedExportsStep: hasInsertedExportsStep,
           hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
           hasRemovedResearchStep: hasRemovedResearchStep
         )
@@ -85,6 +87,7 @@ struct OnboardingView: View {
       hasReorderedTrustStep = true
       hasInsertedHowDidYouHearStep = true
       hasInsertedDataSourcesStep = true
+      hasInsertedExportsStep = true
       hasInsertedSecondBrainStep = false
       hasRemovedResearchStep = true
       introCoordinator.prepare(appState: appState)
@@ -260,11 +263,11 @@ struct OnboardingView: View {
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
           title: "Let Omi send reminders.",
-          description: "Notifications let Omi send proactive tips.",
+          description: "Notifications let Omi send proactive insights.",
           permissionType: "notifications",
           icon: "bell.badge.fill",
           reasonTitle: "Notifications",
-          reasonDetail: "This lets Omi send reminders and proactive tips.",
+          reasonDetail: "This lets Omi send reminders and proactive insights.",
           primaryActionLabel: "Enable notifications",
           requiresRestart: false,
           onContinue: {
@@ -403,32 +406,48 @@ struct OnboardingView: View {
             AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources")
             currentStep = 16
           },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "DataSources_Skipped")
+            currentStep = 16
+          },
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 16 {
+        OnboardingExportsStepView(
+          graphViewModel: graphViewModel,
+          stepIndex: 16,
+          totalSteps: OnboardingFlow.introStepCount,
+          summaryText: introCoordinator.connectedContextSummary,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Exports")
+            currentStep = 17
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 17 {
         OnboardingGoalStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
-          stepIndex: 16,
+          stepIndex: 17,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Goal")
             if !ProactiveAssistantsPlugin.shared.isMonitoring {
               ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
-            currentStep = 17
+            currentStep = 18
           },
           onForceComplete: handleOnboardingComplete
         )
       } else {
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           },
           onForceComplete: handleOnboardingComplete
@@ -478,7 +497,7 @@ struct OnboardingView: View {
 
     // Create welcome task
     Task {
-      let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+      let welcomeDescription = "Run omi for two days to start receiving helpful insights"
       let alreadyExists = await ActionItemStorage.shared.actionItemExists(
         description: welcomeDescription)
       if !alreadyExists {

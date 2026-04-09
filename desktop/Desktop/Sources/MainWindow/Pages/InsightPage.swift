@@ -1,27 +1,27 @@
 import SwiftUI
 
-// MARK: - Advice View Model
+// MARK: - Insight View Model
 
 @MainActor
-class AdviceViewModel: ObservableObject {
-    @Published var selectedCategory: AdviceCategory? = nil
+class InsightViewModel: ObservableObject {
+    @Published var selectedCategory: InsightCategory? = nil
     @Published var searchText = ""
     @Published var showDismissed = false
 
-    private let storage = AdviceStorage.shared
+    private let storage = InsightStorage.shared
 
-    var filteredAdvice: [StoredAdvice] {
-        var result = showDismissed ? storage.adviceHistory : storage.visibleAdvice
+    var filteredInsights: [StoredInsight] {
+        var result = showDismissed ? storage.insightHistory : storage.visibleInsights
 
         // Filter by category
         if let category = selectedCategory {
-            result = result.filter { $0.advice.category == category }
+            result = result.filter { $0.insight.category == category }
         }
 
         // Filter by search text
         if !searchText.isEmpty {
             result = result.filter {
-                $0.advice.advice.localizedCaseInsensitiveContains(searchText) ||
+                $0.insight.insight.localizedCaseInsensitiveContains(searchText) ||
                 $0.contextSummary.localizedCaseInsensitiveContains(searchText) ||
                 $0.currentActivity.localizedCaseInsensitiveContains(searchText)
             }
@@ -31,7 +31,7 @@ class AdviceViewModel: ObservableObject {
     }
 
     var totalCount: Int {
-        storage.visibleAdvice.count
+        storage.visibleInsights.count
     }
 
     var unreadCount: Int {
@@ -48,13 +48,13 @@ class AdviceViewModel: ObservableObject {
         objectWillChange.send()
     }
 
-    func dismissAdvice(_ id: String) {
-        storage.dismissAdvice(id)
+    func dismissInsight(_ id: String) {
+        storage.dismissInsight(id)
         objectWillChange.send()
     }
 
-    func deleteAdvice(_ id: String) {
-        storage.deleteAdvice(id)
+    func deleteInsight(_ id: String) {
+        storage.deleteInsight(id)
         objectWillChange.send()
     }
 
@@ -63,21 +63,21 @@ class AdviceViewModel: ObservableObject {
         objectWillChange.send()
     }
 
-    func countForCategory(_ category: AdviceCategory?) -> Int {
-        let base = showDismissed ? storage.adviceHistory : storage.visibleAdvice
+    func countForCategory(_ category: InsightCategory?) -> Int {
+        let base = showDismissed ? storage.insightHistory : storage.visibleInsights
         if let category = category {
-            return base.filter { $0.advice.category == category }.count
+            return base.filter { $0.insight.category == category }.count
         }
         return base.count
     }
 }
 
-// MARK: - Advice Page
+// MARK: - Insight Page
 
-struct AdvicePage: View {
-    @StateObject private var viewModel = AdviceViewModel()
-    @ObservedObject private var storage = AdviceStorage.shared
-    @State private var selectedAdvice: StoredAdvice? = nil
+struct InsightPage: View {
+    @StateObject private var viewModel = InsightViewModel()
+    @ObservedObject private var storage = InsightStorage.shared
+    @State private var selectedInsight: StoredInsight? = nil
     @State private var showClearConfirmation = false
 
     var body: some View {
@@ -89,21 +89,21 @@ struct AdvicePage: View {
             filterBar
 
             // Content
-            if storage.adviceHistory.isEmpty {
+            if storage.insightHistory.isEmpty {
                 emptyState
-            } else if viewModel.filteredAdvice.isEmpty {
+            } else if viewModel.filteredInsights.isEmpty {
                 noResultsView
             } else {
-                adviceList
+                insightList
             }
         }
         .background(Color.clear)
-        .dismissableSheet(item: $selectedAdvice) { advice in
-            adviceDetailSheet(advice)
+        .dismissableSheet(item: $selectedInsight) { item in
+            insightDetailSheet(item)
                 .frame(width: 450, height: 500)
         }
         .confirmationDialog(
-            "Clear All Advice",
+            "Clear All Insights",
             isPresented: $showClearConfirmation,
             titleVisibility: .visible
         ) {
@@ -112,11 +112,11 @@ struct AdvicePage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to clear all advice history? This cannot be undone.")
+            Text("Are you sure you want to clear all insight history? This cannot be undone.")
         }
         .onAppear {
             // Advice uses local storage, so it's immediately ready
-            NotificationCenter.default.post(name: .advicePageDidLoad, object: nil)
+            NotificationCenter.default.post(name: .insightPageDidLoad, object: nil)
         }
     }
 
@@ -125,12 +125,12 @@ struct AdvicePage: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Advice")
+                Text("Insights")
                     .scaledFont(size: 24, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
-                    Text("\(viewModel.totalCount) tips")
+                    Text("\(viewModel.totalCount) insights")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
@@ -174,7 +174,7 @@ struct AdvicePage: View {
                     } label: {
                         Label("Clear All History", systemImage: "trash")
                     }
-                    .disabled(storage.adviceHistory.isEmpty)
+                    .disabled(storage.insightHistory.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .scaledFont(size: 18)
@@ -197,7 +197,7 @@ struct AdvicePage: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(OmiColors.textTertiary)
 
-                TextField("Search advice...", text: $viewModel.searchText)
+                TextField("Search insights...", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -221,7 +221,7 @@ struct AdvicePage: View {
                 HStack(spacing: 8) {
                     categoryTab(nil, "All")
 
-                    ForEach(AdviceCategory.allCases, id: \.self) { category in
+                    ForEach(InsightCategory.allCases, id: \.self) { category in
                         categoryTab(category, category.displayName)
                     }
                 }
@@ -231,7 +231,7 @@ struct AdvicePage: View {
         .padding(.bottom, 16)
     }
 
-    private func categoryTab(_ category: AdviceCategory?, _ title: String) -> some View {
+    private func categoryTab(_ category: InsightCategory?, _ title: String) -> some View {
         let isSelected = viewModel.selectedCategory == category
         let count = viewModel.countForCategory(category)
 
@@ -268,23 +268,23 @@ struct AdvicePage: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Advice List
+    // MARK: - Insight List
 
-    private var adviceList: some View {
+    private var insightList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(viewModel.filteredAdvice) { advice in
-                    AdviceCard(
-                        advice: advice,
+                ForEach(viewModel.filteredInsights) { item in
+                    InsightCard(
+                        insight: item,
                         onTap: {
-                            viewModel.markAsRead(advice.id)
-                            selectedAdvice = advice
+                            viewModel.markAsRead(item.id)
+                            selectedInsight = item
                         },
                         onDismiss: {
-                            viewModel.dismissAdvice(advice.id)
+                            viewModel.dismissInsight(item.id)
                         },
                         onDelete: {
-                            viewModel.deleteAdvice(advice.id)
+                            viewModel.deleteInsight(item.id)
                         }
                     )
                 }
@@ -302,11 +302,11 @@ struct AdvicePage: View {
                 .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
-            Text("No Advice Yet")
+            Text("No Insights Yet")
                 .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text("Proactive advice from your AI assistant will appear here.\nMake sure the Advice Assistant is enabled in Settings.")
+            Text("Proactive insights from your AI assistant will appear here.\nMake sure the Insight Assistant is enabled in Settings.")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -354,26 +354,26 @@ struct AdvicePage: View {
 
     // MARK: - Detail Sheet
 
-    private func adviceDetailSheet(_ advice: StoredAdvice) -> some View {
+    private func insightDetailSheet(_ insight: StoredInsight) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
             HStack {
                 HStack(spacing: 8) {
-                    Image(systemName: advice.advice.category.icon)
+                    Image(systemName: insight.insight.category.icon)
                         .scaledFont(size: 14)
-                    Text(advice.advice.category.displayName)
+                    Text(insight.insight.category.displayName)
                         .scaledFont(size: 14, weight: .medium)
                 }
-                .foregroundColor(categoryColor(advice.advice.category))
+                .foregroundColor(categoryColor(insight.insight.category))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(categoryColor(advice.advice.category).opacity(0.15))
+                .background(categoryColor(insight.insight.category).opacity(0.15))
                 .cornerRadius(6)
 
                 Spacer()
 
                 Button {
-                    selectedAdvice = nil
+                    selectedInsight = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 20)
@@ -383,16 +383,16 @@ struct AdvicePage: View {
             }
 
             // Main advice
-            Text(advice.advice.advice)
+            Text(insight.insight.insight)
                 .scaledFont(size: 18, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Reasoning
-            if let reasoning = advice.advice.reasoning {
+            if let reasoning = insight.insight.reasoning {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Why this advice?")
+                    Text("Why this insight?")
                         .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(OmiColors.textTertiary)
                         .textCase(.uppercase)
@@ -422,7 +422,7 @@ struct AdvicePage: View {
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
-                        Text(advice.advice.sourceApp)
+                        Text(insight.insight.sourceApp)
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .textSelection(.enabled)
@@ -434,7 +434,7 @@ struct AdvicePage: View {
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
-                        Text(advice.currentActivity)
+                        Text(insight.currentActivity)
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .textSelection(.enabled)
@@ -446,7 +446,7 @@ struct AdvicePage: View {
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
-                        Text(advice.contextSummary)
+                        Text(insight.contextSummary)
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .textSelection(.enabled)
@@ -463,7 +463,7 @@ struct AdvicePage: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chart.bar.fill")
                         .scaledFont(size: 11)
-                    Text("\(Int(advice.advice.confidence * 100))% confidence")
+                    Text("\(Int(insight.insight.confidence * 100))% confidence")
                         .scaledFont(size: 12)
                 }
                 .foregroundColor(OmiColors.textTertiary)
@@ -471,7 +471,7 @@ struct AdvicePage: View {
                 Spacer()
 
                 // Date
-                Text(formatDate(advice.createdAt))
+                Text(formatDate(insight.createdAt))
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
@@ -483,7 +483,7 @@ struct AdvicePage: View {
 
     // MARK: - Helpers
 
-    private func categoryColor(_ category: AdviceCategory) -> Color {
+    private func categoryColor(_ category: InsightCategory) -> Color {
         return OmiColors.textSecondary
     }
 
@@ -494,10 +494,10 @@ struct AdvicePage: View {
     }
 }
 
-// MARK: - Advice Card
+// MARK: - Insight Card
 
-struct AdviceCard: View {
-    let advice: StoredAdvice
+struct InsightCard: View {
+    let insight: StoredInsight
     let onTap: () -> Void
     let onDismiss: () -> Void
     let onDelete: () -> Void
@@ -518,7 +518,7 @@ struct AdviceCard: View {
                         .fill(categoryColor.opacity(0.15))
                         .frame(width: 36, height: 36)
 
-                    Image(systemName: advice.advice.category.icon)
+                    Image(systemName: insight.insight.category.icon)
                         .scaledFont(size: 16)
                         .foregroundColor(categoryColor)
                 }
@@ -527,14 +527,14 @@ struct AdviceCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         // Unread indicator
-                        if !advice.isRead {
+                        if !insight.isRead {
                             Circle()
                                 .fill(OmiColors.textPrimary)
                                 .frame(width: 8, height: 8)
                         }
 
-                        Text(advice.advice.advice)
-                            .scaledFont(size: 14, weight: advice.isRead ? .regular : .medium)
+                        Text(insight.insight.insight)
+                            .scaledFont(size: 14, weight: insight.isRead ? .regular : .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -547,7 +547,7 @@ struct AdviceCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "app.fill")
                                 .scaledFont(size: 10)
-                            Text(advice.advice.sourceApp)
+                            Text(insight.insight.sourceApp)
                                 .scaledFont(size: 11)
                         }
                         .foregroundColor(OmiColors.textTertiary)
@@ -556,7 +556,7 @@ struct AdviceCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "chart.bar.fill")
                                 .scaledFont(size: 10)
-                            Text("\(Int(advice.advice.confidence * 100))%")
+                            Text("\(Int(insight.insight.confidence * 100))%")
                                 .scaledFont(size: 11)
                         }
                         .foregroundColor(OmiColors.textTertiary)
@@ -564,7 +564,7 @@ struct AdviceCard: View {
                         Spacer()
 
                         // Date
-                        Text(formatDate(advice.createdAt))
+                        Text(formatDate(insight.createdAt))
                             .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -604,11 +604,11 @@ struct AdviceCard: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(
-                        advice.isDismissed ? OmiColors.textTertiary.opacity(0.3) : Color.clear,
+                        insight.isDismissed ? OmiColors.textTertiary.opacity(0.3) : Color.clear,
                         lineWidth: 1
                     )
             )
-            .opacity(advice.isDismissed ? 0.6 : 1.0)
+            .opacity(insight.isDismissed ? 0.6 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -620,7 +620,7 @@ struct AdviceCard: View {
             }
         }
         .confirmationDialog(
-            "Delete Advice",
+            "Delete Insight",
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
@@ -629,7 +629,7 @@ struct AdviceCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this advice?")
+            Text("Are you sure you want to delete this insight?")
         }
     }
 
@@ -641,7 +641,7 @@ struct AdviceCard: View {
 }
 
 #Preview {
-    AdvicePage()
+    InsightPage()
         .frame(width: 800, height: 600)
         .background(OmiColors.backgroundPrimary)
 }

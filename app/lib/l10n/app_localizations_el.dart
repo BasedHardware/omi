@@ -1721,7 +1721,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ΣΥΣΚΕΥΕΣ',
+      one: 'ΣΥΣΚΕΥΗ',
+    );
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -9043,4 +9048,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Βρέθηκε εγγραφή';
+
+  @override
+  String get transcriptionConnecting => 'Σύνδεση μεταγραφής...';
+
+  @override
+  String get transcriptionReconnecting => 'Επανασύνδεση μεταγραφής...';
+
+  @override
+  String get transcriptionUnavailable => 'Η μεταγραφή δεν είναι διαθέσιμη';
+
+  @override
+  String get audioOutput => 'Έξοδος ήχου';
 }

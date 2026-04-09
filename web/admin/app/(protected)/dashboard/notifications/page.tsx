@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, BellOff, Users, Send, Loader2 } from "lucide-react";
 import PromptTester from "./prompt-tester";
 import useSWR from "swr";
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 import {
   Bar,
   Line,
@@ -59,11 +60,7 @@ interface NotificationStats {
   };
 }
 
-const fetcher = (url: string) =>
-  fetch(url).then((res) => {
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
-  });
+// Auth fetcher is imported from useAuthToken
 
 const COLORS = {
   mentor: "#6366f1",
@@ -101,15 +98,16 @@ function formatHourTick(hk: string) {
 
 export default function NotificationsPage() {
   const [days, setDays] = useState(30);
+  const { token, loading: authTokenLoading } = useAuthToken();
 
   const { data, error, isLoading } = useSWR<NotificationStats>(
-    `/api/omi/stats/notifications?days=${days}`,
-    fetcher,
+    token ? [`/api/omi/stats/notifications?days=${days}`, token] : null,
+    authenticatedFetcher,
     { revalidateOnFocus: false }
   );
 
   const statsError = error || (data && (data as any).error);
-  const statsReady = !isLoading && !statsError && data;
+  const statsReady = !isLoading && !authTokenLoading && !statsError && data;
 
   const dailyData = data?.dailyData;
   const weeklyData = data?.weeklyData;

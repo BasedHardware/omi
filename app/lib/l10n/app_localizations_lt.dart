@@ -1707,7 +1707,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -8986,4 +8991,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Rastas įrašas';
+
+  @override
+  String get transcriptionConnecting => 'Jungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionReconnecting => 'Perjungiamasi prie transkripcijos...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkripcija nepasiekiama';
+
+  @override
+  String get audioOutput => 'Garso išvestis';
 }

@@ -606,7 +606,7 @@ extension MixpanelManager {
         ])
     }
 
-    func adviceGenerated(category: String?) {
+    func insightGenerated(category: String?) {
         var properties: [String: MixpanelType] = [:]
         if let cat = category { properties["category"] = cat }
         track("Advice Generated", properties: properties.isEmpty ? nil : properties)

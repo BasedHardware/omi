@@ -6,20 +6,34 @@ enum ConnectorBrand: String, Sendable {
   case gmail
   case localFiles
   case appleNotes
+  case notion
+  case obsidian
   case chatgpt
   case claude
+  case gemini
 
   fileprivate var appPath: String? {
     switch self {
     case .appleNotes:
       return "/System/Applications/Notes.app"
+    case .notion:
+      return "/Applications/Notion.app"
+    case .obsidian:
+      return "/Applications/Obsidian.app"
     case .chatgpt:
       return "/Applications/ChatGPT.app"
     case .claude:
       return "/Applications/Claude.app"
-    default:
+    case .calendar, .gmail, .localFiles, .gemini:
       return nil
     }
+  }
+
+  var installedApplicationURL: URL? {
+    guard let appPath, FileManager.default.fileExists(atPath: appPath) else {
+      return nil
+    }
+    return URL(fileURLWithPath: appPath)
   }
 
   fileprivate var bundledResourceName: String? {
@@ -28,6 +42,10 @@ enum ConnectorBrand: String, Sendable {
       return "google_calendar_logo"
     case .gmail:
       return "gmail_logo"
+    case .obsidian:
+      return "obsidian_logo"
+    case .gemini:
+      return "gemini_logo"
     default:
       return nil
     }
@@ -43,10 +61,16 @@ enum ConnectorBrand: String, Sendable {
       return "folder.fill"
     case .appleNotes:
       return "note.text"
+    case .notion:
+      return "square.text.square"
+    case .obsidian:
+      return "mountain.2.fill"
     case .chatgpt:
       return "bubble.left.and.bubble.right.fill"
     case .claude:
       return "sparkles"
+    case .gemini:
+      return "sparkles.rectangle.stack"
     }
   }
 }
@@ -120,7 +144,8 @@ private enum ConnectorBrandImageLoader {
 
     let fm = FileManager.default
     let documentsPath = fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents").path
-    let path = fm.fileExists(atPath: documentsPath)
+    let path =
+      fm.fileExists(atPath: documentsPath)
       ? documentsPath : fm.homeDirectoryForCurrentUser.path
     return NSWorkspace.shared.icon(forFile: path)
   }

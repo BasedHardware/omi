@@ -6,6 +6,7 @@ struct OnboardingDataSourcesStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onSkip: (() -> Void)?
   let onForceComplete: (() -> Void)?
 
   @State private var activeImportSource: OnboardingMemoryLogSource?
@@ -21,6 +22,8 @@ struct OnboardingDataSourcesStepView: View {
       title: "Your 2nd brain is live.",
       description: "Connect more of your context.",
       rightPaneFooterText: coordinator.connectedContextSummary,
+      showsSkip: true,
+      onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 18) {
@@ -32,11 +35,22 @@ struct OnboardingDataSourcesStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        Button(coordinator.isResearchComplete ? "Continue" : "Finishing…") {
-          onContinue()
+        if coordinator.isResearchComplete {
+          Button("Continue") {
+            onContinue()
+          }
+          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        } else {
+          HStack(spacing: 8) {
+            ProgressView()
+              .controlSize(.small)
+              .tint(OmiColors.textTertiary)
+            Text("Scanning your data sources...")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundColor(OmiColors.textTertiary)
+          }
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-        .disabled(!coordinator.isResearchComplete)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

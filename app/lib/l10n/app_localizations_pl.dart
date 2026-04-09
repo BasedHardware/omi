@@ -9002,4 +9002,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Znaleziono nagranie';
+
+  @override
+  String get transcriptionConnecting => 'Łączenie transkrypcji...';
+
+  @override
+  String get transcriptionReconnecting => 'Ponowne łączenie transkrypcji...';
+
+  @override
+  String get transcriptionUnavailable => 'Transkrypcja niedostępna';
+
+  @override
+  String get audioOutput => 'Wyjście audio';
 }

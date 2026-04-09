@@ -2930,5 +2930,10 @@
             }
         }
     },
-    "willSyncAutomatically": "sẽ tự động đồng bộ"
+    "willSyncAutomatically": "sẽ tự động đồng bộ",
+    "voiceRecordingFound": "Đã tìm thấy bản ghi",
+    "transcriptionConnecting": "Đang kết nối phiên âm...",
+    "transcriptionReconnecting": "Đang kết nối lại phiên âm...",
+    "transcriptionUnavailable": "Phiên âm không khả dụng",
+    "audioOutput": "Đầu ra âm thanh"
 }

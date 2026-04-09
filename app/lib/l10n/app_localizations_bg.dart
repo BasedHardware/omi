@@ -1713,7 +1713,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -9014,4 +9019,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get voiceRecordingFound => 'Намерен запис';
+
+  @override
+  String get transcriptionConnecting => 'Свързване на транскрипция...';
+
+  @override
+  String get transcriptionReconnecting => 'Повторно свързване на транскрипция...';
+
+  @override
+  String get transcriptionUnavailable => 'Транскрипцията не е налична';
+
+  @override
+  String get audioOutput => 'Аудио изход';
 }

@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/components/auth-provider';
+import { useAuthFetch } from '@/hooks/useAuthToken';
 import { Loader2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,6 +25,7 @@ interface EditSummaryAppDrawerProps {
 
 export function EditSummaryAppDrawer({ isOpen, onClose, app, onSave }: EditSummaryAppDrawerProps) {
   const { user } = useAuth();
+  const { fetchWithAuth } = useAuthFetch();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -47,13 +49,8 @@ export function EditSummaryAppDrawer({ isOpen, onClose, app, onSave }: EditSumma
 
     setIsLoading(true);
     try {
-      const idToken = await user.getIdToken();
-      const response = await fetch('/api/omi/summary-apps', {
+      const response = await fetchWithAuth('/api/omi/summary-apps', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
-        },
         body: JSON.stringify({
           appId: app.id,
           name: formData.name,

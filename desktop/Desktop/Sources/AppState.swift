@@ -737,7 +737,11 @@ class AppState: ObservableObject {
 
   /// Check notification permission status and alert style
   func checkNotificationPermission() {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
+    // Dispatch async to avoid calling UNUserNotificationCenter.current() during
+    // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
       DispatchQueue.main.async {
         let isNowGranted = settings.authorizationStatus == .authorized
         self.hasNotificationPermission = isNowGranted
@@ -805,6 +809,7 @@ class AppState: ObservableObject {
 
       }
     }
+    }  // end DispatchQueue.main.async
   }
 
   /// Check screen recording permission status
@@ -2936,6 +2941,8 @@ extension Notification.Name {
   static let screenCapturePermissionLost = Notification.Name("screenCapturePermissionLost")
   /// Posted when ScreenCaptureKit is broken (TCC granted but SCK declined)
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
+  /// Posted to show the "Try asking" popup centered over the full window
+  static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
   /// Posted to navigate to Rewind settings
   static let navigateToRewindSettings = Notification.Name("navigateToRewindSettings")
   /// Posted to navigate to Rewind page (global hotkey: Cmd+Option+R)
@@ -2963,7 +2970,7 @@ extension Notification.Name {
   /// Posted when Focus page finishes loading initial data
   static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
   /// Posted when Advice page finishes loading initial data
-  static let advicePageDidLoad = Notification.Name("advicePageDidLoad")
+  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService

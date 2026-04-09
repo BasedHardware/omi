@@ -2,16 +2,20 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
-    // Python backend URL for subscription/payment endpoints (these don't exist on the Rust desktop backend)
-    var pythonBackendURL: String {
+    // Primary data backend URL — Python backend (api.omi.me) is the single source of truth for all data CRUD.
+    // Override via OMI_PYTHON_API_URL for local dev.
+    var baseURL: String {
         if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         return "https://api.omi.me/"
     }
 
-    // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
-    var baseURL: String {
+    // Rust desktop backend URL — used only for: agent VM provisioning/status,
+    // config/api-keys, Crisp, and local test subscription. All data CRUD,
+    // chat AI, and title generation are on Python.
+    // Set via OMI_API_URL env var (in .env).
+    var rustBackendURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
         if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             let normalized = url.hasSuffix("/") ? url : url + "/"
@@ -22,12 +26,15 @@ actor APIClient {
             let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
             return normalized
         }
-        NSLog("OMI API: OMI_API_URL not set — API calls will fail")
+        NSLog("OMI API: OMI_API_URL not set — Rust backend calls will fail")
         return ""
     }
 
     let session: URLSession
     private let decoder: JSONDecoder
+
+    /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
+    var testAuthHeader: String?
 
     // Short-lived caches to deduplicate simultaneous calls from multiple services
     private var goalsCacheTime: Date?
@@ -40,7 +47,17 @@ actor APIClient {
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
 
-        self.decoder = JSONDecoder()
+        self.decoder = Self.makeDecoder()
+    }
+
+    /// Test-only initializer that accepts a custom URLSession for request interception.
+    init(session: URLSession) {
+        self.session = session
+        self.decoder = Self.makeDecoder()
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
         // Note: Don't use .convertFromSnakeCase - it conflicts with explicit CodingKeys
         // Use custom date strategy to handle ISO8601 with fractional seconds
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -62,6 +79,7 @@ actor APIClient {
 
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateString)")
         }
+        return decoder
     }
 
     // MARK: - Request Building
@@ -74,9 +92,13 @@ actor APIClient {
         ]
 
         if requireAuth {
-            let authService = await MainActor.run { AuthService.shared }
-            let authHeader = try await authService.getAuthHeader()
-            headers["Authorization"] = authHeader
+            if let testHeader = testAuthHeader {
+                headers["Authorization"] = testHeader
+            } else {
+                let authService = await MainActor.run { AuthService.shared }
+                let authHeader = try await authService.getAuthHeader()
+                headers["Authorization"] = authHeader
+            }
         }
 
         return headers
@@ -1213,7 +1235,7 @@ extension APIClient {
             let response: ForceProcessConversationResponse = try await post(
                 "v1/conversations",
                 body: EmptyBody(),
-                customBaseURL: pythonBackendURL
+                customBaseURL: nil
             )
             return response.conversation
         } catch APIError.httpError(let statusCode) where statusCode == 404 {
@@ -1426,13 +1448,25 @@ struct UserProfile: Codable {
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
-struct ActionItemsListResponse: Codable {
+/// Accepts both "action_items" (/v1/action-items) and "items" (/v1/staged-tasks) keys.
+struct ActionItemsListResponse: Decodable {
     let items: [TaskActionItem]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
+        case actionItems = "action_items"
         case items
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
+            self.items = actionItems
+        } else {
+            self.items = try container.decode([TaskActionItem].self, forKey: .items)
+        }
+        self.hasMore = try container.decode(Bool.self, forKey: .hasMore)
     }
 }
 
@@ -1923,10 +1957,10 @@ extension APIClient {
         if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
             return cache
         }
-        let response: GoalsListResponse = try await get("v1/goals/all")
-        goalsCache = response.goals
+        let goals: [Goal] = try await get("v1/goals/all")
+        goalsCache = goals
         goalsCacheTime = Date()
-        return response.goals
+        return goals
     }
 
     /// Creates a new goal
@@ -2024,8 +2058,8 @@ extension APIClient {
 
     /// Gets completed goals for history
     func getCompletedGoals() async throws -> [Goal] {
-        let response: GoalsListResponse = try await get("v1/goals/completed")
-        return response.goals
+        let goals: [Goal] = try await get("v1/goals/completed")
+        return goals
     }
 
     /// Completes a goal (marks as inactive with completed_at)
@@ -2736,8 +2770,8 @@ struct OmiApp: Codable, Identifiable, Sendable {
     let approved: Bool
     let `private`: Bool
     let installs: Int
-    let ratingAvg: Double?
-    let ratingCount: Int
+    var ratingAvg: Double?
+    var ratingCount: Int
     let isPaid: Bool
     let price: Double?
     var enabled: Bool
@@ -2790,7 +2824,7 @@ struct OmiApp: Codable, Identifiable, Sendable {
 
     /// Formatted rating string
     var formattedRating: String? {
-        guard let rating = ratingAvg else { return nil }
+        guard let rating = ratingAvg, ratingCount > 0 else { return nil }
         return String(format: "%.1f", rating)
     }
 
@@ -2836,6 +2870,7 @@ struct OmiAppDetails: Codable, Identifiable {
     let twitter: String?
     let createdAt: Date?
     var enabled: Bool
+    let externalIntegration: ExternalIntegration?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, image, category, author, email, capabilities
@@ -2854,6 +2889,7 @@ struct OmiAppDetails: Codable, Identifiable {
         case username, twitter
         case createdAt = "created_at"
         case enabled
+        case externalIntegration = "external_integration"
     }
 
     init(from decoder: Decoder) throws {
@@ -2883,6 +2919,7 @@ struct OmiAppDetails: Codable, Identifiable {
         twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        externalIntegration = try container.decodeIfPresent(ExternalIntegration.self, forKey: .externalIntegration)
     }
 }
 
@@ -2896,7 +2933,50 @@ struct OmiAppCategory: Codable, Identifiable, Sendable {
 struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
-    let description: String
+    let description: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+    }
+}
+
+/// Auth step for external integration setup
+struct AuthStep: Codable, Sendable {
+    let name: String
+    let url: String
+}
+
+/// External integration setup details
+struct ExternalIntegration: Codable, Sendable {
+    let authSteps: [AuthStep]
+    let setupCompletedUrl: String?
+    let setupInstructionsFilePath: String?
+    let appHomeUrl: String?
+    let isInstructionsUrl: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case authSteps = "auth_steps"
+        case setupCompletedUrl = "setup_completed_url"
+        case setupInstructionsFilePath = "setup_instructions_file_path"
+        case appHomeUrl = "app_home_url"
+        case isInstructionsUrl = "is_instructions_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        authSteps = try container.decodeIfPresent([AuthStep].self, forKey: .authSteps) ?? []
+        setupCompletedUrl = try container.decodeIfPresent(String.self, forKey: .setupCompletedUrl)
+        setupInstructionsFilePath = try container.decodeIfPresent(String.self, forKey: .setupInstructionsFilePath)
+        appHomeUrl = try container.decodeIfPresent(String.self, forKey: .appHomeUrl)
+        isInstructionsUrl = try container.decodeIfPresent(Bool.self, forKey: .isInstructionsUrl)
+    }
 }
 
 /// App review
@@ -2998,7 +3078,12 @@ extension APIClient {
 
     /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
     /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-    func getAppsV2(offset: Int = 0, limit: Int = 100) async throws -> OmiAppsV2Response {
+    /// Fetches all apps with real rating data from v1/apps
+    func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
+        return try await get("v1/apps?limit=\(limit)")
+    }
+
+    func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
         let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
         return try await get(endpoint)
     }
@@ -3019,6 +3104,10 @@ extension APIClient {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> [OmiApp] {
+        struct SearchResponse: Decodable {
+            let data: [OmiApp]
+        }
+
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)"
@@ -3045,7 +3134,8 @@ extension APIClient {
         }
 
         let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        let response: SearchResponse = try await get(endpoint)
+        return response.data
     }
 
     /// Fetches app details by ID
@@ -3065,28 +3155,35 @@ extension APIClient {
 
     /// Enables an app for the current user
     func enableApp(appId: String) async throws {
-        struct EnableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = EnableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/enable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
     }
 
     /// Disables an app for the current user
     func disableApp(appId: String) async throws {
-        struct DisableRequest: Encodable {
-            let app_id: String
-        }
         struct ToggleResponse: Decodable {
-            let success: Bool
-            let message: String
+            let status: String?
+            let detail: String?
         }
-        let body = DisableRequest(app_id: appId)
-        let _: ToggleResponse = try await post("v1/apps/disable", body: body)
+        let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
+    }
+
+    /// Checks if an external integration app's setup is complete
+    func isAppSetupCompleted(url: String, uid: String) async -> Bool {
+        guard !url.isEmpty else { return true }
+        guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
+        var request = URLRequest(url: fullUrl)
+        request.httpMethod = "GET"
+        do {
+            let (data, _) = try await session.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json["is_setup_completed"] as? Bool ?? false
+            }
+        } catch {}
+        return false
     }
 
     /// Submits a review for an app
@@ -3591,11 +3688,19 @@ struct UserLanguageResponse: Codable {
 /// Recording permission response
 struct RecordingPermissionResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "store_recording_permission"
+    }
 }
 
 /// Private cloud sync response
 struct PrivateCloudSyncResponse: Codable {
     let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "private_cloud_sync_enabled"
+    }
 }
 
 /// Notification settings response
@@ -3809,7 +3914,7 @@ struct TaskSettingsResponse: Codable {
     }
 }
 
-struct AdviceSettingsResponse: Codable {
+struct InsightSettingsResponse: Codable {
     var enabled: Bool?
     var analysisPrompt: String?
     var extractionInterval: Double?
@@ -3861,13 +3966,13 @@ struct AssistantSettingsResponse: Codable {
     var shared: SharedAssistantSettingsResponse?
     var focus: FocusSettingsResponse?
     var task: TaskSettingsResponse?
-    var advice: AdviceSettingsResponse?
+    var insight: InsightSettingsResponse?
     var memory: MemorySettingsResponse?
     var floatingBar: FloatingBarSettingsResponse?
     var updateChannel: String?
 
     enum CodingKeys: String, CodingKey {
-        case shared, focus, task, advice, memory
+        case shared, focus, task, insight = "advice", memory
         case floatingBar = "floating_bar"
         case updateChannel = "update_channel"
     }
@@ -3906,17 +4011,17 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice API
+// MARK: - Insight API
 
 extension APIClient {
 
-    /// Fetches advice history from the backend
-    func getAdvice(
+    /// Fetches insight history from the backend
+    func getInsights(
         limit: Int = 100,
         offset: Int = 0,
         category: String? = nil,
         includeDismissed: Bool = false
-    ) async throws -> [ServerAdvice] {
+    ) async throws -> [ServerInsight] {
         var queryItems: [String] = [
             "limit=\(limit)",
             "offset=\(offset)",
@@ -3931,13 +4036,13 @@ extension APIClient {
         return try await get(endpoint)
     }
 
-    /// Creates a new advice entry
-    func createAdvice(_ request: CreateAdviceRequest) async throws -> ServerAdvice {
+    /// Creates a new insight entry
+    func createInsight(_ request: CreateInsightRequest) async throws -> ServerInsight {
         return try await post("v1/advice", body: request)
     }
 
-    /// Updates advice (mark as read/dismissed)
-    func updateAdvice(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerAdvice {
+    /// Updates insight (mark as read/dismissed)
+    func updateInsight(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws -> ServerInsight {
         struct UpdateRequest: Encodable {
             let is_read: Bool?
             let is_dismissed: Bool?
@@ -3946,13 +4051,13 @@ extension APIClient {
         return try await patch("v1/advice/\(id)", body: body)
     }
 
-    /// Deletes advice permanently
-    func deleteAdvice(id: String) async throws {
+    /// Deletes insight permanently
+    func deleteInsight(id: String) async throws {
         try await delete("v1/advice/\(id)")
     }
 
-    /// Marks all advice as read
-    func markAllAdviceAsRead() async throws {
+    /// Marks all insights as read
+    func markAllInsightsAsRead() async throws {
         struct StatusResponse: Decodable {
             let status: String
         }
@@ -3960,13 +4065,13 @@ extension APIClient {
     }
 }
 
-// MARK: - Advice Models
+// MARK: - Insight Models
 
-/// Server advice model matching Rust AdviceDB
-struct ServerAdvice: Codable, Identifiable {
+/// Server insight model matching Rust InsightDB
+struct ServerInsight: Codable, Identifiable {
     let id: String
     let content: String
-    let category: ServerAdviceCategory
+    let category: ServerInsightCategory
     let reasoning: String?
     let sourceApp: String?
     let confidence: Double
@@ -3992,7 +4097,7 @@ struct ServerAdvice: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        category = try container.decodeIfPresent(ServerAdviceCategory.self, forKey: .category) ?? .other
+        category = try container.decodeIfPresent(ServerInsightCategory.self, forKey: .category) ?? .other
         reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
         sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
         confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
@@ -4005,16 +4110,16 @@ struct ServerAdvice: Codable, Identifiable {
     }
 }
 
-/// Server advice category enum matching Rust AdviceCategory
-enum ServerAdviceCategory: String, Codable {
+/// Server advice category enum matching Rust InsightCategory
+enum ServerInsightCategory: String, Codable {
     case productivity
     case health
     case communication
     case learning
     case other
 
-    /// Convert to local AdviceCategory
-    var toLocal: AdviceCategory {
+    /// Convert to local InsightCategory
+    var toLocal: InsightCategory {
         switch self {
         case .productivity: return .productivity
         case .health: return .health
@@ -4025,8 +4130,8 @@ enum ServerAdviceCategory: String, Codable {
     }
 }
 
-/// Request to create new advice
-struct CreateAdviceRequest: Encodable {
+/// Request to create new insight
+struct CreateInsightRequest: Encodable {
     let content: String
     let category: String?
     let reasoning: String?
@@ -4037,7 +4142,7 @@ struct CreateAdviceRequest: Encodable {
 
     init(
         content: String,
-        category: AdviceCategory? = nil,
+        category: InsightCategory? = nil,
         reasoning: String? = nil,
         sourceApp: String? = nil,
         confidence: Double? = nil,
@@ -4077,7 +4182,7 @@ extension APIClient {
             let metadata: String?
         }
         let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
-        return try await post("v2/messages", body: body)
+        return try await post("v2/desktop/messages", body: body)
     }
 
     /// Fetch chat message history
@@ -4095,13 +4200,13 @@ extension APIClient {
             queryItems.append("app_id=\(appId)")
         }
 
-        let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
+        let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
         return try await get(endpoint)
     }
 
     /// Clear chat message history
     func deleteMessages(appId: String? = nil) async throws -> MessageDeleteResponse {
-        var endpoint = "v2/messages"
+        var endpoint = "v2/desktop/messages"
         if let appId = appId {
             endpoint += "?app_id=\(appId)"
         }
@@ -4140,7 +4245,7 @@ extension APIClient {
             "offset=\(offset)"
         ]
 
-        let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
+        let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
         return try await get(endpoint)
     }
 
@@ -4153,13 +4258,39 @@ extension APIClient {
             let rating: Int?
         }
         let body = RateRequest(rating: rating)
-        let _: MessageStatusResponse = try await patch("v2/messages/\(messageId)/rating", body: body)
+        let _: MessageStatusResponse = try await patch("v2/desktop/messages/\(messageId)/rating", body: body)
+    }
+
+    /// Share chat messages and get a shareable URL
+    func shareChatMessages(messageIds: [String]) async throws -> ShareChatResponse {
+        struct ShareRequest: Encodable {
+            let message_ids: [String]
+        }
+        let body = ShareRequest(message_ids: messageIds)
+        return try await post("v2/messages/share", body: body)
+    }
+
+    /// Convenience: get a share link for the current floating bar conversation
+    func getChatShareLink(sessionId: String) async throws -> String {
+        // For session-based chats, share the session
+        struct ShareSessionRequest: Encodable {
+            let session_id: String
+        }
+        let body = ShareSessionRequest(session_id: sessionId)
+        let response: ShareChatResponse = try await post("v2/messages/share", body: body)
+        return response.url
     }
 }
 
 /// Response from rating a message
 struct MessageStatusResponse: Codable {
     let status: String
+}
+
+/// Response from sharing chat messages
+struct ShareChatResponse: Codable {
+    let url: String
+    let token: String
 }
 
 // MARK: - Chat Sessions API
@@ -4397,7 +4528,7 @@ extension APIClient {
 
     /// Provision a cloud agent VM for the current user (fire-and-forget)
     func provisionAgentVM() async throws -> AgentProvisionResponse {
-        return try await post("v2/agent/provision")
+        return try await post("v2/agent/provision", customBaseURL: rustBackendURL)
     }
 
     struct AgentStatusResponse: Decodable {
@@ -4412,7 +4543,7 @@ extension APIClient {
 
     /// Get current agent VM status
     func getAgentStatus() async throws -> AgentStatusResponse? {
-        return try await get("v2/agent/status")
+        return try await get("v2/agent/status", customBaseURL: rustBackendURL)
     }
 }
 
@@ -4436,7 +4567,7 @@ struct Person: Codable, Identifiable {
 extension APIClient {
 
     func getUserSubscription() async throws -> UserSubscriptionResponse {
-        return try await get("v1/users/me/subscription", customBaseURL: pythonBackendURL)
+        return try await get("v1/users/me/subscription")
     }
 
     func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
@@ -4448,11 +4579,11 @@ extension APIClient {
             }
         }
 
-        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId), customBaseURL: pythonBackendURL)
+        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
     }
 
     func createCustomerPortalSession() async throws -> CustomerPortalResponse {
-        return try await post("v1/payments/customer-portal", customBaseURL: pythonBackendURL)
+        return try await post("v1/payments/customer-portal")
     }
 
     /// Fetches all people for the current user
@@ -4596,7 +4727,7 @@ extension APIClient {
     }
 
     func fetchApiKeys() async throws -> ApiKeysResponse {
-        return try await get("v1/config/api-keys")
+        return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
     }
 
     // MARK: - Platform Tools (backend RAG)
@@ -4658,6 +4789,15 @@ extension APIClient {
         }
     }
 
+    /// Percent-encode a date string for use in query parameters.
+    /// `.urlQueryAllowed` does not encode `+`, but servers decode `+` as space in query strings.
+    /// This encodes `+` as `%2B` so timezone offsets like `+07:00` survive round-trip.
+    private func encodeQueryDate(_ date: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+")
+        return date.addingPercentEncoding(withAllowedCharacters: allowed) ?? date
+    }
+
     func toolGetConversations(
         startDate: String? = nil,
         endDate: String? = nil,
@@ -4666,9 +4806,9 @@ extension APIClient {
         includeTranscript: Bool = true
     ) async throws -> ToolResponse {
         var params = "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolSearchConversations(
@@ -4679,7 +4819,7 @@ extension APIClient {
         includeTranscript: Bool = true
     ) async throws -> ToolResponse {
         let body = SearchRequest(query: query, startDate: startDate, endDate: endDate, limit: limit, includeTranscript: includeTranscript)
-        return try await post("v1/tools/conversations/search", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/conversations/search", body: body, customBaseURL: nil)
     }
 
     func toolGetMemories(
@@ -4689,14 +4829,14 @@ extension APIClient {
         endDate: String? = nil
     ) async throws -> ToolResponse {
         var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolSearchMemories(query: String, limit: Int = 5) async throws -> ToolResponse {
         let body = MemorySearchRequest(query: query, limit: limit)
-        return try await post("v1/tools/memories/search", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/memories/search", body: body, customBaseURL: nil)
     }
 
     func toolGetActionItems(
@@ -4710,20 +4850,20 @@ extension APIClient {
     ) async throws -> ToolResponse {
         var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
         if let c = completed { params += "&completed=\(c)" }
-        if let sd = startDate { params += "&start_date=\(sd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sd)" }
-        if let ed = endDate { params += "&end_date=\(ed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ed)" }
-        if let dsd = dueStartDate { params += "&due_start_date=\(dsd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? dsd)" }
-        if let ded = dueEndDate { params += "&due_end_date=\(ded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ded)" }
-        return try await get(params, customBaseURL: pythonBackendURL)
+        if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
+        if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
+        if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
+        if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
+        return try await get(params, customBaseURL: nil)
     }
 
     func toolCreateActionItem(description: String, dueAt: String? = nil, conversationId: String? = nil) async throws -> ToolResponse {
         let body = CreateActionItemRequest(description: description, dueAt: dueAt, conversationId: conversationId)
-        return try await post("v1/tools/action-items", body: body, customBaseURL: pythonBackendURL)
+        return try await post("v1/tools/action-items", body: body, customBaseURL: nil)
     }
 
     func toolUpdateActionItem(id: String, completed: Bool? = nil, description: String? = nil, dueAt: String? = nil) async throws -> ToolResponse {
         let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
-        return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: pythonBackendURL)
+        return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
     }
 }

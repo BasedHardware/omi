@@ -29,6 +29,7 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
+  @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
 
@@ -515,8 +516,8 @@ struct DesktopHomeView: View {
       return .tasks
     case "focus":
       return .focus
-    case "advice":
-      return .advice
+    case "insight":
+      return .insight
     case "rewind":
       return .rewind
     case "apps", "integrations":
@@ -632,6 +633,28 @@ struct DesktopHomeView: View {
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
+    }
+    .overlay {
+      if showTryAskingPopup {
+        let suggestions = PostOnboardingPromptSuggestions.suggestions()
+        if !suggestions.isEmpty {
+          TryAskingPopupView(
+            suggestions: suggestions,
+            onAsk: { suggestion in
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+              FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+            },
+            onDismiss: {
+              showTryAskingPopup = false
+              PostOnboardingPromptSuggestions.shouldShowPopup = false
+            }
+          )
+        }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+      showTryAskingPopup = true
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
@@ -758,7 +781,7 @@ private struct PageContentView: View {
       case 5:
         FocusPage()
       case 6:
-        AdvicePage()
+        InsightPage()
       case 7:
         RewindPage(appState: appState)
       case 8:
