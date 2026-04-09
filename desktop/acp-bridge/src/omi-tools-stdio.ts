@@ -314,7 +314,7 @@ Parameter guidance:
         start_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T00:00:00+07:00)" },
         end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-31T23:59:59+07:00)" },
         limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
-        include_transcript: { type: "boolean" as const, description: "Load speaker/attendee data (default: true). Set false to skip." },
+        include_transcript: { type: "boolean" as const, description: "Load speaker/attendee data (default: true). Summaries/action items always included. Set false to skip speaker processing." },
       },
       required: ["query"],
     },
