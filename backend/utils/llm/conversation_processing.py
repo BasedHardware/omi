@@ -641,8 +641,8 @@ def get_transcript_structure(
     response_language = output_language_code or language_code
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
+    # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
     instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
-    The content language is {language_code}. You MUST respond entirely in {response_language}.
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
@@ -687,7 +687,7 @@ def get_transcript_structure(
     ).strip()
 
     # Second system message: conversation context (dynamic, per-conversation)
-    context_message = 'Content:\n{conversation_context}'
+    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
 
