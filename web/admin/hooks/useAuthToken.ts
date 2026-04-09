@@ -34,9 +34,11 @@ export function useAuthToken() {
     // Refresh token every 10 minutes to prevent stale-token 401s.
     // Firebase ID tokens expire after 1 hour; getIdToken() returns
     // a fresh token when the cached one is close to expiry.
+    // On failure, keep the existing token rather than nulling it —
+    // a stale token that triggers a 401 retry is better than no token.
     if (user) {
       const interval = setInterval(() => {
-        user.getIdToken().then(setToken).catch(() => setToken(null));
+        user.getIdToken().then(setToken).catch(() => {});
       }, 10 * 60 * 1000);
       return () => clearInterval(interval);
     }
