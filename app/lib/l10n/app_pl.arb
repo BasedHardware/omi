@@ -2967,5 +2967,8 @@
     "transcriptionUnavailable": "Transkrypcja niedostępna",
     "audioOutput": "Wyjście audio",
     "enableLocationTitle": "Włącz lokalizację",
-    "enableLocationDescription": "Uprawnienie do lokalizacji jest potrzebne, aby znaleźć pobliskie urządzenia Bluetooth."
+    "enableLocationDescription": "Uprawnienie do lokalizacji jest potrzebne, aby znaleźć pobliskie urządzenia Bluetooth.",
+    "firmwareWarningTitle": "Ważne: Przeczytaj przed aktualizacją",
+    "firmwareFormatWarning": "Ten firmware sformatuje kartę SD. Upewnij się, że wszystkie dane offline są zsynchronizowane przed aktualizacją.\n\nJeśli po zainstalowaniu tej wersji zobaczysz migającą czerwoną diodę, nie martw się. Po prostu podłącz urządzenie do aplikacji, a powinno zmienić kolor na niebieski. Czerwona dioda oznacza, że zegar urządzenia nie został jeszcze zsynchronizowany.",
+    "continueAnyway": "Kontynuuj"
 }

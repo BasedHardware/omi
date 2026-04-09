@@ -10746,5 +10746,8 @@
     "audioOutput": "פלט אודיו",
     "@audioOutput": {
         "description": "Title for audio route picker bottom sheet"
-    }
+    },
+    "firmwareWarningTitle": "חשוב: קראו לפני העדכון",
+    "firmwareFormatWarning": "קושחה זו תפרמט את כרטיס ה-SD. אנא ודאו שכל הנתונים הלא מקוונים מסונכרנים לפני השדרוג.\n\nאם אתם רואים אור אדום מהבהב לאחר התקנת גרסה זו, אל תדאגו. פשוט חברו את המכשיר לאפליקציה והוא אמור להפוך לכחול. האור האדום אומר שהשעון של המכשיר עדיין לא סונכרן.",
+    "continueAnyway": "המשך"
 }

@@ -2932,5 +2932,8 @@
     "transcriptionUnavailable": "Transkripcija nav pieejama",
     "audioOutput": "Audio izvade",
     "enableLocationTitle": "Iespējot atrašanās vietu",
-    "enableLocationDescription": "Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces."
+    "enableLocationDescription": "Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces.",
+    "firmwareWarningTitle": "Svarīgi: Izlasiet pirms atjaunināšanas",
+    "firmwareFormatWarning": "Šī programmaparatūra formatēs SD karti. Lūdzu, pārliecinieties, ka visi bezsaistes dati ir sinhronizēti pirms jaunināšanas.\n\nJa pēc šīs versijas instalēšanas redzat mirgojoššu sarkanu gaismu, neuztraucieties. Vienkārši pievienojiet ierīci lietotnei, un tai vajadzētu kļūt zilai. Sarkanā gaisma nozīmē, ka ierīces pulkstenis vēl nav sinhronizēts.",
+    "continueAnyway": "Turpināt"
 }
