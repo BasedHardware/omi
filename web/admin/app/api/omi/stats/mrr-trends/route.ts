@@ -163,6 +163,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Format data for chart
+    const partial = results.some((r) => r.status === 'rejected');
     const data = monthKeys.map((monthKey) => {
       const [year, month] = monthKey.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1);
@@ -173,7 +174,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data, partial });
   } catch (error) {
     console.error('Error fetching MRR trends:', error);
     return NextResponse.json(
