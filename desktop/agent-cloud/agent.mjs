@@ -297,10 +297,11 @@ Use when:
 - Task management: looking up action items, checking completion status
 - Aggregations, rankings, or structured filters on local data
 
-Don't use when:
-- User asks about conversation content or transcripts (use get_conversations or search_conversations)
-- User asks about their preferences or facts about themselves (use get_memories)
+Don't use when (if those tools are available):
+- User asks about conversation content or transcripts (prefer get_conversations or search_conversations)
+- User asks about their preferences or facts about themselves (prefer get_memories)
 - User asks fuzzy/conceptual questions (use semantic_search instead)
+- If backend tools are not available, fall back to execute_sql on the local transcription_sessions table
 
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
 
@@ -322,7 +323,7 @@ Use when:
 - Theme-based recall: "design mockups", "code reviews", "email about project Z"
 
 Don't use when:
-- User asks about spoken conversations or transcripts (use search_conversations)
+- User asks about spoken conversations or transcripts (prefer search_conversations if available)
 - User asks for structured counts or stats (use execute_sql)
 - User wants a broad daily recap (use get_daily_recap)
 
@@ -351,8 +352,8 @@ Use when:
 - User wants a quick overview without specifying a topic
 
 Don't use when:
-- User asks about a specific topic or event (use search_conversations)
-- User needs detailed transcript content (use get_conversations with transcript segments)
+- User asks about a specific topic or event (prefer search_conversations if available)
+- User needs detailed transcript content (prefer get_conversations if available)
 - User wants structured data or counts (use execute_sql)
 
 This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
