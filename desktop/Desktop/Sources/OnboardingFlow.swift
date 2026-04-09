@@ -10,7 +10,6 @@ enum OnboardingFlow {
     "FullDiskAccess",
     "FileScan",
     "Microphone",
-    "Notifications",
     "Accessibility",
     "Automation",
     "FloatingBarShortcut",

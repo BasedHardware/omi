@@ -18,7 +18,7 @@ enum SidebarNavItem: Int, CaseIterable {
 
   var title: String {
     switch self {
-    case .dashboard: return "Dashboard"
+    case .dashboard: return "Home"
     case .conversations: return "Conversations"
     case .chat: return "Chat"
     case .memories: return "Memories"
@@ -76,6 +76,7 @@ struct SidebarView: View {
   @Binding var selectedIndex: Int
   @Binding var isCollapsed: Bool
   @ObservedObject var appState: AppState
+  @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var adviceStorage = AdviceStorage.shared
   @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var deviceProvider = DeviceProvider.shared
@@ -90,6 +91,7 @@ struct SidebarView: View {
 
   // Toggle states for quick controls
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
+  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
   @State private var isMonitoring = false
   @State private var isTogglingMonitoring = false
   @State private var isTogglingTranscription = false
@@ -107,6 +109,8 @@ struct SidebarView: View {
   // Drag state
   @State private var dragOffset: CGFloat = 0
   @GestureState private var isDragging = false
+  @State private var isProfileMenuPresented = false
+  @State private var isProfileButtonHovered = false
 
   // Constants
   private let expandedWidth: CGFloat = 260
@@ -284,57 +288,20 @@ struct SidebarView: View {
               .transition(.opacity)
           }
 
-          Spacer().frame(height: 16)
+          if hasVisibleSidebarStatuses {
+            Spacer().frame(height: 16)
+            permissionStatusSection
+          }
 
-          // Divider before secondary items
+          Spacer().frame(height: 16)
           Rectangle()
             .fill(OmiColors.backgroundTertiary.opacity(0.5))
             .frame(height: 1)
 
           Spacer().frame(height: 12)
+          profileMenuButton
 
-          // Permission warning (if any permissions missing)
-          if appState.hasMissingPermissions {
-            permissionWarningButton
-          }
-
-          // Secondary navigation items
-          if currentTierLevel == 0 || currentTierLevel >= 4 {
-            BottomNavItemView(
-              icon: "gift.fill",
-              label: "Refer a Friend",
-              isCollapsed: isCollapsed,
-              iconWidth: iconWidth,
-              onTap: {
-                if let url = URL(string: "https://affiliate.omi.me") {
-                  NSWorkspace.shared.open(url)
-                }
-              }
-            )
-          }
-
-          BottomNavItemView(
-            icon: "message.fill",
-            label: "Discord",
-            isCollapsed: isCollapsed,
-            iconWidth: iconWidth,
-            onTap: {
-              guard let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") else { return }
-              NSWorkspace.shared.open(url)
-            }
-          )
-
-          // Settings at the very bottom
-          NavItemView(
-            icon: "gearshape.fill",
-            label: "Settings",
-            isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
-            isCollapsed: isCollapsed,
-            iconWidth: iconWidth,
-            onTap: { selectedIndex = SidebarNavItem.settings.rawValue }
-          )
-
-          Spacer().frame(height: 16)
+          Spacer().frame(height: 8)
         }
         .padding(.horizontal, isCollapsed ? 8 : 16)
         .frame(maxHeight: .infinity)
@@ -382,6 +349,7 @@ struct SidebarView: View {
     .onAppear {
       syncMonitoringState()
       appState.checkAllPermissions()
+      updatePermissionPulse(hasPermissionDenied)
     }
     .onChange(of: currentTierLevel) { _, newTier in
       // Redirect if current page became locked after tier change
@@ -400,6 +368,9 @@ struct SidebarView: View {
       Task {
         await TierManager.shared.checkTierIfNeeded()
       }
+    }
+    .onChange(of: hasPermissionDenied) { _, denied in
+      updatePermissionPulse(denied)
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
@@ -816,70 +787,203 @@ struct SidebarView: View {
     }
   }
 
+  // MARK: - Profile Menu
+
+  private var shouldShowReferFriend: Bool {
+    currentTierLevel == 0 || currentTierLevel >= 4
+  }
+
+  private var shouldShowScreenRecordingStatus: Bool {
+    appState.hasScreenRecordingPermission || !appState.hasScreenRecordingPermission
+      || appState.isScreenCaptureKitBroken
+      || appState.isScreenRecordingStale
+  }
+
+  private var shouldShowMicrophoneStatus: Bool {
+    appState.hasMicrophonePermission || !appState.hasMicrophonePermission
+  }
+
+  private var shouldShowAccessibilityStatus: Bool {
+    !appState.hasAccessibilityPermission || appState.isAccessibilityBroken
+  }
+
+  private var hasVisibleSidebarStatuses: Bool {
+    shouldShowScreenRecordingStatus || shouldShowMicrophoneStatus || shouldShowAccessibilityStatus
+  }
+
+  private var profileDisplayName: String {
+    let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !displayName.isEmpty {
+      return displayName
+    }
+
+    if let email = authState.userEmail, !email.isEmpty {
+      return email.components(separatedBy: "@").first ?? email
+    }
+
+    return "Profile"
+  }
+
+  private var profileInitials: String {
+    let parts =
+      profileDisplayName
+      .split(separator: " ")
+      .prefix(2)
+      .compactMap { $0.first }
+
+    let initials = String(parts)
+    if !initials.isEmpty {
+      return initials.uppercased()
+    }
+
+    return "OM"
+  }
+
+  private var profileMenuButton: some View {
+    Button {
+      isProfileMenuPresented.toggle()
+    } label: {
+      HStack(spacing: 12) {
+        ZStack {
+          Circle()
+            .fill(OmiColors.backgroundTertiary)
+            .frame(width: 30, height: 30)
+
+          Text(profileInitials)
+            .scaledFont(size: 11, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+        }
+
+        if !isCollapsed {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(profileDisplayName)
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+              .lineLimit(1)
+          }
+
+          Spacer(minLength: 8)
+
+          Image(systemName: "ellipsis")
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(
+            isProfileMenuPresented || isProfileButtonHovered
+              ? OmiColors.backgroundTertiary.opacity(0.55) : Color.clear
+          )
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      isProfileButtonHovered = hovering
+    }
+    .popover(isPresented: $isProfileMenuPresented, arrowEdge: .bottom) {
+      profileMenuPopover
+    }
+    .help("Open profile menu")
+  }
+
+  private var profileMenuPopover: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      VStack(spacing: 4) {
+        if shouldShowReferFriend {
+          ProfileMenuActionRow(icon: "gift.fill", label: "Refer a Friend") {
+            isProfileMenuPresented = false
+            openReferFriend()
+          }
+        }
+
+        ProfileMenuActionRow(icon: "message.fill", label: "Discord") {
+          isProfileMenuPresented = false
+          openDiscord()
+        }
+
+        ProfileMenuActionRow(
+          icon: "gearshape.fill",
+          label: "Settings",
+          isSelected: selectedIndex == SidebarNavItem.settings.rawValue
+        ) {
+          isProfileMenuPresented = false
+          selectedIndex = SidebarNavItem.settings.rawValue
+        }
+      }
+    }
+    .padding(10)
+    .frame(width: 220)
+    .background(OmiColors.backgroundPrimary)
+  }
+
+  private func openReferFriend() {
+    if let url = URL(string: "https://affiliate.omi.me") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
+  private func openDiscord() {
+    guard let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") else { return }
+    NSWorkspace.shared.open(url)
+  }
+
   // MARK: - Permission Warning Button
 
   // Check if any permission is specifically denied (not just missing)
   private var hasPermissionDenied: Bool {
     appState.isMicrophonePermissionDenied() || appState.isScreenRecordingPermissionDenied()
-      || appState.isNotificationPermissionDenied() || appState.isAccessibilityPermissionDenied()
+      || appState.isAccessibilityPermissionDenied()
   }
 
   @State private var permissionPulse = false
 
-  private var permissionWarningButton: some View {
+  private func updatePermissionPulse(_ denied: Bool) {
+    if denied {
+      withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+        permissionPulse = true
+      }
+    } else {
+      permissionPulse = false
+    }
+  }
+
+  private var permissionStatusSection: some View {
     VStack(spacing: 6) {
-      // Screen Recording permission (primary for Rewind)
-      // Also show if ScreenCaptureKit is broken (TCC says yes but SCK says no)
-      // or if permission is stale (developer signing changed)
-      if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken
-        || appState.isScreenRecordingStale
-      {
-        screenRecordingPermissionRow
+      if shouldShowScreenRecordingStatus {
+        screenRecordingPermissionRow(isExpanded: !isCollapsed)
       }
 
-      // Microphone permission
-      if !appState.hasMicrophonePermission {
-        microphonePermissionRow
+      if shouldShowMicrophoneStatus {
+        microphonePermissionRow(isExpanded: !isCollapsed)
       }
 
-      // Notification permission (show if disabled OR if banners are off)
-      if !appState.hasNotificationPermission || appState.isNotificationBannerDisabled {
-        notificationPermissionRow
-      }
-
-      // Accessibility permission (also show if broken: TCC says yes but AX calls fail)
-      if !appState.hasAccessibilityPermission || appState.isAccessibilityBroken {
-        accessibilityPermissionRow
-      }
-    }
-    .padding(.bottom, 8)
-    .onAppear {
-      // Start pulsing animation when denied
-      if hasPermissionDenied {
-        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-          permissionPulse = true
-        }
-      }
-    }
-    .onChange(of: hasPermissionDenied) { _, denied in
-      if denied {
-        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-          permissionPulse = true
-        }
-      } else {
-        permissionPulse = false
+      if shouldShowAccessibilityStatus {
+        accessibilityPermissionRow(isExpanded: !isCollapsed)
       }
     }
   }
 
-  private var screenRecordingPermissionRow: some View {
+  @ViewBuilder
+  private func screenRecordingPermissionRow(isExpanded: Bool) -> some View {
     let isDenied = appState.isScreenRecordingPermissionDenied()
     let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
     let isStale = appState.isScreenRecordingStale  // Developer signing changed
+    let isToggleable = appState.hasScreenRecordingPermission && !isBroken && !isStale
+    let isActive = screenAnalysisEnabled && isToggleable
     let needsReset = isBroken  // Show reset when broken (not stale — stale needs toggle off/on)
-    let color: Color = (isDenied || isBroken || isStale) ? .red : OmiColors.warning
+    let color: Color =
+      isToggleable
+      ? OmiColors.textSecondary
+      : ((isDenied || isBroken || isStale) ? .red : OmiColors.warning)
+    let titleColor: Color =
+      isToggleable ? OmiColors.textSecondary : color
 
-    return HStack(spacing: 8) {
+    let row = HStack(spacing: 8) {
       Image(
         systemName: (isDenied || isBroken || isStale)
           ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle"
@@ -889,184 +993,171 @@ struct SidebarView: View {
       .frame(width: iconWidth)
       .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
-      if !isCollapsed {
+      if isExpanded {
         Text("Screen Recording")
           .scaledFont(size: 13, weight: .medium)
-          .foregroundColor(color)
+          .foregroundColor(titleColor)
           .lineLimit(1)
 
         Spacer()
 
-        Button(action: {
-          if isStale {
-            // Stale/corrupted TCC — navigate to Permissions page with full instructions
-            selectedIndex = SidebarNavItem.permissions.rawValue
-          } else if needsReset {
-            // Track reset button click
-            AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
-            // Reset and restart to fix broken ScreenCaptureKit state
-            ScreenCaptureService.resetScreenCapturePermissionAndRestart()
-          } else {
-            // Open Settings FIRST so it's visible before system dialog steals focus
-            ScreenCaptureService.openScreenRecordingPreferences()
-            // Then request permissions (may show system dialog)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-              ScreenCaptureService.requestAllScreenCapturePermissions()
+        if isToggleable {
+          statusAccessoryToggle(isOn: isActive)
+        } else {
+          Button(action: {
+            if isStale {
+              // Stale/corrupted TCC — navigate to Permissions page with full instructions
+              selectedIndex = SidebarNavItem.permissions.rawValue
+            } else if needsReset {
+              // Track reset button click
+              AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
+              // Reset and restart to fix broken ScreenCaptureKit state
+              ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+            } else {
+              // Open Settings FIRST so it's visible before system dialog steals focus
+              ScreenCaptureService.openScreenRecordingPreferences()
+              // Then request permissions (may show system dialog)
+              DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+              }
+              // Track attempt — if still not granted on next check, show recovery instructions
+              appState.screenRecordingGrantAttempts += 1
             }
-            // Track attempt — if still not granted on next check, show recovery instructions
-            appState.screenRecordingGrantAttempts += 1
+          }) {
+            Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
+              .scaledFont(size: 11, weight: .semibold)
+              .foregroundColor(.white)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 4)
+              .background(
+                RoundedRectangle(cornerRadius: 6)
+                  .fill(color)
+              )
           }
-        }) {
-          Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-              RoundedRectangle(cornerRadius: 6)
-                .fill(color)
-            )
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 9)
+    .padding(.vertical, 7)
+    .frame(minHeight: 40)
     .background(
       RoundedRectangle(cornerRadius: 10)
-        .fill(color.opacity(permissionPulse && (isDenied || isBroken || isStale) ? 0.25 : 0.15))
-        .overlay(
-          RoundedRectangle(cornerRadius: 10)
-            .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken || isStale) ? 2 : 1)
+        .fill(
+          isToggleable
+            ? Color.clear
+            : color.opacity(permissionPulse && (isDenied || isBroken || isStale) ? 0.25 : 0.15)
         )
     )
     .help(
-      isCollapsed
-        ? (isStale
-          ? "Screen Recording needs re-enabling"
-          : (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required"))
-        : "")
+      isToggleable
+        ? (isActive
+          ? "Click to turn off Screen Recording monitoring"
+          : "Click to turn on Screen Recording monitoring")
+        : (isExpanded
+          ? ""
+          : (isStale
+            ? "Screen Recording needs re-enabling"
+            : (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required")))
+    )
+
+    if isToggleable {
+      Button(action: {
+        toggleMonitoring(enabled: !screenAnalysisEnabled)
+      }) {
+        row
+      }
+      .buttonStyle(.plain)
+    } else {
+      row
+    }
   }
 
-  private var microphonePermissionRow: some View {
+  @ViewBuilder
+  private func microphonePermissionRow(isExpanded: Bool) -> some View {
     let isDenied = appState.isMicrophonePermissionDenied()
-    let color: Color = isDenied ? .red : OmiColors.warning
+    let isToggleable = appState.hasMicrophonePermission
+    let isActive = transcriptionEnabled && isToggleable
+    let color: Color =
+      isToggleable
+      ? OmiColors.textSecondary
+      : (isDenied ? .red : OmiColors.warning)
+    let titleColor: Color =
+      isToggleable ? OmiColors.textSecondary : color
 
-    return HStack(spacing: 8) {
+    let row = HStack(spacing: 8) {
       Image(systemName: isDenied ? "mic.slash.fill" : "mic.fill")
         .scaledFont(size: 15)
         .foregroundColor(color)
         .frame(width: iconWidth)
         .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
 
-      if !isCollapsed {
+      if isExpanded {
         Text("Microphone")
           .scaledFont(size: 13, weight: .medium)
-          .foregroundColor(color)
+          .foregroundColor(titleColor)
           .lineLimit(1)
 
         Spacer()
 
-        Button(action: {
-          if isDenied {
-            // Go to permissions page for reset options
-            selectedIndex = SidebarNavItem.permissions.rawValue
-          } else {
-            // Request permission directly
-            appState.requestMicrophonePermission()
+        if isToggleable {
+          statusAccessoryToggle(isOn: isActive)
+        } else {
+          Button(action: {
+            if isDenied {
+              // Go to permissions page for reset options
+              selectedIndex = SidebarNavItem.permissions.rawValue
+            } else {
+              // Request permission directly
+              appState.requestMicrophonePermission()
+            }
+          }) {
+            Text(isDenied ? "Fix" : "Grant")
+              .scaledFont(size: 11, weight: .semibold)
+              .foregroundColor(.white)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 4)
+              .background(
+                RoundedRectangle(cornerRadius: 6)
+                  .fill(color)
+              )
           }
-        }) {
-          Text(isDenied ? "Fix" : "Grant")
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-              RoundedRectangle(cornerRadius: 6)
-                .fill(color)
-            )
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 9)
+    .padding(.vertical, 7)
+    .frame(minHeight: 40)
     .background(
       RoundedRectangle(cornerRadius: 10)
-        .fill(color.opacity(permissionPulse && isDenied ? 0.25 : 0.15))
-        .overlay(
-          RoundedRectangle(cornerRadius: 10)
-            .stroke(color.opacity(0.3), lineWidth: isDenied ? 2 : 1)
+        .fill(
+          isToggleable
+            ? Color.clear
+            : color.opacity(permissionPulse && isDenied ? 0.25 : 0.15)
         )
     )
-    .help(isCollapsed ? "Microphone permission required" : "")
-  }
+    .help(
+      isToggleable
+        ? (isActive
+          ? "Click to turn off Microphone transcription"
+          : "Click to turn on Microphone transcription")
+        : (isExpanded ? "" : "Microphone permission required")
+    )
 
-  private var notificationPermissionRow: some View {
-    let isDenied = appState.isNotificationPermissionDenied()
-    let isBannerDisabled = appState.isNotificationBannerDisabled
-    let needsAttention = isDenied || isBannerDisabled
-    let color: Color = needsAttention ? OmiColors.warning : OmiColors.warning
-
-    return HStack(spacing: 8) {
-      Image(
-        systemName: isDenied
-          ? "bell.slash.fill" : (isBannerDisabled ? "bell.badge.slash.fill" : "bell.fill")
-      )
-      .scaledFont(size: 15)
-      .foregroundColor(color)
-      .frame(width: iconWidth)
-      .scaleEffect(permissionPulse && needsAttention ? 1.1 : 1.0)
-
-      if !isCollapsed {
-        Text(isBannerDisabled ? "Banners Off" : "Notifications")
-          .scaledFont(size: 13, weight: .medium)
-          .foregroundColor(color)
-          .lineLimit(1)
-
-        Spacer()
-
-        Button(action: {
-          if isBannerDisabled {
-            // Banners are off — user needs to change notification style in System Settings
-            appState.openNotificationPreferences()
-          } else {
-            // Auth is not authorized — try lsregister repair first, then fall back to System Settings
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "sidebar_fix_button",
-              previousStatus: "not_authorized",
-              currentStatus: "not_authorized"
-            )
-            appState.repairNotificationAndFallback()
-          }
-        }) {
-          Text("Fix")
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-              RoundedRectangle(cornerRadius: 6)
-                .fill(color)
-            )
-        }
-        .buttonStyle(.plain)
+    if isToggleable {
+      Button(action: {
+        toggleTranscription(enabled: !transcriptionEnabled)
+      }) {
+        row
       }
+      .buttonStyle(.plain)
+    } else {
+      row
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 9)
-    .background(
-      RoundedRectangle(cornerRadius: 10)
-        .fill(color.opacity(permissionPulse && isDenied ? 0.25 : 0.15))
-        .overlay(
-          RoundedRectangle(cornerRadius: 10)
-            .stroke(color.opacity(0.3), lineWidth: isDenied ? 2 : 1)
-        )
-    )
-    .help(isCollapsed ? "Notification permission required" : "")
   }
 
-  private var accessibilityPermissionRow: some View {
+  private func accessibilityPermissionRow(isExpanded: Bool) -> some View {
     let isDenied = appState.isAccessibilityPermissionDenied()
     let isBroken = appState.isAccessibilityBroken  // TCC yes but AX calls fail
     let needsReset = isBroken  // Show reset when broken
@@ -1079,7 +1170,7 @@ struct SidebarView: View {
         .frame(width: iconWidth)
         .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
-      if !isCollapsed {
+      if isExpanded {
         Text("Accessibility")
           .scaledFont(size: 13, weight: .medium)
           .foregroundColor(color)
@@ -1110,7 +1201,8 @@ struct SidebarView: View {
       }
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 9)
+    .padding(.vertical, 7)
+    .frame(minHeight: 40)
     .background(
       RoundedRectangle(cornerRadius: 10)
         .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
@@ -1120,8 +1212,27 @@ struct SidebarView: View {
         )
     )
     .help(
-      isCollapsed
-        ? (isBroken ? "Accessibility needs reset" : "Accessibility permission required") : "")
+      isExpanded
+        ? "" : (isBroken ? "Accessibility needs reset" : "Accessibility permission required"))
+  }
+
+  private func statusAccessoryToggle(isOn: Bool) -> some View {
+    ZStack(alignment: isOn ? .trailing : .leading) {
+      Capsule()
+        .fill(
+          isOn
+            ? OmiColors.success.opacity(0.9) : OmiColors.backgroundQuaternary.opacity(0.9)
+        )
+        .frame(width: 30, height: 18)
+
+      Circle()
+        .fill(.white.opacity(isOn ? 0.98 : 0.92))
+        .frame(width: 14, height: 14)
+        .padding(2)
+    }
+    .padding(.trailing, 2)
+    .animation(.easeInOut(duration: 0.16), value: isOn)
+    .accessibilityHidden(true)
   }
 
   // MARK: - Toggle Handlers
@@ -1698,6 +1809,47 @@ struct BottomNavItemView: View {
     .accessibilityAddTraits(.isButton)
     .accessibilityIdentifier(
       "sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
+  }
+}
+
+private struct ProfileMenuActionRow: View {
+  let icon: String
+  let label: String
+  var isSelected: Bool = false
+  let action: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 10) {
+        Image(systemName: icon)
+          .scaledFont(size: 14)
+          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .frame(width: 16)
+
+        Text(label)
+          .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
+          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+
+        Spacer()
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 9)
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(
+            isSelected
+              ? OmiColors.backgroundSecondary
+              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.6) : Color.clear)
+          )
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      isHovered = hovering
+    }
   }
 }
 

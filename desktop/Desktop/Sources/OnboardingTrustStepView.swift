@@ -23,10 +23,15 @@ struct OnboardingTrustStepView: View {
     ) {
       VStack(spacing: 18) {
         VStack(alignment: .leading, spacing: 12) {
-          permissionRow(icon: "display", title: "Screen + files", detail: "Build context from what you’re working on.")
-          permissionRow(icon: "mic.fill", title: "Microphone", detail: "Capture voice notes and meeting context.")
-          permissionRow(icon: "sparkles", title: "Accessibility + automation", detail: "Know the active app and act when you ask.")
-          permissionRow(icon: "bell.badge.fill", title: "Notifications", detail: "Send useful reminders instead of generic noise.")
+          permissionRow(
+            icon: "display", title: "Screen + files",
+            detail: "Build context from what you’re working on.")
+          permissionRow(
+            icon: "mic.fill", title: "Microphone",
+            detail: "Capture voice notes and meeting context.")
+          permissionRow(
+            icon: "sparkles", title: "Accessibility + automation",
+            detail: "Know the active app and act when you ask.")
         }
         .frame(maxWidth: 560, alignment: .leading)
 

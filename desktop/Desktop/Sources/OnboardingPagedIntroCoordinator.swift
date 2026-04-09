@@ -426,8 +426,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return appState.hasFullDiskAccess
     case "microphone":
       return appState.hasMicrophonePermission
-    case "notifications":
-      return appState.hasNotificationPermission
     case "accessibility":
       return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
     case "automation":
@@ -560,7 +558,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           projectScores[project, default: 0] += 1
         }
 
-        let projects = projectScores
+        let projects =
+          projectScores
           .sorted {
             if $0.value == $1.value {
               return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
@@ -1090,7 +1089,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    let cleaned = trimmed
+    let cleaned =
+      trimmed
       .replacingOccurrences(of: "\n", with: " ")
       .replacingOccurrences(of: "  ", with: " ")
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1328,7 +1328,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private func buildLocalFileMemoryDrafts(from snapshot: ScanSnapshot) async -> [MemoryDraft] {
     var drafts: [MemoryDraft] = [
       MemoryDraft(
-        content: "The user has \(snapshot.fileCount.formatted()) local files indexed across their machine.",
+        content:
+          "The user has \(snapshot.fileCount.formatted()) local files indexed across their machine.",
         tags: ["local_files", "onboarding", "profile"],
         source: "local_files",
         headline: "Local Files Overview"
@@ -1417,7 +1418,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         drafts.append(contentsOf: projectDrafts)
       } catch {
-        log("OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
+        log(
+          "OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
       }
     }
 
@@ -1539,7 +1541,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let components = normalized.split(separator: "/").map(String.init)
 
     func component(after name: String) -> String? {
-      guard let index = components.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }),
+      guard
+        let index = components.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }
+        ),
         index + 1 < components.count
       else {
         return nil
