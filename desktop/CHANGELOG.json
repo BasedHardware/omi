@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed call recordings being labeled as a single speaker by re-enabling system audio capture (now with drift compensation, no more crackling)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.275",
+      "date": "2026-04-09",
+      "changes": [
+        "Fixed call recordings being labeled as a single speaker by re-enabling system audio capture (now with drift compensation, no more crackling)"
+      ]
+    },
     {
       "version": "0.11.273",
       "date": "2026-04-09",
