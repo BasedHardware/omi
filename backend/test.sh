@@ -78,6 +78,7 @@ pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_vision_stream_async.py -v
 pytest tests/unit/test_desktop_transcribe.py -v
 pytest tests/unit/test_desktop_migration.py -v
+pytest tests/unit/test_staged_tasks_batch_scores.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
