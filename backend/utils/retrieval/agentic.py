@@ -401,11 +401,9 @@ async def _run_anthropic_agent_stream(
                     # Emit status when tool call starts
                     elif event.type == "content_block_start":
                         if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
-                            # Server tools (web_search, tool_search) — handled by Anthropic
                             server_tool_name = getattr(event.content_block, 'name', '')
-                            display_name = get_tool_display_name(server_tool_name)
-                            if 'tool_search' not in server_tool_name:
-                                await callback.put_thought(display_name)
+                            if server_tool_name == 'web_search':
+                                await callback.put_thought('Searching the web')
                             logger.info(f"Server tool invoked: {server_tool_name}")
                         elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
                             tool_name = event.content_block.name

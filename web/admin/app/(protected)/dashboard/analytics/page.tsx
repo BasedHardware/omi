@@ -11,7 +11,7 @@ import {
   Activity,
   Zap,
   Target,
-  BarChart3,
+  Monitor,
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -31,6 +31,8 @@ import {
   ComposedChart,
   ReferenceLine,
   Cell,
+  PieChart,
+  Pie,
 } from "recharts";
 import {
   Select,
@@ -154,6 +156,19 @@ interface ViralMetrics {
   };
 }
 
+interface MacosVersionBreakdown {
+  label: string;
+  value: number;
+  color: string;
+}
+
+interface MacosVersionStatsData {
+  date: string;
+  activeUsers: number;
+  channelBreakdown: MacosVersionBreakdown[];
+  versionBreakdown: MacosVersionBreakdown[];
+}
+
 // --- Helpers ---
 
 const authFetcher = authenticatedFetcher;
@@ -250,6 +265,9 @@ export default function AnalyticsPage() {
   const { data: viralMetrics, isLoading: viralLoading } =
     useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", token] : null, authFetcher, swrOpts);
 
+  const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
+    useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
+
   const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
 
   const { data: mixpanelRetention, isLoading: mixpanelRetLoading } =
@@ -301,6 +319,8 @@ export default function AnalyticsPage() {
   const overallRatio = totalRatings > 0 ? Math.round((totalThumbsUp / totalRatings) * 100) : 0;
   const fbUsageData = floatingBarUsage?.data ?? [];
   const fbSummary = floatingBarUsage?.summary;
+  const macosChannelData = macosVersionStats?.channelBreakdown ?? [];
+  const macosVersionData = macosVersionStats?.versionBreakdown ?? [];
 
   // 7-day rolling average for daily new users
   const dailyWithRollingAvg = useMemo(() => {
@@ -526,6 +546,142 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Bar Sessions per User */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h2 className="text-lg font-semibold">macOS Active Versions</h2>
+            <p className="text-sm text-muted-foreground">
+              Active users for {macosVersionStats?.date ?? "today"}, split by release channel and app version
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">{macosVersionStats?.activeUsers?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">active macOS users today</p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">Beta vs Production</h3>
+            <div className="h-[280px]">
+              {macosVersionStatsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : macosChannelData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No active-user channel data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={macosChannelData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      paddingAngle={3}
+                      dataKey="value"
+                      nameKey="label"
+                      label={({ label, percent }) => `${label} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {macosChannelData.map((entry) => (
+                        <Cell key={entry.label} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                        Number(value).toLocaleString(),
+                        entry?.payload?.label ?? "Users",
+                      ]}
+                      contentStyle={tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">By Version</h3>
+            <div className="h-[280px]">
+              {macosVersionStatsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : macosVersionData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No active-user version data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={macosVersionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      paddingAngle={2}
+                      dataKey="value"
+                      nameKey="label"
+                    >
+                      {macosVersionData.map((entry) => (
+                        <Cell key={entry.label} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                        Number(value).toLocaleString(),
+                        entry?.payload?.label ?? "Version",
+                      ]}
+                      contentStyle={tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] mt-4">
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Monitor className="h-4 w-4 text-muted-foreground" />
+              <h3 className="font-medium">Channel Counts</h3>
+            </div>
+            <div className="space-y-3">
+              {macosChannelData.map((entry) => (
+                <div key={entry.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-sm">{entry.label}</span>
+                  </div>
+                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <h3 className="font-medium mb-3">Version Counts</h3>
+            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+              {macosVersionData.map((entry) => (
+                <div key={entry.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-sm">{entry.label}</span>
+                  </div>
+                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* Floating Bar Sessions per User */}
       <Card className="p-6">

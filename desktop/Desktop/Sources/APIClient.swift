@@ -321,7 +321,7 @@ extension APIClient {
 
   /// Fetches a single conversation by ID
   func getConversation(id: String) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)")
+    return try await get("v1/conversations/\(id)", customBaseURL: pythonBackendURL)
   }
 
   /// Deletes a conversation by ID
@@ -826,6 +826,12 @@ struct Event: Codable, Identifiable, Equatable {
   }
 }
 
+/// Translation from backend
+struct TranscriptTranslation: Codable {
+  let lang: String
+  let text: String
+}
+
 struct TranscriptSegment: Codable, Identifiable {
   let id: String
   let backendId: String?
@@ -835,6 +841,7 @@ struct TranscriptSegment: Codable, Identifiable {
   let personId: String?
   let start: Double
   let end: Double
+  let translations: [TranscriptTranslation]
 
   var speakerId: Int {
     guard let speaker = speaker else { return 0 }
@@ -849,7 +856,7 @@ struct TranscriptSegment: Codable, Identifiable {
     case id, text, speaker
     case isUser = "is_user"
     case personId = "person_id"
-    case start, end
+    case start, end, translations
   }
 
   init(from decoder: Decoder) throws {
@@ -863,6 +870,8 @@ struct TranscriptSegment: Codable, Identifiable {
     personId = try container.decodeIfPresent(String.self, forKey: .personId)
     start = try container.decodeIfPresent(Double.self, forKey: .start) ?? 0
     end = try container.decodeIfPresent(Double.self, forKey: .end) ?? 0
+    translations =
+      try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
   }
 
   /// Memberwise initializer for creating from local storage
@@ -874,7 +883,8 @@ struct TranscriptSegment: Codable, Identifiable {
     isUser: Bool,
     personId: String?,
     start: Double,
-    end: Double
+    end: Double,
+    translations: [TranscriptTranslation] = []
   ) {
     self.id = id
     self.backendId = backendId
@@ -884,6 +894,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.personId = personId
     self.start = start
     self.end = end
+    self.translations = translations
   }
 
   /// Formatted timestamp string (e.g., "00:01:30 - 00:01:45")
