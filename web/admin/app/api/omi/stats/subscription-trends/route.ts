@@ -93,6 +93,13 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscription trends:', results[1].reason);
     }
 
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All subscription trend data sources failed' },
+        { status: 502 }
+      );
+    }
+
     // Group subscriptions by month created
     const monthlyTrends: Record<string, number> = {};
     const annualTrends: Record<string, number> = {};
