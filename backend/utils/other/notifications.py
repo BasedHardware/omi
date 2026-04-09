@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, time, timedelta
 
-from utils.executors import critical_executor
+from utils.executors import storage_executor
 
 import pytz
 
@@ -157,8 +157,8 @@ def _send_summary_notification(user_data: tuple):
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    # Also send webhook with the full summary data
-    critical_executor.submit(day_summary_webhook, uid, str(summary_data))
+    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run)
+    storage_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -168,7 +168,7 @@ def _send_summary_notification(user_data: tuple):
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
-    tasks = [loop.run_in_executor(critical_executor, _send_summary_notification, user_tokens) for user_tokens in users]
+    tasks = [loop.run_in_executor(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
     await asyncio.gather(*tasks)
 
 
