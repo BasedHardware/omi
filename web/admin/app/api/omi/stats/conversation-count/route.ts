@@ -20,11 +20,7 @@ export async function GET(request: NextRequest) {
 
   if (!TYPESENSE_HOST || !TYPESENSE_API_KEY) {
     console.error('TYPESENSE_HOST or TYPESENSE_API_KEY environment variables are not set.');
-    // Use NextResponse for App Router
-    return NextResponse.json(
-        { message: 'Server configuration error: Typesense is not configured.' }, 
-        { status: 500 }
-    );
+    return NextResponse.json({ totalConversations: 0, unavailable: true });
   }
 
   const typesenseUrl = TYPESENSE_HOST!.startsWith('https://') || TYPESENSE_HOST!.startsWith('http://')
@@ -93,4 +89,4 @@ export async function GET(request: NextRequest) {
 }
 
 // Optional: You can define other methods like POST, PUT, DELETE as needed
-// export async function POST(request: Request) { ... } 
+// export async function POST(request: Request) { ... }

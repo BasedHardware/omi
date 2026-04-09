@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
+import { getOptionalStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
   try {
+    const stripe = getOptionalStripe();
     const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
-    if (!monthlyPriceId || !annualPriceId) {
-      return NextResponse.json(
-        { error: 'Stripe price IDs not configured' },
-        { status: 500 }
-      );
+    if (!stripe || !monthlyPriceId || !annualPriceId) {
+      return NextResponse.json({ mrr: 0, arr: 0, unavailable: true });
     }
 
     // Fetch all active subscriptions with pagination

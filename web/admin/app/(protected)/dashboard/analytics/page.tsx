@@ -12,6 +12,11 @@ import {
   Zap,
   Target,
   Monitor,
+  Bell,
+  BellOff,
+  Send,
+  MousePointerClick,
+  Percent,
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -120,6 +125,57 @@ interface FloatingBarUsageData {
   };
 }
 
+interface NotificationDailyData {
+  date: string;
+  mentorSent: number;
+  marketplaceMentorSent: number;
+  uniqueUsersMentor: number;
+  uniqueUsersMarketplace: number;
+}
+
+interface NotificationWeeklyData {
+  week: string;
+  mentorSent: number;
+  marketplaceMentorSent: number;
+  uniqueUsersMentor: number;
+  uniqueUsersMarketplace: number;
+}
+
+interface NotificationHourlyData {
+  hour: string;
+  mentor: number;
+  marketplace: number;
+  total: number;
+}
+
+interface NotificationStats {
+  dailyData: NotificationDailyData[];
+  weeklyData: NotificationWeeklyData[];
+  hourlyData: NotificationHourlyData[];
+  floatingBarCtr: {
+    dailyData: {
+      date: string;
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+    }[];
+    summary: {
+      sent: number;
+      clicked: number;
+      dismissed: number;
+      ctr: number;
+      uniqueClickers: number;
+      mode: "surface_tagged" | "all_notifications_fallback";
+    };
+  } | null;
+  enabledDisabled: {
+    enabled: number;
+    disabled: number;
+    total: number;
+  };
+}
+
 interface DauTrendsData {
   data: { date: string; dau: number }[];
   days: number;
@@ -215,6 +271,35 @@ function fullDate(v: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatWeek(v: string): string {
+  const d = new Date(v + "T00:00:00Z");
+  return `W/O ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function weekStartKey(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  const weekStart = new Date(d);
+  weekStart.setUTCDate(diff);
+  return weekStart.toISOString().split("T")[0];
+}
+
+function formatHourKey(v: string): string {
+  const d = new Date(v + ":00:00Z");
+  const mon = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const hour = d.getUTCHours();
+  const label = hour === 0 ? "12am" : hour === 12 ? "12pm" : hour < 12 ? `${hour}am` : `${hour - 12}pm`;
+  return `${mon} ${label}`;
+}
+
+function formatHourTick(v: string): string {
+  const d = new Date(v + ":00:00Z");
+  return d.getUTCHours() === 0
+    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    : "";
+}
+
 const tooltipStyle = {
   backgroundColor: "hsl(var(--card))",
   border: "1px solid hsl(var(--border))",
@@ -261,6 +346,9 @@ export default function AnalyticsPage() {
 
   const { data: floatingBarUsage, isLoading: fbUsageLoading } =
     useSWR<FloatingBarUsageData>(token ? ["/api/omi/stats/floating-bar-usage?days=30", token] : null, authFetcher, swrOpts);
+
+  const { data: notificationStats, isLoading: notificationStatsLoading } =
+    useSWR<NotificationStats>(token ? ["/api/omi/stats/notifications?days=30", token] : null, authFetcher, swrOpts);
 
   const { data: viralMetrics, isLoading: viralLoading } =
     useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", token] : null, authFetcher, swrOpts);
@@ -319,8 +407,49 @@ export default function AnalyticsPage() {
   const overallRatio = totalRatings > 0 ? Math.round((totalThumbsUp / totalRatings) * 100) : 0;
   const fbUsageData = floatingBarUsage?.data ?? [];
   const fbSummary = floatingBarUsage?.summary;
+  const notificationDailyData = notificationStats?.dailyData ?? [];
+  const notificationWeeklyData = notificationStats?.weeklyData ?? [];
+  const notificationHourlyData = notificationStats?.hourlyData ?? [];
+  const notificationEnabledDisabled = notificationStats?.enabledDisabled;
+  const floatingBarCtr = notificationStats?.floatingBarCtr;
   const macosChannelData = macosVersionStats?.channelBreakdown ?? [];
   const macosVersionData = macosVersionStats?.versionBreakdown ?? [];
+  const notificationLast7Days = notificationDailyData.slice(-7);
+  const notificationMentorLast7 = notificationLast7Days.reduce((sum, day) => sum + day.mentorSent, 0);
+  const notificationMarketplaceLast7 = notificationLast7Days.reduce((sum, day) => sum + day.marketplaceMentorSent, 0);
+  const floatingBarCtrSummary = floatingBarCtr?.summary;
+  const notificationDailyCombined = notificationDailyData.map((day) => ({
+    ...day,
+    totalSent: day.mentorSent + day.marketplaceMentorSent,
+    totalUsers: Math.max(day.uniqueUsersMentor, day.uniqueUsersMarketplace),
+  }));
+  const notificationWeeklyCombined = notificationWeeklyData.map((week) => ({
+    ...week,
+    totalSent: week.mentorSent + week.marketplaceMentorSent,
+    totalUniqueUsers: week.uniqueUsersMentor + week.uniqueUsersMarketplace,
+  }));
+  const weeklyRatingsData = useMemo(() => {
+    const buckets = new Map<string, { thumbs_up: number; thumbs_down: number }>();
+    for (const point of ratingsData) {
+      const key = weekStartKey(point.date);
+      const bucket = buckets.get(key) ?? { thumbs_up: 0, thumbs_down: 0 };
+      bucket.thumbs_up += point.thumbs_up;
+      bucket.thumbs_down += point.thumbs_down;
+      buckets.set(key, bucket);
+    }
+
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, counts]) => {
+        const total = counts.thumbs_up + counts.thumbs_down;
+        return {
+          week,
+          thumbs_up: counts.thumbs_up,
+          thumbs_down: counts.thumbs_down,
+          ratio: total > 0 ? Math.round((counts.thumbs_up / total) * 100) : 0,
+        };
+      });
+  }, [ratingsData]);
 
   // 7-day rolling average for daily new users
   const dailyWithRollingAvg = useMemo(() => {
@@ -732,6 +861,226 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
+      <h2 className="text-2xl font-bold tracking-tight pt-4">Notification Analytics</h2>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Notifications Enabled</CardTitle>
+            <Bell className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">
+              {notificationEnabledDisabled
+                ? `of ${notificationEnabledDisabled.total.toLocaleString()} users (${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%)`
+                : "Loading notification adoption"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Notifications Disabled</CardTitle>
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"}</div>
+            <p className="text-xs text-muted-foreground">Explicitly disabled desktop notifications</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">"Omi says" Sent (7d)</CardTitle>
+            <Send className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationMentorLast7.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Built-in mentor notifications</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Marketplace Mentor (7d)</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{notificationMarketplaceLast7.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Marketplace "Omi Mentor" app</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Floating Bar Clicks</CardTitle>
+            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{floatingBarCtrSummary?.clicked?.toLocaleString() ?? "0"}</div>
+            <p className="text-xs text-muted-foreground">Explicit notification opens from the floating bar</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Floating Bar CTR</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{floatingBarCtrSummary ? `${floatingBarCtrSummary.ctr.toFixed(1)}%` : "0.0%"}</div>
+            <p className="text-xs text-muted-foreground">
+              {floatingBarCtrSummary
+                ? floatingBarCtrSummary.mode === "surface_tagged"
+                  ? `${floatingBarCtrSummary.sent.toLocaleString()} tagged sends, ${floatingBarCtrSummary.uniqueClickers.toLocaleString()} unique clickers`
+                  : `Fallback: all desktop notifications, ${floatingBarCtrSummary.sent.toLocaleString()} sent`
+                : "Waiting for new surface-tagged events"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Daily Notifications Sent</h2>
+        <div className="h-[350px]">
+          {notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={notificationDailyCombined}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar dataKey="mentorSent" name="Omi says (built-in)" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar dataKey="marketplaceMentorSent" name="Marketplace Mentor" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Notifications Sent, Last 168 Hours</h2>
+          <p className="text-sm text-muted-foreground mb-4">Hourly volume, with dates marked at midnight UTC.</p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={notificationHourlyData} barCategoryGap={0} barGap={0}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="hour" tickFormatter={formatHourTick} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} interval={0} minTickGap={40} />
+                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip labelFormatter={(value) => formatHourKey(value as string)} contentStyle={tooltipStyle} />
+                  <Legend />
+                  <Bar dataKey="mentor" name="Omi Says" fill="#6366f1" stackId="a" />
+                  <Bar dataKey="marketplace" name="Marketplace Mentor" fill="#f59e0b" stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Floating Bar Notification CTR</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            {floatingBarCtrSummary?.mode === "surface_tagged"
+              ? "Sent vs clicked proactive notifications in the desktop floating bar."
+              : "Surface-tagged floating-bar events are not populated yet, so this is currently using all desktop notification clicks as a fallback."}
+          </p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={floatingBarCtr?.dailyData ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    labelFormatter={fullDate}
+                    formatter={(value: number, name: string) => name === "CTR" ? [`${value}%`, name] : [value.toLocaleString(), name]}
+                    contentStyle={tooltipStyle}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="sent" name="Sent" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="clicked" name="Clicked" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Weekly Notification Reach</h2>
+          <p className="text-sm text-muted-foreground mb-4">Volume and unique recipients in one view.</p>
+          <div className="h-[320px]">
+            {notificationStatsLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={notificationWeeklyCombined}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="week" tickFormatter={formatWeek} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip labelFormatter={formatWeek} contentStyle={tooltipStyle} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="mentorSent" name="Omi says sent" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                  <Bar yAxisId="left" dataKey="marketplaceMentorSent" name="Marketplace sent" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMarketplace" name="Marketplace unique users" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold mb-1">Notification Settings</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Based on the desktop <code className="text-xs">notifications_enabled</code> toggle. Missing values default to enabled.
+          </p>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Enabled share</div>
+                  <div className="text-3xl font-semibold">
+                    {notificationEnabledDisabled ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%` : "--"}
+                  </div>
+                </div>
+                <div className="text-right text-sm text-muted-foreground">
+                  <div>{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"} enabled</div>
+                  <div>{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"} disabled</div>
+                </div>
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-green-500"
+                  style={{
+                    width: notificationEnabledDisabled
+                      ? `${(notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100}%`
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       {/* Message Ratings — macOS Floating Bar */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">
@@ -743,46 +1092,35 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-4">
-          Daily thumbs up/down from macOS floating bar (last 30 days)
+          Weekly thumbs up/down from macOS floating bar. The overall positive rate is shown above.
         </p>
         <div className="h-[300px]">
           {ratingsLoading ? (
             <div className="h-full flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : ratingsData.length === 0 ? (
+          ) : weeklyRatingsData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               No rating data yet
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={ratingsData}>
+              <BarChart data={weeklyRatingsData}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis
-                  dataKey="date"
-                  tickFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
+                  dataKey="week"
+                  tickFormatter={formatWeek}
                   tick={{ fontSize: 11 }}
                 />
-                <YAxis yAxisId="count" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="ratio" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip
-                  labelFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-                  }}
-                  formatter={(value: number, name: string) => {
-                    if (name === "ratio") return [`${value}%`, "Positive %"];
-                    return [value, name === "thumbs_up" ? "Thumbs Up" : "Thumbs Down"];
-                  }}
+                  labelFormatter={formatWeek}
+                  formatter={(value: number, name: string) => [value, name === "thumbs_up" ? "Thumbs Up" : "Thumbs Down"]}
                 />
                 <Legend />
-                <Bar yAxisId="count" dataKey="thumbs_up" name="Thumbs Up" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Bar yAxisId="count" dataKey="thumbs_down" name="Thumbs Down" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="ratio" dataKey="ratio" name="ratio" stroke="#6366f1" strokeWidth={2} dot={false} />
-              </ComposedChart>
+                <Bar dataKey="thumbs_up" name="Thumbs Up" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="thumbs_down" name="Thumbs Down" fill="#ef4444" radius={[2, 2, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           )}
         </div>
