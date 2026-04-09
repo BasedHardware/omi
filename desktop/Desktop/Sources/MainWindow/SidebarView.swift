@@ -67,7 +67,7 @@ enum SidebarNavItem: Int, CaseIterable {
 
   /// Items shown in the main navigation (top section)
   static var mainItems: [SidebarNavItem] {
-    [.dashboard, .chat, .memories, .tasks, .rewind, .apps]
+    [.dashboard, .conversations, .memories, .tasks, .rewind, .apps]
   }
 }
 

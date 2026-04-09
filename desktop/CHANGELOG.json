@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Replaced Conversations on Dashboard with embedded Chat (Ask omi anything) and moved the Conversations list to its own sidebar page"
+  ],
   "releases": [
     {
       "version": "0.11.275",
