@@ -102,12 +102,14 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate combined totals
+    const partial = results.some((r) => r.status === 'rejected');
     const totalMRR = monthlyMRR + annualMRR;
     const totalARR = monthlyARR + annualARR;
 
     return NextResponse.json({
       mrr: totalMRR,
       arr: totalARR,
+      partial,
     });
   } catch (error) {
     console.error('Error calculating revenue metrics:', error);
