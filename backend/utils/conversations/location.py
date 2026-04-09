@@ -6,7 +6,7 @@ from typing import Optional
 import requests
 
 from database.redis_db import r
-from models.conversation import Geolocation
+from models.geolocation import Geolocation
 
 logger = logging.getLogger(__name__)
 

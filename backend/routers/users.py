@@ -40,7 +40,8 @@ from database.users import (
 )
 from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
-from models.conversation import Geolocation, Conversation
+from models.conversation import Conversation
+from models.geolocation import Geolocation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod

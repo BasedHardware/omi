@@ -7,7 +7,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
-from models.conversation import Structured
+from models.structured import Structured
 from utils.llm.usage_tracker import get_usage_callback
 
 # Anthropic client for chat agent

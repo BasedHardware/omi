@@ -3,7 +3,8 @@ from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
 import database.users as users_db
-from models.conversation import Structured, Conversation
+from models.conversation import Conversation
+from models.structured import Structured
 from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
 from utils.llm.usage_tracker import track_usage, Features

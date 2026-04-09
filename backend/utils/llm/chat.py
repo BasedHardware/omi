@@ -15,7 +15,10 @@ from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
-from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.conversation import Conversation
+from models.conversation_enums import CategoryEnum
+from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
