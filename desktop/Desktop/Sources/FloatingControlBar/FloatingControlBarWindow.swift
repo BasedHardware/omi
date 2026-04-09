@@ -1182,7 +1182,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationClicked(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         notificationDismissWorkItem?.cancel()
@@ -1205,7 +1206,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationSent(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         let dismissWorkItem = DispatchWorkItem { [weak self] in
@@ -1225,7 +1227,8 @@ class FloatingControlBarManager {
             AnalyticsManager.shared.notificationDismissed(
                 notificationId: dismissedNotification.id.uuidString,
                 title: dismissedNotification.title,
-                assistantId: dismissedNotification.assistantId
+                assistantId: dismissedNotification.assistantId,
+                surface: "floating_bar"
             )
         }
 

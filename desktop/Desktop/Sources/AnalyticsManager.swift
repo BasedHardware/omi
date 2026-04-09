@@ -770,25 +770,25 @@ class AnalyticsManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String) {
+  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String) {
+  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String) {
+  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
     MixpanelManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId)
+      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
