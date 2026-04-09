@@ -251,7 +251,7 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
   // Tool order follows backend CORE_TOOLS for prompt cache stability.
   {
     name: "get_conversations",
-    description: `Retrieve user conversations from the Omi backend with transcripts, summaries, and metadata.
+    description: `Retrieve user conversations from the Omi backend with summaries, action items, and metadata.
 
 Use when:
 - User asks about recent conversations, what they discussed, or needs conversation details
@@ -266,7 +266,7 @@ Don't use when:
 Parameter guidance:
 - start_date/end_date: MUST be ISO format with timezone offset (e.g. 2024-01-19T15:00:00-08:00). Always include timezone.
 - limit: default 20. For summaries/recaps, set limit=5000 to get all conversations in the range.
-- include_transcript: default true. Enables transcript-derived summaries and action items. Set false for faster, lighter results when only metadata is needed.
+- include_transcript: default true. When true, loads speaker data for attendee names. Summaries and action items are always included regardless. Set false to skip speaker processing for faster results.
 - Prefer narrower time windows first (hours > day > week > month) for better relevance.`,
     inputSchema: {
       type: "object" as const,
@@ -275,7 +275,7 @@ Parameter guidance:
         end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T23:59:59-08:00)" },
         limit: { type: "number" as const, description: "Number of conversations: 20 default, 5000 for summaries/recaps" },
         offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
-        include_transcript: { type: "boolean" as const, description: "Process transcript data for summaries/action items (default: true). Set false for faster, lighter results." },
+        include_transcript: { type: "boolean" as const, description: "Load speaker/attendee data (default: true). Summaries and action items always included. Set false to skip speaker processing." },
       },
       required: [],
     },
@@ -306,7 +306,7 @@ Parameter guidance:
 - query: Descriptive phrase about the event or concept — semantic search works best with natural language.
 - start_date/end_date: ISO format with timezone offset. Use to narrow the time range when known.
 - limit: default 5, max 20. Usually 5 is enough for specific events.
-- include_transcript: default true. Includes transcript-derived summaries. Set false for faster, lighter results.`,
+- include_transcript: default true. Loads speaker/attendee data. Summaries and action items are always included. Set false to skip speaker processing for speed.`,
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -314,7 +314,7 @@ Parameter guidance:
         start_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T00:00:00+07:00)" },
         end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-31T23:59:59+07:00)" },
         limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
-        include_transcript: { type: "boolean" as const, description: "Include transcript-derived summaries (default: true). Set false for lighter results." },
+        include_transcript: { type: "boolean" as const, description: "Load speaker/attendee data (default: true). Set false to skip." },
       },
       required: ["query"],
     },
