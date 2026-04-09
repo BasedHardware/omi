@@ -924,6 +924,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final indentWidth = indentLevel * 28.0;
     final isHovered = _hoveredItemId == item.id;
 
+    // Capture the DragTarget's own BuildContext so onMove uses the item's
+    // RenderBox rather than the page-level RenderBox.
+    BuildContext? itemContext;
+
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
         // Accept if it's a different item
@@ -942,10 +946,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         }
       },
       onMove: (details) {
-        // Determine if hovering on top or bottom half
-        final RenderBox box = context.findRenderObject() as RenderBox;
+        // Use the item's own RenderBox (captured from builder) so the
+        // above/below threshold is relative to the item, not the page.
+        final box = (itemContext ?? context).findRenderObject() as RenderBox?;
+        if (box == null) return;
         final localPosition = box.globalToLocal(details.offset);
-        final isAbove = localPosition.dy < 20;
+        final isAbove = localPosition.dy < box.size.height / 2;
 
         if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
           setState(() {
@@ -961,7 +967,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           });
         }
       },
-      builder: (context, candidateData, rejectedData) {
+      builder: (ctx, candidateData, rejectedData) {
+        itemContext = ctx;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
