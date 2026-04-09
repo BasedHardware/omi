@@ -593,6 +593,12 @@ struct MessageMetadataPopover: View {
                                 .foregroundColor(.secondary)
                                 .textSelection(.enabled)
                         }
+                        if metadata.sqlQueryCount > 0 {
+                            metadataRow(
+                                label: "SQL queries",
+                                value: "\(metadata.sqlQueryCount) queries, \(metadata.sqlRowsReturned) rows returned"
+                            )
+                        }
                     }
                 }
 
