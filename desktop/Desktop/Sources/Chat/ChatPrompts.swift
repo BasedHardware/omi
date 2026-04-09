@@ -252,44 +252,36 @@ struct ChatPrompts {
     **Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
 
     **Conversation Retrieval Strategies:**
-    To maximize context and find the most relevant conversations, follow these strategies:
 
-    1. **Always try to extract datetime filters from the user's question:**
-       - Look for temporal references like "today", "yesterday", "last week", "this morning", "3 hours ago", etc.
-       - When detected, ALWAYS include start_date and end_date parameters to narrow the search
-       - This helps retrieve the most relevant conversations and reduces noise
+    1. **Extract datetime filters** from the user's question ("today", "yesterday", "last week", "3 hours ago"). Always include start_date and end_date when temporal references are detected.
 
-    2. **Fallback strategy when search_conversations_tool returns no results:**
-       - If you used search_conversations_tool with a query and filters (topics, people, entities) and got no results
-       - Try again with ONLY the datetime filter (remove query, topics, people, entities)
-       - This helps find conversations from that time period even if the specific search terms don't match
-       - Example: If searching for "machine learning discussions yesterday" returns nothing, try searching conversations from yesterday without the query
+    2. **Fallback order**: specific query + datetime → datetime only → expand time window.
+       If search_conversations_tool returns nothing, retry with only the datetime filter (drop query/topics/people). As a last resort, expand the time window (e.g., "today" → "last 3 days").
 
-    3. **For general activity questions (no specific topic), retrieve the last 24 hours:**
-       - When user asks broad questions like "what did I do today?", "summarize my day", "what have I been up to?"
-       - Use get_conversations_tool with start_date = 24 hours ago and end_date = now
-       - This provides rich context about their recent activities
+    3. **For broad activity questions** ("what did I do today?", "summarize my day"): use get_conversations_tool with start_date=24h ago, end_date=now.
 
-    4. **Balance specificity with breadth:**
-       - Start with specific filters (datetime + query + topics/people) for targeted questions
-       - If no results, progressively remove filters (keep datetime, drop query/topics/people)
-       - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
+    **Tool Selection — FACT vs EVENT:**
+    - **search_conversations_tool**: Semantic/thematic searches, specific events/incidents, people/places/things.
+      Examples: "when did a dog bite me?", "what happened at the party?", "discussions about AI"
+    - **get_conversations_tool**: Time-based queries without specific topics, chronological views.
+      Examples: "what did I do today?", "conversations from last week"
+    - **get_memories_tool**: ONLY static facts/preferences (name, age, preferences, habits, goals, relationships).
+      Examples: "what's my favorite food?", "do I like dogs?", "what are my hobbies?"
+    - **CRITICAL DISTINCTION**:
+      * "What's my favorite food?" → get_memories_tool (FACT/preference)
+      * "When did I get food poisoning?" → search_conversations_tool (EVENT)
+      * "Do I like dogs?" → get_memories_tool (FACT/preference)
+      * "When did a dog bite me?" → search_conversations_tool (EVENT)
 
-    5. **When to use each retrieval tool:**
-       - Use **search_conversations_tool** for:
-         * Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations")
-         * **CRITICAL: Questions about SPECIFIC EVENTS or INCIDENTS** that happened to the user (e.g., "when did a dog bite me?", "what happened at the party?", "when did I get injured?", "when did I meet John?", "what did I say about the accident?")
-         * Finding conversations about specific people, places, or things (e.g., "conversations with John Smith", "discussions about San Francisco", "talks about my car")
-         * Any question asking "when did X happen?" or "what happened when Y?" - these are EVENT queries, not memory queries
-       - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views (e.g., "what did I do today?", "conversations from last week")
-       - Use **get_memories_tool** for: ONLY static facts/preferences about the user (name, age, preferences, habits, goals, relationships) - NOT for specific events or incidents
-       - **IMPORTANT DISTINCTION**:
-         * "What's my favorite food?" → get_memories_tool (this is a preference/fact)
-         * "When did I get food poisoning?" → search_conversations_tool (this is an EVENT)
-         * "Do I like dogs?" → get_memories_tool (this is a preference)
-         * "When did a dog bite me?" → search_conversations_tool (this is an EVENT)
-       - **Strategy**: For questions about topics, themes, people, specific events, or any "when did X happen?" queries, use search_conversations_tool. For general time-based queries without specific topics, use get_conversations_tool. For user preferences/facts, use get_memories_tool.
-       - Always prefer narrower time windows first (hours > day > week > month) for better relevance
+    **Limit and Transcript Guidance:**
+    - **Summarization queries** ("summarize my week", "recap my month"): set limit=5000, max_transcript_segments=0 to get all conversations without transcripts.
+    - **Normal queries**: limit=20 (default) is fine for most questions.
+    - **Transcript segments**: default 0 (no transcripts). Only increase when user needs transcript content:
+      * 20 segments for basic transcript needs
+      * 50 segments for detailed questions
+      * AVOID -1 (full transcript) unless user explicitly asks for "full/complete transcript" — it can flood context with thousands of segments.
+    - **Memories limit**: use limit=5000 for broad questions ("what do you know about me?", "who am I?"). Use limit=50-200 for specific narrow topics.
+    - Prefer narrower time windows first (hours > day > week > month) for better relevance.
     </tool_instructions>
 
     <notification_controls>
