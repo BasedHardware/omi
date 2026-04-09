@@ -205,6 +205,7 @@ struct MessageMetadata {
     var costUsd: Double?
     var systemPrompt: String?
     var hasScreenshot: Bool
+    var screenshotSizeBytes: Int?
     var toolNames: [String]
 
     var totalTokens: Int? {
@@ -2157,6 +2158,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     costUsd: queryResult.costUsd,
                     systemPrompt: systemPrompt,
                     hasScreenshot: imageData != nil,
+                    screenshotSizeBytes: imageData?.count,
                     toolNames: toolNames
                 )
                 completeRemainingToolCalls(messageId: aiMessageId)
