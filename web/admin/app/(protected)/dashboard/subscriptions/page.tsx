@@ -217,10 +217,12 @@ export default function SubscriptionsPage() {
         if (data.partial) setHasPartialData(true);
         setRevenueMetrics(data);
       } else {
+        setRevenueMetrics(null);
         setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching revenue metrics:', err);
+      setRevenueMetrics(null);
       setMetricsError(true);
     }
   };
@@ -237,10 +239,12 @@ export default function SubscriptionsPage() {
           annual: data.priceIdTwo?.count || 0,
         });
       } else {
+        setSubscriptionCounts(null);
         setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching subscription counts:', err);
+      setSubscriptionCounts(null);
       setMetricsError(true);
     }
   };
@@ -254,10 +258,12 @@ export default function SubscriptionsPage() {
         if (data.partial) setHasPartialData(true);
         setSubscriptionTrends(data.data || []);
       } else {
+        setSubscriptionTrends([]);
         setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching subscription trends:', err);
+      setSubscriptionTrends([]);
       setMetricsError(true);
     }
   };
@@ -271,10 +277,12 @@ export default function SubscriptionsPage() {
         if (data.partial) setHasPartialData(true);
         setMrrTrends(data.data || []);
       } else {
+        setMrrTrends([]);
         setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching MRR trends:', err);
+      setMrrTrends([]);
       setMetricsError(true);
     }
   };
