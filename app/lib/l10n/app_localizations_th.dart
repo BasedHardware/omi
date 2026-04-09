@@ -8953,4 +8953,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get audioOutput => 'เอาต์พุตเสียง';
+
+  @override
+  String get firmwareWarningTitle => 'สำคัญ: อ่านก่อนอัปเดต';
+
+  @override
+  String get firmwareFormatWarning =>
+      'เฟิร์มแวร์นี้จะฟอร์แมตการ์ด SD กรุณาตรวจสอบให้แน่ใจว่าข้อมูลออฟไลน์ทั้งหมดได้รับการซิงค์ก่อนอัปเกรด\n\nหากคุณเห็นไฟสีแดงกะพริบหลังจากติดตั้งเวอร์ชันนี้ อย่ากังวล เพียงเชื่อมต่ออุปกรณ์กับแอปและไฟควรเปลี่ยนเป็นสีน้ำเงิน ไฟสีแดงหมายความว่านาฬิกาของอุปกรณ์ยังไม่ได้ซิงค์';
+
+  @override
+  String get continueAnyway => 'ดำเนินการต่อ';
 }

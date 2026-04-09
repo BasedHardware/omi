@@ -9000,4 +9000,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get audioOutput => 'Đầu ra âm thanh';
+
+  @override
+  String get firmwareWarningTitle => 'Quan trọng: Đọc trước khi cập nhật';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Firmware này sẽ định dạng thẻ SD. Vui lòng đảm bảo tất cả dữ liệu ngoại tuyến đã được đồng bộ trước khi nâng cấp.\n\nNếu bạn thấy đèn đỏ nhấp nháy sau khi cài đặt phiên bản này, đừng lo lắng. Chỉ cần kết nối thiết bị với ứng dụng và nó sẽ chuyển sang màu xanh. Đèn đỏ có nghĩa là đồng hồ của thiết bị chưa được đồng bộ.';
+
+  @override
+  String get continueAnyway => 'Tiếp tục';
 }

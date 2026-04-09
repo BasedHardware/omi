@@ -9080,4 +9080,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio Output';
+
+  @override
+  String get firmwareWarningTitle => 'Mahalaga: Basahin Bago Mag-update';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ang firmware na ito ay magfo-format ng SD card. Pakitiyak na ang lahat ng offline na data ay naka-sync bago mag-upgrade.\n\nKung makakita ka ng kumukurap na pulang ilaw pagkatapos i-install ang bersyong ito, huwag mag-alala. Ikonekta lang ang device sa app at dapat itong maging asul. Ang pulang ilaw ay nangangahulugang hindi pa na-sync ang orasan ng device.';
+
+  @override
+  String get continueAnyway => 'Magpatuloy';
 }

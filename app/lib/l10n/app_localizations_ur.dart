@@ -9014,4 +9014,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get audioOutput => 'آڈیو آؤٹ پٹ';
+
+  @override
+  String get firmwareWarningTitle => 'اہم: اپ ڈیٹ سے پہلے پڑھیں';
+
+  @override
+  String get firmwareFormatWarning =>
+      'یہ فرم ویئر SD کارڈ کو فارمیٹ کرے گا۔ براہ کرم اپ گریڈ کرنے سے پہلے یقینی بنائیں کہ تمام آف لائن ڈیٹا مطابقت پذیر ہو چکا ہے۔\n\nاگر اس ورژن کو انسٹال کرنے کے بعد سرخ روشنی چمکتی نظر آئے تو پریشان نہ ہوں۔ بس آلے کو ایپ سے جوڑیں اور یہ نیلا ہو جانا چاہیے۔ سرخ روشنی کا مطلب ہے کہ آلے کی گھڑی ابھی تک مطابقت پذیر نہیں ہوئی۔';
+
+  @override
+  String get continueAnyway => 'جاری رکھیں';
 }

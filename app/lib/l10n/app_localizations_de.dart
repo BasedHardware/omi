@@ -9075,4 +9075,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audioausgabe';
+
+  @override
+  String get firmwareWarningTitle => 'Wichtig: Vor dem Update lesen';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Diese Firmware wird die SD-Karte formatieren. Bitte stellen Sie sicher, dass alle Offline-Daten vor dem Upgrade synchronisiert sind.\n\nWenn Sie nach der Installation dieser Version ein blinkendes rotes Licht sehen, machen Sie sich keine Sorgen. Verbinden Sie das Gerät einfach mit der App und es sollte blau werden. Das rote Licht bedeutet, dass die Uhr des Geräts noch nicht synchronisiert wurde.';
+
+  @override
+  String get continueAnyway => 'Fortfahren';
 }

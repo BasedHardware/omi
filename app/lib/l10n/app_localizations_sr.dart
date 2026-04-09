@@ -9012,4 +9012,14 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аудио излаз';
+
+  @override
+  String get firmwareWarningTitle => 'Важно: Прочитајте пре ажурирања';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Овај фирмвер ће форматирати SD картицу. Молимо вас да се уверите да су сви офлајн подаци синхронизовани пре надоградње.\n\nАко видите треперeће црвено светло након инсталирања ове верзије, не брините. Једноставно повежите уређај са апликацијом и требало би да постане плаво. Црвено светло значи да сат уређаја још увек није синхронизован.';
+
+  @override
+  String get continueAnyway => 'Настави';
 }

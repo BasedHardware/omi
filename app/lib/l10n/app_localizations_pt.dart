@@ -9003,4 +9003,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get audioOutput => 'Saída de áudio';
+
+  @override
+  String get firmwareWarningTitle => 'Importante: Leia antes de atualizar';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Este firmware irá formatar o cartão SD. Certifique-se de que todos os dados offline estão sincronizados antes de atualizar.\n\nSe vir uma luz vermelha a piscar após instalar esta versão, não se preocupe. Basta ligar o dispositivo à aplicação e deverá ficar azul. A luz vermelha significa que o relógio do dispositivo ainda não foi sincronizado.';
+
+  @override
+  String get continueAnyway => 'Continuar';
 }

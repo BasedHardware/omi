@@ -16826,6 +16826,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio Output'**
   String get audioOutput;
+
+  /// No description provided for @firmwareWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Important: Read Before Updating'**
+  String get firmwareWarningTitle;
+
+  /// No description provided for @firmwareFormatWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device\'s clock hasn\'t been synced yet.'**
+  String get firmwareFormatWarning;
+
+  /// No description provided for @continueAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAnyway;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

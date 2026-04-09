@@ -9001,4 +9001,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get audioOutput => 'خروجی صوت';
+
+  @override
+  String get firmwareWarningTitle => 'مهم: قبل از به‌روزرسانی بخوانید';
+
+  @override
+  String get firmwareFormatWarning =>
+      'این فریمور کارت SD را فرمت می‌کند. لطفاً قبل از ارتقا مطمئن شوید که تمام داده‌های آفلاین همگام‌سازی شده‌اند.\n\nاگر بعد از نصب این نسخه چراغ قرمز چشمک‌زن دیدید، نگران نشوید. کافی است دستگاه را به برنامه متصل کنید و باید آبی شود. چراغ قرمز به این معنی است که ساعت دستگاه هنوز همگام‌سازی نشده است.';
+
+  @override
+  String get continueAnyway => 'ادامه';
 }

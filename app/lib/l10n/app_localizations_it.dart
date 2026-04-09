@@ -9053,4 +9053,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get audioOutput => 'Uscita audio';
+
+  @override
+  String get firmwareWarningTitle => 'Importante: Leggere prima dell\'aggiornamento';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Questo firmware formatterà la scheda SD. Assicurati che tutti i dati offline siano sincronizzati prima dell\'aggiornamento.\n\nSe vedi una luce rossa lampeggiante dopo aver installato questa versione, non preoccuparti. Collega semplicemente il dispositivo all\'app e dovrebbe diventare blu. La luce rossa significa che l\'orologio del dispositivo non è ancora stato sincronizzato.';
+
+  @override
+  String get continueAnyway => 'Continua';
 }

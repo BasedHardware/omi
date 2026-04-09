@@ -9035,4 +9035,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аудио изход';
+
+  @override
+  String get firmwareWarningTitle => 'Важно: Прочетете преди актуализация';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Този фърмуер ще форматира SD картата. Моля, уверете се, че всички офлайн данни са синхронизирани преди обновяване.\n\nАко видите мигаща червена светлина след инсталирането на тази версия, не се притеснявайте. Просто свържете устройството с приложението и то трябва да стане синьо. Червената светлина означава, че часовникът на устройството все още не е синхронизиран.';
+
+  @override
+  String get continueAnyway => 'Продължи';
 }
