@@ -53,12 +53,12 @@ describe('authenticatedFetcher', () => {
     });
 
     const result = await authenticatedFetcher(['/api/test', 'my-token']);
-    expect(global.fetch).toHaveBeenCalledWith('/api/test', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
       headers: {
         Authorization: 'Bearer my-token',
         'Content-Type': 'application/json',
       },
-    });
+    }));
     expect(result).toEqual(mockResponse);
   });
 
@@ -110,6 +110,24 @@ describe('useAuthFetch', () => {
         Authorization: 'Bearer fetch-token',
       }),
     }));
+  });
+
+  it('retries with fresh token on 401', async () => {
+    mockUser.getIdToken
+      .mockResolvedValueOnce('stale-token')
+      .mockResolvedValueOnce('fresh-token');
+    vi.mocked(useAuth).mockReturnValue({ user: mockUser, loading: false, isAdmin: true } as any);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true }) });
+
+    const { result } = renderHook(() => useAuthFetch());
+    await waitFor(() => expect(result.current.token).toBe('stale-token'));
+
+    const response = await result.current.fetchWithAuth('/api/test');
+    expect(response.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('skips Content-Type for FormData', async () => {
