@@ -2899,5 +2899,7 @@
     "transcriptionConnecting": "Свързване на транскрипция...",
     "transcriptionReconnecting": "Повторно свързване на транскрипция...",
     "transcriptionUnavailable": "Транскрипцията не е налична",
-    "audioOutput": "Аудио изход"
+    "audioOutput": "Аудио изход",
+    "enableLocationTitle": "Активиране на местоположение",
+    "enableLocationDescription": "Разрешението за местоположение е необходимо за намиране на близки Bluetooth устройства."
 }

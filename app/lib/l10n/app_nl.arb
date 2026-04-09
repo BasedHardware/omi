@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Transcriptie verbinden...",
     "transcriptionReconnecting": "Transcriptie opnieuw verbinden...",
     "transcriptionUnavailable": "Transcriptie niet beschikbaar",
-    "audioOutput": "Audio-uitvoer"
+    "audioOutput": "Audio-uitvoer",
+    "enableLocationTitle": "Locatie inschakelen",
+    "enableLocationDescription": "Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden."
 }

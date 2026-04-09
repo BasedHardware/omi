@@ -2965,5 +2965,7 @@
     "transcriptionConnecting": "Transkripsiyon bağlanıyor...",
     "transcriptionReconnecting": "Transkripsiyon yeniden bağlanıyor...",
     "transcriptionUnavailable": "Transkripsiyon kullanılamıyor",
-    "audioOutput": "Ses çıkışı"
+    "audioOutput": "Ses çıkışı",
+    "enableLocationTitle": "Konumu Etkinleştir",
+    "enableLocationDescription": "Yakındaki Bluetooth cihazlarını bulmak için konum izni gereklidir."
 }

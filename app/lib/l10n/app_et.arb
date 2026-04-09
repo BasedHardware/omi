@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Transkriptsiooni ühendamine...",
     "transcriptionReconnecting": "Transkriptsiooni uuesti ühendamine...",
     "transcriptionUnavailable": "Transkriptsioon pole saadaval",
-    "audioOutput": "Heliväljund"
+    "audioOutput": "Heliväljund",
+    "enableLocationTitle": "Luba asukoht",
+    "enableLocationDescription": "Asukoha luba on vajalik läheduses olevate Bluetooth-seadmete leidmiseks."
 }

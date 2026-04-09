@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Se conectează transcrierea...",
     "transcriptionReconnecting": "Se reconectează transcrierea...",
     "transcriptionUnavailable": "Transcriere indisponibilă",
-    "audioOutput": "Ieșire audio"
+    "audioOutput": "Ieșire audio",
+    "enableLocationTitle": "Activează locația",
+    "enableLocationDescription": "Permisiunea de locație este necesară pentru a găsi dispozitivele Bluetooth din apropiere."
 }

@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Connessione trascrizione...",
     "transcriptionReconnecting": "Riconnessione trascrizione...",
     "transcriptionUnavailable": "Trascrizione non disponibile",
-    "audioOutput": "Uscita audio"
+    "audioOutput": "Uscita audio",
+    "enableLocationTitle": "Attiva posizione",
+    "enableLocationDescription": "L'autorizzazione alla posizione è necessaria per trovare i dispositivi Bluetooth nelle vicinanze."
 }

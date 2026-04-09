@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "전사 연결 중...",
     "transcriptionReconnecting": "전사 재연결 중...",
     "transcriptionUnavailable": "전사를 사용할 수 없습니다",
-    "audioOutput": "오디오 출력"
+    "audioOutput": "오디오 출력",
+    "enableLocationTitle": "위치 활성화",
+    "enableLocationDescription": "근처 블루투스 기기를 찾으려면 위치 권한이 필요합니다."
 }

@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Kobler til transkripsjon...",
     "transcriptionReconnecting": "Kobler til transkripsjon på nytt...",
     "transcriptionUnavailable": "Transkripsjon utilgjengelig",
-    "audioOutput": "Lydutgang"
+    "audioOutput": "Lydutgang",
+    "enableLocationTitle": "Aktiver plassering",
+    "enableLocationDescription": "Plasseringstillatelse er nødvendig for å finne Bluetooth-enheter i nærheten."
 }

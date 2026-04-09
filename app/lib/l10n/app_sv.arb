@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "Ansluter transkription...",
     "transcriptionReconnecting": "Återansluter transkription...",
     "transcriptionUnavailable": "Transkription otillgänglig",
-    "audioOutput": "Ljudutgång"
+    "audioOutput": "Ljudutgång",
+    "enableLocationTitle": "Aktivera plats",
+    "enableLocationDescription": "Platstillstånd behövs för att hitta Bluetooth-enheter i närheten."
 }

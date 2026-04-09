@@ -2966,5 +2966,7 @@
     "transcriptionConnecting": "Conectando transcrição...",
     "transcriptionReconnecting": "Reconectando transcrição...",
     "transcriptionUnavailable": "Transcrição indisponível",
-    "audioOutput": "Saída de áudio"
+    "audioOutput": "Saída de áudio",
+    "enableLocationTitle": "Ativar localização",
+    "enableLocationDescription": "A permissão de localização é necessária para encontrar dispositivos Bluetooth próximos."
 }

@@ -2897,5 +2897,7 @@
     "transcriptionConnecting": "جاري الاتصال بالنسخ...",
     "transcriptionReconnecting": "إعادة الاتصال بالنسخ...",
     "transcriptionUnavailable": "النسخ غير متاح",
-    "audioOutput": "مخرج الصوت"
+    "audioOutput": "مخرج الصوت",
+    "enableLocationTitle": "تفعيل الموقع",
+    "enableLocationDescription": "إذن الموقع مطلوب للعثور على أجهزة بلوتوث القريبة."
 }

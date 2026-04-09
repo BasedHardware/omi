@@ -2930,5 +2930,7 @@
     "transcriptionConnecting": "กำลังเชื่อมต่อการถอดเสียง...",
     "transcriptionReconnecting": "กำลังเชื่อมต่อการถอดเสียงใหม่...",
     "transcriptionUnavailable": "การถอดเสียงไม่พร้อมใช้งาน",
-    "audioOutput": "เอาต์พุตเสียง"
+    "audioOutput": "เอาต์พุตเสียง",
+    "enableLocationTitle": "เปิดใช้งานตำแหน่ง",
+    "enableLocationDescription": "จำเป็นต้องได้รับอนุญาตตำแหน่งเพื่อค้นหาอุปกรณ์ Bluetooth ที่อยู่ใกล้เคียง"
 }
