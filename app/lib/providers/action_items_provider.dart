@@ -701,17 +701,15 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
-    final success = await Future.wait(
-      itemsToDelete.map((item) => deleteActionItem(item)),
-    ).then((results) => results.every((success) => success));
 
-    if (success) {
-      _selectedItems.clear();
-      _isSelectionMode = false;
-      notifyListeners();
-    }
+    // Dismiss UI immediately — don't wait for API
+    _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    _selectedItems.clear();
+    _isSelectionMode = false;
+    notifyListeners();
 
-    return success;
+    final results = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)));
+    return results.every((success) => success);
   }
 
   Future<bool> clearCompletedItems() async {
