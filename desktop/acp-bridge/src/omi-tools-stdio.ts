@@ -119,40 +119,68 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "save_knowledge_graph",
 ]);
 
+// Tool order: local tools first (always available), then backend RAG tools (require auth token).
+// Within each group, order is stable for prompt cache hits.
 const ALL_TOOLS = [
   {
     name: "execute_sql",
-    description: `Run SQL on the local omi.db database.
-Supports: SELECT, INSERT, UPDATE, DELETE.
-SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
+    description: `Run SQL on the user's local omi.db SQLite database for structured data queries.
+
+Use when:
+- User asks for app usage stats, screen time, or activity counts
+- Time-based queries like "how long did I spend on X?"
+- Task management: looking up action items, checking completion status
+- Aggregations, rankings, or structured filters on local data
+
+Don't use when (if those tools are available):
+- User asks about conversation content or transcripts (prefer get_conversations or search_conversations)
+- User asks about their preferences or facts about themselves (prefer get_memories)
+- User asks fuzzy/conceptual questions (use semantic_search instead)
+- If backend tools are not available, fall back to execute_sql on the local transcription_sessions table
+
+Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
+
+Key tables: screenshots (appName, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), action_items (description, completed, priority, dueAt).`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string" as const, description: "SQL query to execute" },
+        query: { type: "string" as const, description: "SQL query to execute against omi.db" },
       },
       required: ["query"],
     },
   },
   {
     name: "semantic_search",
-    description: `Vector similarity search on screen history.
-Use for: fuzzy conceptual queries where exact SQL keywords won't work.
-e.g. "reading about machine learning", "working on design mockups"`,
+    description: `Vector similarity search on the user's screen history (what they saw on their computer).
+
+Use when:
+- Fuzzy or conceptual queries where exact SQL keywords won't work
+- User asks "when was I reading about X?" or "find where I was working on Y"
+- Theme-based recall: "design mockups", "code reviews", "email about project Z"
+
+Don't use when:
+- User asks about spoken conversations or transcripts (prefer search_conversations if available)
+- User asks for structured counts or stats (use execute_sql)
+- User wants a broad daily recap (use get_daily_recap)
+
+Parameter guidance:
+- days: Start with 7 (default). Use 1-3 for recent activity, 14-30 for older searches.
+- app_filter: Set when user specifies an app (e.g., "in Chrome", "in VS Code"). Omit for cross-app searches.
+- Results are ranked by semantic similarity — top 15 returned.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         query: {
           type: "string" as const,
-          description: "Natural language search query",
+          description: "Natural language search query describing what the user was doing or viewing",
         },
         days: {
           type: "number" as const,
-          description: "Number of days to search back (default: 7)",
+          description: "Days to search back: 1-3 for recent, 7 default, 14-30 for older",
         },
         app_filter: {
           type: "string" as const,
-          description: "Filter results to a specific app name",
+          description: "Filter to a specific app (e.g., 'Chrome', 'VS Code'). Omit for all apps",
         },
       },
       required: ["query"],
@@ -160,15 +188,30 @@ e.g. "reading about machine learning", "working on design mockups"`,
   },
   {
     name: "get_daily_recap",
-    description: `Get a pre-formatted daily activity recap from the local database.
-Use for: "what did I do today/yesterday/this week", activity summaries, daily reviews.
-Runs app usage, conversations, and action items queries in one call — much faster than multiple execute_sql calls.`,
+    description: `Get a pre-formatted daily activity recap combining app usage, conversations, and tasks.
+
+Use when:
+- User asks "what did I do today/yesterday/this week?"
+- Broad activity summaries or daily reviews
+- User wants a quick overview without specifying a topic
+
+Don't use when:
+- User asks about a specific topic or event (prefer search_conversations if available)
+- User needs detailed transcript content (prefer get_conversations if available)
+- User wants structured data or counts (use execute_sql)
+
+This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
+
+Parameter guidance:
+- days_ago=0: today's activity so far
+- days_ago=1: yesterday (default, most common)
+- days_ago=7: past week overview`,
     inputSchema: {
       type: "object" as const,
       properties: {
         days_ago: {
           type: "number" as const,
-          description: "0=today, 1=yesterday, 7=past week (default: 1)",
+          description: "0=today, 1=yesterday, 7=past week. Default 1",
         },
       },
       required: [],
@@ -205,33 +248,71 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     },
   },
   // --- Backend RAG tools (call Python backend /v1/tools/* via Swift) ---
+  // Tool order follows backend CORE_TOOLS for prompt cache stability.
   {
     name: "get_conversations",
     description: `Retrieve user conversations from the Omi backend with transcripts, summaries, and metadata.
-Use when user asks about recent conversations, what they discussed, or needs conversation details.
-For weekly/monthly summaries: set limit=5000, include_transcript=false.`,
+
+Use when:
+- User asks about recent conversations, what they discussed, or needs conversation details
+- Time-based retrieval: "what did I talk about today?", "conversations from last week"
+- Broad activity queries: "what did I do today?" (with start_date=start of today)
+- Summarization queries: "summarize my week", "recap my month"
+
+Don't use when:
+- User asks about a specific topic or event (use search_conversations — it uses semantic search)
+- User asks about preferences or facts about themselves (use get_memories)
+
+Parameter guidance:
+- start_date/end_date: MUST be ISO format with timezone offset (e.g. 2024-01-19T15:00:00-08:00). Always include timezone.
+- limit: default 20. For summaries/recaps, set limit=5000 to get all conversations in the range.
+- include_transcript: default true. Set false for broad/summary queries to avoid flooding context.
+- Prefer narrower time windows first (hours > day > week > month) for better relevance.`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        start_date: { type: "string" as const, description: "ISO date with timezone (e.g. 2024-01-19T15:00:00-08:00)" },
-        end_date: { type: "string" as const, description: "ISO date with timezone" },
-        limit: { type: "number" as const, description: "Number of conversations (default: 20, max: 5000)" },
+        start_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T15:00:00-08:00)" },
+        end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T23:59:59-08:00)" },
+        limit: { type: "number" as const, description: "Number of conversations: 20 default, 5000 for summaries/recaps" },
         offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
-        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true)" },
+        include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true, set false for summaries)" },
       },
       required: [],
     },
   },
   {
     name: "search_conversations",
-    description: `Semantic search across user conversations. Uses AI embeddings to find conversations matching a concept.
-Use for: "when did X happen?", "what did I say about Y?", finding specific events or topics.`,
+    description: `Semantic search across user conversations — USE THIS FOR EVENTS AND INCIDENTS.
+
+Uses AI embeddings to find conversations matching a concept, even without exact keywords.
+
+Use when:
+- Questions about SPECIFIC EVENTS or INCIDENTS: "when did a dog bite me?", "what happened at the party?"
+- Any "when did X happen?" or "what happened when Y?" question
+- Searching for concepts, themes, or topics: "discussions about AI", "health-related talks"
+- Finding conversations about specific people, places, or things
+
+Don't use when:
+- User asks about preferences or facts (use get_memories for "what's my favorite food?", "do I like dogs?")
+- Time-based retrieval without a topic (use get_conversations for "what did I do today?")
+
+CRITICAL DISTINCTION:
+- "What's my favorite food?" → get_memories (FACT/preference)
+- "When did I get food poisoning?" → search_conversations (EVENT)
+- "Do I like dogs?" → get_memories (FACT/preference)
+- "When did a dog bite me?" → search_conversations (EVENT)
+
+Parameter guidance:
+- query: Descriptive phrase about the event or concept — semantic search works best with natural language.
+- start_date/end_date: ISO format with timezone offset. Use to narrow the time range when known.
+- limit: default 5, max 20. Usually 5 is enough for specific events.
+- include_transcript: default true. Set false if you only need conversation metadata.`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string" as const, description: "Natural language search query" },
-        start_date: { type: "string" as const, description: "ISO date with timezone" },
-        end_date: { type: "string" as const, description: "ISO date with timezone" },
+        query: { type: "string" as const, description: "Natural language description of the event, topic, or concept to search for" },
+        start_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-19T00:00:00+07:00)" },
+        end_date: { type: "string" as const, description: "ISO date with timezone offset (e.g. 2024-01-31T23:59:59+07:00)" },
         limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
         include_transcript: { type: "boolean" as const, description: "Include transcripts (default: true)" },
       },
@@ -240,28 +321,52 @@ Use for: "when did X happen?", "what did I say about Y?", finding specific event
   },
   {
     name: "get_memories",
-    description: `Retrieve user memories (facts, preferences, habits) from the Omi backend.
-Use for: "what do you know about me?", "what are my preferences?", personal facts.
-NOT for events — use search_conversations for "when did X happen?".`,
+    description: `Retrieve user memories — static facts, preferences, habits, and personal information.
+
+Use when:
+- User asks about their own facts or preferences: "what's my name?", "what do you know about me?"
+- Broad self-knowledge queries: "who am I?", "what are my hobbies?"
+- Checking stored personal info: relationships, goals, habits
+
+Don't use when:
+- User asks about specific events or incidents (use search_conversations for "when did X happen?")
+- User asks about conversation content or transcripts (use get_conversations or search_conversations)
+
+CRITICAL: This tool stores FACTS, not EVENTS. "What's my favorite food?" → get_memories. "When did I eat sushi?" → search_conversations.
+
+Parameter guidance:
+- limit: default 50. For broad questions ("what do you know about me?"), use limit=5000 to get comprehensive results. For specific narrow topics, 50-200 is enough.
+- start_date/end_date: ISO format with timezone offset. Rarely needed — memories are timeless facts.`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        limit: { type: "number" as const, description: "Number of memories (default: 50, max: 5000)" },
+        limit: { type: "number" as const, description: "Number of memories: 50 default, 5000 for broad questions, 50-200 for specific topics" },
         offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
-        start_date: { type: "string" as const, description: "ISO date with timezone" },
-        end_date: { type: "string" as const, description: "ISO date with timezone" },
+        start_date: { type: "string" as const, description: "ISO date with timezone offset (rarely needed for memories)" },
+        end_date: { type: "string" as const, description: "ISO date with timezone offset (rarely needed for memories)" },
       },
       required: [],
     },
   },
   {
     name: "search_memories",
-    description: `Semantic search across user memories/facts. Finds memories matching a concept.
-Use for: "what do I know about cooking?", "my work goals", topic-specific facts.`,
+    description: `Semantic search across user memories/facts. Finds memories matching a concept using AI embeddings.
+
+Use when:
+- Searching for memories about a specific topic: "what do I know about cooking?", "my work goals"
+- Narrowing down from a broad set of memories to topic-specific ones
+
+Don't use when:
+- User wants ALL their memories (use get_memories with high limit)
+- User asks about events/incidents (use search_conversations)
+
+Parameter guidance:
+- query: Natural language topic to search for. Semantic matching finds conceptually related memories.
+- limit: default 5, max 20. Usually 5 is enough for focused queries.`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string" as const, description: "Natural language search query" },
+        query: { type: "string" as const, description: "Natural language topic to search for in memories" },
         limit: { type: "number" as const, description: "Number of results (default: 5, max: 20)" },
       },
       required: ["query"],
@@ -270,18 +375,25 @@ Use for: "what do I know about cooking?", "my work goals", topic-specific facts.
   {
     name: "get_action_items",
     description: `Retrieve user action items (tasks/to-dos) from the Omi backend.
-Use for: "what are my tasks?", "show my to-dos", "what's due today?".
-Use due_start_date/due_end_date for time queries (not start_date/end_date which filter by creation date).`,
+
+Use when:
+- User asks about tasks: "what are my tasks?", "show my to-dos", "what's due today?"
+- Checking task status: "what's pending?", "what did I complete?"
+
+Parameter guidance:
+- completed: true=completed only, false=pending only, omit=all tasks
+- IMPORTANT: Use due_start_date/due_end_date to filter by due date ("what's due this week?"). Use start_date/end_date to filter by creation date ("tasks created today"). These are different fields.
+- All dates: ISO format with timezone offset (e.g. 2024-01-19T00:00:00-08:00).`,
     inputSchema: {
       type: "object" as const,
       properties: {
         limit: { type: "number" as const, description: "Number of items (default: 50, max: 500)" },
         offset: { type: "number" as const, description: "Pagination offset (default: 0)" },
         completed: { type: "boolean" as const, description: "Filter: true=completed, false=pending, omit=all" },
-        start_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone)" },
-        end_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone)" },
-        due_start_date: { type: "string" as const, description: "Filter by due date (ISO with timezone)" },
-        due_end_date: { type: "string" as const, description: "Filter by due date (ISO with timezone)" },
+        start_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone offset)" },
+        end_date: { type: "string" as const, description: "Filter by creation date (ISO with timezone offset)" },
+        due_start_date: { type: "string" as const, description: "Filter by due date (ISO with timezone offset)" },
+        due_end_date: { type: "string" as const, description: "Filter by due date (ISO with timezone offset)" },
       },
       required: [],
     },
@@ -289,13 +401,22 @@ Use due_start_date/due_end_date for time queries (not start_date/end_date which 
   {
     name: "create_action_item",
     description: `Create a new action item (task) for the user.
-ONLY use when user explicitly asks: "add task...", "remind me to...", "create a to-do...".
-Keep descriptions short (5-10 words).`,
+
+Use when:
+- User explicitly asks to create a task: "add task...", "remind me to...", "create a to-do..."
+
+Don't use when:
+- User is just discussing tasks without asking to create one
+- User wants to view or search existing tasks (use get_action_items)
+
+Parameter guidance:
+- description: Keep short (5-10 words). This is what the user sees in their task list.
+- due_at: ISO format with timezone offset. Defaults to 24h from now if omitted.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         description: { type: "string" as const, description: "Short task description (5-10 words)" },
-        due_at: { type: "string" as const, description: "Due date (ISO with timezone, defaults to 24h from now)" },
+        due_at: { type: "string" as const, description: "Due date (ISO with timezone offset, defaults to 24h from now)" },
         conversation_id: { type: "string" as const, description: "Source conversation ID (optional)" },
       },
       required: ["description"],
@@ -304,14 +425,24 @@ Keep descriptions short (5-10 words).`,
   {
     name: "update_action_item",
     description: `Update an action item's status, description, or due date.
-Use get_action_items first to find the action_item_id.`,
+
+Use when:
+- User wants to complete a task: "mark X as done", "I finished Y"
+- User wants to change a task: "change due date to...", "update the description"
+
+Always use get_action_items first to find the action_item_id.
+
+Parameter guidance:
+- action_item_id: Required. Get this from get_action_items results.
+- completed: true to mark done, false to mark pending.
+- due_at: ISO format with timezone offset.`,
     inputSchema: {
       type: "object" as const,
       properties: {
-        action_item_id: { type: "string" as const, description: "ID from get_action_items" },
+        action_item_id: { type: "string" as const, description: "ID from get_action_items (required)" },
         completed: { type: "boolean" as const, description: "Mark complete (true) or pending (false)" },
         description: { type: "string" as const, description: "New description" },
-        due_at: { type: "string" as const, description: "New due date (ISO with timezone)" },
+        due_at: { type: "string" as const, description: "New due date (ISO with timezone offset)" },
       },
       required: ["action_item_id"],
     },
