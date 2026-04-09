@@ -601,7 +601,10 @@ struct DesktopHomeView: View {
         RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
           .fill(
             LinearGradient(
-              colors: [OmiColors.backgroundSecondary.opacity(0.96), OmiColors.backgroundPrimary.opacity(0.96)],
+              colors: [
+                OmiColors.backgroundSecondary.opacity(0.96),
+                OmiColors.backgroundPrimary.opacity(0.96),
+              ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             )
@@ -683,7 +686,7 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
-      selectedSettingsSection = .aiChat
+      selectedSettingsSection = .advanced
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
