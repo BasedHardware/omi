@@ -65,11 +65,50 @@ describe('authenticatedFetcher', () => {
   it('throws on non-ok response', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
+      status: 500,
+      json: () => Promise.resolve({ error: 'server error' }),
+    });
+
+    await expect(authenticatedFetcher(['/api/test', 'bad-token'])).rejects.toThrow();
+  });
+
+  it('retries with fresh token on 401 when forceRefresh is registered', async () => {
+    // First, render useAuthToken to register the module-level forceRefresh callback
+    mockUser.getIdToken
+      .mockResolvedValueOnce('stale-token')
+      .mockResolvedValueOnce('fresh-token');
+    vi.mocked(useAuth).mockReturnValue({ user: mockUser, loading: false, isAdmin: true } as any);
+
+    const { result } = renderHook(() => useAuthToken());
+    await waitFor(() => expect(result.current.token).toBe('stale-token'));
+
+    // Now test authenticatedFetcher with a 401 → retry flow
+    const mockData = { data: 'success' };
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, json: () => Promise.resolve({ error: 'unauthorized' }) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(mockData) });
+
+    const fetchResult = await authenticatedFetcher(['/api/test', 'stale-token']);
+    expect(fetchResult).toEqual(mockData);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // Second call should use the fresh token
+    expect(global.fetch).toHaveBeenLastCalledWith('/api/test', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer fresh-token' }),
+    }));
+  });
+
+  it('throws 401 when forceRefresh returns null', async () => {
+    // Register forceRefresh with a user that fails to refresh
+    vi.mocked(useAuth).mockReturnValue({ user: null, loading: false, isAdmin: false } as any);
+    renderHook(() => useAuthToken());
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
       status: 401,
       json: () => Promise.resolve({ error: 'unauthorized' }),
     });
 
-    await expect(authenticatedFetcher(['/api/test', 'bad-token'])).rejects.toThrow();
+    await expect(authenticatedFetcher(['/api/test', 'stale-token'])).rejects.toThrow();
   });
 });
 
