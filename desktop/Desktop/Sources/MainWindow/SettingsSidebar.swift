@@ -105,9 +105,9 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["task", "action item", "notify task"], section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
-      name: "Advice Notifications", subtitle: "Show notification when advice is generated",
-      keywords: ["advice", "tips", "notify advice"], section: .notifications, icon: "bell",
-      settingId: "notifications.advice"),
+      name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
+      keywords: ["insight", "insights", "notify insight"], section: .notifications, icon: "bell",
+      settingId: "notifications.insight"),
     SettingsSearchItem(
       name: "Memory Notifications", subtitle: "Show notification when a memory is extracted",
       keywords: ["memory", "facts", "notify memory"], section: .notifications, icon: "bell",

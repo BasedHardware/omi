@@ -248,12 +248,12 @@ class TestDeepgramPrerecordedFromBytesPCM:
         mock_response.to_dict.return_value = {'results': {'channels': [{'alternatives': [{'words': []}]}]}}
         mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
 
-        deepgram_prerecorded_from_bytes(b'\x00' * 100, model='nova-2-general', language='zh')
+        deepgram_prerecorded_from_bytes(b'\x00' * 100, model='nova-3', language='zh')
 
         call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
         options = call_args[0][1]
 
-        assert options['model'] == 'nova-2-general'
+        assert options['model'] == 'nova-3'
         assert options['language'] == 'zh'
 
     @patch('utils.stt.pre_recorded._deepgram_client')
@@ -372,11 +372,11 @@ class TestTranscribePcmBytes:
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.deepgram_prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
-    def test_nova2_language_uses_correct_model(self, mock_get_model, mock_dg, mock_postprocess):
-        """Chinese should use nova-2-general model."""
+    def test_chinese_language_uses_nova3(self, mock_get_model, mock_dg, mock_postprocess):
+        """Chinese should use nova-3 model."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('zh', 'nova-2-general')
+        mock_get_model.return_value = ('zh', 'nova-3')
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': '你好'}]
         mock_seg = MagicMock()
         mock_seg.text = '你好'
@@ -385,7 +385,7 @@ class TestTranscribePcmBytes:
         text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='zh')
 
         call_kwargs = mock_dg.call_args[1]
-        assert call_kwargs['model'] == 'nova-2-general'
+        assert call_kwargs['model'] == 'nova-3'
         assert call_kwargs['language'] == 'zh'
 
     @patch('utils.chat.postprocess_words')

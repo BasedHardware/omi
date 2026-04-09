@@ -26,6 +26,7 @@ import {
   Users
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
+import { useAuthFetch } from "@/hooks/useAuthToken";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 
@@ -91,6 +92,7 @@ interface MRRTrendData {
 
 export default function SubscriptionsPage() {
   const { user } = useAuth();
+  const { fetchWithAuth, token } = useAuthFetch();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [revenueMetrics, setRevenueMetrics] = useState<RevenueMetrics | null>(null);
@@ -108,13 +110,14 @@ export default function SubscriptionsPage() {
   const [previousPage, setPreviousPage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!token) return;
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
     fetchSubscriptionCounts();
     fetchSubscriptionTrends();
     fetchMrrTrends();
-  }, [statusFilter]);
+  }, [statusFilter, token]);
 
   const fetchSubscriptions = async (pageParams?: { starting_after?: string; ending_before?: string }) => {
     try {
@@ -124,8 +127,6 @@ export default function SubscriptionsPage() {
       } else {
         setLoading(true);
       }
-      const idToken = await user?.getIdToken();
-      
       // Build query parameters
       const params = new URLSearchParams();
       if (pageParams?.starting_after) {
@@ -137,14 +138,9 @@ export default function SubscriptionsPage() {
       if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
-      
+
       // Fetch subscriptions data
-      const response = await fetch(`/api/omi/subscriptions?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchWithAuth(`/api/omi/subscriptions?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch subscriptions');
@@ -166,21 +162,14 @@ export default function SubscriptionsPage() {
 
   const fetchTotalCount = async () => {
     try {
-      const idToken = await user?.getIdToken();
-      
       // Fetch total count separately with status filter
       const countParams = new URLSearchParams();
       countParams.append('count_only', 'true');
       if (statusFilter !== 'all') {
         countParams.append('status', statusFilter);
       }
-      
-      const countResponse = await fetch(`/api/omi/subscriptions?${countParams.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+
+      const countResponse = await fetchWithAuth(`/api/omi/subscriptions?${countParams.toString()}`);
 
       if (countResponse.ok) {
         const countData = await countResponse.json();
@@ -214,14 +203,7 @@ export default function SubscriptionsPage() {
 
   const fetchRevenueMetrics = async () => {
     try {
-      const idToken = await user?.getIdToken();
-      
-      const response = await fetch('/api/omi/stats/revenue', {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchWithAuth('/api/omi/stats/revenue');
 
       if (response.ok) {
         const data: RevenueMetrics = await response.json();
@@ -234,14 +216,7 @@ export default function SubscriptionsPage() {
 
   const fetchSubscriptionCounts = async () => {
     try {
-      const idToken = await user?.getIdToken();
-      
-      const response = await fetch('/api/omi/stats/subscriptions', {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchWithAuth('/api/omi/stats/subscriptions');
 
       if (response.ok) {
         const data = await response.json();
@@ -257,14 +232,7 @@ export default function SubscriptionsPage() {
 
   const fetchSubscriptionTrends = async () => {
     try {
-      const idToken = await user?.getIdToken();
-      
-      const response = await fetch('/api/omi/stats/subscription-trends?months=6', {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchWithAuth('/api/omi/stats/subscription-trends?months=6');
 
       if (response.ok) {
         const data = await response.json();
@@ -277,14 +245,7 @@ export default function SubscriptionsPage() {
 
   const fetchMrrTrends = async () => {
     try {
-      const idToken = await user?.getIdToken();
-      
-      const response = await fetch('/api/omi/stats/mrr-trends?months=6', {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchWithAuth('/api/omi/stats/mrr-trends?months=6');
 
       if (response.ok) {
         const data = await response.json();

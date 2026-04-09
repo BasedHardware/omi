@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Onboarding step that shows what proactive notifications look like.
-/// Uses a static example tip — no Gemini call needed.
+/// Uses a static example insight — no Gemini call needed.
 struct OnboardingNotificationStepView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
@@ -12,8 +12,8 @@ struct OnboardingNotificationStepView: View {
     @State private var notificationSent = false
     @State private var pulseAnimation = false
 
-    private let tipHeadline = "Tip"
-    private let tipText = "I'll watch your screen and send you proactive tips like this"
+    private let insightHeadline = "Insight"
+    private let insightText = "I'll watch your screen and send you proactive insights like this"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -129,8 +129,8 @@ struct OnboardingNotificationStepView: View {
 
                 // Send a real macOS notification
                 NotificationService.shared.sendNotification(
-                    title: tipHeadline,
-                    message: tipText,
+                    title: insightHeadline,
+                    message: insightText,
                     assistantId: "onboarding"
                 )
 
@@ -178,12 +178,12 @@ struct OnboardingNotificationStepView: View {
                         .foregroundColor(.gray)
                 }
 
-                Text(tipHeadline)
+                Text(insightHeadline)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.black.opacity(0.85))
                     .lineLimit(1)
 
-                Text(tipText)
+                Text(insightText)
                     .font(.system(size: 12))
                     .foregroundColor(.black.opacity(0.7))
                     .lineLimit(2)

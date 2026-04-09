@@ -516,8 +516,8 @@ struct DesktopHomeView: View {
       return .tasks
     case "focus":
       return .focus
-    case "advice":
-      return .advice
+    case "insight":
+      return .insight
     case "rewind":
       return .rewind
     case "apps", "integrations":
@@ -784,7 +784,7 @@ private struct PageContentView: View {
       case 5:
         FocusPage()
       case 6:
-        AdvicePage()
+        InsightPage()
       case 7:
         RewindPage(appState: appState)
       case 8:

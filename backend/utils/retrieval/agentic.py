@@ -29,7 +29,6 @@ from utils.retrieval.tools import (
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -82,7 +81,6 @@ CORE_TOOLS = [
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -122,7 +120,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_calendar_event_tool': 'Updating calendar event',
         'delete_calendar_event_tool': 'Deleting calendar event',
         'get_gmail_messages_tool': 'Checking Gmail',
-        'perplexity_web_search_tool': 'Searching the web',
+        'web_search': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
         'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
@@ -143,7 +141,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
 
     if 'calendar' in tool_name.lower():
         return 'Checking calendar'
-    elif 'perplexity' in tool_name.lower() or 'search' in tool_name.lower():
+    elif 'web_search' in tool_name.lower():
         return 'Searching the web'
     elif 'memory' in tool_name.lower():
         return 'Searching memories'
@@ -223,6 +221,13 @@ TOOL_SEARCH_TOOL = {
     "name": "tool_search_tool_regex",
 }
 
+# Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
+WEB_SEARCH_TOOL = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 5,
+}
+
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
@@ -236,6 +241,9 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
         tool definitions and tool_registry maps tool name -> LangChain tool object.
     """
     schemas = []
+
+    # Add built-in server tools
+    schemas.append(WEB_SEARCH_TOOL)
 
     # Add tool search tool if there are app tools to discover
     if app_tools:
@@ -392,7 +400,14 @@ async def _run_anthropic_agent_stream(
 
                     # Emit status when tool call starts
                     elif event.type == "content_block_start":
-                        if hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
+                        if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
+                            # Server tools (web_search, tool_search) — handled by Anthropic
+                            server_tool_name = getattr(event.content_block, 'name', '')
+                            display_name = get_tool_display_name(server_tool_name)
+                            if 'tool_search' not in server_tool_name:
+                                await callback.put_thought(display_name)
+                            logger.info(f"Server tool invoked: {server_tool_name}")
+                        elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
                             tool_name = event.content_block.name
                             # Skip tool_search_tool — handled server-side by Anthropic
                             if 'tool_search' in tool_name:

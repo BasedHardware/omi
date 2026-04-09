@@ -104,11 +104,11 @@ struct SettingsContentView: View {
   @State private var isRescoringTasks = false
 
   // Advice Assistant states
-  @State private var adviceEnabled: Bool
-  @State private var adviceExtractionInterval: Double
-  @State private var adviceMinConfidence: Double
-  @State private var adviceNotificationsEnabled: Bool
-  @State private var adviceExcludedApps: Set<String>
+  @State private var insightEnabled: Bool
+  @State private var insightExtractionInterval: Double
+  @State private var insightMinConfidence: Double
+  @State private var insightNotificationsEnabled: Bool
+  @State private var insightExcludedApps: Set<String>
 
   // Memory Assistant states
   @State private var memoryEnabled: Bool
@@ -260,7 +260,7 @@ struct SettingsContentView: View {
     case stats = "Your Stats"
     case focusAssistant = "Focus Assistant"
     case taskAssistant = "Task Assistant"
-    case adviceAssistant = "Advice Assistant"
+    case insightAssistant = "Insight Assistant"
     case memoryAssistant = "Memory Assistant"
     case analysisThrottle = "Analysis Throttle"
     case goals = "Goals"
@@ -277,7 +277,7 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .adviceAssistant: return "lightbulb.fill"
+      case .insightAssistant: return "lightbulb.fill"
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -347,13 +347,13 @@ struct SettingsContentView: View {
       initialValue: TaskAssistantSettings.shared.notificationsEnabled)
     _taskAllowedApps = State(initialValue: TaskAssistantSettings.shared.allowedApps)
     _taskBrowserKeywords = State(initialValue: TaskAssistantSettings.shared.browserKeywords)
-    _adviceEnabled = State(initialValue: AdviceAssistantSettings.shared.isEnabled)
-    _adviceExtractionInterval = State(
-      initialValue: AdviceAssistantSettings.shared.extractionInterval)
-    _adviceMinConfidence = State(initialValue: AdviceAssistantSettings.shared.minConfidence)
-    _adviceNotificationsEnabled = State(
-      initialValue: AdviceAssistantSettings.shared.notificationsEnabled)
-    _adviceExcludedApps = State(initialValue: AdviceAssistantSettings.shared.excludedApps)
+    _insightEnabled = State(initialValue: InsightAssistantSettings.shared.isEnabled)
+    _insightExtractionInterval = State(
+      initialValue: InsightAssistantSettings.shared.extractionInterval)
+    _insightMinConfidence = State(initialValue: InsightAssistantSettings.shared.minConfidence)
+    _insightNotificationsEnabled = State(
+      initialValue: InsightAssistantSettings.shared.notificationsEnabled)
+    _insightExcludedApps = State(initialValue: InsightAssistantSettings.shared.excludedApps)
     _memoryEnabled = State(initialValue: MemoryAssistantSettings.shared.isEnabled)
     _memoryExtractionInterval = State(
       initialValue: MemoryAssistantSettings.shared.extractionInterval)
@@ -1335,17 +1335,18 @@ struct SettingsContentView: View {
             }
 
             settingRow(
-              title: "Advice Notifications", subtitle: "Show notification when advice is generated",
-              settingId: "notifications.advice"
+              title: "Insight Notifications",
+              subtitle: "Show notification when an insight is generated",
+              settingId: "notifications.insight"
             ) {
-              Toggle("", isOn: $adviceNotificationsEnabled)
+              Toggle("", isOn: $insightNotificationsEnabled)
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .onChange(of: adviceNotificationsEnabled) { _, newValue in
-                  AdviceAssistantSettings.shared.notificationsEnabled = newValue
+                .onChange(of: insightNotificationsEnabled) { _, newValue in
+                  InsightAssistantSettings.shared.notificationsEnabled = newValue
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
-                      advice: AdviceSettingsResponse(notificationsEnabled: newValue)))
+                      insight: InsightSettingsResponse(notificationsEnabled: newValue)))
                 }
             }
 
@@ -3769,36 +3770,36 @@ struct SettingsContentView: View {
     }
   }
 
-  private var adviceAssistantSubsection: some View {
+  private var insightAssistantSubsection: some View {
     VStack(spacing: 20) {
-      settingsCard(settingId: "advanced.adviceassistant") {
+      settingsCard(settingId: "advanced.insightassistant") {
         VStack(alignment: .leading, spacing: 16) {
           HStack {
             Image(systemName: "lightbulb.fill")
               .scaledFont(size: 16)
               .foregroundColor(OmiColors.purplePrimary)
 
-            Text("Advice Assistant")
+            Text("Insight Assistant")
               .scaledFont(size: 15, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
-            Toggle("", isOn: $adviceEnabled)
+            Toggle("", isOn: $insightEnabled)
               .toggleStyle(.switch)
               .labelsHidden()
-              .onChange(of: adviceEnabled) { _, newValue in
-                AdviceAssistantSettings.shared.isEnabled = newValue
+              .onChange(of: insightEnabled) { _, newValue in
+                InsightAssistantSettings.shared.isEnabled = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
-                  AssistantSettingsResponse(advice: AdviceSettingsResponse(enabled: newValue)))
+                  AssistantSettingsResponse(insight: InsightSettingsResponse(enabled: newValue)))
               }
           }
 
-          Text("Get proactive tips and suggestions")
+          Text("Get proactive insights and suggestions")
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textTertiary)
 
-          if adviceEnabled {
+          if insightEnabled {
             Divider()
               .background(OmiColors.backgroundQuaternary)
 
@@ -3809,14 +3810,14 @@ struct SettingsContentView: View {
                   Text("Frequency")
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
-                  Text("How often to check for advice opportunities")
+                  Text("How often to check for insight opportunities")
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
-                Text(formatExtractionInterval(adviceExtractionInterval))
+                Text(formatExtractionInterval(insightExtractionInterval))
                   .scaledFont(size: 13, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 80, alignment: .trailing)
@@ -3824,16 +3825,16 @@ struct SettingsContentView: View {
 
               Slider(
                 value: Binding(
-                  get: { Double(adviceIntervalSliderIndex) },
-                  set: { adviceExtractionInterval = extractionIntervalOptions[Int($0)] }
+                  get: { Double(insightIntervalSliderIndex) },
+                  set: { insightExtractionInterval = extractionIntervalOptions[Int($0)] }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
               .tint(OmiColors.purplePrimary)
-              .onChange(of: adviceExtractionInterval) { _, newValue in
-                AdviceAssistantSettings.shared.extractionInterval = newValue
+              .onChange(of: insightExtractionInterval) { _, newValue in
+                InsightAssistantSettings.shared.extractionInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
                   AssistantSettingsResponse(
-                    advice: AdviceSettingsResponse(extractionInterval: newValue)))
+                    insight: InsightSettingsResponse(extractionInterval: newValue)))
               }
             }
 
@@ -3844,36 +3845,36 @@ struct SettingsContentView: View {
                   Text("Minimum Confidence")
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
-                  Text("Only show advice above this confidence level")
+                  Text("Only show insights above this confidence level")
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
-                Text("\(Int(adviceMinConfidence * 100))%")
+                Text("\(Int(insightMinConfidence * 100))%")
                   .scaledFont(size: 13, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 40, alignment: .trailing)
               }
 
-              Slider(value: $adviceMinConfidence, in: 0.5...0.95, step: 0.05)
+              Slider(value: $insightMinConfidence, in: 0.5...0.95, step: 0.05)
                 .tint(OmiColors.purplePrimary)
-                .onChange(of: adviceMinConfidence) { _, newValue in
-                  AdviceAssistantSettings.shared.minConfidence = newValue
+                .onChange(of: insightMinConfidence) { _, newValue in
+                  InsightAssistantSettings.shared.minConfidence = newValue
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
-                      advice: AdviceSettingsResponse(minConfidence: newValue)))
+                      insight: InsightSettingsResponse(minConfidence: newValue)))
                 }
             }
 
             settingRow(
-              title: "Advice Prompt", subtitle: "Customize AI instructions for advice",
-              settingId: "advanced.adviceassistant.prompt"
+              title: "Insight Prompt", subtitle: "Customize AI instructions for insights",
+              settingId: "advanced.insightassistant.prompt"
             ) {
               HStack(spacing: 8) {
                 Button(action: {
-                  AdviceTestRunnerWindow.show()
+                  InsightTestRunnerWindow.show()
                 }) {
                   HStack(spacing: 4) {
                     Image(systemName: "play.circle")
@@ -3886,7 +3887,7 @@ struct SettingsContentView: View {
                 .controlSize(.small)
 
                 Button(action: {
-                  AdvicePromptEditorWindow.show()
+                  InsightPromptEditorWindow.show()
                 }) {
                   HStack(spacing: 4) {
                     Text("Edit")
@@ -3941,14 +3942,14 @@ struct SettingsContentView: View {
               }
               .tint(OmiColors.textTertiary)
 
-              if !adviceExcludedApps.isEmpty {
+              if !insightExcludedApps.isEmpty {
                 LazyVStack(spacing: 8) {
-                  ForEach(Array(adviceExcludedApps).sorted(), id: \.self) { appName in
+                  ForEach(Array(insightExcludedApps).sorted(), id: \.self) { appName in
                     ExcludedAppRow(
                       appName: appName,
                       onRemove: {
-                        AdviceAssistantSettings.shared.includeApp(appName)
-                        adviceExcludedApps = AdviceAssistantSettings.shared.excludedApps
+                        InsightAssistantSettings.shared.includeApp(appName)
+                        insightExcludedApps = InsightAssistantSettings.shared.excludedApps
                       }
                     )
                   }
@@ -3957,13 +3958,13 @@ struct SettingsContentView: View {
 
               AddExcludedAppView(
                 onAdd: { appName in
-                  AdviceAssistantSettings.shared.excludeApp(appName)
-                  adviceExcludedApps = AdviceAssistantSettings.shared.excludedApps
+                  InsightAssistantSettings.shared.excludeApp(appName)
+                  insightExcludedApps = InsightAssistantSettings.shared.excludedApps
                 },
-                excludedApps: adviceExcludedApps
+                excludedApps: insightExcludedApps
               )
             }
-          }  // end if adviceEnabled
+          }  // end if insightEnabled
         }
       }
     }
@@ -4709,7 +4710,7 @@ struct SettingsContentView: View {
 
       developerKeyField(
         title: "Gemini API Key",
-        subtitle: "For proactive AI (memory, tasks, advice, focus)",
+        subtitle: "For proactive AI (memory, tasks, insights, focus)",
         settingId: "advanced.devkeys.gemini",
         value: $devGeminiKey
       )
@@ -5591,9 +5592,8 @@ struct SettingsContentView: View {
     for plan in primary {
       if let existing = mergedById[plan.id] {
         let mergedPrices = Array(
-          Dictionary(
-            uniqueKeysWithValues: (existing.prices + plan.prices).map { ($0.id, $0) }
-          ).values
+          Dictionary(uniqueKeysWithValues: (existing.prices + plan.prices).map { ($0.id, $0) })
+            .values
         )
         .sorted { $0.title < $1.title }
 
@@ -5859,8 +5859,8 @@ struct SettingsContentView: View {
     extractionIntervalOptions.firstIndex(of: taskExtractionInterval) ?? 0
   }
 
-  private var adviceIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: adviceExtractionInterval) ?? 0
+  private var insightIntervalSliderIndex: Int {
+    extractionIntervalOptions.firstIndex(of: insightExtractionInterval) ?? 0
   }
 
   private var memoryIntervalSliderIndex: Int {
