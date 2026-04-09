@@ -4,7 +4,7 @@ from typing import List
 import os
 import time
 
-import requests
+import httpx
 
 from utils.http_client import (
     get_webhook_client,
@@ -75,7 +75,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
-        response = requests.get(url, headers=headers)
+        response = httpx.get(url, headers=headers)
 
         if response.status_code != 200:
             logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
@@ -89,7 +89,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
-                raw_response = requests.get(item["download_url"], headers=headers)
+                raw_response = httpx.get(item["download_url"], headers=headers)
                 if raw_response.status_code == 200:
                     docs_content[item["path"]] = raw_response.text
 
