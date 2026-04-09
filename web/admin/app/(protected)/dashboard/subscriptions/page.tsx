@@ -113,6 +113,7 @@ export default function SubscriptionsPage() {
 
   useEffect(() => {
     if (!token) return;
+    setHasPartialData(false);
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
