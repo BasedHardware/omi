@@ -15,6 +15,7 @@ from pydantic import BaseModel
 import database.wrapped as wrapped_db
 from database.wrapped import WrappedStatus
 from utils.other import endpoints as auth
+from utils.wrapped.generate_2025 import generate_wrapped_2025
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,12 +37,9 @@ class GenerateWrappedResponse(BaseModel):
     message: str
 
 
-# Background generation function (imported lazily to avoid circular imports)
 def _run_wrapped_generation(uid: str, year: int):
-    """Run wrapped generation in a background thread."""
+    """Run wrapped generation in background executor."""
     try:
-        from utils.wrapped.generate_2025 import generate_wrapped_2025
-
         generate_wrapped_2025(uid, year)
     except Exception as e:
         logger.error(f"Error in wrapped generation for user {uid}: {e}")
