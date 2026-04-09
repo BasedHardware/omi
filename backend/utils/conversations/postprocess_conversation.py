@@ -1,8 +1,9 @@
 import asyncio
 import os
-import threading
 import time
 from typing import List
+
+from utils.executors import storage_executor
 
 from pydub import AudioSegment
 
@@ -72,7 +73,7 @@ def postprocess_conversation(
     try:
         aseg = AudioSegment.from_wav(file_path)
         signed_url = upload_postprocessing_audio(file_path)
-        threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
+        storage_executor.submit(_delete_postprocessing_audio, file_path)
 
         if aseg.frame_rate == 16000 and get_user_store_recording_permission(uid):
             upload_conversation_recording(file_path, uid, conversation_id)
