@@ -8965,16 +8965,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get continueAnyway => 'ดำเนินการต่อ';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'ล้างรายการที่เสร็จแล้ว';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'เลือกทั้งหมด';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'ลบ $count งาน';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'ทำเครื่องหมายว่าเสร็จสิ้น';
 }

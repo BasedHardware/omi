@@ -9007,16 +9007,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get continueAnyway => 'Pokračovat';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Vymazat dokončené';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Vybrat vše';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Smazat $count úkol(y)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Označeno jako dokončené';
 }

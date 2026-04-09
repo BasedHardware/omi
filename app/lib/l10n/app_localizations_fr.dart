@@ -9092,16 +9092,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get continueAnyway => 'Continuer';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Effacer les terminés';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Tout sélectionner';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Supprimer $count tâche(s)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Marqué comme terminé';
 }

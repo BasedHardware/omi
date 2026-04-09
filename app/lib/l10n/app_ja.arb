@@ -2936,5 +2936,9 @@
     "enableLocationDescription": "近くのBluetoothデバイスを検出するには位置情報の許可が必要です。",
     "firmwareWarningTitle": "重要：更新前にお読みください",
     "firmwareFormatWarning": "このファームウェアはSDカードをフォーマットします。アップグレード前にすべてのオフラインデータが同期されていることを確認してください。\n\nこのバージョンのインストール後に赤いライトが点滅しても心配しないでください。デバイスをアプリに接続するだけで青に変わるはずです。赤いライトはデバイスの時計がまだ同期されていないことを意味します。",
-    "continueAnyway": "続行"
+    "continueAnyway": "続行",
+    "tasksClearCompleted": "完了済みをクリア",
+    "tasksSelectAll": "すべて選択",
+    "tasksDeleteSelected": "{count}件のタスクを削除",
+    "tasksMarkComplete": "完了としてマーク"
 }

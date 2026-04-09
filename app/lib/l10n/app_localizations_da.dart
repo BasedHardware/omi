@@ -8997,16 +8997,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get continueAnyway => 'Fortsæt';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Ryd afsluttede';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Vælg alle';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Slet $count opgave(r)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Markeret som fuldført';
 }

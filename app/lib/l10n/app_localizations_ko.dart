@@ -8863,16 +8863,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueAnyway => '계속';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => '완료된 항목 지우기';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => '모두 선택';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count개 작업 삭제';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => '완료로 표시됨';
 }

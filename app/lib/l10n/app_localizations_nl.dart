@@ -9039,16 +9039,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get continueAnyway => 'Doorgaan';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Verwijder voltooide';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Alles selecteren';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count taak/taken verwijderen';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Gemarkeerd als voltooid';
 }

@@ -8992,16 +8992,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get continueAnyway => 'जारी रखें';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'पूर्ण हटाएं';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'सभी चुनें';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count कार्य हटाएं';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'पूर्ण के रूप में चिह्नित';
 }

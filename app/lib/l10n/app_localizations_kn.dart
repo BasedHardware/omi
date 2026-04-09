@@ -9043,16 +9043,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get continueAnyway => 'ಮುಂದುವರಿಸಿ';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'ಪೂರ್ಣಗೊಂಡವನ್ನು ತೆರವು ಮಾಡಿ';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'ಎಲ್ಲ ಆಯ್ಕೆ ಮಾಡಿ';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count ಕಾರ್ಯ(ಗಳನ್ನು) ಅಳಿಸಿ';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ';
 }

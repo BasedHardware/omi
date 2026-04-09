@@ -9075,16 +9075,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueAnyway => 'Συνέχεια';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Εκκαθάριση ολοκληρωμένων';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Επιλογή όλων';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Διαγραφή $count εργασίας(ών)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Επισημάνθηκε ως ολοκληρωμένο';
 }

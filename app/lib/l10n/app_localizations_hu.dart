@@ -9050,16 +9050,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get continueAnyway => 'Folytatás';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Befejezettek törlése';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Az összes kijelölése';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count feladat törlése';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Befejezettként megjelölve';
 }

@@ -8998,16 +8998,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get continueAnyway => 'Pokračovať';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Vymazať dokončené';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Vybrať všetko';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Odstrániť $count úlohu(y)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Označené ako dokončené';
 }

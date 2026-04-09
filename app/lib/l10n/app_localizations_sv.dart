@@ -9015,16 +9015,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get continueAnyway => 'Fortsätt';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Rensa avslutade';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Välj alla';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Ta bort $count uppgift(er)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Markerad som klar';
 }

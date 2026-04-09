@@ -9035,16 +9035,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get continueAnyway => 'Teruskan';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Kosongkan yang selesai';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Pilih semua';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Padam $count tugas';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Ditandai selesai';
 }

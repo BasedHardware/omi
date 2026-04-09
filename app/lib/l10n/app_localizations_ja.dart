@@ -8861,16 +8861,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get continueAnyway => '続行';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => '完了済みをクリア';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'すべて選択';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count件のタスクを削除';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => '完了としてマーク';
 }

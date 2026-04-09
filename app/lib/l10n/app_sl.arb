@@ -10749,5 +10749,9 @@
     },
     "firmwareWarningTitle": "Pomembno: Preberite pred posodobitvijo",
     "firmwareFormatWarning": "Ta vdelana programska oprema bo formatirala kartico SD. Pred nadgradnjo se prepričajte, da so vsi podatki brez povezave sinhronizirani.\n\nČe po namestitvi te različice vidite utripajočo rdečo lučko, ne skrbite. Preprosto povežite napravo z aplikacijo in morala bi postati modra. Rdeča lučka pomeni, da ura naprave še ni bila sinhronizirana.",
-    "continueAnyway": "Nadaljuj"
+    "continueAnyway": "Nadaljuj",
+    "tasksClearCompleted": "Počisti dokončane",
+    "tasksSelectAll": "Izberi vse",
+    "tasksDeleteSelected": "Izbriši {count} nalogo(e)",
+    "tasksMarkComplete": "Označeno kot dokončano"
 }

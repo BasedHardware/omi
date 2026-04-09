@@ -9029,16 +9029,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get continueAnyway => 'Turpināt';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Notīrīt paveiktos';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Atlasīt visu';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Dzēst $count uzdevumu(s)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Atzīmēts kā pabeigts';
 }

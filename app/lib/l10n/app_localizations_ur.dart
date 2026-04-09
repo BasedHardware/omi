@@ -9026,16 +9026,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get continueAnyway => 'جاری رکھیں';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'مکمل کو صاف کریں';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'سب منتخب کریں';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '$count کام حذف کریں';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'مکمل کے طور پر نشان زد';
 }

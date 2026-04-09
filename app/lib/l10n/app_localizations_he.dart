@@ -8939,16 +8939,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get continueAnyway => 'המשך';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'נקה גמורים';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'בחר הכל';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'מחק $count משימה(ות)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'סומן כהושלם';
 }

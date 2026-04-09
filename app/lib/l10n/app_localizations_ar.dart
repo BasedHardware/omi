@@ -8950,16 +8950,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get continueAnyway => 'متابعة';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'مسح المكتملة';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'تحديد الكل';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'حذف $count مهمة';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'تم وضع علامة مكتمل';
 }

@@ -8849,16 +8849,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get continueAnyway => '继续';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => '清除已完成';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => '全选';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return '删除 $count 个任务';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => '已标记为完成';
 }

@@ -9010,16 +9010,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get continueAnyway => 'Jatka';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Tyhjennä valmiit';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Valitse kaikki';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Poista $count tehtävä(ä)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Merkitty valmiiksi';
 }

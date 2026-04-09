@@ -9036,16 +9036,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String get continueAnyway => 'Nadaljuj';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Počisti dokončane';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Izberi vse';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Izbriši $count nalogo(e)';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Označeno kot dokončano';
 }

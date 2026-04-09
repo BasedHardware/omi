@@ -9012,16 +9012,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get continueAnyway => 'Tiếp tục';
 
   @override
-  String get tasksClearCompleted => 'Clear Completed';
+  String get tasksClearCompleted => 'Xóa hoàn thành';
 
   @override
-  String get tasksSelectAll => 'Select All';
+  String get tasksSelectAll => 'Chọn tất cả';
 
   @override
   String tasksDeleteSelected(int count) {
-    return 'Delete $count task(s)';
+    return 'Xóa $count nhiệm vụ';
   }
 
   @override
-  String get tasksMarkComplete => 'Marked as complete';
+  String get tasksMarkComplete => 'Đã đánh dấu hoàn thành';
 }
