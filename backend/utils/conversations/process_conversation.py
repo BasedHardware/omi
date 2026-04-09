@@ -507,7 +507,7 @@ def _extract_trends(uid: str, conversation: Conversation):
     with track_usage(uid, Features.TRENDS):
         extracted_items = trends_extractor(uid, conversation)
         parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
-        trends_db.save_trends(conversation, parsed)
+        trends_db.save_trends(conversation.id, parsed)
 
 
 def _save_action_items(uid: str, conversation: Conversation):
@@ -591,7 +591,7 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation, vector, metadata)
+        upsert_vector2(uid, conversation.id, vector, metadata)
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
