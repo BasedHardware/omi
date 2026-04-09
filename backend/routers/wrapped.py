@@ -4,8 +4,9 @@ Wrapped 2025 API endpoints.
 Provides generation and retrieval of yearly recap data.
 """
 
-import threading
 from datetime import datetime, timezone
+
+from utils.executors import critical_executor
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -110,8 +111,7 @@ def generate_wrapped(
         if wrapped_db.is_wrapped_stuck(wrapped):
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            thread = threading.Thread(target=_run_wrapped_generation, args=(uid, year))
-            thread.start()
+            critical_executor.submit(_run_wrapped_generation, uid, year)
             return GenerateWrappedResponse(
                 status=WrappedStatus.PROCESSING,
                 message="Restarting stuck generation...",
@@ -129,8 +129,7 @@ def generate_wrapped(
         wrapped_db.create_wrapped(uid, year)
 
     # Start generation in background
-    thread = threading.Thread(target=_run_wrapped_generation, args=(uid, year))
-    thread.start()
+    critical_executor.submit(_run_wrapped_generation, uid, year)
 
     return GenerateWrappedResponse(
         status=WrappedStatus.PROCESSING,
