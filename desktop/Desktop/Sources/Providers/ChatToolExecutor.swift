@@ -1033,15 +1033,14 @@ class ChatToolExecutor {
     // MARK: - Date Validation
 
     /// Validates an ISO 8601 date string has a timezone offset by parsing it.
-    /// Returns the date string if valid, or an error message if malformed.
+    /// Catches format errors (missing timezone, garbage input). Calendar validity
+    /// (e.g. Feb 30 → Mar 1 normalization) is left to the backend's datetime parser.
     private static func validateISODate(_ dateStr: String, paramName: String) -> (valid: String?, error: String?) {
-        // Try parsing with ISO8601DateFormatter (handles full ISO 8601 including fractional seconds)
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if formatter.date(from: dateStr) != nil {
             return (dateStr, nil)
         }
-        // Retry without fractional seconds
         formatter.formatOptions = [.withInternetDateTime]
         if formatter.date(from: dateStr) != nil {
             return (dateStr, nil)
