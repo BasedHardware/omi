@@ -708,9 +708,24 @@ class ActionItemsProvider extends ChangeNotifier {
     if (success) {
       _selectedItems.clear();
       _isSelectionMode = false;
+      notifyListeners();
     }
 
     return success;
+  }
+
+  Future<bool> clearCompletedItems() async {
+    final completed = _actionItems.where((item) => item.completed).toList();
+    if (completed.isEmpty) return true;
+
+    final results = await Future.wait(completed.map((item) => deleteActionItem(item)));
+    return results.every((success) => success);
+  }
+
+  void startSelectionWithItem(String itemId) {
+    _isSelectionMode = true;
+    _selectedItems = {itemId};
+    notifyListeners();
   }
 
   @override
