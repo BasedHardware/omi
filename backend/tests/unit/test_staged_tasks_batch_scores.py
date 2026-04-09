@@ -128,12 +128,13 @@ class TestBatchUpdateStagedScores:
     """batch_update_staged_scores must skip IDs not present in Firestore."""
 
     def test_skips_stale_ids(self):
-        """Only existing IDs should be updated; stale IDs must be silently skipped."""
+        """Only existing active IDs should be updated; stale IDs must be silently skipped."""
         col_mock = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
 
-        # Server has task-1 and task-3; task-2 was deleted
-        col_mock.select.return_value.stream.return_value = [
+        # .where(completed==False).select([]).stream() returns active docs only
+        # Server has task-1 and task-3 active; task-2 was deleted
+        col_mock.where.return_value.select.return_value.stream.return_value = [
             _make_doc_snapshot("task-1"),
             _make_doc_snapshot("task-3"),
         ]
@@ -171,8 +172,8 @@ class TestBatchUpdateStagedScores:
         col_mock = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
 
-        # Server has no matching docs
-        col_mock.select.return_value.stream.return_value = []
+        # Server has no active docs matching
+        col_mock.where.return_value.select.return_value.stream.return_value = []
 
         batch_mock = MagicMock()
         mock_db.batch.return_value = batch_mock
@@ -188,11 +189,11 @@ class TestBatchUpdateStagedScores:
         mock_db.batch.assert_not_called()
 
     def test_all_valid_ids_updates_all(self):
-        """When all IDs exist, all should be updated."""
+        """When all active IDs exist, all should be updated."""
         col_mock = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
 
-        col_mock.select.return_value.stream.return_value = [
+        col_mock.where.return_value.select.return_value.stream.return_value = [
             _make_doc_snapshot("t1"),
             _make_doc_snapshot("t2"),
         ]
@@ -209,3 +210,28 @@ class TestBatchUpdateStagedScores:
 
         assert batch_mock.update.call_count == 2
         batch_mock.commit.assert_called_once()
+
+    def test_skips_promoted_completed_ids(self):
+        """Promoted tasks (completed=True) should be excluded by the where filter."""
+        col_mock = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
+
+        # Only task-1 is active; task-2 is promoted (completed=True) so the
+        # where(completed==False) query won't return it
+        col_mock.where.return_value.select.return_value.stream.return_value = [
+            _make_doc_snapshot("task-1"),
+        ]
+
+        batch_mock = MagicMock()
+        mock_db.batch.return_value = batch_mock
+
+        scores = [
+            {"id": "task-1", "relevance_score": 0.9},
+            {"id": "task-2", "relevance_score": 0.5},  # promoted, completed=True
+        ]
+
+        staged_tasks_mod.batch_update_staged_scores("uid-789", scores)
+
+        # Only task-1 should be updated
+        assert batch_mock.update.call_count == 1
+        col_mock.document.assert_called_once_with("task-1")
