@@ -1,7 +1,8 @@
 import asyncio
 import logging
-import threading
 from typing import List, Optional
+
+from utils.executors import critical_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
@@ -57,7 +58,7 @@ def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid))
     upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
 
     if memory.visibility == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
     return memory_db
 
 
@@ -182,5 +183,5 @@ def update_memory_visibility(memory_id: str, value: str, uid: str = Depends(auth
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    critical_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}
