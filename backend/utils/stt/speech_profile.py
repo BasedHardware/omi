@@ -4,7 +4,7 @@ import logging
 import os
 from typing import List
 
-import requests
+import httpx
 from pydub import AudioSegment
 
 from utils.executors import storage_executor
@@ -25,7 +25,7 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
     files = [
         ('audio_file', (os.path.basename(audio_file_path), open(audio_file_path, 'rb'), 'audio/wav')),
     ]
-    response = requests.post(
+    response = httpx.post(
         os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}', data={'segments': json.dumps(segments)}, files=files
     )
     default = [{'is_user': False, 'person_id': None}] * len(segments)
