@@ -207,6 +207,10 @@ struct MessageMetadata {
     var hasScreenshot: Bool
     var screenshotSizeBytes: Int?
     var toolNames: [String]
+    /// Total rows returned across all execute_sql tool calls during this response
+    var sqlRowsReturned: Int
+    /// Number of execute_sql tool calls made during this response
+    var sqlQueryCount: Int
 
     var totalTokens: Int? {
         guard let input = inputTokens, let output = outputTokens else { return nil }
@@ -2020,6 +2024,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var sqlRowsReturned = 0
+        var sqlQueryCount = 0
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
@@ -2053,6 +2059,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(toolCall)
                 log("OMI tool \(name) executed for callId=\(callId)")
+                // Track SQL query stats for metadata
+                if name == "execute_sql" {
+                    sqlQueryCount += 1
+                    // Parse row count from result (format: "\nN row(s)" at end)
+                    if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+                        let numStr = result[match].components(separatedBy: " ").first ?? "0"
+                        sqlRowsReturned += Int(numStr) ?? 0
+                    }
+                }
                 return result
             }
             let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
@@ -2159,7 +2174,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     systemPrompt: systemPrompt,
                     hasScreenshot: imageData != nil,
                     screenshotSizeBytes: imageData?.count,
-                    toolNames: toolNames
+                    toolNames: toolNames,
+                    sqlRowsReturned: sqlRowsReturned,
+                    sqlQueryCount: sqlQueryCount
                 )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {
