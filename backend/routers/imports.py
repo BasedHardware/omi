@@ -4,14 +4,14 @@ Import endpoints for importing data from external sources.
 
 import asyncio
 import os
-import threading
 import uuid
 from typing import List, Optional
+
+from utils.executors import critical_executor, storage_executor
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 import database.import_jobs as import_jobs_db
-from utils.executors import storage_executor
 import database.conversations as conversations_db
 from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
@@ -73,8 +73,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
     # Start background processing
-    thread = threading.Thread(target=process_limitless_import, args=(job.id, uid, zip_path, language), daemon=True)
-    thread.start()
+    critical_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
 
     return ImportJobResponse(
         job_id=job.id,
