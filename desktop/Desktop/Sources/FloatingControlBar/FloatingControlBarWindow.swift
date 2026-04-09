@@ -899,19 +899,30 @@ class FloatingControlBarManager {
 
         barWindow.onShareLink = { [weak barWindow] in
             guard let barWindow = barWindow else { return nil }
-            // Collect all synced message IDs from the conversation
+            // Share the visible floating-bar exchange history in chat order.
             var messageIds: [String] = []
             for exchange in barWindow.state.chatHistory {
+                if let questionMessageId = exchange.questionMessageId {
+                    messageIds.append(questionMessageId)
+                }
                 if exchange.aiMessage.isSynced {
                     messageIds.append(exchange.aiMessage.id)
                 }
             }
+            if let currentQuestionMessageId = barWindow.state.currentQuestionMessageId {
+                messageIds.append(currentQuestionMessageId)
+            }
             if let current = barWindow.state.currentAIMessage, current.isSynced {
                 messageIds.append(current.id)
             }
-            guard !messageIds.isEmpty else { return nil }
+            let orderedUniqueMessageIds = messageIds.reduce(into: [String]()) { ids, messageId in
+                if !ids.contains(messageId) {
+                    ids.append(messageId)
+                }
+            }
+            guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
-                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
                 return response.url
             } catch {
                 log("Failed to get chat share link: \(error)")
@@ -1158,6 +1169,7 @@ class FloatingControlBarManager {
             window.state.chatHistory.append(
                 FloatingChatExchange(
                     question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
                     aiMessage: currentMessage
                 )
             )
@@ -1170,6 +1182,7 @@ class FloatingControlBarManager {
         // Set up new query
         window.state.displayedQuery = query
         window.state.markConversationActivity()
+        window.state.currentQuestionMessageId = nil
         window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
@@ -1391,6 +1404,7 @@ class FloatingControlBarManager {
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
+        barWindow.state.currentQuestionMessageId = nil
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
@@ -1438,6 +1452,14 @@ class FloatingControlBarManager {
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
+
+        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
+        if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
+            barWindow.state.currentQuestionMessageId = syncedUserMessage.id
+        }
+        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+            barWindow.state.currentAIMessage = finalAIMessage
+        }
 
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
