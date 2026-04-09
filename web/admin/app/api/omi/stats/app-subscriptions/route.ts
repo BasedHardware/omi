@@ -4,12 +4,14 @@ import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
+const MAX_PAGES = 50; // Safety limit: 50 pages × 100 = 5,000 subscriptions max
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
   try {
+    const stripe = getStripe();
     const omiMonthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const omiAnnualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
@@ -20,21 +22,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch ALL active subscriptions with pagination
+    // Fetch ALL active subscriptions with pagination (capped at MAX_PAGES)
     let allSubscriptions: Stripe.Subscription[] = [];
     let hasMore = true;
     let startingAfter: string | undefined = undefined;
+    let pageCount = 0;
 
-    while (hasMore) {
+    while (hasMore && pageCount < MAX_PAGES) {
       const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
         status: 'active',
-        limit: 100, // Stripe max per page
-        expand: ['data.items.data.price'], // Include price details
+        limit: 100,
+        expand: ['data.items.data.price'],
         ...(startingAfter ? { starting_after: startingAfter } : {}),
       });
 
       allSubscriptions = allSubscriptions.concat(page.data);
       hasMore = page.has_more;
+      pageCount++;
       if (hasMore && page.data.length > 0) {
         startingAfter = page.data[page.data.length - 1].id;
       }
@@ -78,6 +82,7 @@ export async function GET(request: NextRequest) {
       uniqueCustomers: Object.keys(customerSubscriptions).length,
       priceBreakdown,
       uniquePriceIds: Object.keys(priceBreakdown).length,
+      ...(hasMore ? { partial: true, note: `Capped at ${MAX_PAGES * 100} subscriptions` } : {}),
     });
   } catch (error) {
     console.error('Error fetching app subscription stats:', error);
