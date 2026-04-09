@@ -564,3 +564,73 @@ class TestConversationSummaryWithTranscript:
         assert "Hello team" in summary.transcript_text
         assert "Hi there" in summary.transcript_text
         assert sorted(summary.person_ids) == ["p1", "p2"]
+
+
+class TestPhase4ConsumerMigration:
+    """Phase 4b (#6484): consumers decoupled from Conversation import."""
+
+    def test_trends_extractor_accepts_segments_and_person_ids(self):
+        """trends_extractor no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/trends.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'trends_extractor':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids']
+                return
+        pytest.fail('trends_extractor function not found')
+
+    def test_retrieve_memory_context_params_accepts_segments(self):
+        """retrieve_memory_context_params no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/chat.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'retrieve_memory_context_params':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids']
+                return
+        pytest.fail('retrieve_memory_context_params function not found')
+
+    def test_obtain_emotional_message_accepts_segments(self):
+        """obtain_emotional_message no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/chat.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'obtain_emotional_message':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids', 'context', 'emotion']
+                return
+        pytest.fail('obtain_emotional_message function not found')
+
+    def test_removed_imports_not_present(self):
+        """Files that had Conversation import removed no longer import it."""
+        import pathlib
+
+        for file_path in [
+            'utils/retrieval/agentic.py',
+            'routers/speech_profile.py',
+            'utils/llm/trends.py',
+            'routers/chat.py',
+            'utils/chat.py',
+        ]:
+            source = pathlib.Path(file_path).read_text()
+            assert (
+                'from models.conversation import' not in source
+            ), f'{file_path} still imports from models.conversation'
+
+    def test_type_checking_only_imports(self):
+        """Files using TYPE_CHECKING should not have runtime Conversation import."""
+        import pathlib
+
+        source = pathlib.Path('utils/retrieval/graph.py').read_text()
+        assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
+        assert 'from __future__ import annotations' in source

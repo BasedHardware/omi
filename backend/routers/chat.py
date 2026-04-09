@@ -25,7 +25,6 @@ from models.chat import (
     MessageConversation,
     FileChat,
 )
-from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
 from utils.chat import (
@@ -149,15 +148,13 @@ def send_message(
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = []
-        # check if the items in the conversations list are dict
+        # Extract IDs from memories (may be dicts or objects)
         if memories:
-            converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Conversation(**m))
+                    memories_id.append(m.get('id', ''))
                 else:
-                    converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
+                    memories_id.append(m.id)
 
         ai_message = Message(
             id=str(uuid.uuid4()),

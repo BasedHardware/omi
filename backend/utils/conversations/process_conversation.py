@@ -505,7 +505,7 @@ def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
 
 def _extract_trends(uid: str, conversation: Conversation):
     with track_usage(uid, Features.TRENDS):
-        extracted_items = trends_extractor(uid, conversation)
+        extracted_items = trends_extractor(uid, conversation.transcript_segments, conversation.get_person_ids())
         parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
         trends_db.save_trends(conversation.id, parsed)
 
@@ -944,7 +944,9 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     title = "omi"
     context_str, _ = retrieve_rag_conversation_context(uid, conversation)
 
-    response: str = obtain_emotional_message(uid, conversation, context_str, emotion)
+    response: str = obtain_emotional_message(
+        uid, conversation.transcript_segments, conversation.get_person_ids(), context_str, emotion
+    )
     message = response
 
     # Send the notification

@@ -9,7 +9,6 @@ from pydub import AudioSegment
 from database.conversations import get_conversation
 from database.redis_db import set_speech_profile_duration
 from database.users import get_person, set_user_speaker_embedding
-from models.conversation import Conversation
 from models.other import UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import (

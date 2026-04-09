@@ -10,7 +10,6 @@ import database.notifications as notification_db
 import database.users as user_db
 from database.apps import record_app_usage
 from models.chat import ChatSession, Message, ResponseMessage, MessageConversation
-from models.conversation import Conversation
 from models.notification_message import NotificationMessage
 from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
@@ -219,15 +218,13 @@ def process_voice_message_segment(
     with track_usage(uid, Features.CHAT):
         response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
-    # check if the items in the conversations list are dict
+    # Extract IDs from memories (may be dicts or objects)
     if memories:
-        converted_memories = []
         for m in memories[:5]:
             if isinstance(m, dict):
-                converted_memories.append(Conversation(**m))
+                memories_id.append(m.get('id', ''))
             else:
-                converted_memories.append(m)
-        memories_id = [m.id for m in converted_memories]
+                memories_id.append(m.id)
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=response,
