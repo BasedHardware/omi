@@ -69,8 +69,8 @@ function getPlatformLink(userAgent: string, token: string) {
         'https://play.google.com/store/apps/details?id=com.friend.ios',
       )};end`
     : isIOS
-    ? `omi://h.omi.me/chat/${token}`
-    : 'https://omi.me';
+      ? `omi://h.omi.me/chat/${token}`
+      : 'https://omi.me';
 }
 
 function formatTimestamp(timestamp: string | null) {

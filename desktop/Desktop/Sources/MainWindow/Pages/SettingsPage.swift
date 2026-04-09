@@ -3197,7 +3197,7 @@ struct SettingsContentView: View {
             tierPickerRow(tier: 3, label: "Tier 3", subtitle: "+ Tasks (100 tasks)")
             tierPickerRow(tier: 4, label: "Tier 4", subtitle: "+ AI Chat (100 conversations)")
             tierPickerRow(
-              tier: 5, label: "Tier 5", subtitle: "+ Dashboard (200 convos + 2K screenshots)")
+              tier: 5, label: "Tier 5", subtitle: "+ Home (200 convos + 2K screenshots)")
             tierPickerRow(tier: 6, label: "Tier 6", subtitle: "+ Apps (300 conversations)")
           }
 
@@ -3242,7 +3242,7 @@ struct SettingsContentView: View {
 
             // Tier 5 — 200 conversations + 2,000 screenshots
             tierFeatureRow(
-              tier: 5, name: "Dashboard",
+              tier: 5, name: "Home",
               requirement: "200 conversations + 2K screenshots",
               progress: advancedStats.map {
                 "\($0.conversations) / 200 convos, \($0.screenshotsTotal) / 2,000 screenshots"

@@ -196,7 +196,7 @@ enum ViewExporter {
     let selectedIndex: Int
 
     private let items: [(String, String, Int)] = [
-      ("Dashboard", "house.fill", 0),
+      ("Home", "house.fill", 0),
       ("Conversations", "text.bubble.fill", 1),
       ("Chat", "bubble.left.and.bubble.right.fill", 2),
       ("Memories", "brain", 3),
@@ -428,9 +428,9 @@ enum ViewExporter {
         isDismissed: false,
         tags: ["interesting", "productivity"],
         reasoning: "Repeated design feedback emphasized spacing and chrome over feature changes.",
-        currentActivity: "Reviewing dashboard surfaces",
+        currentActivity: "Reviewing home surfaces",
         inputDeviceName: "MacBook Pro Microphone",
-        windowTitle: "Dashboard",
+        windowTitle: "Home",
         headline: nil
       ),
       ServerMemory(

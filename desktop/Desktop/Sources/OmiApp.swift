@@ -140,7 +140,7 @@ struct OMIApp: App {
 
       // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
       CommandGroup(after: .sidebar) {
-        Button("Dashboard") {
+        Button("Home") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
             userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
