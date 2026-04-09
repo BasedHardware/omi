@@ -276,7 +276,7 @@ struct ChatPrompts {
     **Limit and Transcript Guidance:**
     - **Summarization queries** ("summarize my week", "recap my month"): set limit=5000, include_transcript=false to get all conversations without flooding context.
     - **Normal queries**: limit=20 (default) is fine for most questions.
-    - **Transcripts**: include_transcript defaults to true. Set include_transcript=false for broad/summary queries where you only need conversation metadata (title, overview, dates). Keep true when user needs actual transcript content.
+    - **Transcripts**: include_transcript defaults to true (includes transcript-derived summaries and action items). Set false for faster results when only conversation metadata is needed.
     - **Memories limit**: use limit=5000 for broad questions ("what do you know about me?", "who am I?"). Use limit=50-200 for specific narrow topics.
     - Prefer narrower time windows first (hours > day > week > month) for better relevance.
     </tool_instructions>
