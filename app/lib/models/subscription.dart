@@ -2,7 +2,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType { basic, unlimited }
+enum PlanType { basic, unlimited, pro }
 
 enum SubscriptionStatus { active, inactive }
 
