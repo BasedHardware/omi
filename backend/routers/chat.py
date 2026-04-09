@@ -27,6 +27,7 @@ from models.chat import (
 )
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
+from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
@@ -147,14 +148,7 @@ def send_message(
             response = re.sub(r'\[\d+\]', '', response)
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
-        memories_id = []
-        # Extract IDs from memories (may be dicts or objects)
-        if memories:
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    memories_id.append(m.get('id', ''))
-                else:
-                    memories_id.append(m.id)
+        memories_id = extract_memory_ids(memories) if memories else []
 
         ai_message = Message(
             id=str(uuid.uuid4()),

@@ -639,25 +639,21 @@ class TestPhase4ConsumerMigration:
 class TestPhase4RuntimeBehavior:
     """Phase 4b (#6484): runtime tests for narrowed interfaces."""
 
-    def test_chat_memory_id_extraction_from_dict(self):
-        """routers/chat.py and utils/chat.py extract .id from dicts without Conversation."""
-        # Simulate the pattern used in routers/chat.py and utils/chat.py
+    def test_extract_memory_ids_from_dicts(self):
+        """extract_memory_ids handles dict inputs (used by routers/chat.py and utils/chat.py)."""
+        from utils.conversation_helpers import extract_memory_ids
+
         memories = [
             {'id': 'conv-1', 'structured': {'title': 'Test'}},
             {'id': 'conv-2', 'structured': {'title': 'Test 2'}},
         ]
-        memories_id = []
-        for m in memories[:5]:
-            if isinstance(m, dict):
-                memories_id.append(m.get('id', ''))
-            else:
-                memories_id.append(m.id)
-        assert memories_id == ['conv-1', 'conv-2']
+        assert extract_memory_ids(memories) == ['conv-1', 'conv-2']
 
-    def test_chat_memory_id_extraction_from_objects(self):
-        """Mixed dict/object memories handled correctly."""
+    def test_extract_memory_ids_from_objects(self):
+        """extract_memory_ids handles Conversation objects."""
         from models.conversation import Conversation
         from models.structured import Structured
+        from utils.conversation_helpers import extract_memory_ids
 
         now = datetime.now(timezone.utc)
         conv = Conversation(
@@ -667,17 +663,46 @@ class TestPhase4RuntimeBehavior:
             finished_at=now,
             structured=Structured(title='Test'),
         )
-        memories = [
-            {'id': 'conv-dict'},
-            conv,
-        ]
-        memories_id = []
-        for m in memories[:5]:
-            if isinstance(m, dict):
-                memories_id.append(m.get('id', ''))
-            else:
-                memories_id.append(m.id)
-        assert memories_id == ['conv-dict', 'conv-obj']
+        assert extract_memory_ids([conv]) == ['conv-obj']
+
+    def test_extract_memory_ids_mixed(self):
+        """extract_memory_ids handles mixed dict/object inputs."""
+        from models.conversation import Conversation
+        from models.structured import Structured
+        from utils.conversation_helpers import extract_memory_ids
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id='conv-obj',
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            structured=Structured(title='Test'),
+        )
+        memories = [{'id': 'conv-dict'}, conv]
+        assert extract_memory_ids(memories) == ['conv-dict', 'conv-obj']
+
+    def test_extract_memory_ids_limit(self):
+        """extract_memory_ids respects the limit parameter."""
+        from utils.conversation_helpers import extract_memory_ids
+
+        memories = [{'id': f'conv-{i}'} for i in range(10)]
+        assert len(extract_memory_ids(memories, limit=3)) == 3
+
+    def test_extract_memory_ids_empty(self):
+        """extract_memory_ids handles empty list."""
+        from utils.conversation_helpers import extract_memory_ids
+
+        assert extract_memory_ids([]) == []
+
+    def test_call_sites_use_extract_memory_ids(self):
+        """Verify routers/chat.py and utils/chat.py use the shared helper."""
+        import pathlib
+
+        for file_path in ['routers/chat.py', 'utils/chat.py']:
+            source = pathlib.Path(file_path).read_text()
+            assert 'extract_memory_ids' in source, f'{file_path} should use extract_memory_ids'
+            assert 'from utils.conversation_helpers import extract_memory_ids' in source
 
     def test_trends_extractor_signature_callable(self):
         """trends_extractor can be called with the new signature shape."""
