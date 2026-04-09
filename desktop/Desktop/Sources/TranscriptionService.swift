@@ -88,8 +88,22 @@ class TranscriptionService {
     private let language: String
     private let sampleRate = 16000
     private let encoding = "linear16"
-    private let channels = 1  // Always mono for Python backend streaming
+    /// Number of audio channels declared to the backend.
+    /// - 1 (default): single mono stream sent via `sendAudio(_:)`
+    /// - 2: multi-channel mode. Callers MUST use `sendAudio(_:channel:)` and prefix each
+    ///   PCM chunk with a 1-byte channel id (0x01 = mic/user, 0x02 = system audio/other).
+    ///   The backend's `/v4/listen` multichannel handler demuxes on the prefix byte and
+    ///   runs a separate Deepgram STT per channel, tagging segments with `is_user` from
+    ///   the desktop `ChannelConfig` (mic → is_user=true, system_audio → is_user=false).
+    private let channels: Int
     private let streamingMode: StreamingMode
+
+    /// Wire-protocol channel IDs used by the backend's multi-channel demuxer.
+    /// See `build_channel_config(source='desktop')` in backend/routers/transcribe.py.
+    enum Channel: UInt8 {
+        case mic = 0x01          // is_user = true
+        case systemAudio = 0x02  // is_user = false
+    }
 
     /// Python backend base URL for transcription endpoints.
     /// Resolution order: OMI_PYTHON_API_URL → https://api.omi.me/
@@ -124,11 +138,13 @@ class TranscriptionService {
     /// - Parameters:
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
-    init(language: String = "en", mode: StreamingMode = .conversation) throws {
+    ///   - channels: 1 (default mono) or 2 (multi-channel: mic + system audio). See `channels` property doc.
+    init(language: String = "en", mode: StreamingMode = .conversation, channels: Int = 1) throws {
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
         self.streamingMode = mode
-        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language)")
+        self.channels = channels
+        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language), channels=\(channels)")
     }
 
     /// Initialize for batch (PTT) mode only — uses Python backend `/v2/voice-message/transcribe`
@@ -144,6 +160,7 @@ class TranscriptionService {
         self.apiKey = ""
         self.language = language
         self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
+        self.channels = 1
         log("TranscriptionService: Initialized for batch (PTT) mode via Python backend")
     }
 
@@ -210,7 +227,8 @@ class TranscriptionService {
         disconnect()
     }
 
-    /// Send audio data to the backend (buffered for efficiency)
+    /// Send audio data to the backend (buffered for efficiency, mono only).
+    /// For multi-channel mode (channels=2), use `sendAudio(_:channel:)` instead.
     func sendAudio(_ data: Data) {
         guard isConnected else { return }
 
@@ -226,6 +244,25 @@ class TranscriptionService {
         } else {
             audioBufferLock.unlock()
         }
+    }
+
+    /// Send per-channel audio in multi-channel mode.
+    ///
+    /// Wire format for `/v4/listen` with `channels >= 2`: each WebSocket binary message
+    /// is `[channel_id:UInt8][linear16 PCM...]`. The backend's multichannel handler
+    /// demuxes on the first byte, runs a separate Deepgram STT per channel, and tags
+    /// segments with `is_user` from the desktop ChannelConfig (mic → is_user=true,
+    /// system_audio → is_user=false).
+    ///
+    /// We deliberately do NOT batch/coalesce here because each channel runs on its own
+    /// upstream callback cadence (mic and system audio have different frame sizes and
+    /// clocks) and interleaving them through a single buffer would break demux.
+    func sendAudio(_ data: Data, channel: Channel) {
+        guard isConnected, !data.isEmpty else { return }
+        var prefixed = Data(capacity: data.count + 1)
+        prefixed.append(channel.rawValue)
+        prefixed.append(data)
+        sendAudioChunk(prefixed)
     }
 
     /// Flush any remaining audio in the buffer
