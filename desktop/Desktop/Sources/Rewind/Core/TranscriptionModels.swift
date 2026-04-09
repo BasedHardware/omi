@@ -192,6 +192,7 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
     var speakerLabel: String?             // Speaker label (e.g., "SPEAKER_00")
     var isUser: Bool                      // Whether this segment is from the user
     var personId: String?                 // Associated person ID (if identified)
+    var translationsJson: String?         // JSON-encoded [TranscriptTranslation]
 
     static let databaseTableName = "transcription_segments"
 
@@ -210,7 +211,8 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
         segmentId: String? = nil,
         speakerLabel: String? = nil,
         isUser: Bool = false,
-        personId: String? = nil
+        personId: String? = nil,
+        translationsJson: String? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -225,6 +227,7 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
         self.speakerLabel = speakerLabel
         self.isUser = isUser
         self.personId = personId
+        self.translationsJson = translationsJson
     }
 
     // MARK: - Persistence Callbacks
@@ -410,6 +413,11 @@ extension TranscriptionSegmentRecord: TableDocumented {
 extension TranscriptionSegmentRecord {
     /// Create a local record from a TranscriptSegment
     static func from(_ segment: TranscriptSegment, sessionId: Int64, segmentOrder: Int) -> TranscriptionSegmentRecord {
+        var translationsJson: String?
+        if !segment.translations.isEmpty,
+           let data = try? JSONEncoder().encode(segment.translations) {
+            translationsJson = String(data: data, encoding: .utf8)
+        }
         return TranscriptionSegmentRecord(
             sessionId: sessionId,
             speaker: segment.speakerId,
@@ -420,12 +428,17 @@ extension TranscriptionSegmentRecord {
             segmentId: segment.backendId,
             speakerLabel: segment.speaker,
             isUser: segment.isUser,
-            personId: segment.personId
+            personId: segment.personId,
+            translationsJson: translationsJson
         )
     }
 
-    /// Convert back to TranscriptSegment for UI display
+    /// Convert back to TranscriptSegment for UI display.
     func toTranscriptSegment() -> TranscriptSegment {
+        var translations: [TranscriptTranslation] = []
+        if let json = translationsJson, let data = json.data(using: .utf8) {
+            translations = (try? JSONDecoder().decode([TranscriptTranslation].self, from: data)) ?? []
+        }
         return TranscriptSegment(
             id: segmentId ?? UUID().uuidString,
             backendId: segmentId,
@@ -434,7 +447,8 @@ extension TranscriptionSegmentRecord {
             isUser: isUser,
             personId: personId,
             start: startTime,
-            end: endTime
+            end: endTime,
+            translations: translations
         )
     }
 }
