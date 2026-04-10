@@ -40,14 +40,11 @@ from database.auth import get_user_name
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
-from models.conversation import (
-    Conversation,
-    ConversationPhoto,
-    ConversationSource,
-    ConversationStatus,
-    Structured,
-    TranscriptSegment,
-)
+from models.conversation import Conversation
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.conversation_photo import ConversationPhoto
+from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from models.message_event import (
     ConversationEvent,
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,

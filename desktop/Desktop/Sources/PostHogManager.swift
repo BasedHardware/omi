@@ -577,7 +577,7 @@ extension PostHogManager {
         ])
     }
 
-    func adviceGenerated(category: String?) {
+    func insightGenerated(category: String?) {
         var properties: [String: Any] = [:]
         if let cat = category { properties["category"] = cat }
         track("Advice Generated", properties: properties.isEmpty ? nil : properties)
@@ -642,27 +642,30 @@ extension PostHogManager {
 
     // MARK: - Notification Events
 
-    func notificationSent(notificationId: String, title: String, assistantId: String) {
+    func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Sent", properties: [
             "notification_id": notificationId,
             "title": title,
-            "assistant_id": assistantId
+            "assistant_id": assistantId,
+            "notification_surface": surface
         ])
     }
 
-    func notificationClicked(notificationId: String, title: String, assistantId: String) {
+    func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Clicked", properties: [
             "notification_id": notificationId,
             "title": title,
-            "assistant_id": assistantId
+            "assistant_id": assistantId,
+            "notification_surface": surface
         ])
     }
 
-    func notificationDismissed(notificationId: String, title: String, assistantId: String) {
+    func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Dismissed", properties: [
             "notification_id": notificationId,
             "title": title,
-            "assistant_id": assistantId
+            "assistant_id": assistantId,
+            "notification_surface": surface
         ])
     }
 

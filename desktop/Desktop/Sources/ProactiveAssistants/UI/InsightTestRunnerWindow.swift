@@ -3,13 +3,13 @@ import SwiftUI
 
 // MARK: - Test Result Model
 
-struct AdviceTestResult: Identifiable {
+struct InsightTestResult: Identifiable {
     let id = UUID()
     let index: Int
     let timestamp: Date
     let appName: String
     let windowTitle: String?
-    let result: AdviceExtractionResult?
+    let result: InsightExtractionResult?
     let error: String?
     let duration: TimeInterval
     let sqlQueryCount: Int
@@ -17,11 +17,11 @@ struct AdviceTestResult: Identifiable {
 
 // MARK: - SwiftUI View
 
-struct AdviceTestRunnerView: View {
+struct InsightTestRunnerView: View {
     @State private var periodFrom: Date = Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date()
     @State private var periodTo: Date = Date()
     @State private var isRunning = false
-    @State private var results: [AdviceTestResult] = []
+    @State private var results: [InsightTestResult] = []
     @State private var progress: Double = 0
     @State private var elapsedTime: TimeInterval = 0
     @State private var statusMessage = "Ready"
@@ -30,8 +30,8 @@ struct AdviceTestRunnerView: View {
 
     var onClose: (() -> Void)?
 
-    private var adviceFound: Int {
-        results.filter { $0.result?.hasAdvice == true }.count
+    private var insightsFound: Int {
+        results.filter { $0.result?.hasInsight == true }.count
     }
 
     private var errorsCount: Int {
@@ -94,11 +94,11 @@ struct AdviceTestRunnerView: View {
         VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Advice Extraction Test Runner")
+                    Text("Insight Extraction Test Runner")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.primary)
 
-                    Text("Replay screenshots through the agentic advice pipeline (activity summary + SQL investigation + advice)")
+                    Text("Replay screenshots through the agentic insight pipeline (activity summary + SQL investigation + insight)")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
@@ -209,7 +209,7 @@ struct AdviceTestRunnerView: View {
 
     // MARK: - Result Row
 
-    private func resultRow(_ testResult: AdviceTestResult) -> some View {
+    private func resultRow(_ testResult: InsightTestResult) -> some View {
         HStack(spacing: 16) {
             // Index
             Text("\(testResult.index)")
@@ -263,27 +263,27 @@ struct AdviceTestRunnerView: View {
                     .foregroundColor(.orange)
                     .lineLimit(2)
             } else if let result = testResult.result {
-                if result.hasAdvice, let advice = result.advice {
+                if result.hasInsight, let extractedInsight = result.insight {
                     VStack(alignment: .leading, spacing: 2) {
-                        if let headline = advice.headline {
+                        if let headline = extractedInsight.headline {
                             Text(headline)
                                 .scaledFont(size: 12, weight: .medium)
                                 .foregroundColor(.primary)
                                 .lineLimit(1)
                         }
-                        Text(advice.advice)
+                        Text(extractedInsight.insight)
                             .scaledFont(size: 11)
                             .foregroundColor(.primary.opacity(0.8))
                             .lineLimit(2)
                         HStack(spacing: 8) {
-                            Text(advice.category.rawValue)
+                            Text(extractedInsight.category.rawValue)
                                 .scaledFont(size: 10, weight: .medium)
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
-                                .background(categoryColor(advice.category))
+                                .background(categoryColor(extractedInsight.category))
                                 .cornerRadius(3)
-                            Text(advice.sourceApp)
+                            Text(extractedInsight.sourceApp)
                                 .scaledFont(size: 10)
                                 .foregroundColor(.secondary)
                         }
@@ -298,11 +298,11 @@ struct AdviceTestRunnerView: View {
 
             Spacer()
 
-            // Confidence (only for advice)
-            if let result = testResult.result, result.hasAdvice, let advice = result.advice {
-                Text("\(Int(advice.confidence * 100))%")
+            // Confidence (only for insights)
+            if let result = testResult.result, result.hasInsight, let extractedInsight = result.insight {
+                Text("\(Int(extractedInsight.confidence * 100))%")
                     .scaledFont(size: 12, weight: .medium, design: .monospaced)
-                    .foregroundColor(confidenceColor(advice.confidence))
+                    .foregroundColor(confidenceColor(extractedInsight.confidence))
                     .frame(width: 40, alignment: .trailing)
             } else {
                 Text("")
@@ -317,10 +317,10 @@ struct AdviceTestRunnerView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
-        .background(testResult.result?.hasAdvice == true ? Color.green.opacity(0.05) : Color.clear)
+        .background(testResult.result?.hasInsight == true ? Color.green.opacity(0.05) : Color.clear)
     }
 
-    private func decisionBadge(for testResult: AdviceTestResult) -> some View {
+    private func decisionBadge(for testResult: InsightTestResult) -> some View {
         Group {
             if testResult.error != nil {
                 HStack(spacing: 4) {
@@ -331,11 +331,11 @@ struct AdviceTestRunnerView: View {
                 }
                 .foregroundColor(.orange)
             } else if let result = testResult.result {
-                if result.hasAdvice {
+                if result.hasInsight {
                     HStack(spacing: 4) {
                         Image(systemName: "lightbulb.fill")
                             .scaledFont(size: 10)
-                        Text("Advice")
+                        Text("Insights")
                             .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.green)
@@ -343,7 +343,7 @@ struct AdviceTestRunnerView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "minus.circle")
                             .scaledFont(size: 10)
-                        Text("No Advice")
+                        Text("No Insight")
                             .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.secondary)
@@ -352,7 +352,7 @@ struct AdviceTestRunnerView: View {
         }
     }
 
-    private func categoryColor(_ category: AdviceCategory) -> Color {
+    private func categoryColor(_ category: InsightCategory) -> Color {
         switch category {
         case .productivity: return .blue
         case .communication: return .purple
@@ -378,9 +378,9 @@ struct AdviceTestRunnerView: View {
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
 
-                    Label("\(adviceFound) advice", systemImage: "lightbulb")
+                    Label("\(insightsFound) insights", systemImage: "lightbulb")
                         .scaledFont(size: 12)
-                        .foregroundColor(adviceFound > 0 ? .green : .secondary)
+                        .foregroundColor(insightsFound > 0 ? .green : .secondary)
 
                     Label("\(totalSqlQueries) SQL queries", systemImage: "cylinder")
                         .scaledFont(size: 12)
@@ -418,7 +418,7 @@ struct AdviceTestRunnerView: View {
     // MARK: - Test Execution
 
     private func runTest() {
-        log("AdviceTestRunner: runTest() called")
+        log("InsightTestRunner: runTest() called")
         isRunning = true
         results = []
         progress = 0
@@ -436,16 +436,16 @@ struct AdviceTestRunnerView: View {
             let coordAssistant = await MainActor.run(body: {
                 AssistantCoordinator.shared.assistant(withIdentifier: "advice")
             })
-            let adviceAssistant: AdviceAssistant
-            if let existing = coordAssistant as? AdviceAssistant {
-                adviceAssistant = existing
-                log("AdviceTestRunner: Using existing AdviceAssistant from coordinator")
+            let insightAssistant: InsightAssistant
+            if let existing = coordAssistant as? InsightAssistant {
+                insightAssistant = existing
+                log("InsightTestRunner: Using existing InsightAssistant from coordinator")
             } else {
                 do {
-                    adviceAssistant = try AdviceAssistant()
-                    log("AdviceTestRunner: Created fresh AdviceAssistant instance")
+                    insightAssistant = try InsightAssistant()
+                    log("InsightTestRunner: Created fresh InsightAssistant instance")
                 } catch {
-                    log("AdviceTestRunner: ERROR - Failed to create AdviceAssistant: \(error)")
+                    log("InsightTestRunner: ERROR - Failed to create InsightAssistant: \(error)")
                     await MainActor.run {
                         statusMessage = "Failed to create Advice Assistant: \(error.localizedDescription)"
                         isRunning = false
@@ -456,7 +456,7 @@ struct AdviceTestRunnerView: View {
 
             // Get excluded apps
             let excludedApps = await MainActor.run {
-                AdviceAssistantSettings.shared.excludedApps
+                InsightAssistantSettings.shared.excludedApps
             }
 
             // Fetch all screenshots from selected range (excluding excluded apps)
@@ -468,7 +468,7 @@ struct AdviceTestRunnerView: View {
                     limit: 100_000
                 ).reversed() // getScreenshots returns desc, we want chronological
             } catch {
-                log("AdviceTestRunner: ERROR - Failed to load screenshots: \(error)")
+                log("InsightTestRunner: ERROR - Failed to load screenshots: \(error)")
                 await MainActor.run {
                     statusMessage = "Failed to load screenshots: \(error.localizedDescription)"
                     isRunning = false
@@ -520,7 +520,7 @@ struct AdviceTestRunnerView: View {
                     let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
                     let analyzeStart = Date()
-                    let (result, sqlCount) = try await adviceAssistant.testAnalyze(
+                    let (result, sqlCount) = try await insightAssistant.testAnalyze(
                         jpegData: jpegData,
                         appName: screenshot.appName,
                         windowTitle: screenshot.windowTitle,
@@ -529,7 +529,7 @@ struct AdviceTestRunnerView: View {
                     let duration = Date().timeIntervalSince(analyzeStart)
 
                     await MainActor.run {
-                        results.append(AdviceTestResult(
+                        results.append(InsightTestResult(
                             index: i + 1,
                             timestamp: screenshot.timestamp,
                             appName: screenshot.appName,
@@ -543,7 +543,7 @@ struct AdviceTestRunnerView: View {
                     }
                 } catch {
                     await MainActor.run {
-                        results.append(AdviceTestResult(
+                        results.append(InsightTestResult(
                             index: i + 1,
                             timestamp: screenshot.timestamp,
                             appName: screenshot.appName,
@@ -570,8 +570,8 @@ struct AdviceTestRunnerView: View {
 
 // MARK: - NSWindow Subclass
 
-class AdviceTestRunnerWindow: NSWindow {
-    private static var sharedWindow: AdviceTestRunnerWindow?
+class InsightTestRunnerWindow: NSWindow {
+    private static var sharedWindow: InsightTestRunnerWindow?
 
     static func show() {
         if let existingWindow = sharedWindow {
@@ -580,7 +580,7 @@ class AdviceTestRunnerWindow: NSWindow {
             return
         }
 
-        let window = AdviceTestRunnerWindow()
+        let window = InsightTestRunnerWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -601,13 +601,13 @@ class AdviceTestRunnerWindow: NSWindow {
             defer: false
         )
 
-        self.title = "Advice Extraction Test Runner"
+        self.title = "Insight Extraction Test Runner"
         self.isReleasedWhenClosed = false
         self.delegate = self
         self.minSize = NSSize(width: 900, height: 600)
         self.center()
 
-        let runnerView = AdviceTestRunnerView(onClose: { [weak self] in
+        let runnerView = InsightTestRunnerView(onClose: { [weak self] in
             self?.close()
         })
 
@@ -618,15 +618,15 @@ class AdviceTestRunnerWindow: NSWindow {
 
 // MARK: - NSWindowDelegate
 
-extension AdviceTestRunnerWindow: NSWindowDelegate {
+extension InsightTestRunnerWindow: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        AdviceTestRunnerWindow.sharedWindow = nil
+        InsightTestRunnerWindow.sharedWindow = nil
     }
 }
 
 // MARK: - CLI Test Runner (headless, logs to omi-dev.log)
 
-enum AdviceTestRunner {
+enum InsightTestRunner {
 
     /// Run the advice test headlessly — triggered by distributed notification from CLI.
     /// Simulates production cadence: divides the time range into extraction-interval
@@ -635,36 +635,36 @@ enum AdviceTestRunner {
     static func runCLITest(lookbackHours: Double, maxScreenshots: Int) async {
         let periodEnd = Date()
         let periodStart = periodEnd.addingTimeInterval(-lookbackHours * 3600)
-        let interval = await MainActor.run { AdviceAssistantSettings.shared.extractionInterval }
+        let interval = await MainActor.run { InsightAssistantSettings.shared.extractionInterval }
 
-        log("AdviceTestCLI: Starting test — range \(periodStart) to \(periodEnd), interval \(Int(interval))s, max \(maxScreenshots) windows")
+        log("InsightTestCLI: Starting test — range \(periodStart) to \(periodEnd), interval \(Int(interval))s, max \(maxScreenshots) windows")
 
-        // Get or create AdviceAssistant
+        // Get or create InsightAssistant
         let coordAssistant = await MainActor.run {
             AssistantCoordinator.shared.assistant(withIdentifier: "advice")
         }
-        let adviceAssistant: AdviceAssistant
-        if let existing = coordAssistant as? AdviceAssistant {
-            adviceAssistant = existing
+        let insightAssistant: InsightAssistant
+        if let existing = coordAssistant as? InsightAssistant {
+            insightAssistant = existing
         } else {
             do {
-                adviceAssistant = try AdviceAssistant()
+                insightAssistant = try InsightAssistant()
             } catch {
-                log("AdviceTestCLI: ERROR — Failed to create AdviceAssistant: \(error)")
+                log("InsightTestCLI: ERROR — Failed to create InsightAssistant: \(error)")
                 return
             }
         }
 
         // Get excluded apps
         let excludedApps = await MainActor.run {
-            AdviceAssistantSettings.shared.excludedApps
+            InsightAssistantSettings.shared.excludedApps
         }
 
         // Ensure storage is initialized for the current user
         do {
             try await RewindStorage.shared.initialize()
         } catch {
-            log("AdviceTestCLI: WARNING — Storage init failed: \(error)")
+            log("InsightTestCLI: WARNING — Storage init failed: \(error)")
         }
 
         // Build analysis windows (each covers one extraction interval)
@@ -690,11 +690,11 @@ enum AdviceTestRunner {
         }
 
         // For each window, find the latest non-excluded screenshot to get app context
-        log("AdviceTestCLI: Processing \(sampled.count) windows (from \(windows.count) total)")
+        log("InsightTestCLI: Processing \(sampled.count) windows (from \(windows.count) total)")
 
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm:ss"
-        var adviceCount = 0
+        var insightCount = 0
         var errorCount = 0
         var nilCount = 0
         var noAdviceCount = 0
@@ -714,7 +714,7 @@ enum AdviceTestRunner {
                 )
             } catch {
                 errorCount += 1
-                log("AdviceTestCLI: \(label) ERROR fetching screenshots: \(error.localizedDescription)")
+                log("InsightTestCLI: \(label) ERROR fetching screenshots: \(error.localizedDescription)")
                 continue
             }
 
@@ -724,13 +724,13 @@ enum AdviceTestRunner {
                     && !TaskAssistantSettings.builtInExcludedApps.contains(ss.appName)
                     && !excludedApps.contains(ss.appName)
             }) else {
-                log("AdviceTestCLI: \(label) \(timeFormatter.string(from: window.windowEnd)) — skipped (no non-excluded screenshots)")
+                log("InsightTestCLI: \(label) \(timeFormatter.string(from: window.windowEnd)) — skipped (no non-excluded screenshots)")
                 continue
             }
 
             do {
                 let analyzeStart = Date()
-                let (result, sqlCount) = try await adviceAssistant.testAnalyze(
+                let (result, sqlCount) = try await insightAssistant.testAnalyze(
                     jpegData: Data(),
                     appName: anchor.appName,
                     windowTitle: anchor.windowTitle,
@@ -742,24 +742,24 @@ enum AdviceTestRunner {
                 let time = timeFormatter.string(from: window.windowEnd)
                 let windowTitle = anchor.windowTitle ?? "(no title)"
 
-                if let result = result, result.hasAdvice, let advice = result.advice {
-                    adviceCount += 1
-                    let conf = Int(advice.confidence * 100)
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → ADVICE [\(conf)%] \(advice.headline ?? "") — \(advice.advice) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
-                } else if let result = result, !result.hasAdvice {
+                if let result = result, result.hasInsight, let extractedInsight = result.insight {
+                    insightCount += 1
+                    let conf = Int(extractedInsight.confidence * 100)
+                    log("InsightTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → INSIGHT [\(conf)%] \(extractedInsight.headline ?? "") — \(extractedInsight.insight) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                } else if let result = result, !result.hasInsight {
                     noAdviceCount += 1
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → no_advice (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                    log("InsightTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → no_insight (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
                 } else {
                     nilCount += 1
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → nil (loop exhausted) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                    log("InsightTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → nil (loop exhausted) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
                 }
             } catch {
                 errorCount += 1
-                log("AdviceTestCLI: \(label) \(anchor.appName) → ERROR: \(error.localizedDescription)")
+                log("InsightTestCLI: \(label) \(anchor.appName) → ERROR: \(error.localizedDescription)")
             }
         }
 
         let totalTime = Date().timeIntervalSince(testStart)
-        log("AdviceTestCLI: DONE — \(sampled.count) windows, \(adviceCount) advice, \(noAdviceCount) no_advice, \(nilCount) exhausted, \(errorCount) errors, \(totalSql) SQL queries, \(String(format: "%.1fs", totalTime)) total")
+        log("InsightTestCLI: DONE — \(sampled.count) windows, \(insightCount) advice, \(noAdviceCount) no_advice, \(nilCount) exhausted, \(errorCount) errors, \(totalSql) SQL queries, \(String(format: "%.1fs", totalTime)) total")
     }
 }

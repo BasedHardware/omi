@@ -10822,5 +10822,8 @@
     "audioOutput": "Audio Output",
     "@audioOutput": {
         "description": "Title for audio route picker bottom sheet"
-    }
+    },
+    "firmwareWarningTitle": "Important: Read Before Updating",
+    "firmwareFormatWarning": "This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device's clock hasn't been synced yet.",
+    "continueAnyway": "Continue"
 }

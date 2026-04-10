@@ -8993,10 +8993,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get willSyncAutomatically => 'otomatik olarak senkronize edilecek';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Konumu Etkinleştir';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Yakındaki Bluetooth cihazlarını bulmak için konum izni gereklidir.';
 
   @override
   String get voiceRecordingFound => 'Kayıt bulundu';
@@ -9012,4 +9012,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get audioOutput => 'Ses çıkışı';
+
+  @override
+  String get firmwareWarningTitle => 'Önemli: Güncellemeden Önce Okuyun';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Bu yazılım SD kartı biçimlendirecektir. Lütfen yükseltmeden önce tüm çevrimdışı verilerin senkronize edildiğinden emin olun.\n\nBu sürümü yükledikten sonra yanıp sönen kırmızı bir ışık görürseniz endişelenmeyin. Cihazı uygulamaya bağlamanız yeterlidir ve mavi renğe dönmelidir. Kırmızı ışık, cihazın saatinin henüz senkronize edilmediği anlamına gelir.';
+
+  @override
+  String get continueAnyway => 'Devam Et';
 }

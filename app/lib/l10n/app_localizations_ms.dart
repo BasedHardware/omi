@@ -9004,10 +9004,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get willSyncAutomatically => 'akan disegerakkan secara automatik';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktifkan Lokasi';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Kebenaran lokasi diperlukan untuk mencari peranti Bluetooth berdekatan.';
 
   @override
   String get voiceRecordingFound => 'Rakaman ditemui';
@@ -9023,4 +9023,14 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get audioOutput => 'Output audio';
+
+  @override
+  String get firmwareWarningTitle => 'Penting: Baca Sebelum Mengemas Kini';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Firmware ini akan memformat kad SD. Sila pastikan semua data luar talian telah disegerakkan sebelum menaik taraf.\n\nJika anda melihat lampu merah berkelip selepas memasang versi ini, jangan risau. Sambungkan sahaja peranti ke aplikasi dan ia sepatutnya bertukar biru. Lampu merah bermakna jam peranti belum disegerakkan lagi.';
+
+  @override
+  String get continueAnyway => 'Teruskan';
 }

@@ -8997,10 +8997,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get willSyncAutomatically => 'tiks sinhronizēts automātiski';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Iespējot atrašanās vietu';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces.';
 
   @override
   String get voiceRecordingFound => 'Ieraksts atrasts';
@@ -9016,4 +9017,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio izvade';
+
+  @override
+  String get firmwareWarningTitle => 'Svarīgi: Izlasiet pirms atjaunināšanas';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Šī programmaparatūra formatēs SD karti. Lūdzu, pārliecinieties, ka visi bezsaistes dati ir sinhronizēti pirms jaunināšanas.\n\nJa pēc šīs versijas instalēšanas redzat mirgojoššu sarkanu gaismu, neuztraucieties. Vienkārši pievienojiet ierīci lietotnei, un tai vajadzētu kļūt zilai. Sarkanā gaisma nozīmē, ka ierīces pulkstenis vēl nav sinhronizēts.';
+
+  @override
+  String get continueAnyway => 'Turpināt';
 }

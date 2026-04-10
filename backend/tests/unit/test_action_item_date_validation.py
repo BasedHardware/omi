@@ -375,7 +375,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_clears_past_due_dates_from_extraction(self):
         """Due dates more than 1 day in the past should be cleared after extraction."""
-        from models.conversation import ActionItem, ActionItemsExtraction
+        from models.structured import ActionItem, ActionItemsExtraction
 
         past_due = datetime(2025, 9, 15, 10, 0, tzinfo=timezone.utc)
         future_due = datetime.now(timezone.utc) + timedelta(days=3)
@@ -426,7 +426,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_passes_current_time_to_invoke(self):
         """extract_action_items should pass current_time in the invoke payload."""
-        from models.conversation import ActionItemsExtraction
+        from models.structured import ActionItemsExtraction
 
         mock_response = ActionItemsExtraction(action_items=[])
         mock_chain = MagicMock()
@@ -468,7 +468,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_none_due_dates(self):
         """Action items with no due date should remain unchanged."""
-        from models.conversation import ActionItem, ActionItemsExtraction
+        from models.structured import ActionItem, ActionItemsExtraction
 
         mock_response = ActionItemsExtraction(action_items=[ActionItem(description="No due date task", due_at=None)])
         mock_chain = MagicMock()
@@ -509,7 +509,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_due_date_within_grace_boundary(self):
         """Due date 23h ago should be preserved (within 1-day grace window)."""
-        from models.conversation import ActionItem, ActionItemsExtraction
+        from models.structured import ActionItem, ActionItemsExtraction
 
         boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
         mock_response = ActionItemsExtraction(

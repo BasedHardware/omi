@@ -9050,4 +9050,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get audioOutput => 'ఆడియో నిర్గమం';
+
+  @override
+  String get firmwareWarningTitle => 'ముఖ్యం: అప్‌డేట్ చేయడానికి ముందు చదవండి';
+
+  @override
+  String get firmwareFormatWarning =>
+      'ఈ ఫర్మ్‌వేర్ SD కార్డ్‌ను ఫార్మాట్ చేస్తుంది. అప్‌గ్రేడ్ చేయడానికి ముందు అన్ని ఆఫ్‌లైన్ డేటా సింక్ అయిందని నిర్ధారించుకోండి.\n\nఈ వెర్షన్ ఇన్‌స్టాల్ చేసిన తర్వాత ఎరుపు లైట్ మినుకుమినుకుమంటే ఆందోళన చెందకండి. పరికరాన్ని యాప్‌కి కనెక్ట్ చేయండి, అది నీలం రంగులోకి మారాలి. ఎరుపు లైట్ అంటే పరికరం యొక్క గడియారం ఇంకా సింక్ కాలేదు.';
+
+  @override
+  String get continueAnyway => 'కొనసాగించు';
 }

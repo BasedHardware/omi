@@ -133,7 +133,7 @@ struct LiveTranscriptView: View {
                             segment: segment,
                             formatTime: formatTime,
                             personName: speakerNames[segment.speaker],
-                            onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
+                            onSpeakerTapped: !segment.isUser ? { onSpeakerTapped?(segment) } : nil
                         )
                     }
 
@@ -162,7 +162,7 @@ private struct LiveSegmentView: View {
     @State private var isHovered = false
 
     private var isUser: Bool {
-        segment.speaker == 0
+        segment.isUser
     }
 
     private var speakerLabel: String {
@@ -247,6 +247,23 @@ private struct LiveSegmentView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(bubbleColor)
                 )
+
+            // Translations from backend
+            if !segment.translations.isEmpty {
+                ForEach(segment.translations, id: \.lang) { translation in
+                    Text(translation.text)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .italic()
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(bubbleColor.opacity(0.5))
+                        )
+                }
+            }
         }
     }
 

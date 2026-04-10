@@ -9031,10 +9031,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get willSyncAutomatically => 'es sincronitzarà automàticament';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activa la ubicació';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Es necessita el permís d\'ubicació per trobar dispositius Bluetooth propers.';
 
   @override
   String get voiceRecordingFound => 'Gravació trobada';
@@ -9050,4 +9051,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get audioOutput => 'Sortida d\'àudio';
+
+  @override
+  String get firmwareWarningTitle => 'Important: Llegiu abans d\'actualitzar';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Aquest firmware formatarà la targeta SD. Assegureu-vos que totes les dades fora de línia estiguin sincronitzades abans d\'actualitzar.\n\nSi veieu una llum vermella parpellejant després d\'instal·lar aquesta versió, no us preocupeu. Simplement connecteu el dispositiu a l\'aplicació i hauria de tornar-se blau. La llum vermella significa que el rellotge del dispositiu encara no s\'ha sincronitzat.';
+
+  @override
+  String get continueAnyway => 'Continuar';
 }

@@ -11,13 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
-from models.conversation import (
-    ConversationPhoto,
-    PostProcessingStatus,
-    PostProcessingModel,
-    ConversationStatus,
-    AudioFile,
-)
+from models.audio_file import AudioFile
+from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
+from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db

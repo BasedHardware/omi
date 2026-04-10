@@ -716,7 +716,8 @@ struct ConversationDetailView: View {
                 isUser: isUser,
                 personId: isUser ? nil : personId,
                 start: oldSegment.start,
-                end: oldSegment.end
+                end: oldSegment.end,
+                translations: oldSegment.translations
             )
         }
         loadedConversation = updatedConversation

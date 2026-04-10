@@ -57,6 +57,8 @@ class MixpanelManager {
     });
   }
 
+  void setSubscriptionTier(String tier) => setUserProperty('Subscription Tier', tier);
+
   setUserProperty(String key, dynamic value) =>
       PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
         if (PlatformService.isMixpanelNativelySupported) {

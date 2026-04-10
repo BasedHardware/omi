@@ -8818,10 +8818,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get willSyncAutomatically => '将自动同步';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => '启用位置';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => '需要位置权限才能查找附近的蓝牙设备。';
 
   @override
   String get voiceRecordingFound => '找到录音';
@@ -8837,4 +8837,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioOutput => '音频输出';
+
+  @override
+  String get firmwareWarningTitle => '重要：更新前请阅读';
+
+  @override
+  String get firmwareFormatWarning =>
+      '此固件将格式化SD卡。请确保在升级前同步所有离线数据。\n\n如果安装此版本后看到红灯闪烁，请不要担心。只需将设备连接到应用程序，它应该会变成蓝色。红灯表示设备的时钟尚未同步。';
+
+  @override
+  String get continueAnyway => '继续';
 }

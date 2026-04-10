@@ -19,7 +19,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     /// Public read-only accessor for memory diagnostics
     var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
-    private var adviceAssistant: AdviceAssistant?
+    private var insightAssistant: InsightAssistant?
     private var memoryAssistant: MemoryAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
@@ -174,8 +174,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             FocusAssistantSettings.shared.isEnabled = enabled
         case "task-extraction":
             TaskAssistantSettings.shared.isEnabled = enabled
-        case "advice":
-            AdviceAssistantSettings.shared.isEnabled = enabled
+        case "insight":
+            InsightAssistantSettings.shared.isEnabled = enabled
         case "memory-extraction":
             MemoryAssistantSettings.shared.isEnabled = enabled
         default:
@@ -361,10 +361,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             Task { await TaskPrioritizationService.shared.start() }
             Task { await TaskPromotionService.shared.start() }
 
-            adviceAssistant = try AdviceAssistant()
+            insightAssistant = try InsightAssistant()
 
-            if let advice = adviceAssistant {
-                AssistantCoordinator.shared.register(advice)
+            if let insight = insightAssistant {
+                AssistantCoordinator.shared.register(insight)
             }
 
             memoryAssistant = try MemoryAssistant()
@@ -465,9 +465,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         Task { await TaskDeduplicationService.shared.stop() }
         Task { await TaskPromotionService.shared.stop() }
-        if let advice = adviceAssistant {
+        if let insight = insightAssistant {
             Task {
-                await advice.stop()
+                await insight.stop()
             }
         }
         if let memory = memoryAssistant {
@@ -478,7 +478,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         focusAssistant = nil
         taskAssistant = nil
-        adviceAssistant = nil
+        insightAssistant = nil
         memoryAssistant = nil
         screenCaptureService = nil
 
@@ -941,8 +941,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Use selector-based observer (more reliable with DistributedNotificationCenter)
         DistributedNotificationCenter.default().addObserver(
             self,
-            selector: #selector(handleAdviceTestNotification(_:)),
-            name: NSNotification.Name("com.omi.test.advice"),
+            selector: #selector(handleInsightTestNotification(_:)),
+            name: NSNotification.Name("com.omi.test.insight"),
             object: nil
         )
         DistributedNotificationCenter.default().addObserver(
@@ -951,16 +951,16 @@ public class ProactiveAssistantsPlugin: NSObject {
             name: NSNotification.Name("com.omi.test.focus"),
             object: nil
         )
-        log("AdviceTestCLI: Notification observer registered")
+        log("InsightTestCLI: Notification observer registered")
         log("FocusTestCLI: Notification observer registered")
     }
 
-    @objc private func handleAdviceTestNotification(_ notification: Notification) {
+    @objc private func handleInsightTestNotification(_ notification: Notification) {
         Task { @MainActor in
             let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
             let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
-            log("AdviceTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-            await AdviceTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+            log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+            await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
         }
     }
 

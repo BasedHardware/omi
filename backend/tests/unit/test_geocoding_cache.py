@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 # Mock database._client before importing anything that touches GCP
 sys.modules.setdefault("database._client", MagicMock())
 
-from models.conversation import Geolocation
+from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location
 
 

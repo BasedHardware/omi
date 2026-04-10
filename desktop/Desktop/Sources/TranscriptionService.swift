@@ -19,6 +19,12 @@ class TranscriptionService {
         case ptt
     }
 
+    /// Translation from backend (lang code + translated text)
+    struct BackendTranslation: Decodable {
+        let lang: String
+        let text: String
+    }
+
     /// Transcript segment from Python backend
     /// Matches `models.transcript_segment.TranscriptSegment` on the backend
     struct BackendSegment: Decodable {
@@ -30,6 +36,7 @@ class TranscriptionService {
         let person_id: String?
         let start: Double
         let end: Double
+        let translations: [BackendTranslation]?
     }
 
     /// Message event (from `/v4/listen` only — not used by PTT transcribe-stream)

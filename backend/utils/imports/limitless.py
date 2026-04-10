@@ -16,14 +16,9 @@ from zipfile import ZipFile
 
 import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
-from models.conversation import (
-    Conversation,
-    ConversationSource,
-    ConversationStatus,
-    Structured,
-    CategoryEnum,
-    AppResult,
-)
+from models.conversation import AppResult, Conversation
+from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
+from models.structured import Structured
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification

@@ -87,12 +87,23 @@ def delete_staged_task(uid: str, task_id: str) -> bool:
 
 
 def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
-    """Update relevance_score for staged tasks in batches of 500."""
+    """Update relevance_score for staged tasks in batches of 500.
+
+    Pre-filters to active (uncompleted) document IDs so stale/deleted/promoted
+    task references from the client don't cause NotFound errors on batch.update().
+    """
+    if not scores:
+        return
     col = _user_col(uid, 'staged_tasks')
+    active_query = col.where(filter=FieldFilter('completed', '==', False)).select([])
+    existing_ids = {doc.id for doc in active_query.stream()}
+    valid_scores = [s for s in scores if s['id'] in existing_ids]
+    if not valid_scores:
+        return
     now = datetime.now(timezone.utc)
     batch = db.batch()
     count = 0
-    for item in scores:
+    for item in valid_scores:
         ref = col.document(item['id'])
         batch.update(ref, {'relevance_score': item['relevance_score'], 'updated_at': now})
         count += 1

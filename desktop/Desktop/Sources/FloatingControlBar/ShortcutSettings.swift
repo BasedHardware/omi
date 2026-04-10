@@ -356,7 +356,20 @@ class ShortcutSettings: ObservableObject {
     @Published var floatingBarVoiceAnswersEnabled: Bool {
         didSet {
             UserDefaults.standard.set(floatingBarVoiceAnswersEnabled, forKey: "shortcut_floatingBarVoiceAnswersEnabled")
-            if !floatingBarVoiceAnswersEnabled {
+            if !hasAnyFloatingBarVoiceAnswersEnabled {
+                FloatingBarVoicePlaybackService.shared.stop()
+            }
+        }
+    }
+
+    /// When true, typed floating-bar questions receive spoken replies.
+    @Published var floatingBarTypedQuestionVoiceAnswersEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                floatingBarTypedQuestionVoiceAnswersEnabled,
+                forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled"
+            )
+            if !hasAnyFloatingBarVoiceAnswersEnabled {
                 FloatingBarVoicePlaybackService.shared.stop()
             }
         }
@@ -379,6 +392,14 @@ class ShortcutSettings: ObservableObject {
         if speed <= 1.4 { return "Faster" }
         if speed <= 1.6 { return "Very Fast" }
         return "Maximum"
+    }
+
+    var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
+        floatingBarVoiceAnswersEnabled || floatingBarTypedQuestionVoiceAnswersEnabled
+    }
+
+    func shouldSpeakFloatingBarResponse(forVoiceQuery: Bool) -> Bool {
+        forVoiceQuery ? floatingBarVoiceAnswersEnabled : floatingBarTypedQuestionVoiceAnswersEnabled
     }
 
     var askOmiUsesCustomShortcut: Bool {
@@ -417,6 +438,8 @@ class ShortcutSettings: ObservableObject {
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
         self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? true
+        self.floatingBarTypedQuestionVoiceAnswersEnabled =
+            UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
         self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4
     }
 

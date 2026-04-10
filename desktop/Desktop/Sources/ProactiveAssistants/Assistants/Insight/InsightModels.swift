@@ -1,8 +1,8 @@
 import Foundation
 
-// MARK: - Advice Category
+// MARK: - Insight Category
 
-enum AdviceCategory: String, Codable {
+enum InsightCategory: String, Codable {
     case productivity
     case health // legacy, kept for backward compatibility with stored records
     case communication
@@ -10,18 +10,18 @@ enum AdviceCategory: String, Codable {
     case other
 }
 
-// MARK: - Extracted Advice
+// MARK: - Extracted Insight
 
-struct ExtractedAdvice: Codable {
-    let advice: String
+struct ExtractedInsight: Codable {
+    let insight: String
     let headline: String?
     let reasoning: String?
-    let category: AdviceCategory
+    let category: InsightCategory
     let sourceApp: String
     let confidence: Double
 
     enum CodingKeys: String, CodingKey {
-        case advice
+        case insight = "advice"
         case headline
         case reasoning
         case category
@@ -32,7 +32,7 @@ struct ExtractedAdvice: Codable {
     /// Convert to dictionary for Flutter
     func toDictionary() -> [String: Any] {
         var dict: [String: Any] = [
-            "advice": advice,
+            "advice": insight,
             "category": category.rawValue,
             "sourceApp": sourceApp,
             "confidence": confidence
@@ -47,17 +47,17 @@ struct ExtractedAdvice: Codable {
     }
 }
 
-// MARK: - Advice Extraction Result
+// MARK: - Insight Extraction Result
 
-struct AdviceExtractionResult: Codable, AssistantResult {
-    let hasAdvice: Bool
-    let advice: ExtractedAdvice?
+struct InsightExtractionResult: Codable, AssistantResult {
+    let hasInsight: Bool
+    let insight: ExtractedInsight?
     let contextSummary: String
     let currentActivity: String
 
     enum CodingKeys: String, CodingKey {
-        case hasAdvice = "has_advice"
-        case advice
+        case hasInsight = "has_advice"
+        case insight = "advice"
         case contextSummary = "context_summary"
         case currentActivity = "current_activity"
     }
@@ -65,12 +65,12 @@ struct AdviceExtractionResult: Codable, AssistantResult {
     /// Convert to dictionary for Flutter
     func toDictionary() -> [String: Any] {
         var dict: [String: Any] = [
-            "hasAdvice": hasAdvice,
+            "hasInsight": hasInsight,
             "contextSummary": contextSummary,
             "currentActivity": currentActivity
         ]
-        if let advice = advice {
-            dict["advice"] = advice.toDictionary()
+        if let insight = insight {
+            dict["advice"] = insight.toDictionary()
         }
         return dict
     }
