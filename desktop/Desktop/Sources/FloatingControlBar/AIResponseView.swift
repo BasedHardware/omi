@@ -158,7 +158,7 @@ struct AIResponseView: View {
     @ViewBuilder
     private func contentBlocksView(for message: ChatMessage) -> some View {
         if !message.contentBlocks.isEmpty {
-            let grouped = ContentBlockGroup.group(message.contentBlocks)
+            let grouped = groupedContentBlocks(for: message)
             ForEach(grouped) { group in
                 switch group {
                 case .text(_, let text):
@@ -182,6 +182,20 @@ struct AIResponseView: View {
                 .textSelection(.enabled)
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
+        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        guard !message.isStreaming else { return grouped }
+
+        return grouped.filter { group in
+            switch group {
+            case .text, .discoveryCard:
+                return true
+            case .toolCalls, .thinking:
+                return false
+            }
         }
     }
 
@@ -488,8 +502,10 @@ struct MessageHoverOverlay<Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            content()
-                .padding(.trailing, actionBarWidth)
+            VStack(alignment: .leading, spacing: 8) {
+                content()
+            }
+            .padding(.trailing, actionBarWidth)
 
             actionBar
         }
