@@ -57,6 +57,56 @@ struct SettingsPage: View {
   }
 }
 
+struct SubscriptionPlanCatalogMerger {
+  static func merge(
+    primary: [SubscriptionPlanOption],
+    fallback: [SubscriptionPlanOption]
+  ) -> [SubscriptionPlanOption] {
+    var mergedById: [String: SubscriptionPlanOption] = [:]
+
+    for plan in fallback {
+      mergedById[plan.id] = plan
+    }
+
+    for plan in primary {
+      if let existing = mergedById[plan.id] {
+        mergedById[plan.id] = SubscriptionPlanOption(
+          id: plan.id,
+          title: plan.title.isEmpty ? existing.title : plan.title,
+          features: plan.features.isEmpty ? existing.features : plan.features,
+          prices: mergePrices(primary: plan.prices, fallback: existing.prices)
+        )
+      } else {
+        mergedById[plan.id] = plan
+      }
+    }
+
+    return Array(mergedById.values)
+  }
+
+  private static func mergePrices(
+    primary: [SubscriptionPriceOption],
+    fallback: [SubscriptionPriceOption]
+  ) -> [SubscriptionPriceOption] {
+    var mergedById: [String: SubscriptionPriceOption] = [:]
+
+    for price in fallback {
+      mergedById[price.id] = price
+    }
+
+    for price in primary {
+      mergedById[price.id] = price
+    }
+
+    return Array(mergedById.values).sorted { lhs, rhs in
+      if lhs.title != rhs.title {
+        return lhs.title < rhs.title
+      }
+      return lhs.id < rhs.id
+    }
+  }
+}
+
 /// Dark-themed settings content matching the main window style
 struct SettingsContentView: View {
   // AppState for transcription control
@@ -5609,32 +5659,7 @@ struct SettingsContentView: View {
     primary: [SubscriptionPlanOption],
     fallback: [SubscriptionPlanOption]
   ) -> [SubscriptionPlanOption] {
-    var mergedById: [String: SubscriptionPlanOption] = [:]
-
-    for plan in fallback {
-      mergedById[plan.id] = plan
-    }
-
-    for plan in primary {
-      if let existing = mergedById[plan.id] {
-        let mergedPrices = Array(
-          Dictionary((existing.prices + plan.prices).map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
-            .values
-        )
-        .sorted { $0.title < $1.title }
-
-        mergedById[plan.id] = SubscriptionPlanOption(
-          id: plan.id,
-          title: plan.title.isEmpty ? existing.title : plan.title,
-          features: plan.features.isEmpty ? existing.features : plan.features,
-          prices: mergedPrices
-        )
-      } else {
-        mergedById[plan.id] = plan
-      }
-    }
-
-    return Array(mergedById.values)
+    SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
   }
 
   private func fallbackFeatures(for planId: String) -> [String] {
