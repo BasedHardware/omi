@@ -1997,7 +1997,7 @@ class AppState: ObservableObject {
 
   /// Refresh conversations silently (for auto-refresh timer and app-activate).
   /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
-  func refreshConversations() async {
+  func refreshConversations(skipCount: Bool = false) async {
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if in auth backoff period (recent 401 errors)
@@ -2057,14 +2057,16 @@ class AppState: ObservableObject {
       }
     }
 
-    // Update total count
-    do {
-      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
-      if totalConversationsCount != count {
-        totalConversationsCount = count
+    // Update total count (skipped during periodic background refreshes to halve traffic)
+    if !skipCount {
+      do {
+        let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
+        if totalConversationsCount != count {
+          totalConversationsCount = count
+        }
+      } catch {
+        // Keep existing count
       }
-    } catch {
-      // Keep existing count
     }
   }
 
