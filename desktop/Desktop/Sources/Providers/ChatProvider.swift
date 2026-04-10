@@ -280,6 +280,17 @@ struct MessageMetadata {
 
         return sections
     }
+
+    // Backward-compatible summary counts used by the floating-bar metadata popover.
+    private func sectionItemCount(forTag tag: String) -> Int {
+        promptSections.first(where: { $0.tag == tag })?.itemCount ?? 0
+    }
+
+    var memoriesCount: Int { sectionItemCount(forTag: "user_facts") }
+    var conversationTurns: Int { sectionItemCount(forTag: "conversation_history") }
+    var tasksCount: Int { sectionItemCount(forTag: "user_tasks") }
+    var goalsCount: Int { sectionItemCount(forTag: "user_goals") }
+    var availableToolsCount: Int { sectionItemCount(forTag: "tools") }
 }
 
 /// A single chat message
