@@ -282,15 +282,64 @@ struct MessageMetadata {
     }
 
     // Backward-compatible summary counts used by the floating-bar metadata popover.
-    private func sectionItemCount(forTag tag: String) -> Int {
-        promptSections.first(where: { $0.tag == tag })?.itemCount ?? 0
+    // These intentionally keep the older semantics instead of exposing every raw XML section.
+    var memoriesCount: Int {
+        guard let prompt = systemPrompt,
+              let factsStart = prompt.range(of: "<user_facts>"),
+              let factsEnd = prompt.range(of: "</user_facts>") else { return 0 }
+        let factsSection = String(prompt[factsStart.upperBound..<factsEnd.lowerBound])
+        return factsSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
     }
 
-    var memoriesCount: Int { sectionItemCount(forTag: "user_facts") }
-    var conversationTurns: Int { sectionItemCount(forTag: "conversation_history") }
-    var tasksCount: Int { sectionItemCount(forTag: "user_tasks") }
-    var goalsCount: Int { sectionItemCount(forTag: "user_goals") }
-    var availableToolsCount: Int { sectionItemCount(forTag: "tools") }
+    var conversationTurns: Int {
+        guard let prompt = systemPrompt,
+              let histStart = prompt.range(of: "<conversation_history>"),
+              let histEnd = prompt.range(of: "</conversation_history>") else { return 0 }
+        let histSection = String(prompt[histStart.upperBound..<histEnd.lowerBound])
+        return histSection
+            .components(separatedBy: "\n")
+            .filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }
+            .count
+    }
+
+    var tasksCount: Int {
+        guard let prompt = systemPrompt,
+              let tasksStart = prompt.range(of: "<user_tasks>"),
+              let tasksEnd = prompt.range(of: "</user_tasks>") else { return 0 }
+        let tasksSection = String(prompt[tasksStart.upperBound..<tasksEnd.lowerBound])
+        return tasksSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
+    }
+
+    var goalsCount: Int {
+        guard let prompt = systemPrompt,
+              let goalsStart = prompt.range(of: "<user_goals>"),
+              let goalsEnd = prompt.range(of: "</user_goals>") else { return 0 }
+        let goalsSection = String(prompt[goalsStart.upperBound..<goalsEnd.lowerBound])
+        return goalsSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
+    }
+
+    var availableToolsCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        return [
+            "execute_sql",
+            "semantic_search",
+            "get_daily_recap",
+            "complete_task",
+            "delete_task",
+            "save_knowledge_graph"
+        ]
+        .filter { prompt.contains("**\($0)**") }
+        .count
+    }
 }
 
 /// A single chat message
@@ -636,6 +685,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
+        await preparePromptContextIfNeeded()
         _ = await ensureBridgeStarted()
     }
 
@@ -677,6 +727,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             await APIKeyService.shared.waitForKeys()
         }
         do {
+            await preparePromptContextIfNeeded()
             try await acpBridge.start()
             acpBridgeStarted = true
             log("ChatProvider: ACP bridge started successfully")
@@ -716,6 +767,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
+    }
+
+    /// Ensures all prompt-backed local context is loaded before we build and cache the ACP session prompt.
+    private func preparePromptContextIfNeeded() async {
+        await loadMemoriesIfNeeded()
+        await loadGoalsIfNeeded()
+        await loadTasksIfNeeded()
+        await loadAIProfileIfNeeded()
+        await loadSchemaIfNeeded()
     }
 
     /// Switch between bridge modes (Omi AI vs user's Claude account)
