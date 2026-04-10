@@ -2,6 +2,101 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
+interface RawCohort {
+  counts: number[];
+  first?: number;
+}
+
+interface CohortResult {
+  date: string;
+  users: number;
+  data: { day: number; retention: number }[];
+}
+
+interface RetentionResult {
+  data: { day: number; retention: number }[];
+  cohorts: CohortResult[];
+  totalCohorts: number;
+  totalUsers: number;
+}
+
+/**
+ * Transform raw Mixpanel retention data into capped retention percentages.
+ * Exported for unit testing.
+ */
+export function transformRetention(raw: Record<string, RawCohort>): RetentionResult {
+  const cohortDates = Object.keys(raw)
+    .filter((k) => typeof raw[k] === 'object' && raw[k] !== null && 'counts' in raw[k])
+    .sort();
+
+  if (cohortDates.length === 0) {
+    return { data: [], cohorts: [], totalCohorts: 0, totalUsers: 0 };
+  }
+
+  let maxDays = 0;
+  for (const date of cohortDates) {
+    const counts = raw[date]?.counts;
+    if (Array.isArray(counts) && counts.length > maxDays) {
+      maxDays = counts.length;
+    }
+  }
+
+  const data: { day: number; retention: number }[] = [];
+  let totalUsers = 0;
+  const cohorts: CohortResult[] = [];
+
+  for (const date of cohortDates) {
+    const cohort = raw[date];
+    if (!cohort || !Array.isArray(cohort.counts)) continue;
+
+    // Use counts[0] as denominator so "Users" reflects the filtered platform.
+    // Cap at 100% because Mixpanel's where-filter applies per-day independently:
+    // a user might match on day N but not day 0, making counts[N] > counts[0].
+    const first = cohort.counts[0] || 0;
+    if (first === 0) continue;
+
+    totalUsers += first;
+    const label = date.split('T')[0]; // "YYYY-MM-DD"
+    const curve: { day: number; retention: number }[] = [];
+
+    for (let dayIdx = 0; dayIdx < cohort.counts.length; dayIdx++) {
+      const pct = (cohort.counts[dayIdx] / first) * 100;
+      curve.push({
+        day: dayIdx,
+        retention: Math.round(Math.min(pct, 100) * 100) / 100,
+      });
+    }
+
+    cohorts.push({ date: label, users: first, data: curve });
+  }
+
+  for (let dayIdx = 0; dayIdx < maxDays; dayIdx++) {
+    let sumPct = 0;
+    let cohortCount = 0;
+
+    for (const date of cohortDates) {
+      const cohort = raw[date];
+      if (!cohort || !Array.isArray(cohort.counts)) continue;
+
+      const first = cohort.counts[0] || 0;
+      if (first === 0) continue;
+      if (dayIdx >= cohort.counts.length) continue;
+
+      sumPct += Math.min((cohort.counts[dayIdx] / first) * 100, 100);
+      cohortCount++;
+    }
+
+    if (cohortCount > 0) {
+      data.push({
+        day: dayIdx,
+        retention: Math.round((sumPct / cohortCount) * 100) / 100,
+      });
+    }
+  }
+
+  return { data, cohorts, totalCohorts: cohortDates.length, totalUsers };
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -69,86 +164,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // raw format: { "YYYY-MM-DDTHH:MM:SS": { counts: [n0, n1, ...], first: N }, ... }
-    // Filter out non-cohort keys like "request", "error"
-    const cohortDates = Object.keys(raw)
-      .filter((k) => typeof raw[k] === 'object' && raw[k] !== null && 'counts' in raw[k])
-      .sort();
-    if (cohortDates.length === 0) {
-      return NextResponse.json({ data: [], totalCohorts: 0, totalUsers: 0 });
-    }
-
-    // Find max retention days across all cohorts
-    let maxDays = 0;
-    for (const date of cohortDates) {
-      const counts = raw[date]?.counts;
-      if (Array.isArray(counts) && counts.length > maxDays) {
-        maxDays = counts.length;
-      }
-    }
-
-    // Average retention across all cohorts for each day
-    const data: { day: number; retention: number }[] = [];
-    let totalUsers = 0;
-
-    // Per-cohort retention curves
-    const cohorts: { date: string; users: number; data: { day: number; retention: number }[] }[] = [];
-
-    for (const date of cohortDates) {
-      const cohort = raw[date];
-      if (!cohort || !Array.isArray(cohort.counts)) continue;
-
-      // Use counts[0] as denominator so "Users" reflects the filtered platform.
-      // Cap at 100% because Mixpanel's where-filter applies per-day independently:
-      // a user might match on day N but not day 0, making counts[N] > counts[0].
-      const first = cohort.counts[0] || 0;
-      if (first === 0) continue;
-
-      totalUsers += first;
-      const label = date.split('T')[0]; // "YYYY-MM-DD"
-      const curve: { day: number; retention: number }[] = [];
-
-      for (let dayIdx = 0; dayIdx < cohort.counts.length; dayIdx++) {
-        const pct = (cohort.counts[dayIdx] / first) * 100;
-        curve.push({
-          day: dayIdx,
-          retention: Math.round(Math.min(pct, 100) * 100) / 100,
-        });
-      }
-
-      cohorts.push({ date: label, users: first, data: curve });
-    }
-
-    for (let dayIdx = 0; dayIdx < maxDays; dayIdx++) {
-      let sumPct = 0;
-      let cohortCount = 0;
-
-      for (const date of cohortDates) {
-        const cohort = raw[date];
-        if (!cohort || !Array.isArray(cohort.counts)) continue;
-
-        const first = cohort.counts[0] || 0;
-        if (first === 0) continue;
-        if (dayIdx >= cohort.counts.length) continue;
-
-        sumPct += Math.min((cohort.counts[dayIdx] / first) * 100, 100);
-        cohortCount++;
-      }
-
-      if (cohortCount > 0) {
-        data.push({
-          day: dayIdx,
-          retention: Math.round((sumPct / cohortCount) * 100) / 100,
-        });
-      }
-    }
-
-    return NextResponse.json({
-      data,
-      cohorts,
-      totalCohorts: cohortDates.length,
-      totalUsers,
-    });
+    const result = transformRetention(raw);
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching Mixpanel retention:', error);
     return NextResponse.json(
