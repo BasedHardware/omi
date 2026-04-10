@@ -99,14 +99,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        // Esc clears visible floating-bar history without closing the bar.
         if event.keyCode == 53 { // Escape
-            if state.showingAIConversation && state.hasVisibleConversation {
-                clearVisibleConversationFromUI()
-            }
+            handleEscapeKey()
             return
         }
         super.keyDown(with: event)
+    }
+
+    func handleEscapeKey() {
+        FloatingBarVoicePlaybackService.shared.stop()
+
+        guard state.showingAIConversation else { return }
+
+        if state.hasVisibleConversation {
+            clearVisibleConversationFromUI()
+        } else {
+            closeAIConversation()
+        }
     }
 
     private func setupViews() {
@@ -117,6 +126,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
+            onEscape: { [weak self] in self?.handleEscapeKey() },
             onClearVisibleConversation: { [weak self] in self?.clearVisibleConversationFromUI() },
             onRate: { [weak self] messageId, rating in self?.onRate?(messageId, rating) },
             onShareLink: { [weak self] in await self?.onShareLink?() }
@@ -293,6 +303,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
             state.isAILoading = false
+            state.isHoveringBar = false
+            state.requiresHoverReset = true
         }
         // Suppress hover resizes while the close animation plays, otherwise onHover
         // fires mid-animation, reads an intermediate frame, and causes position drift.
@@ -754,34 +766,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             || eventType == .otherMouseDown
         guard isMouseClick else { return }
 
-        // Stamp a token so a new PTT query can cancel this in-flight dismiss.
+        // Close in-place so the bar collapses smoothly instead of blinking out and back in.
         resignKeyAnimationToken += 1
-        let token = resignKeyAnimationToken
-
-        // Phase 1: fade out (easeIn — accelerates to gone, feels intentional).
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self.animator().alphaValue = 0
-        }) { [weak self] in
-            guard let self, self.resignKeyAnimationToken == token else { return }
-            // Phase 2: collapse while invisible (no jarring resize flash).
-            self.closeAIConversation()
-
-            // If the bar is disabled, keep it hidden instead of fading the pill back in.
-            if !FloatingControlBarManager.shared.isEnabled {
-                self.orderOut(nil)
-                self.alphaValue = 1
-                return
-            }
-
-            // Phase 3: fade the collapsed pill back in (easeOut — decelerates into place).
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                self.animator().alphaValue = 1
-            })
-        }
+        closeAIConversation()
     }
 
     @objc func windowDidMove(_ notification: Notification) {
@@ -912,19 +899,30 @@ class FloatingControlBarManager {
 
         barWindow.onShareLink = { [weak barWindow] in
             guard let barWindow = barWindow else { return nil }
-            // Collect all synced message IDs from the conversation
+            // Share the visible floating-bar exchange history in chat order.
             var messageIds: [String] = []
             for exchange in barWindow.state.chatHistory {
+                if let questionMessageId = exchange.questionMessageId {
+                    messageIds.append(questionMessageId)
+                }
                 if exchange.aiMessage.isSynced {
                     messageIds.append(exchange.aiMessage.id)
                 }
             }
+            if let currentQuestionMessageId = barWindow.state.currentQuestionMessageId {
+                messageIds.append(currentQuestionMessageId)
+            }
             if let current = barWindow.state.currentAIMessage, current.isSynced {
                 messageIds.append(current.id)
             }
-            guard !messageIds.isEmpty else { return nil }
+            let orderedUniqueMessageIds = messageIds.reduce(into: [String]()) { ids, messageId in
+                if !ids.contains(messageId) {
+                    ids.append(messageId)
+                }
+            }
+            guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
-                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
                 return response.url
             } catch {
                 log("Failed to get chat share link: \(error)")
@@ -1171,6 +1169,7 @@ class FloatingControlBarManager {
             window.state.chatHistory.append(
                 FloatingChatExchange(
                     question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
                     aiMessage: currentMessage
                 )
             )
@@ -1183,6 +1182,7 @@ class FloatingControlBarManager {
         // Set up new query
         window.state.displayedQuery = query
         window.state.markConversationActivity()
+        window.state.currentQuestionMessageId = nil
         window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
@@ -1195,7 +1195,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationClicked(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         notificationDismissWorkItem?.cancel()
@@ -1218,7 +1219,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationSent(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         let dismissWorkItem = DispatchWorkItem { [weak self] in
@@ -1238,7 +1240,8 @@ class FloatingControlBarManager {
             AnalyticsManager.shared.notificationDismissed(
                 notificationId: dismissedNotification.id.uuidString,
                 title: dismissedNotification.title,
-                assistantId: dismissedNotification.assistantId
+                assistantId: dismissedNotification.assistantId,
+                surface: "floating_bar"
             )
         }
 
@@ -1258,7 +1261,8 @@ class FloatingControlBarManager {
         guard storedNotificationMessages[notification.id] == nil,
               let provider = historyChatProvider else { return }
 
-        let messageText = "**\(notification.title)**\n\n\(notification.message)"
+        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? notification.title : bodyText
         guard let message = provider.appendAssistantMessage(messageText) else { return }
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
@@ -1378,24 +1382,17 @@ class FloatingControlBarManager {
         limiter.recordQuery()
         FloatingBarVoicePlaybackService.shared.stop()
 
-        // Hide the bar visually (without ordering it out) so we keep key-window ownership
-        // and avoid promoting the main Omi window while capturing a clean screenshot.
-        let previousAlpha = barWindow.alphaValue
-        let previousIgnoresMouseEvents = barWindow.ignoresMouseEvents
-        barWindow.alphaValue = 0
-        barWindow.ignoresMouseEvents = true
-        try? await Task.sleep(nanoseconds: 150_000_000) // 150ms for window to disappear
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
             return try? Data(contentsOf: url)
         }.value
-        barWindow.alphaValue = previousAlpha
-        barWindow.ignoresMouseEvents = previousIgnoresMouseEvents
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
-        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
         if shouldPlayVoice {
             FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
         }
@@ -1409,6 +1406,7 @@ class FloatingControlBarManager {
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
+        barWindow.state.currentQuestionMessageId = nil
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
@@ -1456,6 +1454,14 @@ class FloatingControlBarManager {
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
+
+        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
+        if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
+            barWindow.state.currentQuestionMessageId = syncedUserMessage.id
+        }
+        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+            barWindow.state.currentAIMessage = finalAIMessage
+        }
 
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.

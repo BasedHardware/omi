@@ -3048,5 +3048,8 @@
     "e2eeKeyRecoveryLostKey": "我丢失了恢复密钥",
     "e2eeKeyRecoveryLostKeyBody": "如果没有恢复密钥，你需要从已登录的另一台设备禁用 E2EE，或联系支持人员重置加密。",
     "enableLocationTitle": "启用位置",
-    "enableLocationDescription": "需要位置权限才能查找附近的 Bluetooth 设备。"
+    "enableLocationDescription": "需要位置权限才能查找附近的蓝牙设备。",
+    "firmwareWarningTitle": "重要：更新前请阅读",
+    "firmwareFormatWarning": "此固件将格式化SD卡。请确保在升级前同步所有离线数据。\n\n如果安装此版本后看到红灯闪烁，请不要担心。只需将设备连接到应用程序，它应该会变成蓝色。红灯表示设备的时钟尚未同步。",
+    "continueAnyway": "继续"
 }

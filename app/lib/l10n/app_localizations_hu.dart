@@ -9128,10 +9128,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get willSyncAutomatically => 'automatikusan szinkronizálódik';
 
   @override
-  String get enableLocationTitle => 'Hely engedélyezése';
+  String get enableLocationTitle => 'Helymeghatározás engedélyezése';
 
   @override
-  String get enableLocationDescription => 'A helyengedély szükséges a közeli Bluetooth-eszközök megtalálásához.';
+  String get enableLocationDescription =>
+      'A helymeghatározási engedély szükséges a közeli Bluetooth-eszközök megtalálásához.';
 
   @override
   String get voiceRecordingFound => 'Felvétel találva';
@@ -9147,4 +9148,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get audioOutput => 'Hangkimenet';
+
+  @override
+  String get firmwareWarningTitle => 'Fontos: Olvassa el a frissítés előtt';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ez a firmware formázni fogja az SD-kártyát. Kérjük, győződjön meg arról, hogy minden offline adat szinkronizálva van a frissítés előtt.\n\nHa a verzió telepítése után villogó piros fényt lát, ne aggódjon. Egyszerűen csatlakoztassa az eszközt az alkalmazáshoz, és kékre kell váltania. A piros fény azt jelenti, hogy az eszköz órája még nem lett szinkronizálva.';
+
+  @override
+  String get continueAnyway => 'Folytatás';
 }

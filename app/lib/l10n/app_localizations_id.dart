@@ -9105,7 +9105,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get enableLocationTitle => 'Aktifkan Lokasi';
 
   @override
-  String get enableLocationDescription => 'Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di sekitar.';
+  String get enableLocationDescription => 'Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di dekatnya.';
 
   @override
   String get voiceRecordingFound => 'Rekaman ditemukan';
@@ -9121,4 +9121,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get audioOutput => 'Output audio';
+
+  @override
+  String get firmwareWarningTitle => 'Penting: Baca Sebelum Memperbarui';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Firmware ini akan memformat kartu SD. Pastikan semua data offline telah disinkronkan sebelum memperbarui.\n\nJika Anda melihat lampu merah berkedip setelah menginstal versi ini, jangan khawatir. Cukup hubungkan perangkat ke aplikasi dan lampu akan berubah menjadi biru. Lampu merah berarti jam perangkat belum disinkronkan.';
+
+  @override
+  String get continueAnyway => 'Lanjutkan';
 }

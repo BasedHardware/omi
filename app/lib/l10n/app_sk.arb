@@ -3031,5 +3031,8 @@
     "e2eeKeyRecoveryLostKey": "Stratil(a) som obnovovací kľúč",
     "e2eeKeyRecoveryLostKeyBody": "Bez obnovovacieho kľúča budete musieť vypnúť E2EE z iného zariadenia, kde ste prihlásení, alebo kontaktovať podporu na resetovanie šifrovania.",
     "enableLocationTitle": "Povoliť polohu",
-    "enableLocationDescription": "Povolenie polohy je potrebné na nájdenie blízkych zariadení Bluetooth."
+    "enableLocationDescription": "Na nájdenie blízkych Bluetooth zariadení je potrebné povolenie polohy.",
+    "firmwareWarningTitle": "Dôležité: Prečítajte si pred aktualizáciou",
+    "firmwareFormatWarning": "Tento firmvér naformátuje SD kartu. Pred aktualizáciou sa uistite, že všetky offline dáta sú synchronizované.\n\nAk po inštalácii tejto verzie uvidíte blikajúce červené svetlo, neznepokojujte sa. Jednoducho pripojte zariadenie k aplikácii a malo by sa rozsvietiť namodro. Červené svetlo znamená, že hodiny zariadenia ešte neboli synchronizované.",
+    "continueAnyway": "Pokračovať"
 }

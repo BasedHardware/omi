@@ -20,7 +20,7 @@ import time
 import pytest
 
 from database.redis_db import r
-from models.conversation import Geolocation
+from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location
 
 # San Francisco (Embarcadero)

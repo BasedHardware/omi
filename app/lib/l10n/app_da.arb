@@ -3035,5 +3035,8 @@
     "e2eeKeyRecoveryLostKey": "Jeg har mistet min gendannelsesnøgle",
     "e2eeKeyRecoveryLostKeyBody": "Uden gendannelsesnøglen skal du deaktivere E2EE fra en anden enhed, hvor du er logget ind, eller kontakte support for at nulstille din kryptering.",
     "enableLocationTitle": "Aktivér placering",
-    "enableLocationDescription": "Placeringstilladelse er nødvendig for at finde Bluetooth-enheder i nærheden."
+    "enableLocationDescription": "Placeringstilladelse er nødvendig for at finde Bluetooth-enheder i nærheden.",
+    "firmwareWarningTitle": "Vigtigt: Læs inden opdatering",
+    "firmwareFormatWarning": "Denne firmware vil formatere SD-kortet. Sørg venligst for, at alle offline-data er synkroniseret inden opgradering.\n\nHvis du ser et blinkende rødt lys efter installation af denne version, skal du ikke bekymre dig. Tilslut blot enheden til appen, og den skulle blive blå. Det røde lys betyder, at enhedens ur endnu ikke er synkroniseret.",
+    "continueAnyway": "Fortsæt"
 }

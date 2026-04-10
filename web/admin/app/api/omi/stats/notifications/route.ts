@@ -7,6 +7,45 @@ export const dynamic = 'force-dynamic';
 const MENTOR_APP_ID = 'mentor';
 const MARKETPLACE_MENTOR_APP_ID = 'omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1';
 
+type FloatingBarCtrPoint = {
+  date: string;
+  sent: number;
+  clicked: number;
+  dismissed: number;
+  ctr: number;
+};
+
+type FloatingBarCtrStats = {
+  dailyData: FloatingBarCtrPoint[];
+  summary: {
+    sent: number;
+    clicked: number;
+    dismissed: number;
+    ctr: number;
+    uniqueClickers: number;
+    mode: 'surface_tagged' | 'all_notifications_fallback';
+  };
+};
+
+async function queryPostHog(host: string, projectId: string, apiKey: string, query: string) {
+  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PostHog API error ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -15,6 +54,9 @@ export async function GET(request: NextRequest) {
     const db = getDb();
     const searchParams = request.nextUrl.searchParams;
     const days = parseInt(searchParams.get('days') || '30', 10);
+    const posthogHost = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
+    const posthogApiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+    const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
 
     const endDate = new Date();
     const startDate = new Date();
@@ -59,105 +101,7 @@ export async function GET(request: NextRequest) {
     const startMs = startDate.getTime();
     const endMs = endDate.getTime();
     const usersRef = db.collection('users');
-    const TYPESENSE_HOST = process.env.TYPESENSE_HOST;
-    const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY;
-
-    // ── Run ALL data fetches in parallel ──
-
-    const dailyActiveAll: Record<string, number> = {};
-    const dailyActiveUserIds: Record<string, Set<string>> = {};
-    const dayCorrectionFactors: Record<string, number> = {};
-
-    const fetchDAU = async () => {
-      if (!TYPESENSE_HOST || !TYPESENSE_API_KEY) return;
-      const PER_PAGE = 250;
-
-      // Phase 1: Fire ONE request per day in parallel to get total count + first page
-      const firstPages = await Promise.all(dateKeys.map(async (dayKey) => {
-        const startTs = Math.floor(new Date(dayKey + 'T00:00:00Z').getTime() / 1000);
-        const endTs = Math.floor(new Date(dayKey + 'T23:59:59Z').getTime() / 1000);
-        try {
-          const url = `https://${TYPESENSE_HOST}/collections/conversations/documents/search?q=*&per_page=${PER_PAGE}&page=1&filter_by=created_at:>=${startTs}%20%26%26%20created_at:<=${endTs}&include_fields=userId`;
-          const resp = await fetch(url, {
-            headers: { 'X-TYPESENSE-API-KEY': TYPESENSE_API_KEY },
-            signal: AbortSignal.timeout(12000),
-          });
-          if (!resp.ok) return { dayKey, found: 0, hits: [] as any[] };
-          const data = await resp.json();
-          return { dayKey, found: data.found || 0, hits: data.hits || [] };
-        } catch {
-          return { dayKey, found: 0, hits: [] as any[] };
-        }
-      }));
-
-      // Phase 2: For days needing more pages, fire pages 2-5 ALL in parallel
-      const extraRequests: { dayKey: string; page: number }[] = [];
-      const dayData: Record<string, { found: number; uniqueUsers: Set<string>; sampled: number }> = {};
-
-      for (const { dayKey, found, hits } of firstPages) {
-        const uniqueUsers = new Set<string>();
-        for (const hit of hits) {
-          if (hit.document?.userId) uniqueUsers.add(hit.document.userId);
-        }
-        dayData[dayKey] = { found, uniqueUsers, sampled: hits.length };
-        // Queue pages 2-5 if there are more results
-        if (hits.length >= PER_PAGE && found > PER_PAGE) {
-          const maxPage = Math.min(5, Math.ceil(found / PER_PAGE));
-          for (let p = 2; p <= maxPage; p++) {
-            extraRequests.push({ dayKey, page: p });
-          }
-        }
-      }
-
-      if (extraRequests.length > 0) {
-        const extraResults = await Promise.all(extraRequests.map(async ({ dayKey, page }) => {
-          const startTs = Math.floor(new Date(dayKey + 'T00:00:00Z').getTime() / 1000);
-          const endTs = Math.floor(new Date(dayKey + 'T23:59:59Z').getTime() / 1000);
-          try {
-            const url = `https://${TYPESENSE_HOST}/collections/conversations/documents/search?q=*&per_page=${PER_PAGE}&page=${page}&filter_by=created_at:>=${startTs}%20%26%26%20created_at:<=${endTs}&include_fields=userId`;
-            const resp = await fetch(url, {
-              headers: { 'X-TYPESENSE-API-KEY': TYPESENSE_API_KEY },
-              signal: AbortSignal.timeout(12000),
-            });
-            if (!resp.ok) return { dayKey, hits: [] as any[] };
-            const data = await resp.json();
-            return { dayKey, hits: data.hits || [] };
-          } catch {
-            return { dayKey, hits: [] as any[] };
-          }
-        }));
-
-        for (const { dayKey, hits } of extraResults) {
-          const dd = dayData[dayKey];
-          if (dd) {
-            dd.sampled += hits.length;
-            for (const hit of hits) {
-              if (hit.document?.userId) dd.uniqueUsers.add(hit.document.userId);
-            }
-          }
-        }
-      }
-
-      // Compute corrected DAU for each day
-      for (const dayKey of dateKeys) {
-        const dd = dayData[dayKey];
-        if (!dd || dd.sampled === 0) {
-          dailyActiveAll[dayKey] = 0;
-          dailyActiveUserIds[dayKey] = new Set();
-          dayCorrectionFactors[dayKey] = 1;
-          continue;
-        }
-        let correctionFactor = 1;
-        if (dd.found > dd.sampled) {
-          correctionFactor = Math.pow(dd.found / dd.sampled, 0.35);
-        }
-        dailyActiveAll[dayKey] = Math.round(dd.uniqueUsers.size * correctionFactor);
-        dailyActiveUserIds[dayKey] = dd.uniqueUsers;
-        dayCorrectionFactors[dayKey] = correctionFactor;
-      }
-    };
-
-    const enabledUserIdsSet = new Set<string>();
+    let floatingBarCtr: FloatingBarCtrStats | null = null;
 
     const fetchNotifications = async () => {
       // Try collection group first
@@ -201,7 +145,7 @@ export async function GET(request: NextRequest) {
         // Collection group needs index — fall back to per-user queries
       }
 
-      // Fallback: query all enabled users
+      // Fallback: query all mentor-enabled users
       const enabledUsersSnap = await usersRef
         .where('mentor_notification_frequency', '>', 0)
         .select()
@@ -209,8 +153,6 @@ export async function GET(request: NextRequest) {
         .get();
 
       const enabledUserIds = enabledUsersSnap.docs.map(doc => doc.id);
-      // Also populate the set for DAU cross-reference (saves a duplicate query)
-      for (const id of enabledUserIds) enabledUserIdsSet.add(id);
 
       // Fire ALL queries at once — only ~400 users × 2 = ~800 queries
       const allPromises = enabledUserIds.flatMap(uid => [
@@ -251,47 +193,142 @@ export async function GET(request: NextRequest) {
     };
 
     const countsPromise = Promise.all([
-      usersRef.where('mentor_notification_frequency', '>', 0).count().get(),
-      usersRef.where('mentor_notification_frequency', '==', 0).count().get(),
+      usersRef.where('notifications_enabled', '==', false).count().get(),
       usersRef.count().get(),
     ]);
 
-    // Run counts, notifications, and DAU all in parallel
-    const [countResults] = await Promise.all([
+    const fetchFloatingBarCtr = async () => {
+      if (!posthogApiKey || !posthogProjectId) return null;
+
+      const buildCtr = (
+        dailyRows: [string, number, number, number][],
+        summaryRow: [number, number, number, number] | undefined,
+        mode: 'surface_tagged' | 'all_notifications_fallback'
+      ) => {
+        const ctrByDate = new Map(
+          dailyRows.map(([date, sent, clicked, dismissed]) => {
+            const normalizedDate = date.slice(0, 10);
+            return [normalizedDate, { sent, clicked, dismissed }];
+          })
+        );
+
+        const dailyData = dateKeys.map((date) => {
+          const row = ctrByDate.get(date) ?? { sent: 0, clicked: 0, dismissed: 0 };
+          return {
+            date,
+            sent: row.sent,
+            clicked: row.clicked,
+            dismissed: row.dismissed,
+            ctr: row.sent > 0 ? Math.round((row.clicked / row.sent) * 1000) / 10 : 0,
+          };
+        });
+
+        const [sent = 0, clicked = 0, dismissed = 0, uniqueClickers = 0] = summaryRow ?? [];
+        return {
+          dailyData,
+          summary: {
+            sent,
+            clicked,
+            dismissed,
+            ctr: sent > 0 ? Math.round((clicked / sent) * 1000) / 10 : 0,
+            uniqueClickers,
+            mode,
+          },
+        };
+      };
+
+      const surfaceDailyCtrQuery = `
+        SELECT
+          toDate(timestamp) as day,
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND properties.notification_surface = 'floating_bar'
+          AND timestamp >= now() - interval ${days} day
+        GROUP BY day
+        ORDER BY day
+      `;
+
+      const surfaceSummaryQuery = `
+        SELECT
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed,
+          count(DISTINCT if(event = 'Notification Clicked', distinct_id, null)) as unique_clickers
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND properties.notification_surface = 'floating_bar'
+          AND timestamp >= now() - interval ${days} day
+      `;
+
+      const [surfaceDailyResult, surfaceSummaryResult] = await Promise.all([
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, surfaceDailyCtrQuery),
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, surfaceSummaryQuery),
+      ]);
+
+      const surfaceDailyRows: [string, number, number, number][] = surfaceDailyResult?.results ?? [];
+      const surfaceSummaryRow: [number, number, number, number] | undefined = surfaceSummaryResult?.results?.[0];
+      const surfaceCtr = buildCtr(surfaceDailyRows, surfaceSummaryRow, 'surface_tagged');
+
+      if (surfaceCtr.summary.sent > 0 || surfaceCtr.summary.clicked > 0) {
+        return surfaceCtr;
+      }
+
+      const fallbackDailyCtrQuery = `
+        SELECT
+          toDate(timestamp) as day,
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND timestamp >= now() - interval ${days} day
+        GROUP BY day
+        ORDER BY day
+      `;
+
+      const fallbackSummaryQuery = `
+        SELECT
+          countIf(event = 'Notification Sent') as sent,
+          countIf(event = 'Notification Clicked') as clicked,
+          countIf(event = 'Notification Dismissed') as dismissed,
+          count(DISTINCT if(event = 'Notification Clicked', distinct_id, null)) as unique_clickers
+        FROM events
+        WHERE event IN ('Notification Sent', 'Notification Clicked', 'Notification Dismissed')
+          AND properties.$os_name = 'macOS'
+          AND timestamp >= now() - interval ${days} day
+      `;
+
+      const [fallbackDailyResult, fallbackSummaryResult] = await Promise.all([
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, fallbackDailyCtrQuery),
+        queryPostHog(posthogHost, posthogProjectId, posthogApiKey, fallbackSummaryQuery),
+      ]);
+
+      const fallbackDailyRows: [string, number, number, number][] = fallbackDailyResult?.results ?? [];
+      const fallbackSummaryRow: [number, number, number, number] | undefined = fallbackSummaryResult?.results?.[0];
+      return buildCtr(fallbackDailyRows, fallbackSummaryRow, 'all_notifications_fallback');
+    };
+
+    // Run counts, notifications, and CTR queries in parallel
+    const [countResults, , floatingBarCtrResult] = await Promise.all([
       countsPromise,
       fetchNotifications(),
-      fetchDAU(),
+      fetchFloatingBarCtr().catch((error) => {
+        console.error('Error fetching floating bar CTR from PostHog:', error);
+        return null;
+      }),
     ]);
+    floatingBarCtr = floatingBarCtrResult;
 
-    const [enabledSnap, disabledSnap, totalSnap] = countResults;
-    const enabledCount = enabledSnap.data().count;
+    const [disabledSnap, totalSnap] = countResults;
     const disabledCount = disabledSnap.data().count;
     const totalUsers = totalSnap.data().count;
-
-    // If enabledUserIdsSet wasn't populated by the fallback path, fetch it now
-    if (enabledUserIdsSet.size === 0) {
-      try {
-        const snap = await usersRef
-          .where('mentor_notification_frequency', '>', 0)
-          .select()
-          .limit(5000)
-          .get();
-        for (const doc of snap.docs) enabledUserIdsSet.add(doc.id);
-      } catch { /* ignore */ }
-    }
-
-    // Cross-reference DAU with enabled users
-    const dailyActiveEnabled: Record<string, number> = {};
-    for (const key of dateKeys) {
-      let count = 0;
-      const dayUsers = dailyActiveUserIds[key];
-      if (dayUsers) {
-        for (const uid of Array.from(dayUsers)) {
-          if (enabledUserIdsSet.has(uid)) count++;
-        }
-      }
-      dailyActiveEnabled[key] = Math.round(count * (dayCorrectionFactors[key] ?? 1));
-    }
+    const enabledCount = Math.max(totalUsers - disabledCount, 0);
 
     // Build daily data
     const dailyData = dateKeys.map(key => ({
@@ -300,9 +337,6 @@ export async function GET(request: NextRequest) {
       marketplaceMentorSent: dayBuckets[key].marketplaceMentorSent,
       uniqueUsersMentor: dayBuckets[key].uniqueUsersMentor.size,
       uniqueUsersMarketplace: dayBuckets[key].uniqueUsersMarketplace.size,
-      dailyActiveUsers: dailyActiveAll[key] ?? 0,
-      dailyActiveWithMentor: dailyActiveEnabled[key] ?? 0,
-      enabledPct: (dailyActiveAll[key] ?? 0) > 0 ? Math.round(((dailyActiveEnabled[key] ?? 0) / (dailyActiveAll[key] ?? 1)) * 1000) / 10 : 0,
     }));
 
     // Build weekly data
@@ -350,9 +384,10 @@ export async function GET(request: NextRequest) {
       dailyData,
       weeklyData,
       hourlyData,
+      floatingBarCtr,
       enabledDisabled: {
         enabled: enabledCount,
-        disabled: disabledCount + (totalUsers - enabledCount - disabledCount),
+        disabled: disabledCount,
         total: totalUsers,
       },
     });

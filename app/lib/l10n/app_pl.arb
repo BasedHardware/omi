@@ -3061,5 +3061,8 @@
     "e2eeKeyRecoveryLostKey": "Zgubiłem klucz odzyskiwania",
     "e2eeKeyRecoveryLostKeyBody": "Bez klucza odzyskiwania musisz wyłączyć E2EE na innym urządzeniu, na którym jesteś zalogowany, albo skontaktować się z pomocą techniczną, aby zresetować szyfrowanie.",
     "enableLocationTitle": "Włącz lokalizację",
-    "enableLocationDescription": "Uprawnienie do lokalizacji jest potrzebne do znajdowania pobliskich urządzeń Bluetooth."
+    "enableLocationDescription": "Uprawnienie do lokalizacji jest potrzebne, aby znaleźć pobliskie urządzenia Bluetooth.",
+    "firmwareWarningTitle": "Ważne: Przeczytaj przed aktualizacją",
+    "firmwareFormatWarning": "Ten firmware sformatuje kartę SD. Upewnij się, że wszystkie dane offline są zsynchronizowane przed aktualizacją.\n\nJeśli po zainstalowaniu tej wersji zobaczysz migającą czerwoną diodę, nie martw się. Po prostu podłącz urządzenie do aplikacji, a powinno zmienić kolor na niebieski. Czerwona dioda oznacza, że zegar urządzenia nie został jeszcze zsynchronizowany.",
+    "continueAnyway": "Kontynuuj"
 }

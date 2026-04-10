@@ -398,7 +398,7 @@ actor MemoryStorage {
     // MARK: - Local Extraction Operations
 
     /// Insert a locally extracted memory (before backend sync)
-    /// Used by MemoryAssistant and AdviceAssistant
+    /// Used by MemoryAssistant and InsightAssistant
     @discardableResult
     func insertLocalMemory(_ record: MemoryRecord) async throws -> MemoryRecord {
         let db = try await ensureInitialized()

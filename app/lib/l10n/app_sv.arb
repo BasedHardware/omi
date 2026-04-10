@@ -3026,5 +3026,8 @@
     "e2eeKeyRecoveryLostKey": "Jag har tappat bort min återställningsnyckel",
     "e2eeKeyRecoveryLostKeyBody": "Utan återställningsnyckeln måste du inaktivera E2EE från en annan enhet där du är inloggad, eller kontakta supporten för att återställa krypteringen.",
     "enableLocationTitle": "Aktivera plats",
-    "enableLocationDescription": "Platsbehörighet behövs för att hitta Bluetooth-enheter i närheten."
+    "enableLocationDescription": "Platstillstånd behövs för att hitta Bluetooth-enheter i närheten.",
+    "firmwareWarningTitle": "Viktigt: Läs innan du uppdaterar",
+    "firmwareFormatWarning": "Denna firmware kommer att formatera SD-kortet. Se till att all offlinedata är synkroniserad innan du uppgraderar.\n\nOm du ser ett blinkande rött ljus efter att ha installerat denna version, oroa dig inte. Anslut bara enheten till appen och den bör bli blå. Det röda ljuset betyder att enhetens klocka inte har synkroniserats ännu.",
+    "continueAnyway": "Fortsätt"
 }

@@ -719,7 +719,7 @@ class TestProcessSegmentReal:
         ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
@@ -746,7 +746,7 @@ class TestProcessSegmentReal:
         ), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
@@ -767,7 +767,7 @@ class TestProcessSegmentReal:
         ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
@@ -806,7 +806,7 @@ class TestProcessSegmentReal:
         ), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
@@ -849,7 +849,7 @@ class TestProcessSegmentReal:
         ), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             threads = [
                 threading.Thread(
@@ -908,7 +908,7 @@ class TestProcessSegmentReal:
         ), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
@@ -935,7 +935,7 @@ class TestProcessSegmentReal:
         ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             for i in range(3):
                 process_segment(f'/tmp/{i}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
@@ -974,7 +974,7 @@ class TestProcessSegmentReal:
         ), patch(
             'routers.sync.time.sleep'
         ):
-            from models.conversation import ConversationSource
+            from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 

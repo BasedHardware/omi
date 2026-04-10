@@ -6,15 +6,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from models.app import App
-from models.conversation import (
-    CalendarMeetingContext,
-    Structured,
-    Conversation,
-    ActionItem,
-    Event,
-    ConversationPhoto,
-    ActionItemsExtraction,
-)
+from models.calendar_context import CalendarMeetingContext
+from models.conversation import Conversation
+from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 import logging
 
@@ -392,15 +387,17 @@ def extract_action_items(
       - "Call dentist" (existing) vs "Call plumber" → NOT duplicate (different person/service)
       - "Submit report by March 1st" (existing) vs "Submit report by March 15th" → NOT duplicate (different deadlines)
     • If you're unsure whether something is a duplicate, err on the side of treating it as a duplicate (DON'T extract)
+    • SINGLE-TOPIC LIMIT: If a conversation discusses one topic, extract AT MOST 1 action item for it — not one per variation, option, or detail mentioned in the discussion.
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
     2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
-    3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
-       - Is the user ALREADY doing this? SKIP IT
-       - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
-       - Would missing this have real consequences? If not obvious, SKIP IT
-       - Better to extract 0 implicit tasks than flood the user with noise
+    3. THIRD: For IMPLICIT tasks - default to extracting NOTHING:
+       - Is the user already doing this or about to do it? SKIP IT
+       - Is this being handled in real-time between the participants? SKIP IT
+       - Would a busy person genuinely forget this without a reminder? If not OBVIOUS, SKIP IT
+       - NEVER extract multiple items about the same topic from a single conversation
+       - When in doubt, extract 0 items. One missed marginal task is far better than multiple garbage tasks.
     4. FOURTH: Extract timing information separately and put it in the due_at field
     5. FIFTH: Clean the description - remove ALL time references and vague words
     6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
@@ -452,24 +449,17 @@ def extract_action_items(
        - Commitments to other people (meetings, deliverables, promises)
        - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
-    5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
-       - "I want to X" → EXTRACT (user stated intention, needs reminder)
-       - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
-       - "Today I will X" → EXTRACT (daily goal, needs tracking)
-       - "This week/month I want to X" → EXTRACT (time-bound goal)
-
-       Only skip if user is ACTIVELY doing something RIGHT NOW:
-       - "I am currently in the middle of X" → Skip (actively doing it this moment)
-       - "Right now I'm doing X" → Skip (immediate present action)
-
-       Examples:
-       - ✅ "Today, I want to complete the onboarding experience" → EXTRACT (stated goal with deadline)
-       - ✅ "I want to finish the report by Friday" → EXTRACT (intention + deadline)
-       - ✅ "This month, I want to grow users to 500k" → EXTRACT (monthly goal)
-       - ✅ "Need to call the plumber tomorrow" → EXTRACT (future task)
-       - ✅ "Have to submit tax documents by March 31st" → EXTRACT (deadline)
-       - ❌ "I'm currently on a call with the client" → Skip (happening right now)
-       - ❌ "Right now I'm debugging this issue" → Skip (immediate action)
+    5. **NOT Already Being Done or About to Do Immediately**:
+       - Skip if user is currently doing it, about to do it, or handling it in this conversation
+       - "I'm going to X" → SKIP (about to do it right now)
+       - "I'll do X for you" → SKIP (immediate response to a request)
+       - "Let me X" → SKIP (taking action now)
+       - "Today I will X" → SKIP unless there's a specific time/deadline attached
+       - "I want to X" → SKIP unless paired with a concrete deadline or explicit reminder request
+       - Only EXTRACT if there's a real future deadline that could be forgotten:
+         * "I need to submit the report by Friday" → EXTRACT (forgettable deadline)
+         * "Remind me to call the dentist tomorrow" → EXTRACT (explicit request)
+         * "Don't forget to pay rent by the 1st" → EXTRACT (financial deadline)
 
     EXCLUDE these types of items (be aggressive about exclusion):
     • Things user is ALREADY doing or actively working on
@@ -484,6 +474,10 @@ def extract_action_items(
     • Routine daily activities the user already knows about
     • Things that are obvious or don't need a reminder
     • Updates or status reports about ongoing work
+    • Conversations where the action is being completed in real-time between the participants
+    • Back-and-forth clarification or decision-making about something happening right now
+    • Requests and responses between people who are together and handling the matter on the spot
+    • If the entire conversation is a brief in-person exchange that will be resolved within minutes, extract 0 items
 
     FORMAT REQUIREMENTS:
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
@@ -524,51 +518,17 @@ def extract_action_items(
     • Merge duplicates
     • Order by: due date → urgency → alphabetical
 
-    DUE DATE EXTRACTION (CRITICAL):
-    IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
-    IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
-    IMPORTANT: NEVER produce a due_at date that is in the past relative to {current_time}.
+    DUE DATE EXTRACTION:
+    All due_at values MUST be future UTC timestamps with 'Z' suffix. NEVER produce a past date.
 
-    REFERENCE TIME SELECTION (CRITICAL):
-    - The conversation started at {started_at}, and the current time is {current_time}.
-    - If {started_at} is MORE than 7 days before {current_time}, this is a HISTORICAL conversation being reprocessed.
-      In this case, you MUST use {current_time} as your reference for resolving relative dates ("today", "tomorrow", "next week", etc.).
-      Do NOT resolve relative dates against the old conversation date.
-    - If {started_at} is WITHIN 7 days of {current_time}, use {started_at} as the reference time (normal behavior).
-    - Let REFERENCE_TIME = the chosen reference time based on the rule above.
+    REFERENCE_TIME: If {started_at} is >7 days before {current_time}, use {current_time} (historical reprocessing). Otherwise use {started_at}.
 
-    Step-by-step date parsing process:
-    1. IDENTIFY THE DATE:
-       - "today" → current date from REFERENCE_TIME
-       - "tomorrow" → next day from REFERENCE_TIME
-       - "Monday", "Tuesday", etc. → next occurrence of that weekday from REFERENCE_TIME
-       - "next week" → same day next week from REFERENCE_TIME
-       - Specific date (e.g., "March 15") → that date
+    Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
+    Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
+    Process: resolve date + time in user's timezone ({tz}), convert to UTC with 'Z' suffix, verify it's future relative to {current_time}. If past, omit due_at.
 
-    2. IDENTIFY THE TIME (if mentioned):
-       - "before 10am", "by 10am", "at 10am" → 10:00 AM
-       - "before 3pm", "by 3pm", "at 3pm" → 3:00 PM
-       - "in the morning" → 9:00 AM
-       - "in the afternoon" → 2:00 PM
-       - "in the evening", "by evening" → 6:00 PM
-       - "at noon" → 12:00 PM
-       - "by midnight", "by end of day" → 11:59 PM
-       - No time mentioned → 11:59 PM (end of day)
-
-    3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
-
-    4. VERIFY the resulting date is in the FUTURE relative to {current_time}. If not, do NOT include a due_at.
-
-    Examples of CORRECT date parsing:
-    If REFERENCE_TIME is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
-    - "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
-    - "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
-    - "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
-    - "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
-    - "urgent" or "ASAP" → 2 hours from REFERENCE_TIME → "2025-10-03T15:25:00Z"
-
-    CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
-    DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
+    Example: REFERENCE_TIME "2025-10-03T13:25:00Z", tz "Asia/Kolkata": "tomorrow before 10am" → Oct 4 10:00 IST → "2025-10-04T04:30:00Z"
+    Format: UTC with 'Z' suffix only (e.g., "2025-10-04T04:30:00Z"). No timezone offsets like "+05:30".
 
     Conversation started at: {started_at}
     Current time: {current_time}

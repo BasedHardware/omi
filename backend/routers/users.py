@@ -36,9 +36,9 @@ from database.redis_db import (
     set_generic_cache,
 )
 from database.users import *
-import database.users as users_db
 from utils.stt.streaming import deepgram_nova3_multi_languages
-from models.conversation import Geolocation, Conversation
+from models.conversation import Conversation
+from models.geolocation import Geolocation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod

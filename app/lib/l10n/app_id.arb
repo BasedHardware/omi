@@ -3068,5 +3068,8 @@
     "e2eeKeyRecoveryLostKey": "Saya kehilangan kunci pemulihan saya",
     "e2eeKeyRecoveryLostKeyBody": "Tanpa kunci pemulihan, Anda perlu menonaktifkan E2EE dari perangkat lain tempat Anda masuk, atau menghubungi dukungan untuk mengatur ulang enkripsi.",
     "enableLocationTitle": "Aktifkan Lokasi",
-    "enableLocationDescription": "Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di sekitar."
+    "enableLocationDescription": "Izin lokasi diperlukan untuk menemukan perangkat Bluetooth di dekatnya.",
+    "firmwareWarningTitle": "Penting: Baca Sebelum Memperbarui",
+    "firmwareFormatWarning": "Firmware ini akan memformat kartu SD. Pastikan semua data offline telah disinkronkan sebelum memperbarui.\n\nJika Anda melihat lampu merah berkedip setelah menginstal versi ini, jangan khawatir. Cukup hubungkan perangkat ke aplikasi dan lampu akan berubah menjadi biru. Lampu merah berarti jam perangkat belum disinkronkan.",
+    "continueAnyway": "Lanjutkan"
 }

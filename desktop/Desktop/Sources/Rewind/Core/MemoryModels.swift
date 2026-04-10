@@ -4,7 +4,7 @@ import GRDB
 // MARK: - Memory Record
 
 /// Database record for memories with bidirectional sync support
-/// Stores all memories (extracted, advice/tips, focus-tagged) from both local extraction and backend API
+/// Stores all memories (extracted, insight, focus-tagged) from both local extraction and backend API
 struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var id: Int64?
 
@@ -138,9 +138,9 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         tags.contains(tag)
     }
 
-    /// Check if this is a tips/advice memory
+    /// Check if this is a insight memory
     var isTips: Bool {
-        hasTag("tips")
+        hasTag("insights")
     }
 
     /// Check if this is a focus memory
@@ -148,7 +148,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         hasTag("focus")
     }
 
-    /// Check if this is a regular memory (not tips or focus)
+    /// Check if this is a regular memory (not insight or focus)
     var isRegularMemory: Bool {
         !isTips && !isFocus
     }

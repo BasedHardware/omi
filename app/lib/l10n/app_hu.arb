@@ -3121,6 +3121,9 @@
     "e2eeKeyRecoveryWrongKey": "Hibás kulcs — nem egyezik az adataid titkosításához használt kulccsal",
     "e2eeKeyRecoveryLostKey": "Elvesztettem a helyreállítási kulcsomat",
     "e2eeKeyRecoveryLostKeyBody": "Helyreállítási kulcs nélkül egy másik bejelentkezett eszközről kell kikapcsolnod az E2EE-t, vagy kapcsolatba kell lépned a támogatással a titkosítás visszaállításához.",
-    "enableLocationTitle": "Hely engedélyezése",
-    "enableLocationDescription": "A helyengedély szükséges a közeli Bluetooth-eszközök megtalálásához."
+    "enableLocationTitle": "Helymeghatározás engedélyezése",
+    "enableLocationDescription": "A helymeghatározási engedély szükséges a közeli Bluetooth-eszközök megtalálásához.",
+    "firmwareWarningTitle": "Fontos: Olvassa el a frissítés előtt",
+    "firmwareFormatWarning": "Ez a firmware formázni fogja az SD-kártyát. Kérjük, győződjön meg arról, hogy minden offline adat szinkronizálva van a frissítés előtt.\n\nHa a verzió telepítése után villogó piros fényt lát, ne aggódjon. Egyszerűen csatlakoztassa az eszközt az alkalmazáshoz, és kékre kell váltania. A piros fény azt jelenti, hogy az eszköz órája még nem lett szinkronizálva.",
+    "continueAnyway": "Folytatás"
 }

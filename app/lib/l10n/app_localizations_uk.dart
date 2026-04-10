@@ -9109,7 +9109,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get enableLocationDescription =>
-      'Дозвіл на місцезнаходження потрібен, щоб знаходити пристрої Bluetooth поблизу.';
+      'Дозвіл на визначення місцезнаходження потрібен для пошуку пристроїв Bluetooth поблизу.';
 
   @override
   String get voiceRecordingFound => 'Запис знайдено';
@@ -9125,4 +9125,14 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аудіовихід';
+
+  @override
+  String get firmwareWarningTitle => 'Важливо: Прочитайте перед оновленням';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ця прошивка відформатує SD-карту. Будь ласка, переконайтеся, що всі офлайн-дані синхронізовані перед оновленням.\n\nЯкщо після встановлення цієї версії ви побачите блимаючий червоний індикатор, не хвилюйтеся. Просто підключіть пристрій до додатку, і він повинен стати синім. Червоний індикатор означає, що годинник пристрою ще не синхронізовано.';
+
+  @override
+  String get continueAnyway => 'Продовжити';
 }

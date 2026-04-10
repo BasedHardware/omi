@@ -3027,5 +3027,8 @@
     "e2eeKeyRecoveryLostKey": "Perdí mi clave de recuperación",
     "e2eeKeyRecoveryLostKeyBody": "Sin la clave de recuperación, tendrás que desactivar E2EE desde otro dispositivo en el que hayas iniciado sesión o contactar con soporte para restablecer el cifrado.",
     "enableLocationTitle": "Activar ubicación",
-    "enableLocationDescription": "El permiso de ubicación es necesario para encontrar dispositivos Bluetooth cercanos."
+    "enableLocationDescription": "Se necesita permiso de ubicación para encontrar dispositivos Bluetooth cercanos.",
+    "firmwareWarningTitle": "Importante: Lea antes de actualizar",
+    "firmwareFormatWarning": "Este firmware formateará la tarjeta SD. Asegúrese de que todos los datos sin conexión estén sincronizados antes de actualizar.\n\nSi ve una luz roja parpadeante después de instalar esta versión, no se preocupe. Simplemente conecte el dispositivo a la aplicación y debería ponerse azul. La luz roja significa que el reloj del dispositivo aún no se ha sincronizado.",
+    "continueAnyway": "Continuar"
 }

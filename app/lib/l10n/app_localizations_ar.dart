@@ -9031,7 +9031,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get enableLocationTitle => 'تفعيل الموقع';
 
   @override
-  String get enableLocationDescription => 'إذن الموقع مطلوب للعثور على أجهزة Bluetooth القريبة.';
+  String get enableLocationDescription => 'إذن الموقع مطلوب للعثور على أجهزة بلوتوث القريبة.';
 
   @override
   String get voiceRecordingFound => 'تسجيل موجود';
@@ -9047,4 +9047,14 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get audioOutput => 'مخرج الصوت';
+
+  @override
+  String get firmwareWarningTitle => 'مهم: اقرأ قبل التحديث';
+
+  @override
+  String get firmwareFormatWarning =>
+      'سيقوم هذا التحديث بتهيئة بطاقة SD. يرجى التأكد من مزامنة جميع البيانات غير المتصلة قبل الترقية.\n\nإذا رأيت ضوءاً أحمر يومض بعد تثبيت هذا الإصدار، لا تقلق. ما عليك سوى توصيل الجهاز بالتطبيق وسيتحول إلى اللون الأزرق. الضوء الأحمر يعني أن ساعة الجهاز لم تتم مزامنتها بعد.';
+
+  @override
+  String get continueAnyway => 'متابعة';
 }

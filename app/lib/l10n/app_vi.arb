@@ -3031,5 +3031,8 @@
     "e2eeKeyRecoveryLostKey": "Tôi đã mất khóa khôi phục",
     "e2eeKeyRecoveryLostKeyBody": "Nếu không có khóa khôi phục, bạn cần tắt E2EE từ một thiết bị khác mà bạn đã đăng nhập, hoặc liên hệ hỗ trợ để đặt lại mã hóa.",
     "enableLocationTitle": "Bật vị trí",
-    "enableLocationDescription": "Cần quyền vị trí để tìm các thiết bị Bluetooth ở gần."
+    "enableLocationDescription": "Cần quyền truy cập vị trí để tìm các thiết bị Bluetooth gần đây.",
+    "firmwareWarningTitle": "Quan trọng: Đọc trước khi cập nhật",
+    "firmwareFormatWarning": "Firmware này sẽ định dạng thẻ SD. Vui lòng đảm bảo tất cả dữ liệu ngoại tuyến đã được đồng bộ trước khi nâng cấp.\n\nNếu bạn thấy đèn đỏ nhấp nháy sau khi cài đặt phiên bản này, đừng lo lắng. Chỉ cần kết nối thiết bị với ứng dụng và nó sẽ chuyển sang màu xanh. Đèn đỏ có nghĩa là đồng hồ của thiết bị chưa được đồng bộ.",
+    "continueAnyway": "Tiếp tục"
 }

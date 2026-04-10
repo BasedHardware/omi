@@ -223,7 +223,8 @@ class TestCreateConversationLockPropagation:
 
     def test_conversation_inherits_lock_from_create(self):
         """Conversation(**create_dict) inherits is_locked=True."""
-        from models.conversation import CreateConversation, Conversation, Structured
+        from models.conversation import Conversation, CreateConversation
+        from models.structured import Structured
         from datetime import datetime, timezone
 
         cc = CreateConversation(

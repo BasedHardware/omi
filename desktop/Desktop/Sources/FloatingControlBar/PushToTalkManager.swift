@@ -340,12 +340,33 @@ class PushToTalkManager: ObservableObject {
       Task {
         do {
           let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-          let transcript = try await TranscriptionService.batchTranscribe(
+          let audioSeconds = Double(audioData.count) / (16000.0 * 2.0)
+          log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), language=\(language)")
+
+          // First attempt with the user's effective language (usually "multi")
+          var transcript = try await TranscriptionService.batchTranscribe(
             audioData: audioData,
             language: language
           )
+
+          // If multi-language detection returned empty on short audio (<5s),
+          // retry with the user's explicit language — Deepgram's language
+          // detection needs more context and often fails on short clips.
+          if (transcript == nil || transcript?.isEmpty == true)
+              && language == "multi" && audioSeconds < 5.0 {
+            let fallback = AssistantSettings.shared.transcriptionLanguage
+            let retryLang = (fallback.isEmpty || fallback == "multi") ? "en" : fallback
+            log("PushToTalkManager: multi returned empty on short audio, retrying with '\(retryLang)'")
+            transcript = try await TranscriptionService.batchTranscribe(
+              audioData: audioData,
+              language: retryLang
+            )
+          }
+
           if let transcript, !transcript.isEmpty {
             self.transcriptSegments = [transcript]
+          } else {
+            log("PushToTalkManager: transcription returned empty after retry")
           }
         } catch {
           logError("PushToTalkManager: batch transcription failed", error: error)

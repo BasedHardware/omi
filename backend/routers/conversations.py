@@ -10,26 +10,25 @@ import database.users as users_db
 from database.vector_db import delete_vector, delete_memory_vector
 from utils.e2ee_access import verify_e2ee_access
 from utils.other.storage import delete_conversation_audio_files
+from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
-    BaseModel,
-    CalendarMeetingContext,
+    BulkAssignSegmentsRequest,
     Conversation,
-    ConversationPhoto,
-    ConversationStatus,
-    ConversationVisibility,
     CreateConversationResponse,
-    Geolocation,
+    DeleteActionItemRequest,
     MergeConversationsRequest,
     MergeConversationsResponse,
-    SetConversationEventsStateRequest,
-    SetConversationActionItemsStateRequest,
-    UpdateActionItemDescriptionRequest,
-    DeleteActionItemRequest,
-    BulkAssignSegmentsRequest,
-    UpdateSegmentTextRequest,
     SearchRequest,
+    SetConversationActionItemsStateRequest,
+    SetConversationEventsStateRequest,
     TestPromptRequest,
+    UpdateActionItemDescriptionRequest,
+    UpdateSegmentTextRequest,
 )
+from models.conversation_enums import ConversationStatus, ConversationVisibility
+from models.conversation_photo import ConversationPhoto
+from models.geolocation import Geolocation
+from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 

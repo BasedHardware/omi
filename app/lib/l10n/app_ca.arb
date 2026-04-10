@@ -2994,6 +2994,9 @@
     "e2eeKeyRecoveryWrongKey": "Clau incorrecta — no coincideix amb la utilitzada per xifrar les vostres dades",
     "e2eeKeyRecoveryLostKey": "He perdut la clau de recuperació",
     "e2eeKeyRecoveryLostKeyBody": "Sense la clau de recuperació, haureu de desactivar E2EE des d’un altre dispositiu on hàgiu iniciat sessió, o contactar amb suport per restablir el xifratge.",
-    "enableLocationTitle": "Activar la ubicació",
-    "enableLocationDescription": "El permís d’ubicació és necessari per trobar dispositius Bluetooth propers."
+    "enableLocationTitle": "Activa la ubicació",
+    "enableLocationDescription": "Es necessita el permís d'ubicació per trobar dispositius Bluetooth propers.",
+    "firmwareWarningTitle": "Important: Llegiu abans d'actualitzar",
+    "firmwareFormatWarning": "Aquest firmware formatarà la targeta SD. Assegureu-vos que totes les dades fora de línia estiguin sincronitzades abans d'actualitzar.\n\nSi veieu una llum vermella parpellejant després d'instal·lar aquesta versió, no us preocupeu. Simplement connecteu el dispositiu a l'aplicació i hauria de tornar-se blau. La llum vermella significa que el rellotge del dispositiu encara no s'ha sincronitzat.",
+    "continueAnyway": "Continuar"
 }

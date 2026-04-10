@@ -16,6 +16,7 @@ from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
 import database.users as users_db
+import database.folders as folders_db
 from utils.notifications import send_notification
 import logging
 
@@ -58,6 +59,16 @@ def _add_speaker_names_to_payload(uid, payload: dict):
             seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
+def _add_folder_name_to_payload(uid, payload: dict):
+    """Add folder_name to webhook payload based on folder_id."""
+    folder_id = payload.get('folder_id')
+    if folder_id:
+        folder = folders_db.get_folder(uid, folder_id)
+        payload['folder_name'] = folder['name'] if folder else None
+    else:
+        payload['folder_name'] = None
+
+
 def conversation_created_webhook(uid, memory: Conversation):
     if memory.is_locked:
         return
@@ -72,6 +83,7 @@ def conversation_created_webhook(uid, memory: Conversation):
         try:
             payload = memory.as_dict_cleaned_dates()
             _add_speaker_names_to_payload(uid, payload)
+            _add_folder_name_to_payload(uid, payload)
             payload = _json_serialize_datetime(payload)
             response = requests.post(
                 webhook_url,

@@ -52,6 +52,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { OmiApp, OmiAppCapability } from "@/lib/services/omi-api/types";
 import { useAuth } from "@/components/auth-provider";
+import { useAuthFetch } from "@/hooks/useAuthToken";
 import { mutate } from "swr";
 import { useRouter } from 'next/navigation';
 import EditAppDrawer from '@/components/dashboard/edit-app-drawer';
@@ -89,6 +90,7 @@ export function AppsList({
 }: AppsListProps) {
   const [loadingActions, setLoadingActions] = useState<Record<string, boolean>>({});
   const { user } = useAuth();
+  const { fetchWithAuth } = useAuthFetch();
   const [editOpen, setEditOpen] = useState(false);
   const [editApp, setEditApp] = useState<OmiApp | null>(null);
   
@@ -140,13 +142,8 @@ export function AppsList({
     setLoadingActions(prev => ({ ...prev, [appId]: true }));
 
     try {
-      const idToken = await user.getIdToken();
-      const response = await fetch(`/api/omi/apps/${appId}/review`, {
+      const response = await fetchWithAuth(`/api/omi/apps/${appId}/review`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ action }),
       });
 

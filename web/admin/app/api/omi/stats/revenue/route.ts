@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
+import { getOptionalStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
   try {
+    const stripe = getOptionalStripe();
     const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
-    if (!monthlyPriceId || !annualPriceId) {
-      return NextResponse.json(
-        { error: 'Stripe price IDs not configured' },
-        { status: 500 }
-      );
+    if (!stripe || !monthlyPriceId || !annualPriceId) {
+      return NextResponse.json({ mrr: 0, arr: 0, unavailable: true });
     }
 
     // Fetch all active subscriptions with pagination
@@ -50,10 +47,27 @@ export async function GET(request: NextRequest) {
       return allSubscriptions;
     };
 
-    const [monthlySubscriptions, annualSubscriptions] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchAllSubscriptions(monthlyPriceId),
       fetchAllSubscriptions(annualPriceId),
     ]);
+
+    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
+    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
+
+    if (results[0].status === 'rejected') {
+      console.error('Error fetching monthly subscriptions:', results[0].reason);
+    }
+    if (results[1].status === 'rejected') {
+      console.error('Error fetching annual subscriptions:', results[1].reason);
+    }
+
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All revenue data sources failed' },
+        { status: 502 }
+      );
+    }
 
     let monthlyMRR = 0;
     let annualMRR = 0;
@@ -95,12 +109,14 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate combined totals
+    const partial = results.some((r) => r.status === 'rejected');
     const totalMRR = monthlyMRR + annualMRR;
     const totalARR = monthlyARR + annualARR;
 
     return NextResponse.json({
       mrr: totalMRR,
       arr: totalARR,
+      partial,
     });
   } catch (error) {
     console.error('Error calculating revenue metrics:', error);

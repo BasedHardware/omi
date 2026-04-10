@@ -9139,4 +9139,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio-uitvoer';
+
+  @override
+  String get firmwareWarningTitle => 'Belangrijk: Lees voor het updaten';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Deze firmware zal de SD-kaart formatteren. Zorg ervoor dat alle offline gegevens gesynchroniseerd zijn voor de upgrade.\n\nAls u na het installeren van deze versie een knipperend rood lampje ziet, maak u geen zorgen. Verbind het apparaat gewoon met de app en het zou blauw moeten worden. Het rode lampje betekent dat de klok van het apparaat nog niet is gesynchroniseerd.';
+
+  @override
+  String get continueAnyway => 'Doorgaan';
 }

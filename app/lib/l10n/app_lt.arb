@@ -3026,5 +3026,8 @@
     "e2eeKeyRecoveryLostKey": "Praradau atkūrimo raktą",
     "e2eeKeyRecoveryLostKeyBody": "Be atkūrimo rakto turėsite išjungti E2EE kitame įrenginyje, kuriame esate prisijungę, arba susisiekti su palaikymo komanda, kad iš naujo nustatytumėte šifravimą.",
     "enableLocationTitle": "Įjungti vietą",
-    "enableLocationDescription": "Vietos leidimas reikalingas netoliese esantiems Bluetooth įrenginiams rasti."
+    "enableLocationDescription": "Vietos leidimas reikalingas norint rasti netoliese esančius Bluetooth įrenginius.",
+    "firmwareWarningTitle": "Svarbu: Perskaitykite prieš atnaujinimą",
+    "firmwareFormatWarning": "Ši programinė įranga suformatuos SD kortelę. Prieš atnaujinimą įsitikinkite, kad visi neprisijungus esantys duomenys yra sinchronizuoti.\n\nJei po šios versijos įdiegimo matote mirksintį raudoną šviesą, nesijaudinkite. Tiesiog prijunkite įrenginį prie programėlės ir jis turėtų tapti mėlynas. Raudona šviesa reiškia, kad įrenginio laikrodis dar nebuvo sinchronizuotas.",
+    "continueAnyway": "Tęsti"
 }

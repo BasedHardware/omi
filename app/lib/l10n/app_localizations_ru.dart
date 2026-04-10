@@ -9120,10 +9120,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get willSyncAutomatically => 'синхронизируется автоматически';
 
   @override
-  String get enableLocationTitle => 'Включить геолокацию';
+  String get enableLocationTitle => 'Включить местоположение';
 
   @override
-  String get enableLocationDescription => 'Разрешение на геолокацию нужно для поиска ближайших устройств Bluetooth.';
+  String get enableLocationDescription =>
+      'Разрешение на определение местоположения необходимо для поиска ближайших Bluetooth-устройств.';
 
   @override
   String get voiceRecordingFound => 'Запись найдена';
@@ -9139,4 +9140,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аудиовыход';
+
+  @override
+  String get firmwareWarningTitle => 'Важно: Прочитайте перед обновлением';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Эта прошивка отформатирует SD-карту. Пожалуйста, убедитесь, что все офлайн-данные синхронизированы перед обновлением.\n\nЕсли после установки этой версии вы увидите мигающий красный свет, не беспокойтесь. Просто подключите устройство к приложению, и оно должно стать синим. Красный свет означает, что часы устройства ещё не синхронизированы.';
+
+  @override
+  String get continueAnyway => 'Продолжить';
 }

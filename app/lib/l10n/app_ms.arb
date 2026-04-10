@@ -3025,6 +3025,9 @@
     "e2eeKeyRecoveryWrongKey": "Kunci salah — tidak sepadan dengan kunci yang digunakan untuk menyulitkan data anda",
     "e2eeKeyRecoveryLostKey": "Saya kehilangan kunci pemulihan saya",
     "e2eeKeyRecoveryLostKeyBody": "Tanpa kunci pemulihan, anda perlu melumpuhkan E2EE daripada peranti lain yang anda telah log masuk, atau menghubungi sokongan untuk menetapkan semula penyulitan anda.",
-    "enableLocationTitle": "Dayakan Lokasi",
-    "enableLocationDescription": "Kebenaran lokasi diperlukan untuk mencari peranti Bluetooth berdekatan."
+    "enableLocationTitle": "Aktifkan Lokasi",
+    "enableLocationDescription": "Kebenaran lokasi diperlukan untuk mencari peranti Bluetooth berdekatan.",
+    "firmwareWarningTitle": "Penting: Baca Sebelum Mengemas Kini",
+    "firmwareFormatWarning": "Firmware ini akan memformat kad SD. Sila pastikan semua data luar talian telah disegerakkan sebelum menaik taraf.\n\nJika anda melihat lampu merah berkelip selepas memasang versi ini, jangan risau. Sambungkan sahaja peranti ke aplikasi dan ia sepatutnya bertukar biru. Lampu merah bermakna jam peranti belum disegerakkan lagi.",
+    "continueAnyway": "Teruskan"
 }

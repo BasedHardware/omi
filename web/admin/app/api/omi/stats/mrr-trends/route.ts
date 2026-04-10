@@ -1,28 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
+import { getOptionalStripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
+
+function buildEmptyMrrData(months: number) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - months);
+
+  const monthKeys: string[] = [];
+  const currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    monthKeys.push(monthKey);
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+
+  return monthKeys.map((monthKey) => {
+    const [year, month] = monthKey.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1);
+    return {
+      month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      monthKey,
+      mrr: 0,
+    };
+  });
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const months = parseInt(searchParams.get('months') || '12', 10);
+    const stripe = getOptionalStripe();
     const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
-    if (!monthlyPriceId || !annualPriceId) {
-      return NextResponse.json(
-        { error: 'Stripe price IDs not configured' },
-        { status: 500 }
-      );
+    if (!stripe || !monthlyPriceId || !annualPriceId) {
+      return NextResponse.json({ data: buildEmptyMrrData(months), unavailable: true });
     }
-
-    // Get query params for date range (default to last 12 months)
-    const searchParams = request.nextUrl.searchParams;
-    const months = parseInt(searchParams.get('months') || '12', 10);
 
     // Calculate date range
     const endDate = new Date();
@@ -58,10 +77,27 @@ export async function GET(request: NextRequest) {
       return allSubscriptions;
     };
 
-    const [monthlySubscriptions, annualSubscriptions] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchAllSubscriptions(monthlyPriceId),
       fetchAllSubscriptions(annualPriceId),
     ]);
+
+    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
+    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
+
+    if (results[0].status === 'rejected') {
+      console.error('Error fetching monthly subscriptions for MRR:', results[0].reason);
+    }
+    if (results[1].status === 'rejected') {
+      console.error('Error fetching annual subscriptions for MRR:', results[1].reason);
+    }
+
+    if (results.every((r) => r.status === 'rejected')) {
+      return NextResponse.json(
+        { error: 'All MRR trend data sources failed' },
+        { status: 502 }
+      );
+    }
 
     // Group MRR by month
     const mrrByMonth: Record<string, number> = {};
@@ -134,6 +170,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Format data for chart
+    const partial = results.some((r) => r.status === 'rejected');
     const data = monthKeys.map((monthKey) => {
       const [year, month] = monthKey.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1);
@@ -144,7 +181,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data, partial });
   } catch (error) {
     console.error('Error fetching MRR trends:', error);
     return NextResponse.json(
@@ -153,4 +190,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

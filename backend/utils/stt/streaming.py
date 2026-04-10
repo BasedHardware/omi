@@ -27,28 +27,6 @@ class STTService(str, Enum):
             return 'deepgram_streaming'
 
 
-# Language codes supported in nova-2 but NOT in nova-3
-deepgram_nova2_languages = {
-    "zh",
-    "zh-CN",
-    "zh-Hans",
-    "zh-TW",
-    "zh-Hant",
-    "zh-HK",
-    "th",
-    "th-TH",
-}
-deepgram_nova2_multi_languages = {
-    'multi',
-    "en",
-    "en-US",
-    "en-AU",
-    "en-GB",
-    "en-IN",
-    "en-NZ",
-    "es",
-    "es-419",
-}
 deepgram_nova3_multi_languages = {
     "multi",
     "en",
@@ -72,36 +50,64 @@ deepgram_nova3_multi_languages = {
     "nl",
 }
 deepgram_nova3_languages = {
+    "ar",
+    "ar-AE",
+    "ar-SA",
+    "ar-QA",
+    "ar-KW",
+    "ar-SY",
+    "ar-LB",
+    "ar-PS",
+    "ar-JO",
+    "ar-EG",
+    "ar-SD",
+    "ar-TD",
+    "ar-MA",
+    "ar-DZ",
+    "ar-TN",
+    "ar-IQ",
+    "ar-IR",
+    "be",
     "bg",
+    "bn",
+    "bs",
     "ca",
     "cs",
     "da",
     "da-DK",
-    "nl",
+    "de",
+    "de-CH",
+    "el",
     "en",
     "en-US",
     "en-AU",
     "en-GB",
     "en-IN",
     "en-NZ",
+    "es",
+    "es-419",
     "et",
+    "fa",
     "fi",
-    "nl-BE",
     "fr",
     "fr-CA",
-    "de",
-    "de-CH",
-    "el",
+    "he",
     "hi",
+    "hr",
     "hu",
     "id",
     "it",
     "ja",
+    "kn",
     "ko",
     "ko-KR",
-    "lv",
     "lt",
+    "lv",
+    "mk",
+    "mr",
     "ms",
+    "nl",
+    "nl-BE",
     "no",
     "pl",
     "pt",
@@ -110,35 +116,35 @@ deepgram_nova3_languages = {
     "ro",
     "ru",
     "sk",
-    "es",
-    "es-419",
+    "sl",
+    "sr",
     "sv",
     "sv-SE",
+    "ta",
+    "te",
+    "th",
+    "th-TH",
+    "tl",
     "tr",
     "uk",
+    "ur",
     "vi",
+    "zh",
+    "zh-CN",
+    "zh-Hans",
+    "zh-HK",
+    "zh-Hant",
+    "zh-TW",
 }
-
-# Supported values: dg-nova-3,dg-nova-2
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
-    for m in stt_service_models:
-        # DeepGram Nova-3
-        if m == 'dg-nova-3':
-            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-                return STTService.deepgram, 'multi', 'nova-3'
-            if language in deepgram_nova3_languages:
-                return STTService.deepgram, language, 'nova-3'
-        # DeepGram Nova-2
-        elif m == 'dg-nova-2':
-            if multi_lang_enabled and language in deepgram_nova2_multi_languages:
-                return STTService.deepgram, 'multi', 'nova-2-general'
-            if language in deepgram_nova2_languages:
-                return STTService.deepgram, language, 'nova-2-general'
+    if multi_lang_enabled and language in deepgram_nova3_multi_languages:
+        return STTService.deepgram, 'multi', 'nova-3'
+    if language in deepgram_nova3_languages:
+        return STTService.deepgram, language, 'nova-3'
 
-    # Fallback to deepgram nova-3
+    # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
 
 
@@ -169,7 +175,7 @@ async def process_audio_dg(
     language: str,
     sample_rate: int,
     channels: int,
-    model: str = 'nova-2-general',
+    model: str = 'nova-3',
     keywords: List[str] = [],
     vad_gate=None,
     is_active: Optional[Callable[[], bool]] = None,

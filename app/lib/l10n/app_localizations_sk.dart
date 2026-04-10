@@ -9081,7 +9081,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get enableLocationTitle => 'Povoliť polohu';
 
   @override
-  String get enableLocationDescription => 'Povolenie polohy je potrebné na nájdenie blízkych zariadení Bluetooth.';
+  String get enableLocationDescription => 'Na nájdenie blízkych Bluetooth zariadení je potrebné povolenie polohy.';
 
   @override
   String get voiceRecordingFound => 'Nahrávka nájdená';
@@ -9097,4 +9097,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get audioOutput => 'Zvukový výstup';
+
+  @override
+  String get firmwareWarningTitle => 'Dôležité: Prečítajte si pred aktualizáciou';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Tento firmvér naformátuje SD kartu. Pred aktualizáciou sa uistite, že všetky offline dáta sú synchronizované.\n\nAk po inštalácii tejto verzie uvidíte blikajúce červené svetlo, neznepokojujte sa. Jednoducho pripojte zariadenie k aplikácii a malo by sa rozsvietiť namodro. Červené svetlo znamená, že hodiny zariadenia ešte neboli synchronizované.';
+
+  @override
+  String get continueAnyway => 'Pokračovať';
 }

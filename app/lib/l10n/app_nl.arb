@@ -3026,5 +3026,8 @@
     "e2eeKeyRecoveryLostKey": "Ik ben mijn herstelsleutel kwijt",
     "e2eeKeyRecoveryLostKeyBody": "Zonder de herstelsleutel moet je E2EE uitschakelen vanaf een ander apparaat waarop je bent ingelogd, of contact opnemen met ondersteuning om je versleuteling te resetten.",
     "enableLocationTitle": "Locatie inschakelen",
-    "enableLocationDescription": "Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden."
+    "enableLocationDescription": "Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden.",
+    "firmwareWarningTitle": "Belangrijk: Lees voor het updaten",
+    "firmwareFormatWarning": "Deze firmware zal de SD-kaart formatteren. Zorg ervoor dat alle offline gegevens gesynchroniseerd zijn voor de upgrade.\n\nAls u na het installeren van deze versie een knipperend rood lampje ziet, maak u geen zorgen. Verbind het apparaat gewoon met de app en het zou blauw moeten worden. Het rode lampje betekent dat de klok van het apparaat nog niet is gesynchroniseerd.",
+    "continueAnyway": "Doorgaan"
 }
