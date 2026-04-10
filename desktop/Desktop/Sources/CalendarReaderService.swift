@@ -47,20 +47,65 @@ private struct CalBrowserConfig {
   let keychainService: String
   let cookiePath: String
 
+  private struct BrowserFamily {
+    let name: String
+    let keychainService: String
+    let userDataPath: String
+  }
+
+  private static func cookiePaths(in userDataPath: String) -> [String] {
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(atPath: userDataPath) else { return [] }
+
+    return
+      entries
+      .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
+      .sorted { lhs, rhs in
+        if lhs == "Default" { return true }
+        if rhs == "Default" { return false }
+        return lhs.localizedStandardCompare(rhs) == .orderedAscending
+      }
+      .map { "\(userDataPath)/\($0)/Cookies" }
+      .filter { fm.fileExists(atPath: $0) }
+  }
+
   static func allBrowsers() -> [CalBrowserConfig] {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    return [
-      CalBrowserConfig(
+    let families = [
+      BrowserFamily(
         name: "Arc",
         keychainService: "Arc Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
+        userDataPath: "\(home)/Library/Application Support/Arc/User Data"
       ),
-      CalBrowserConfig(
+      BrowserFamily(
         name: "Chrome",
         keychainService: "Chrome Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Google/Chrome/Default/Cookies"
+        userDataPath: "\(home)/Library/Application Support/Google/Chrome"
+      ),
+      BrowserFamily(
+        name: "Brave",
+        keychainService: "Brave Safe Storage",
+        userDataPath: "\(home)/Library/Application Support/BraveSoftware/Brave-Browser"
+      ),
+      BrowserFamily(
+        name: "Edge",
+        keychainService: "Microsoft Edge Safe Storage",
+        userDataPath: "\(home)/Library/Application Support/Microsoft Edge"
       ),
     ]
+
+    return families.flatMap { family in
+      cookiePaths(in: family.userDataPath).map { cookiePath in
+        let profileName = URL(fileURLWithPath: cookiePath).deletingLastPathComponent()
+          .lastPathComponent
+        let browserName = profileName == "Default" ? family.name : "\(family.name) (\(profileName))"
+        return CalBrowserConfig(
+          name: browserName,
+          keychainService: family.keychainService,
+          cookiePath: cookiePath
+        )
+      }
+    }
   }
 }
 
@@ -70,7 +115,7 @@ actor CalendarReaderService {
   static let shared = CalendarReaderService()
 
   /// Read calendar events using browser cookies + SAPISID auth.
-  /// Tries Arc, Chrome, Brave, Edge, Vivaldi in order.
+  /// Tries Arc, Chrome, Brave, and Edge across all Chromium profiles.
   /// Fetches events from `daysBack` days ago to `daysForward` days from now.
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
@@ -234,7 +279,8 @@ actor CalendarReaderService {
     }
   }
 
-  func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int) {
+  func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int)
+  {
     let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
     guard !eventsToSave.isEmpty else { return (0, 0) }
 
