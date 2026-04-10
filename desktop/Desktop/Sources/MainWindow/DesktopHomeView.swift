@@ -202,7 +202,7 @@ struct DesktopHomeView: View {
               NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             ) { _ in
               let now = Date()
-              guard now.timeIntervalSince(lastActivationRefresh) >= 60 else { return }
+              guard now.timeIntervalSince(lastActivationRefresh) >= PollingConfig.activationCooldown else { return }
               lastActivationRefresh = now
               Task { await appState.refreshConversations() }
               // Auto-start monitoring when returning to app if screen analysis is enabled
@@ -239,8 +239,8 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            // Periodic refresh every 120s to pick up conversations from other devices (e.g. Omi Glass)
-            .onReceive(Timer.publish(every: 120, on: .main, in: .common).autoconnect()) { _ in
+            // Periodic refresh to pick up conversations from other devices (e.g. Omi Glass)
+            .onReceive(Timer.publish(every: PollingConfig.conversationsPollInterval, on: .main, in: .common).autoconnect()) { _ in
               Task { await appState.refreshConversations(skipCount: true) }
             }
             // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
