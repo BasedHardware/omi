@@ -539,10 +539,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var sessionGroupingObserver: AnyCancellable?
 
     // MARK: - Cross-Platform Message Polling
-    /// Polls for new messages from other platforms (mobile) every 15 seconds.
-    /// Similar to TasksStore's 30-second polling pattern.
+    /// Polls for new messages from other platforms (mobile) every 120 seconds.
     private var messagePollTimer: AnyCancellable?
-    private static let messagePollInterval: TimeInterval = 15.0
+    private static let messagePollInterval: TimeInterval = 120.0
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -638,7 +637,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 }
             }
 
-        // Poll for new messages from other platforms (mobile) every 15 seconds
+        // Poll for new messages from other platforms (mobile) every 120 seconds
         messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
