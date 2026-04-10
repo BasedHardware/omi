@@ -49,25 +49,24 @@ export function transformRetention(raw: Record<string, RawCohort>): RetentionRes
     const cohort = raw[date];
     if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-    // Use counts[0] as denominator so "Users" reflects the filtered platform.
-    // Cap at 100% because Mixpanel's where-filter applies per-day independently:
-    // a user might match on day N but not day 0, making counts[N] > counts[0].
-    const first = cohort.counts[0] || 0;
-    if (first === 0) continue;
+    // Use cohort.first as denominator — the true cohort size.
+    // With born_where, first = users whose birth event matched the platform filter.
+    // counts[N] can never exceed first, so retention is always ≤ 100%.
+    const denominator = cohort.first ?? cohort.counts[0] ?? 0;
+    if (denominator === 0) continue;
 
-    totalUsers += first;
+    totalUsers += denominator;
     const label = date.split('T')[0]; // "YYYY-MM-DD"
     const curve: { day: number; retention: number }[] = [];
 
     for (let dayIdx = 0; dayIdx < cohort.counts.length; dayIdx++) {
-      const pct = (cohort.counts[dayIdx] / first) * 100;
       curve.push({
         day: dayIdx,
-        retention: Math.round(Math.min(pct, 100) * 100) / 100,
+        retention: Math.round((cohort.counts[dayIdx] / denominator) * 100 * 100) / 100,
       });
     }
 
-    cohorts.push({ date: label, users: first, data: curve });
+    cohorts.push({ date: label, users: denominator, data: curve });
   }
 
   for (let dayIdx = 0; dayIdx < maxDays; dayIdx++) {
@@ -78,11 +77,11 @@ export function transformRetention(raw: Record<string, RawCohort>): RetentionRes
       const cohort = raw[date];
       if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-      const first = cohort.counts[0] || 0;
-      if (first === 0) continue;
+      const denominator = cohort.first ?? cohort.counts[0] ?? 0;
+      if (denominator === 0) continue;
       if (dayIdx >= cohort.counts.length) continue;
 
-      sumPct += Math.min((cohort.counts[dayIdx] / first) * 100, 100);
+      sumPct += (cohort.counts[dayIdx] / denominator) * 100;
       cohortCount++;
     }
 
@@ -131,7 +130,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (platform === 'macos') {
-      params.set('where', 'properties["$os"]=="macOS"');
+      // Use born_where to define the cohort as "users whose first session was on macOS".
+      // This makes cohort.first = macOS-born users, so retention never exceeds 100%.
+      // Using `where` instead would filter events per-day independently, allowing
+      // counts[N] > counts[0] and producing >100% retention.
+      params.set('born_where', 'properties["$os"]=="macOS"');
     }
 
     const url = `${apiBase.replace(/\/$/, '')}/retention?${params.toString()}`;
