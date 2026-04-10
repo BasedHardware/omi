@@ -107,7 +107,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func handleEscapeKey() {
-        FloatingBarVoicePlaybackService.shared.stop()
+        if FloatingBarVoicePlaybackService.shared.isSpeaking {
+            FloatingBarVoicePlaybackService.shared.stop()
+            return
+        }
 
         guard state.showingAIConversation else { return }
 
@@ -807,6 +810,11 @@ class FloatingControlBarManager {
     private static let kAskOmiEnabled = "askOmiBarEnabled"
     private static let recentNotificationReuseInterval: TimeInterval = 60
 
+    private struct PendingFollowUpQuery {
+        let text: String
+        let fromVoice: Bool
+    }
+
     private struct StoredNotificationMessage {
         var message: ChatMessage
         let createdAt: Date
@@ -825,6 +833,8 @@ class FloatingControlBarManager {
     private var mostRecentNotificationID: UUID?
     private var pendingNotificationContextMessage: ChatMessage?
     private var floatingSessionKey = "floating"
+    private var activeQueryGeneration: Int = 0
+    private var pendingFollowUpQuery: PendingFollowUpQuery?
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
@@ -1033,8 +1043,11 @@ class FloatingControlBarManager {
 
     /// Cancel any in-flight chat streaming.
     func cancelChat() {
+        activeQueryGeneration += 1
+        pendingFollowUpQuery = nil
         chatCancellable?.cancel()
         chatCancellable = nil
+        activeFloatingProvider()?.stopAgent()
         FloatingBarVoicePlaybackService.shared.stop()
     }
 
@@ -1136,15 +1149,8 @@ class FloatingControlBarManager {
         // center instead of where it was before the chat opened.
         window.savePreChatCenterIfNeeded()
 
-        // Set up state — go straight to response view (skip input view to avoid resize flicker)
-        window.state.showingAIConversation = true
-        window.state.showingAIResponse = true
-        window.state.isAILoading = true
-        window.state.aiInputText = query
-        window.state.displayedQuery = query
-        window.state.markConversationActivity()
-        window.state.currentAIMessage = nil
-        window.resizeToResponseHeightPublic(animated: true)
+        // Mark the query source before sending so playback behavior is correct.
+        window.state.currentQueryFromVoice = fromVoice
         window.orderFrontRegardless()
 
         // Auto-send the query
@@ -1160,7 +1166,7 @@ class FloatingControlBarManager {
             openAIInputWithQuery(query, fromVoice: fromVoice)
             return
         }
-        window.state.currentQueryFromVoice = fromVoice
+        guard let provider = activeFloatingProvider() else { return }
 
         // Archive current exchange
         if let currentMessage = window.state.currentAIMessage,
@@ -1175,18 +1181,17 @@ class FloatingControlBarManager {
             )
         }
 
-        // Cancel existing streaming response if still in progress
-        chatCancellable?.cancel()
-        chatCancellable = nil
+        if provider.isSending {
+            pendingFollowUpQuery = PendingFollowUpQuery(text: query, fromVoice: fromVoice)
+            prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
+            provider.stopAgent()
+            return
+        }
 
-        // Set up new query
-        window.state.displayedQuery = query
-        window.state.markConversationActivity()
-        window.state.currentQuestionMessageId = nil
-        window.state.currentAIMessage = nil
-        window.state.isAILoading = true
-
-        window.onSendQuery?(query)
+        window.state.currentQueryFromVoice = fromVoice
+        Task { @MainActor in
+            await self.sendAIQuery(query, barWindow: window, provider: provider)
+        }
     }
 
     func openNotificationAsChat(_ notification: FloatingBarNotification) {
@@ -1365,10 +1370,40 @@ class FloatingControlBarManager {
 
     // MARK: - AI Query
 
+    private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+        activeQueryGeneration += 1
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.stop()
+        barWindow.cancelInputHeightObserver()
+        barWindow.state.currentQueryFromVoice = fromVoice
+        barWindow.state.showingAIConversation = true
+        barWindow.state.showingAIResponse = true
+        barWindow.state.isAILoading = true
+        barWindow.state.aiInputText = message
+        barWindow.state.displayedQuery = message
+        barWindow.state.markConversationActivity()
+        barWindow.state.currentQuestionMessageId = nil
+        barWindow.state.currentAIMessage = nil
+        barWindow.state.isVoiceFollowUp = false
+        barWindow.state.voiceFollowUpTranscript = ""
+        barWindow.state.responseContentHeight = 0
+        barWindow.resizeToResponseHeightPublic(animated: true)
+    }
+
+    private func isActiveQueryGeneration(_ generation: Int) -> Bool {
+        generation == activeQueryGeneration
+    }
+
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: shouldPlayVoice)
+        let generation = activeQueryGeneration
+
         // Check weekly usage limit for free users
         let limiter = FloatingBarUsageLimiter.shared
         if limiter.isLimitReached {
+            guard isActiveQueryGeneration(generation) else { return }
             barWindow.state.isAILoading = false
             barWindow.state.showingAIResponse = true
             barWindow.state.currentAIMessage = ChatMessage(
@@ -1411,7 +1446,8 @@ class FloatingControlBarManager {
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] messages in
+            .sink { [weak self, weak barWindow] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
                 // Find the AI response message added after our query
                 guard messages.count > messageCountBefore,
                       let aiMessage = messages.last,
@@ -1455,6 +1491,14 @@ class FloatingControlBarManager {
             imageData: screenshotData
         )
 
+        if let followUp = pendingFollowUpQuery {
+            pendingFollowUpQuery = nil
+            barWindow.state.currentQueryFromVoice = followUp.fromVoice
+            await sendAIQuery(followUp.text, barWindow: barWindow, provider: provider)
+            return
+        }
+
+        guard isActiveQueryGeneration(generation) else { return }
         let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
         if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
             barWindow.state.currentQuestionMessageId = syncedUserMessage.id
@@ -1462,7 +1506,6 @@ class FloatingControlBarManager {
         if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
             barWindow.state.currentAIMessage = finalAIMessage
         }
-
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
         chatCancellable?.cancel()
