@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { transformRetention } from '../route';
+import { transformRetention } from '../transform';
 
 describe('transformRetention', () => {
   it('uses cohort.first as denominator for retention calculation', () => {
