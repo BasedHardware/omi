@@ -5618,7 +5618,7 @@ struct SettingsContentView: View {
     for plan in primary {
       if let existing = mergedById[plan.id] {
         let mergedPrices = Array(
-          Dictionary(uniqueKeysWithValues: (existing.prices + plan.prices).map { ($0.id, $0) })
+          Dictionary((existing.prices + plan.prices).map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
             .values
         )
         .sorted { $0.title < $1.title }
