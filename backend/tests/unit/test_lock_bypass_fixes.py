@@ -1286,3 +1286,225 @@ class TestSuggestGoalLockFilter:
         prompt_text = str(call_args)
         assert 'LOCKED_SECRET' not in prompt_text
         assert 'visible goal-related memory' in prompt_text
+
+
+# =============================================================================
+# Test MCP memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpMemoryLockEnforcement:
+    """Gaps 6-7: MCP REST delete/edit must reject locked memories."""
+
+    def test_mcp_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='mem-1', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp import delete_memory
+
+        result = delete_memory(memory_id='mem-1', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='nonexistent', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 404
+
+    def test_mcp_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import edit_memory
+
+        try:
+            edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp import edit_memory
+
+        result = edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new content')
+
+
+# =============================================================================
+# Test MCP SSE memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpSseMemoryLockEnforcement:
+    """Gaps 8-9: MCP SSE delete/edit must reject locked memories."""
+
+    def test_mcp_sse_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+            assert 'paid plan' in e.message.lower()
+
+    def test_mcp_sse_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+        assert result == {"success": True}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_sse_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'nonexistent'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32001
+
+    def test_mcp_sse_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+
+    def test_mcp_sse_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+        assert result == {"success": True}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new')
+
+
+# =============================================================================
+# Test folder move — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestFolderMoveLockEnforcement:
+    """Gap 10 + bonus: Folder move must reject locked conversations."""
+
+    def test_move_conversation_rejects_locked(self):
+        import database.conversations as conversations_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        try:
+            move_conversation_to_folder('conv-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_move_conversation_allows_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.move_conversation_to_folder = MagicMock()
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        result = move_conversation_to_folder('conv-1', request, uid='test-uid')
+        assert result == {"status": "ok"}
+
+    def test_bulk_move_rejects_if_any_locked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=True, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        try:
+            bulk_move_conversations('folder-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_bulk_move_allows_all_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=False, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.bulk_move_conversations_to_folder = MagicMock(return_value=2)
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        result = bulk_move_conversations('folder-1', request, uid='test-uid')
+        assert result == {"status": "ok", "moved_count": 2}
