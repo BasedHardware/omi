@@ -537,6 +537,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
+    private var activationObserver: AnyCancellable?
 
     // MARK: - Cross-Platform Message Polling
     /// Polls for new messages from other platforms (mobile) every 120 seconds.
@@ -640,6 +641,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         // Poll for new messages from other platforms (mobile) every 120 seconds
         messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
             .autoconnect()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    await self?.pollForNewMessages()
+                }
+            }
+
+        // Refresh messages when app becomes active (compensates for longer poll interval)
+        activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await self?.pollForNewMessages()
