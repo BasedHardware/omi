@@ -542,7 +542,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     // MARK: - Cross-Platform Message Polling
     /// Polls for new messages from other platforms (mobile) every 120 seconds.
     private var messagePollTimer: AnyCancellable?
-    private static let messagePollInterval: TimeInterval = 120.0
+    private static let messagePollInterval: TimeInterval = PollingConfig.chatPollInterval
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
