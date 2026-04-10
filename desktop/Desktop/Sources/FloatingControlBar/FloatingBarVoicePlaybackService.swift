@@ -40,6 +40,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   private override init() {}
 
+  var isSpeaking: Bool {
+    if audioPlayer?.isPlaying == true { return true }
+    if speechSynthesizer.isSpeaking { return true }
+    if fillerTask != nil || playbackTask != nil { return true }
+    if isSynthesizing { return true }
+    return !audioQueue.isEmpty || !synthesisQueue.isEmpty
+  }
+
   func playFillerIfEnabled() {
     guard ShortcutSettings.shared.floatingBarVoiceAnswersEnabled else { return }
 
