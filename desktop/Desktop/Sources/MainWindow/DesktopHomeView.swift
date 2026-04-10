@@ -32,6 +32,7 @@ struct DesktopHomeView: View {
   @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
+  @State private var lastActivationRefresh = Date.distantPast
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -196,9 +197,13 @@ struct DesktopHomeView: View {
               await AgentVMService.shared.ensureProvisioned()
             }
             // Refresh conversations when app becomes active (e.g. switching back from another app)
+            // Cooldown: skip if last activation refresh was less than 60 seconds ago
             .onReceive(
               NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             ) { _ in
+              let now = Date()
+              guard now.timeIntervalSince(lastActivationRefresh) >= 60 else { return }
+              lastActivationRefresh = now
               Task { await appState.refreshConversations() }
               // Auto-start monitoring when returning to app if screen analysis is enabled
               // but monitoring is not running. Handles the case where the user granted
@@ -234,9 +239,9 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
-            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-              Task { await appState.refreshConversations() }
+            // Periodic refresh every 120s to pick up conversations from other devices (e.g. Omi Glass)
+            .onReceive(Timer.publish(every: 120, on: .main, in: .common).autoconnect()) { _ in
+              Task { await appState.refreshConversations(skipCount: true) }
             }
             // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
             // hasCompletedOnboarding must be set here (in a View) because @AppStorage
