@@ -1718,12 +1718,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8741,12 +8736,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9065,4 +9055,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get audioOutput => 'ஆடியோ வெளியீடு';
+
+  @override
+  String get firmwareWarningTitle => 'முக்கியம்: புதுப்பிக்கும் முன் படிக்கவும்';
+
+  @override
+  String get firmwareFormatWarning =>
+      'இந்த firmware SD கார்டை வடிவமைக்கும். மேம்படுத்துவதற்கு முன் அனைத்து ஆஃப்லைன் தரவும் ஒத்திசைக்கப்பட்டிருப்பதை உறுதிசெய்யவும்.\n\nஇந்த பதிப்பை நிறுவிய பிறகு சிவப்பு விளக்கு ஒளிர்ந்தால் கவலைப்பட வேண்டாம். சாதனத்தை செயலியுடன் இணைக்கவும், அது நீல நிறமாக மாற வேண்டும். சிவப்பு விளக்கு என்பது சாதனத்தின் கடிகாரம் இன்னும் ஒத்திசைக்கப்படவில்லை என்று அர்த்தம்.';
+
+  @override
+  String get continueAnyway => 'தொடரவும்';
 }

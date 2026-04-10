@@ -1713,12 +1713,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPARATEN',
-      one: 'APPARAAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -9008,10 +9003,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get willSyncAutomatically => 'wordt automatisch gesynchroniseerd';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Locatie inschakelen';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Locatietoestemming is nodig om Bluetooth-apparaten in de buurt te vinden.';
 
   @override
   String get voiceRecordingFound => 'Opname gevonden';
@@ -9027,4 +9022,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio-uitvoer';
+
+  @override
+  String get firmwareWarningTitle => 'Belangrijk: Lees voor het updaten';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Deze firmware zal de SD-kaart formatteren. Zorg ervoor dat alle offline gegevens gesynchroniseerd zijn voor de upgrade.\n\nAls u na het installeren van deze versie een knipperend rood lampje ziet, maak u geen zorgen. Verbind het apparaat gewoon met de app en het zou blauw moeten worden. Het rode lampje betekent dat de klok van het apparaat nog niet is gesynchroniseerd.';
+
+  @override
+  String get continueAnyway => 'Doorgaan';
 }

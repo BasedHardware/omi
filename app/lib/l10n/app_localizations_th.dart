@@ -1701,12 +1701,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'อุปกรณ์',
-      one: 'อุปกรณ์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -8934,10 +8929,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'เปิดใช้งานตำแหน่ง';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'จำเป็นต้องได้รับอนุญาตตำแหน่งเพื่อค้นหาอุปกรณ์ Bluetooth ที่อยู่ใกล้เคียง';
 
   @override
   String get voiceRecordingFound => 'พบการบันทึก';
@@ -8953,4 +8948,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get audioOutput => 'เอาต์พุตเสียง';
+
+  @override
+  String get firmwareWarningTitle => 'สำคัญ: อ่านก่อนอัปเดต';
+
+  @override
+  String get firmwareFormatWarning =>
+      'เฟิร์มแวร์นี้จะฟอร์แมตการ์ด SD กรุณาตรวจสอบให้แน่ใจว่าข้อมูลออฟไลน์ทั้งหมดได้รับการซิงค์ก่อนอัปเกรด\n\nหากคุณเห็นไฟสีแดงกะพริบหลังจากติดตั้งเวอร์ชันนี้ อย่ากังวล เพียงเชื่อมต่ออุปกรณ์กับแอปและไฟควรเปลี่ยนเป็นสีน้ำเงิน ไฟสีแดงหมายความว่านาฬิกาของอุปกรณ์ยังไม่ได้ซิงค์';
+
+  @override
+  String get continueAnyway => 'ดำเนินการต่อ';
 }

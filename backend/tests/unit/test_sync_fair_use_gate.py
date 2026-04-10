@@ -223,7 +223,8 @@ class TestCreateConversationLockPropagation:
 
     def test_conversation_inherits_lock_from_create(self):
         """Conversation(**create_dict) inherits is_locked=True."""
-        from models.conversation import CreateConversation, Conversation, Structured
+        from models.conversation import Conversation, CreateConversation
+        from models.structured import Structured
         from datetime import datetime, timezone
 
         cc = CreateConversation(
@@ -293,8 +294,9 @@ class TestSyncEndpointCodeStructure:
             if in_triggered_block:
                 if stripped and not stripped.startswith('#') and not line.startswith(' ' * 16):
                     break  # exited the block
-                assert 'should_lock' not in stripped, \
-                    "soft cap trigger must not set should_lock — matches transcribe.py behavior"
+                assert (
+                    'should_lock' not in stripped
+                ), "soft cap trigger must not set should_lock — matches transcribe.py behavior"
 
 
 class TestLockDecisionBehavior:
@@ -327,9 +329,7 @@ class TestLockDecisionBehavior:
 
     def test_credits_exhausted_no_soft_cap_locks(self):
         """User with exhausted credits must be locked even without soft cap."""
-        is_locked = self._compute_lock_decision(
-            has_credits=False, fair_use_enabled=True, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=False, fair_use_enabled=True, triggered_caps=[])
         assert is_locked is True, "Credit exhaustion must lock regardless of soft caps"
 
     def test_credits_exhausted_with_soft_cap_locks(self):
@@ -341,16 +341,12 @@ class TestLockDecisionBehavior:
 
     def test_credits_available_fair_use_disabled_no_lock(self):
         """With fair-use disabled and credits available, no lock."""
-        is_locked = self._compute_lock_decision(
-            has_credits=True, fair_use_enabled=False, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=True, fair_use_enabled=False, triggered_caps=[])
         assert is_locked is False
 
     def test_credits_available_no_caps_no_lock(self):
         """Normal unlimited user with no caps triggered: no lock."""
-        is_locked = self._compute_lock_decision(
-            has_credits=True, fair_use_enabled=True, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=True, fair_use_enabled=True, triggered_caps=[])
         assert is_locked is False
 
 

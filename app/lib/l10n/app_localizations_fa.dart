@@ -1710,12 +1710,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8681,12 +8676,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9001,4 +8991,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get audioOutput => 'خروجی صوت';
+
+  @override
+  String get firmwareWarningTitle => 'مهم: قبل از به‌روزرسانی بخوانید';
+
+  @override
+  String get firmwareFormatWarning =>
+      'این فریمور کارت SD را فرمت می‌کند. لطفاً قبل از ارتقا مطمئن شوید که تمام داده‌های آفلاین همگام‌سازی شده‌اند.\n\nاگر بعد از نصب این نسخه چراغ قرمز چشمک‌زن دیدید، نگران نشوید. کافی است دستگاه را به برنامه متصل کنید و باید آبی شود. چراغ قرمز به این معنی است که ساعت دستگاه هنوز همگام‌سازی نشده است.';
+
+  @override
+  String get continueAnyway => 'ادامه';
 }

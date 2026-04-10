@@ -10746,5 +10746,8 @@
     "audioOutput": "Izlaz audio-a",
     "@audioOutput": {
         "description": "Title for audio route picker bottom sheet"
-    }
+    },
+    "firmwareWarningTitle": "Važno: Pročitajte prije ažuriranja",
+    "firmwareFormatWarning": "Ovaj firmware će formatirati SD karticu. Molimo osigurajte da su svi offline podaci sinkronizirani prije nadogradnje.\n\nAko vidite trepćuće crveno svjetlo nakon instaliranja ove verzije, ne brinite. Jednostavno povežite uređaj s aplikacijom i trebao bi postati plav. Crveno svjetlo znači da sat uređaja još nije sinkroniziran.",
+    "continueAnyway": "Nastavi"
 }

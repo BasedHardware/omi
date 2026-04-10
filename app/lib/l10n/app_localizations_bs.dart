@@ -1709,12 +1709,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8701,12 +8696,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9022,4 +9012,14 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get audioOutput => 'Zvučni izlaz';
+
+  @override
+  String get firmwareWarningTitle => 'Važno: Pročitajte prije ažuriranja';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ovaj firmware će formatirati SD karticu. Molimo osigurajte da su svi offline podaci sinhronizovani prije nadogradnje.\n\nAko vidite trepćuće crveno svjetlo nakon instaliranja ove verzije, ne brinite. Jednostavno povežite uređaj s aplikacijom i trebao bi postati plav. Crveno svjetlo znači da sat uređaja još nije sinhronizovan.';
+
+  @override
+  String get continueAnyway => 'Nastavi';
 }

@@ -2,12 +2,15 @@ import asyncio
 import os
 import threading
 import time
+from typing import List
 
 from pydub import AudioSegment
 
 import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
-from models.conversation import *
+from models.conversation import Conversation
+from models.conversation_enums import PostProcessingStatus
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words

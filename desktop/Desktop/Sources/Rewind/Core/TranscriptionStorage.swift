@@ -297,7 +297,9 @@ actor TranscriptionStorage {
         startTime: Double,
         endTime: Double,
         isUser: Bool = false,
-        personId: String? = nil
+        personId: String? = nil,
+        speakerLabel: String? = nil,
+        translationsJson: String? = nil
     ) async throws -> Int64 {
         let db = try await ensureInitialized()
 
@@ -307,10 +309,12 @@ actor TranscriptionStorage {
                 try database.execute(
                     sql: """
                         UPDATE transcription_segments
-                        SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?
+                        SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?,
+                            speakerLabel = COALESCE(?, speakerLabel),
+                            translationsJson = COALESCE(?, translationsJson)
                         WHERE sessionId = ? AND segmentId = ?
                         """,
-                    arguments: [text, speaker, startTime, endTime, isUser, personId, sessionId, segId]
+                    arguments: [text, speaker, startTime, endTime, isUser, personId, speakerLabel, translationsJson, sessionId, segId]
                 )
                 return database.changesCount > 0
             }
@@ -336,8 +340,10 @@ actor TranscriptionStorage {
             endTime: endTime,
             segmentOrder: segmentOrder,
             segmentId: backendSegmentId,
+            speakerLabel: speakerLabel,
             isUser: isUser,
-            personId: personId
+            personId: personId,
+            translationsJson: translationsJson
         )
 
         let record = try await db.write { database in
@@ -651,8 +657,12 @@ actor TranscriptionStorage {
     }
 
     /// Upsert segments from a ServerConversation
-    /// Deletes existing segments and re-inserts from conversation
+    /// Deletes existing segments and re-inserts from conversation.
+    /// Skips when incoming segments are empty to avoid wiping locally-cached data
+    /// (list endpoints often return conversations without transcript segments).
     func upsertSegmentsFromServerConversation(_ conversation: ServerConversation, sessionId: Int64) async throws {
+        guard !conversation.transcriptSegments.isEmpty else { return }
+
         let db = try await ensureInitialized()
 
         try await db.write { database in

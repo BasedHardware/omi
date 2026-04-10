@@ -1711,12 +1711,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8705,12 +8700,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9026,4 +9016,14 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аўдыё выхад';
+
+  @override
+  String get firmwareWarningTitle => 'Важна: Прачытайце перад абнаўленнем';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Гэта прашыўка адфарматуе SD-карту. Калі ласка, пераканайцеся, што ўсе афлайн-даныя сінхранізаваны перад абнаўленнем.\n\nКалі пасля ўстаноўкі гэтай версіі вы ўбачыце мігатлівы чырвоны індыкатар, не хвалюйцеся. Проста падключыце прыладу да праграмы, і яна павінна стаць сіняй. Чырвоны індыкатар азначае, што гадзіннік прылады яшчэ не сінхранізаваны.';
+
+  @override
+  String get continueAnyway => 'Працягнуць';
 }

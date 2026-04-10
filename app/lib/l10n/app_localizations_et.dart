@@ -1708,12 +1708,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8977,10 +8972,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get willSyncAutomatically => 'sünkroniseeritakse automaatselt';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Luba asukoht';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Asukoha luba on vajalik läheduses olevate Bluetooth-seadmete leidmiseks.';
 
   @override
   String get voiceRecordingFound => 'Salvestis leitud';
@@ -8996,4 +8991,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get audioOutput => 'Heliväljund';
+
+  @override
+  String get firmwareWarningTitle => 'Oluline: Lugege enne uuendamist';
+
+  @override
+  String get firmwareFormatWarning =>
+      'See püsivara vormindab SD-kaardi. Palun veenduge, et kõik võrguühenduseta andmed on enne uuendamist sünkroniseeritud.\n\nKui näete pärast selle versiooni installimist vilkuvat punast tuld, ärge muretsege. Ühendage seade lihtsalt rakendusega ja see peaks muutuma siniseks. Punane tuli tähendab, et seadme kell pole veel sünkroniseeritud.';
+
+  @override
+  String get continueAnyway => 'Jätka';
 }

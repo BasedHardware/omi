@@ -1721,12 +1721,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ΣΥΣΚΕΥΕΣ',
-      one: 'ΣΥΣΚΕΥΗ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -9044,10 +9039,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ενεργοποίηση τοποθεσίας';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Απαιτείται άδεια τοποθεσίας για την εύρεση κοντινών συσκευών Bluetooth.';
 
   @override
   String get voiceRecordingFound => 'Βρέθηκε εγγραφή';
@@ -9063,4 +9058,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Έξοδος ήχου';
+
+  @override
+  String get firmwareWarningTitle => 'Σημαντικό: Διαβάστε πριν την ενημέρωση';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Αυτό το firmware θα διαμορφώσει την κάρτα SD. Βεβαιωθείτε ότι όλα τα offline δεδομένα έχουν συγχρονιστεί πριν την αναβάθμιση.\n\nΑν δείτε ένα κόκκινο φως που αναβοσβήνει μετά την εγκατάσταση αυτής της έκδοσης, μην ανησυχείτε. Απλά συνδέστε τη συσκευή στην εφαρμογή και θα πρέπει να γίνει μπλε. Το κόκκινο φως σημαίνει ότι το ρολόι της συσκευής δεν έχει συγχρονιστεί ακόμα.';
+
+  @override
+  String get continueAnyway => 'Συνέχεια';
 }

@@ -1709,12 +1709,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8688,12 +8683,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9009,4 +8999,14 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get audioOutput => 'অডিও আউটপুট';
+
+  @override
+  String get firmwareWarningTitle => 'গুরুত্বপূর্ণ: আপডেটের আগে পড়ুন';
+
+  @override
+  String get firmwareFormatWarning =>
+      'এই ফার্মওয়্যার SD কার্ড ফরম্যাট করবে। আপগ্রেড করার আগে দয়া করে নিশ্চিত করুন যে সমস্ত অফলাইন ডেটা সিঙ্ক হয়েছে।\n\nএই সংস্করণ ইনস্টল করার পর যদি লাল আলো জ্বলতে দেখেন, চিন্তা করবেন না। শুধু ডিভাইসটি অ্যাপের সাথে সংযুক্ত করুন এবং এটি নীল হয়ে যাওয়া উচিত। লাল আলো মানে ডিভাইসের ঘড়ি এখনও সিঙ্ক হয়নি।';
+
+  @override
+  String get continueAnyway => 'চালিয়ে যান';
 }

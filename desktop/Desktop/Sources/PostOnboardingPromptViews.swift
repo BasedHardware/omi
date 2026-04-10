@@ -167,21 +167,7 @@ struct PromptSuggestionBanner: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Button(action: onOpen) {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 8) {
-            Image(systemName: "sparkles")
-              .font(.system(size: 11, weight: .semibold))
-            Text("Suggested first ask")
-              .font(.system(size: 12, weight: .semibold))
-          }
-          .foregroundColor(calloutAmber)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(
-            Capsule()
-              .fill(calloutAmber.opacity(0.14))
-          )
-
+        VStack(alignment: .leading, spacing: 12) {
           Text("Next step -> Ask omi")
             .font(.system(size: 20, weight: .semibold, design: .serif))
             .foregroundColor(bannerPrimaryText)
@@ -219,7 +205,8 @@ struct PromptSuggestionBanner: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(22)
+    .padding(.horizontal, 22)
+    .padding(.vertical, 18)
     .background(
       RoundedRectangle(cornerRadius: 20, style: .continuous)
         .fill(

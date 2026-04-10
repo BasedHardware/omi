@@ -32,7 +32,8 @@ from database.sync_jobs import (
     mark_job_completed,
     mark_job_failed,
 )
-from models.conversation import CreateConversation, ConversationSource, Conversation
+from models.conversation import Conversation, CreateConversation
+from models.conversation_enums import ConversationSource
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth

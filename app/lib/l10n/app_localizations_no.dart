@@ -1709,12 +1709,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 FUNNET I NÆRHETEN';
   }
 
@@ -8975,10 +8970,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get willSyncAutomatically => 'synkroniseres automatisk';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Aktiver plassering';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Plasseringstillatelse er nødvendig for å finne Bluetooth-enheter i nærheten.';
 
   @override
   String get voiceRecordingFound => 'Opptak funnet';
@@ -8994,4 +8990,14 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get audioOutput => 'Lydutgang';
+
+  @override
+  String get firmwareWarningTitle => 'Viktig: Les før oppdatering';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Denne fastvaren vil formatere SD-kortet. Sørg for at alle offline-data er synkronisert før oppgradering.\n\nHvis du ser et blinkende rødt lys etter installasjon av denne versjonen, ikke bekymre deg. Koble enheten til appen, og den skal bli blå. Det røde lyset betyr at enhetens klokke ikke er synkronisert ennå.';
+
+  @override
+  String get continueAnyway => 'Fortsett';
 }

@@ -151,7 +151,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 AnalyticsManager.shared.notificationClicked(
                     notificationId: notificationId,
                     title: title,
-                    assistantId: assistantId
+                    assistantId: assistantId,
+                    surface: "system_notification"
                 )
 
                 // If this is a screen capture reset notification, trigger the reset
@@ -165,7 +166,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 AnalyticsManager.shared.notificationDismissed(
                     notificationId: notificationId,
                     title: title,
-                    assistantId: assistantId
+                    assistantId: assistantId,
+                    surface: "system_notification"
                 )
 
             case Self.resetNowActionId:
@@ -174,7 +176,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 AnalyticsManager.shared.notificationClicked(
                     notificationId: notificationId,
                     title: title,
-                    assistantId: assistantId
+                    assistantId: assistantId,
+                    surface: "system_notification"
                 )
                 self.handleScreenCaptureResetAction(source: "notification_action_button")
 
@@ -278,7 +281,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     AnalyticsManager.shared.notificationSent(
                         notificationId: notificationId,
                         title: title,
-                        assistantId: assistantId
+                        assistantId: assistantId,
+                        surface: "system_notification"
                     )
                 }
             }

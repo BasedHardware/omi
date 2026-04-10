@@ -1709,12 +1709,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8703,12 +8698,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9024,4 +9014,14 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get audioOutput => 'Avdio izhod';
+
+  @override
+  String get firmwareWarningTitle => 'Pomembno: Preberite pred posodobitvijo';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ta vdelana programska oprema bo formatirala kartico SD. Pred nadgradnjo se prepričajte, da so vsi podatki brez povezave sinhronizirani.\n\nČe po namestitvi te različice vidite utripajočo rdečo lučko, ne skrbite. Preprosto povežite napravo z aplikacijo in morala bi postati modra. Rdeča lučka pomeni, da ura naprave še ni bila sinhronizirana.';
+
+  @override
+  String get continueAnyway => 'Nadaljuj';
 }

@@ -1707,12 +1707,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ĮRENGINIAI',
-      one: 'ĮRENGINYS',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -8987,10 +8982,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get willSyncAutomatically => 'bus sinchronizuota automatiškai';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Įjungti vietą';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Vietos leidimas reikalingas norint rasti netoliese esančius Bluetooth įrenginius.';
 
   @override
   String get voiceRecordingFound => 'Rastas įrašas';
@@ -9006,4 +9002,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get audioOutput => 'Garso išvestis';
+
+  @override
+  String get firmwareWarningTitle => 'Svarbu: Perskaitykite prieš atnaujinimą';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Ši programinė įranga suformatuos SD kortelę. Prieš atnaujinimą įsitikinkite, kad visi neprisijungus esantys duomenys yra sinchronizuoti.\n\nJei po šios versijos įdiegimo matote mirksintį raudoną šviesą, nesijaudinkite. Tiesiog prijunkite įrenginį prie programėlės ir jis turėtų tapti mėlynas. Raudona šviesa reiškia, kad įrenginio laikrodis dar nebuvo sinchronizuotas.';
+
+  @override
+  String get continueAnyway => 'Tęsti';
 }

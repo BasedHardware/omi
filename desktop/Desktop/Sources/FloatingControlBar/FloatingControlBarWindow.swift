@@ -909,19 +909,30 @@ class FloatingControlBarManager {
 
         barWindow.onShareLink = { [weak barWindow] in
             guard let barWindow = barWindow else { return nil }
-            // Collect all synced message IDs from the conversation
+            // Share the visible floating-bar exchange history in chat order.
             var messageIds: [String] = []
             for exchange in barWindow.state.chatHistory {
+                if let questionMessageId = exchange.questionMessageId {
+                    messageIds.append(questionMessageId)
+                }
                 if exchange.aiMessage.isSynced {
                     messageIds.append(exchange.aiMessage.id)
                 }
             }
+            if let currentQuestionMessageId = barWindow.state.currentQuestionMessageId {
+                messageIds.append(currentQuestionMessageId)
+            }
             if let current = barWindow.state.currentAIMessage, current.isSynced {
                 messageIds.append(current.id)
             }
-            guard !messageIds.isEmpty else { return nil }
+            let orderedUniqueMessageIds = messageIds.reduce(into: [String]()) { ids, messageId in
+                if !ids.contains(messageId) {
+                    ids.append(messageId)
+                }
+            }
+            guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
-                let response = try await APIClient.shared.shareChatMessages(messageIds: messageIds)
+                let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
                 return response.url
             } catch {
                 log("Failed to get chat share link: \(error)")
@@ -1164,6 +1175,7 @@ class FloatingControlBarManager {
             window.state.chatHistory.append(
                 FloatingChatExchange(
                     question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
                     aiMessage: currentMessage
                 )
             )
@@ -1188,7 +1200,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationClicked(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         notificationDismissWorkItem?.cancel()
@@ -1211,7 +1224,8 @@ class FloatingControlBarManager {
         AnalyticsManager.shared.notificationSent(
             notificationId: notification.id.uuidString,
             title: notification.title,
-            assistantId: notification.assistantId
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
         )
 
         let dismissWorkItem = DispatchWorkItem { [weak self] in
@@ -1231,7 +1245,8 @@ class FloatingControlBarManager {
             AnalyticsManager.shared.notificationDismissed(
                 notificationId: dismissedNotification.id.uuidString,
                 title: dismissedNotification.title,
-                assistantId: dismissedNotification.assistantId
+                assistantId: dismissedNotification.assistantId,
+                surface: "floating_bar"
             )
         }
 
@@ -1251,7 +1266,8 @@ class FloatingControlBarManager {
         guard storedNotificationMessages[notification.id] == nil,
               let provider = historyChatProvider else { return }
 
-        let messageText = "**\(notification.title)**\n\n\(notification.message)"
+        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? notification.title : bodyText
         guard let message = provider.appendAssistantMessage(messageText) else { return }
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
@@ -1367,6 +1383,7 @@ class FloatingControlBarManager {
         barWindow.state.aiInputText = message
         barWindow.state.displayedQuery = message
         barWindow.state.markConversationActivity()
+        barWindow.state.currentQuestionMessageId = nil
         barWindow.state.currentAIMessage = nil
         barWindow.state.isVoiceFollowUp = false
         barWindow.state.voiceFollowUpTranscript = ""
@@ -1408,6 +1425,9 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
         if shouldPlayVoice {
             FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
         }
@@ -1421,6 +1441,7 @@ class FloatingControlBarManager {
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
+        barWindow.state.currentQuestionMessageId = nil
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
@@ -1478,7 +1499,13 @@ class FloatingControlBarManager {
         }
 
         guard isActiveQueryGeneration(generation) else { return }
-
+        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
+        if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
+            barWindow.state.currentQuestionMessageId = syncedUserMessage.id
+        }
+        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+            barWindow.state.currentAIMessage = finalAIMessage
+        }
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
         chatCancellable?.cancel()

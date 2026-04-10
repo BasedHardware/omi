@@ -2930,5 +2930,10 @@
     "transcriptionConnecting": "Ansluter transkription...",
     "transcriptionReconnecting": "Återansluter transkription...",
     "transcriptionUnavailable": "Transkription otillgänglig",
-    "audioOutput": "Ljudutgång"
+    "audioOutput": "Ljudutgång",
+    "enableLocationTitle": "Aktivera plats",
+    "enableLocationDescription": "Platstillstånd behövs för att hitta Bluetooth-enheter i närheten.",
+    "firmwareWarningTitle": "Viktigt: Läs innan du uppdaterar",
+    "firmwareFormatWarning": "Denna firmware kommer att formatera SD-kortet. Se till att all offlinedata är synkroniserad innan du uppgraderar.\n\nOm du ser ett blinkande rött ljus efter att ha installerat denna version, oroa dig inte. Anslut bara enheten till appen och den bör bli blå. Det röda ljuset betyder att enhetens klocka inte har synkroniserats ännu.",
+    "continueAnyway": "Fortsätt"
 }

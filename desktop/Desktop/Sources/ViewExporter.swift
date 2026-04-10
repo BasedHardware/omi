@@ -55,7 +55,11 @@ enum ViewExporter {
         {
           AnyView(
             DashboardPage(
-              viewModel: DashboardViewModel(), appState: AppState(), selectedIndex: .constant(0)))
+              viewModel: DashboardViewModel(),
+              appState: AppState(),
+              appProvider: AppProvider(),
+              chatProvider: ChatProvider(),
+              selectedIndex: .constant(0)))
         },
         CGSize(width: 900, height: 700)
       ),
@@ -79,8 +83,8 @@ enum ViewExporter {
       ),
 
       (
-        "06-advice",
-        { AnyView(AdvicePage()) },
+        "06-insight",
+        { AnyView(InsightPage()) },
         CGSize(width: 900, height: 700)
       ),
 
@@ -196,7 +200,7 @@ enum ViewExporter {
     let selectedIndex: Int
 
     private let items: [(String, String, Int)] = [
-      ("Dashboard", "house.fill", 0),
+      ("Home", "house.fill", 0),
       ("Conversations", "text.bubble.fill", 1),
       ("Chat", "bubble.left.and.bubble.right.fill", 2),
       ("Memories", "brain", 3),
@@ -279,7 +283,11 @@ enum ViewExporter {
         {
           AnyView(
             DashboardPage(
-              viewModel: DashboardViewModel(), appState: AppState(), selectedIndex: .constant(0)))
+              viewModel: DashboardViewModel(),
+              appState: AppState(),
+              appProvider: AppProvider(),
+              chatProvider: ChatProvider(),
+              selectedIndex: .constant(0)))
         }
       ),
       (
@@ -298,7 +306,7 @@ enum ViewExporter {
         }
       ),
       ("full-focus", 5, { AnyView(FocusPage()) }),
-      ("full-advice", 6, { AnyView(AdvicePage()) }),
+      ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),
       (
@@ -428,9 +436,9 @@ enum ViewExporter {
         isDismissed: false,
         tags: ["interesting", "productivity"],
         reasoning: "Repeated design feedback emphasized spacing and chrome over feature changes.",
-        currentActivity: "Reviewing dashboard surfaces",
+        currentActivity: "Reviewing home surfaces",
         inputDeviceName: "MacBook Pro Microphone",
-        windowTitle: "Dashboard",
+        windowTitle: "Home",
         headline: nil
       ),
       ServerMemory(

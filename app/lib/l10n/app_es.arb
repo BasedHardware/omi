@@ -2931,5 +2931,10 @@
     "transcriptionConnecting": "Conectando transcripción...",
     "transcriptionReconnecting": "Reconectando transcripción...",
     "transcriptionUnavailable": "Transcripción no disponible",
-    "audioOutput": "Salida de audio"
+    "audioOutput": "Salida de audio",
+    "enableLocationTitle": "Activar ubicación",
+    "enableLocationDescription": "Se necesita permiso de ubicación para encontrar dispositivos Bluetooth cercanos.",
+    "firmwareWarningTitle": "Importante: Lea antes de actualizar",
+    "firmwareFormatWarning": "Este firmware formateará la tarjeta SD. Asegúrese de que todos los datos sin conexión estén sincronizados antes de actualizar.\n\nSi ve una luz roja parpadeante después de instalar esta versión, no se preocupe. Simplemente conecte el dispositivo a la aplicación y debería ponerse azul. La luz roja significa que el reloj del dispositivo aún no se ha sincronizado.",
+    "continueAnyway": "Continuar"
 }

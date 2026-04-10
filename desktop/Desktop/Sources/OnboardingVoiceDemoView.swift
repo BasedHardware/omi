@@ -65,7 +65,7 @@ struct OnboardingVoiceDemoView: View {
                                 )
                             )
                         }
-                    Text("Enable voice responses")
+                    Text("Speak answers aloud for voice questions")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                 }

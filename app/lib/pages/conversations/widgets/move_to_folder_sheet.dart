@@ -55,7 +55,7 @@ class MoveToFolderSheet extends StatelessWidget {
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.pop(context, false),
+                      onTap: () => Navigator.pop(context),
                       child: const Icon(Icons.close, color: ResponsiveHelper.textTertiary, size: 24),
                     ),
                   ],
@@ -196,6 +196,7 @@ Future<String?> showMoveToFolderSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    useRootNavigator: true,
     builder: (context) => MoveToFolderSheet(conversationId: conversationId, currentFolderId: currentFolderId),
   );
   return result;

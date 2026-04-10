@@ -10,6 +10,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -377,6 +378,22 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           // Update button
           GestureDetector(
             onTap: () async {
+              var targetVersion = latestFirmwareDetails['version']?.toString() ?? '';
+              if (targetVersion.startsWith('3.0.17')) {
+                var confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => ConfirmationDialog(
+                    title: context.l10n.firmwareWarningTitle,
+                    description: context.l10n.firmwareFormatWarning,
+                    confirmText: context.l10n.continueAnyway,
+                    cancelText: context.l10n.cancel,
+                    onConfirm: () => Navigator.of(ctx).pop(true),
+                    onCancel: () => Navigator.of(ctx).pop(false),
+                  ),
+                );
+                if (confirmed != true) return;
+              }
+
               final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
               deviceProvider.setFirmwareUpdateInProgress(true);
 

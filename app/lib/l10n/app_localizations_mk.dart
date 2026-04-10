@@ -1714,12 +1714,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8725,12 +8720,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9047,4 +9037,14 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get audioOutput => 'Звучен излез';
+
+  @override
+  String get firmwareWarningTitle => 'Важно: Прочитајте пред ажурирање';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Овој фирмвер ќе ја форматира SD картичката. Ве молиме осигурајте се дека сите офлајн податоци се синхронизирани пред надградба.\n\nАко видите трепкачко црвено светло по инсталирањето на оваа верзија, не грижете се. Едноставно поврзете го уредот со апликацијата и треба да стане сино. Црвеното светло значи дека часовникот на уредот сè уште не е синхронизиран.';
+
+  @override
+  String get continueAnyway => 'Продолжи';
 }

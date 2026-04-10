@@ -140,17 +140,17 @@ struct OMIApp: App {
 
       // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
       CommandGroup(after: .sidebar) {
-        Button("Dashboard") {
+        Button("Home") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
             userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
         }
         .keyboardShortcut("1", modifiers: .command)
 
-        Button("Chat") {
+        Button("Conversations") {
           NotificationCenter.default.post(
             name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
         }
         .keyboardShortcut("2", modifiers: .command)
 
@@ -344,6 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Initialize analytics (MixPanel + PostHog)
     AnalyticsManager.shared.initialize()
+    AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.appLaunched()
     AnalyticsManager.shared.trackDisplayInfo()
 
@@ -1059,6 +1060,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    // Mark clean exit so crash detection works on next launch
+    UserDefaults.standard.set(true, forKey: "lastSessionCleanExit")
+
     // Remove window observers
     for observer in windowObservers {
       NotificationCenter.default.removeObserver(observer)

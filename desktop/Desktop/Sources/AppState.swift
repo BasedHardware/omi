@@ -4,6 +4,13 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+/// Translation from backend (e.g., Japanese speech translated to English)
+struct SegmentTranslation: Identifiable {
+  var id: String { lang }
+  let lang: String
+  let text: String
+}
+
 /// Speaker segment for diarized transcription
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
@@ -15,6 +22,7 @@ struct SpeakerSegment: Identifiable {
   var end: Double
   var isUser: Bool = false
   var personId: String?    // Backend-assigned person ID from speaker identification
+  var translations: [SegmentTranslation] = []
 }
 
 /// Result of finalizing a conversation
@@ -853,14 +861,18 @@ class AppState: ObservableObject {
       // Stale TCC entry from old developer signing: CGPreflight says granted but
       // actual capture fails. The user must toggle OFF then ON in System Settings
       // to update the code signing requirement (csreq) stored in the TCC database.
+      // NOTE: Do NOT call tccutil reset here — it wipes the user's permission entry
+      // entirely and forces them to re-grant manually. This was the root cause of
+      // users' screen recording permission getting reset "for no reason" after
+      // local rebuilds of Omi Beta (binary hash changes → stale csreq → self-reset).
+      // The correct recovery is for the user to toggle the permission in System
+      // Settings, which refreshes csreq in place. See PR #5616 / a2bc4471d for history.
       if !realPermission && !isScreenRecordingStale {
         log("Screen capture: stale TCC entry detected (developer signing changed)")
+        log(
+          "Screen capture: please toggle Screen Recording OFF then ON for this app in System Settings → Privacy & Security → Screen Recording"
+        )
         isScreenRecordingStale = true
-        // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
-        Task.detached {
-          ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-          _ = ScreenCaptureService.resetScreenCapturePermission()
-        }
       } else if realPermission {
         // Permission recovered (user toggled off/on in System Settings)
         isScreenRecordingStale = false
@@ -2265,12 +2277,14 @@ class AppState: ObservableObject {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,
+            backendId: old.backendId,
             text: old.text,
             speaker: old.speaker,
-            isUser: isUser ? true : old.isUser,
-            personId: personId ?? old.personId,
+            isUser: isUser,
+            personId: isUser ? nil : personId,
             start: old.start,
-            end: old.end
+            end: old.end,
+            translations: old.translations
           )
         }
       }
@@ -2300,6 +2314,9 @@ class AppState: ObservableObject {
       let speakerId = segment.speaker_id ?? 0
 
       // Convert backend segment to local SpeakerSegment
+      let translations = (segment.translations ?? []).map {
+        SegmentTranslation(lang: $0.lang, text: $0.text)
+      }
       let newSeg = SpeakerSegment(
         segmentId: segment.id,
         speaker: speakerId,
@@ -2307,7 +2324,8 @@ class AppState: ObservableObject {
         start: segment.start,
         end: segment.end,
         isUser: segment.is_user,
-        personId: segment.person_id
+        personId: segment.person_id,
+        translations: translations
       )
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
@@ -2317,7 +2335,12 @@ class AppState: ObservableObject {
         // Adjust word count: subtract old words, add new words
         let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
         totalWordCount += newSeg.text.split(separator: " ").count - oldWords
-        speakerSegments[existingIdx] = newSeg
+        // Preserve existing translations if the backend didn't send new ones
+        var updatedSeg = newSeg
+        if translations.isEmpty && !speakerSegments[existingIdx].translations.isEmpty {
+          updatedSeg.translations = speakerSegments[existingIdx].translations
+        }
+        speakerSegments[existingIdx] = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
@@ -2350,6 +2373,13 @@ class AppState: ObservableObject {
         for segment in segments {
           guard !segment.text.isEmpty else { continue }
           let speakerId = segment.speaker_id ?? 0
+          var translationsJson: String?
+          if let translations = segment.translations, !translations.isEmpty {
+            let mapped = translations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+            if let data = try? JSONEncoder().encode(mapped) {
+              translationsJson = String(data: data, encoding: .utf8)
+            }
+          }
           do {
             try await TranscriptionStorage.shared.upsertSegment(
               sessionId: sessionId,
@@ -2359,7 +2389,9 @@ class AppState: ObservableObject {
               startTime: segment.start,
               endTime: segment.end,
               isUser: segment.is_user,
-              personId: segment.person_id
+              personId: segment.person_id,
+              speakerLabel: segment.speaker,
+              translationsJson: translationsJson
             )
           } catch {
             logError("Transcription: Failed to persist segment to DB", error: error)
@@ -2476,7 +2508,55 @@ class AppState: ObservableObject {
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
 
     case "translating":
-      log("Transcription: Translation event received")
+      if let segmentsArray = event.raw["segments"] as? [[String: Any]] {
+        do {
+          let data = try JSONSerialization.data(withJSONObject: segmentsArray)
+          let translatedSegments = try JSONDecoder().decode(
+            [TranscriptionService.BackendSegment].self, from: data)
+          log("Transcription: Translation event with \(translatedSegments.count) segments")
+          for translated in translatedSegments {
+            guard let segId = translated.id else { continue }
+            let newTranslations = (translated.translations ?? []).map {
+              SegmentTranslation(lang: $0.lang, text: $0.text)
+            }
+            guard !newTranslations.isEmpty else { continue }
+
+            // Update in-memory if the segment is still loaded
+            if let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId }) {
+              speakerSegments[idx].translations = newTranslations
+            }
+
+            // Always persist to SQLite — even if the segment was trimmed from
+            // the in-memory window, the event payload has all fields needed
+            if let sessionId = currentSessionId {
+              let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+              var translationsJson: String?
+              if let jsonData = try? JSONEncoder().encode(mapped) {
+                translationsJson = String(data: jsonData, encoding: .utf8)
+              }
+              Task {
+                try? await TranscriptionStorage.shared.upsertSegment(
+                  sessionId: sessionId,
+                  backendSegmentId: segId,
+                  speaker: translated.speaker_id ?? 0,
+                  text: translated.text,
+                  startTime: translated.start,
+                  endTime: translated.end,
+                  isUser: translated.is_user,
+                  personId: translated.person_id,
+                  speakerLabel: translated.speaker,
+                  translationsJson: translationsJson
+                )
+              }
+            }
+          }
+          LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+        } catch {
+          logError("Transcription: Failed to parse translation event", error: error)
+        }
+      } else {
+        log("Transcription: Translation event received (no segments)")
+      }
 
     case "last_memory":
       let memoryId = event.raw["memory_id"] as? String ?? "?"
@@ -2970,7 +3050,7 @@ extension Notification.Name {
   /// Posted when Focus page finishes loading initial data
   static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
   /// Posted when Advice page finishes loading initial data
-  static let advicePageDidLoad = Notification.Name("advicePageDidLoad")
+  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService

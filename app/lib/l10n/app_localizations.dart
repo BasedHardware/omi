@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -16826,6 +16826,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio Output'**
   String get audioOutput;
+
+  /// No description provided for @firmwareWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Important: Read Before Updating'**
+  String get firmwareWarningTitle;
+
+  /// No description provided for @firmwareFormatWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device\'s clock hasn\'t been synced yet.'**
+  String get firmwareFormatWarning;
+
+  /// No description provided for @continueAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAnyway;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16838,56 +16856,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16996,8 +17014,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

@@ -1,8 +1,8 @@
 import Cocoa
 import SwiftUI
 
-/// SwiftUI view for editing the advice prompt
-struct AdvicePromptEditorView: View {
+/// SwiftUI view for editing the insight prompt
+struct InsightPromptEditorView: View {
     @State private var prompt: String
     @Environment(\.dismiss) private var dismiss
 
@@ -10,7 +10,7 @@ struct AdvicePromptEditorView: View {
 
     init(onClose: (() -> Void)? = nil) {
         self.onClose = onClose
-        _prompt = State(initialValue: AdviceAssistantSettings.shared.analysisPrompt)
+        _prompt = State(initialValue: InsightAssistantSettings.shared.analysisPrompt)
     }
 
     var body: some View {
@@ -18,11 +18,11 @@ struct AdvicePromptEditorView: View {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Advice Prompt")
+                    Text("Insight Prompt")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.primary)
 
-                    Text("Customize the AI instructions for proactive advice")
+                    Text("Customize the AI instructions for proactive insights")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
@@ -55,7 +55,7 @@ struct AdvicePromptEditorView: View {
                         .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
                 )
                 .onChange(of: prompt) { _, newValue in
-                    AdviceAssistantSettings.shared.analysisPrompt = newValue
+                    InsightAssistantSettings.shared.analysisPrompt = newValue
                 }
 
             // Footer with character count
@@ -80,16 +80,16 @@ struct AdvicePromptEditorView: View {
     }
 
     private func resetToDefault() {
-        AdviceAssistantSettings.shared.resetPromptToDefault()
-        prompt = AdviceAssistantSettings.shared.analysisPrompt
+        InsightAssistantSettings.shared.resetPromptToDefault()
+        prompt = InsightAssistantSettings.shared.analysisPrompt
     }
 }
 
 /// NSWindow subclass that hosts the Advice Prompt Editor SwiftUI view
-class AdvicePromptEditorWindow: NSWindow {
-    private static var sharedWindow: AdvicePromptEditorWindow?
+class InsightPromptEditorWindow: NSWindow {
+    private static var sharedWindow: InsightPromptEditorWindow?
 
-    /// Shows the advice prompt editor window, creating it if necessary
+    /// Shows the insight prompt editor window, creating it if necessary
     static func show() {
         if let existingWindow = sharedWindow {
             existingWindow.makeKeyAndOrderFront(nil)
@@ -97,13 +97,13 @@ class AdvicePromptEditorWindow: NSWindow {
             return
         }
 
-        let window = AdvicePromptEditorWindow()
+        let window = InsightPromptEditorWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
 
-    /// Closes the advice prompt editor window
+    /// Closes the insight prompt editor window
     static func close() {
         sharedWindow?.close()
         sharedWindow = nil
@@ -119,7 +119,7 @@ class AdvicePromptEditorWindow: NSWindow {
             defer: false
         )
 
-        self.title = "Edit Advice Prompt"
+        self.title = "Edit Insight Prompt"
         self.isReleasedWhenClosed = false
         self.delegate = self
         self.minSize = NSSize(width: 500, height: 400)
@@ -128,7 +128,7 @@ class AdvicePromptEditorWindow: NSWindow {
         self.center()
 
         // Create SwiftUI view
-        let editorView = AdvicePromptEditorView(onClose: { [weak self] in
+        let editorView = InsightPromptEditorView(onClose: { [weak self] in
             self?.close()
         })
 
@@ -139,12 +139,12 @@ class AdvicePromptEditorWindow: NSWindow {
 
 // MARK: - NSWindowDelegate
 
-extension AdvicePromptEditorWindow: NSWindowDelegate {
+extension InsightPromptEditorWindow: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        AdvicePromptEditorWindow.sharedWindow = nil
+        InsightPromptEditorWindow.sharedWindow = nil
     }
 }
 
 #Preview {
-    AdvicePromptEditorView()
+    InsightPromptEditorView()
 }

@@ -23,7 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  Users
+  Users,
+  AlertTriangle
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthFetch } from "@/hooks/useAuthToken";
@@ -99,6 +100,8 @@ export default function SubscriptionsPage() {
   const [subscriptionCounts, setSubscriptionCounts] = useState<SubscriptionCounts | null>(null);
   const [subscriptionTrends, setSubscriptionTrends] = useState<SubscriptionTrendData[]>([]);
   const [mrrTrends, setMrrTrends] = useState<MRRTrendData[]>([]);
+  const [hasPartialData, setHasPartialData] = useState(false);
+  const [metricsError, setMetricsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,8 @@ export default function SubscriptionsPage() {
 
   useEffect(() => {
     if (!token) return;
+    setHasPartialData(false);
+    setMetricsError(false);
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
@@ -193,6 +198,8 @@ export default function SubscriptionsPage() {
   };
 
   const handleRefresh = () => {
+    setHasPartialData(false);
+    setMetricsError(false);
     fetchSubscriptions();
     fetchRevenueMetrics();
     fetchTotalCount();
@@ -206,11 +213,17 @@ export default function SubscriptionsPage() {
       const response = await fetchWithAuth('/api/omi/stats/revenue');
 
       if (response.ok) {
-        const data: RevenueMetrics = await response.json();
+        const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setRevenueMetrics(data);
+      } else {
+        setRevenueMetrics(null);
+        setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching revenue metrics:', err);
+      setRevenueMetrics(null);
+      setMetricsError(true);
     }
   };
 
@@ -220,13 +233,19 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setSubscriptionCounts({
           monthly: data.priceIdOne?.count || 0,
           annual: data.priceIdTwo?.count || 0,
         });
+      } else {
+        setSubscriptionCounts(null);
+        setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching subscription counts:', err);
+      setSubscriptionCounts(null);
+      setMetricsError(true);
     }
   };
 
@@ -236,10 +255,16 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setSubscriptionTrends(data.data || []);
+      } else {
+        setSubscriptionTrends([]);
+        setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching subscription trends:', err);
+      setSubscriptionTrends([]);
+      setMetricsError(true);
     }
   };
 
@@ -249,10 +274,16 @@ export default function SubscriptionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.partial) setHasPartialData(true);
         setMrrTrends(data.data || []);
+      } else {
+        setMrrTrends([]);
+        setMetricsError(true);
       }
     } catch (err) {
       console.error('Error fetching MRR trends:', err);
+      setMrrTrends([]);
+      setMetricsError(true);
     }
   };
 
@@ -318,6 +349,18 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="space-y-6">
+      {metricsError && (
+        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Some metrics failed to load. Displayed values may be unavailable or incomplete.</span>
+        </div>
+      )}
+      {hasPartialData && !metricsError && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Some data sources failed to load. Numbers may be incomplete.</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
@@ -346,7 +389,7 @@ export default function SubscriptionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${revenueMetrics?.mrr.toLocaleString() || '0'}
+              {revenueMetrics ? `$${revenueMetrics.mrr.toLocaleString()}` : metricsError ? 'N/A' : '$0'}
             </div>
           </CardContent>
         </Card>
@@ -357,7 +400,7 @@ export default function SubscriptionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${revenueMetrics?.arr.toLocaleString() || '0'}
+              {revenueMetrics ? `$${revenueMetrics.arr.toLocaleString()}` : metricsError ? 'N/A' : '$0'}
             </div>
           </CardContent>
         </Card>
@@ -368,7 +411,7 @@ export default function SubscriptionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {subscriptionCounts?.monthly.toLocaleString() || '0'}
+              {subscriptionCounts ? subscriptionCounts.monthly.toLocaleString() : metricsError ? 'N/A' : '0'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Active monthly subscriptions
@@ -382,7 +425,7 @@ export default function SubscriptionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {subscriptionCounts?.annual.toLocaleString() || '0'}
+              {subscriptionCounts ? subscriptionCounts.annual.toLocaleString() : metricsError ? 'N/A' : '0'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Active annual subscriptions
@@ -448,7 +491,7 @@ export default function SubscriptionsPage() {
               </ChartContainer>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                Loading chart data...
+                {metricsError ? 'Chart data unavailable' : 'Loading chart data...'}
               </div>
             )}
           </CardContent>
@@ -501,7 +544,7 @@ export default function SubscriptionsPage() {
               </ChartContainer>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                Loading chart data...
+                {metricsError ? 'Chart data unavailable' : 'Loading chart data...'}
               </div>
             )}
           </CardContent>

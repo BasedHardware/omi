@@ -1705,12 +1705,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIVOS',
-      one: 'DISPOSITIVO',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVOS', one: 'DISPOSITIVO');
     return '$count $_temp0 ENCONTRADOS CERCA';
   }
 
@@ -8998,10 +8993,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get willSyncAutomatically => 'se sincronizará automáticamente';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activar ubicación';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Se necesita permiso de ubicación para encontrar dispositivos Bluetooth cercanos.';
 
   @override
   String get voiceRecordingFound => 'Grabación encontrada';
@@ -9017,4 +9013,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioOutput => 'Salida de audio';
+
+  @override
+  String get firmwareWarningTitle => 'Importante: Lea antes de actualizar';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Este firmware formateará la tarjeta SD. Asegúrese de que todos los datos sin conexión estén sincronizados antes de actualizar.\n\nSi ve una luz roja parpadeante después de instalar esta versión, no se preocupe. Simplemente conecte el dispositivo a la aplicación y debería ponerse azul. La luz roja significa que el reloj del dispositivo aún no se ha sincronizado.';
+
+  @override
+  String get continueAnyway => 'Continuar';
 }

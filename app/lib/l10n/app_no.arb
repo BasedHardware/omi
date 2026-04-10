@@ -2930,5 +2930,10 @@
     "transcriptionConnecting": "Kobler til transkripsjon...",
     "transcriptionReconnecting": "Kobler til transkripsjon på nytt...",
     "transcriptionUnavailable": "Transkripsjon utilgjengelig",
-    "audioOutput": "Lydutgang"
+    "audioOutput": "Lydutgang",
+    "enableLocationTitle": "Aktiver plassering",
+    "enableLocationDescription": "Plasseringstillatelse er nødvendig for å finne Bluetooth-enheter i nærheten.",
+    "firmwareWarningTitle": "Viktig: Les før oppdatering",
+    "firmwareFormatWarning": "Denne fastvaren vil formatere SD-kortet. Sørg for at alle offline-data er synkronisert før oppgradering.\n\nHvis du ser et blinkende rødt lys etter installasjon av denne versjonen, ikke bekymre deg. Koble enheten til appen, og den skal bli blå. Det røde lyset betyr at enhetens klokke ikke er synkronisert ennå.",
+    "continueAnyway": "Fortsett"
 }

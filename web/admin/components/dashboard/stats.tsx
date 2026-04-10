@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Loader2, MessageSquare, CreditCard, Smartphone } from "lucide-react";
+import { Package, Loader2, MessageSquare, CreditCard, Smartphone, AlertTriangle } from "lucide-react";
 import useSWR from 'swr';
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 
@@ -10,10 +10,12 @@ interface AppStats {
   approved: number;
   inReview: number;
   paid: number;
+  partial?: boolean;
 }
 
 interface SubscriptionStats {
   totalSubscriptions: number;
+  partial?: boolean;
   priceIdOne: {
     count: number;
     priceId: string;
@@ -30,6 +32,13 @@ interface AppSubscriptionStats {
   priceBreakdown: Record<string, number>;
   uniquePriceIds: number;
 }
+
+const PartialDataBadge = () => (
+  <span className="inline-flex items-center gap-1 text-xs text-amber-600" title="Some data sources failed to load. Numbers may be incomplete.">
+    <AlertTriangle className="h-3 w-3" />
+    <span>Partial</span>
+  </span>
+);
 
 const StatItem = ({ color, count, label }: { color: string; count: number; label: string }) => (
   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -122,7 +131,10 @@ export function DashboardStats() {
       ) : appStats && appStats.total !== undefined ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium text-muted-foreground">Apps</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-medium text-muted-foreground">Apps</CardTitle>
+              {appStats.partial && <PartialDataBadge />}
+            </div>
             <Package className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-3 pt-0 pb-6 px-6">
@@ -179,7 +191,10 @@ export function DashboardStats() {
       ) : subscriptionData && subscriptionData.totalSubscriptions !== undefined ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium text-muted-foreground">Active OMI Subscriptions</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-medium text-muted-foreground">Active OMI Subscriptions</CardTitle>
+              {subscriptionData.partial && <PartialDataBadge />}
+            </div>
             <CreditCard className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-3 pt-0 pb-6 px-6">

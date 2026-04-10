@@ -23,14 +23,32 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return withCors(authResult);
 
   try {
-    // Fetch both regular apps and unapproved apps
-    const [apps, unapprovedApps] = await Promise.all([
+    // Fetch both regular apps and unapproved apps — use allSettled
+    // so one failure doesn't crash the entire stats endpoint
+    const results = await Promise.allSettled([
       getApps(authResult.uid),
       getUnapprovedApps(authResult.uid)
     ]);
 
+    const apps = results[0].status === 'fulfilled' ? results[0].value : [];
+    const unapprovedApps = results[1].status === 'fulfilled' ? results[1].value : [];
+
+    if (results[0].status === 'rejected') {
+      console.error('[API Route] Error fetching apps:', results[0].reason);
+    }
+    if (results[1].status === 'rejected') {
+      console.error('[API Route] Error fetching unapproved apps:', results[1].reason);
+    }
+
+    if (results.every((r) => r.status === 'rejected')) {
+      return withCors(NextResponse.json(
+        { error: 'All app data sources failed' },
+        { status: 502 }
+      ));
+    }
+
     // Filter out persona apps from regular apps
-    const filteredApps = apps.filter(app => 
+    const filteredApps = apps.filter(app =>
       !app.capabilities?.includes('persona')
     );
 
@@ -52,16 +70,18 @@ export async function GET(request: NextRequest) {
     // 1. Only public apps (already handled by getUnapprovedApps)
     // 2. Only apps that are actually pending review (not rejected)
     // 3. Exclude persona apps
-    const filteredUnapprovedApps = unapprovedApps.filter(app => 
+    const filteredUnapprovedApps = unapprovedApps.filter(app =>
       (app.status === 'pending' || app.status === 'under-review') &&
       !app.capabilities?.includes('persona')
     );
 
+    const partial = results.some((r) => r.status === 'rejected');
     const stats = {
       total: filteredApps.length,
       approved: approvedCount,
       inReview: filteredUnapprovedApps.length, // Only public apps awaiting review
       paid: paidCount,
+      partial,
     };
 
     return withCors(NextResponse.json(stats));

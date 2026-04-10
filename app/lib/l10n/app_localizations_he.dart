@@ -1699,12 +1699,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -8609,12 +8604,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8927,4 +8917,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get audioOutput => 'פלט אודיו';
+
+  @override
+  String get firmwareWarningTitle => 'חשוב: קראו לפני העדכון';
+
+  @override
+  String get firmwareFormatWarning =>
+      'קושחה זו תפרמט את כרטיס ה-SD. אנא ודאו שכל הנתונים הלא מקוונים מסונכרנים לפני השדרוג.\n\nאם אתם רואים אור אדום מהבהב לאחר התקנת גרסה זו, אל תדאגו. פשוט חברו את המכשיר לאפליקציה והוא אמור להפוך לכחול. האור האדום אומר שהשעון של המכשיר עדיין לא סונכרן.';
+
+  @override
+  String get continueAnyway => 'המשך';
 }

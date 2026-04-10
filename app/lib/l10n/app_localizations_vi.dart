@@ -1714,12 +1714,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'THIẾT BỊ',
-      one: 'THIẾT BỊ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8981,10 +8976,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get willSyncAutomatically => 'sẽ tự động đồng bộ';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Bật vị trí';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Cần quyền truy cập vị trí để tìm các thiết bị Bluetooth gần đây.';
 
   @override
   String get voiceRecordingFound => 'Đã tìm thấy bản ghi';
@@ -9000,4 +8995,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get audioOutput => 'Đầu ra âm thanh';
+
+  @override
+  String get firmwareWarningTitle => 'Quan trọng: Đọc trước khi cập nhật';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Firmware này sẽ định dạng thẻ SD. Vui lòng đảm bảo tất cả dữ liệu ngoại tuyến đã được đồng bộ trước khi nâng cấp.\n\nNếu bạn thấy đèn đỏ nhấp nháy sau khi cài đặt phiên bản này, đừng lo lắng. Chỉ cần kết nối thiết bị với ứng dụng và nó sẽ chuyển sang màu xanh. Đèn đỏ có nghĩa là đồng hồ của thiết bị chưa được đồng bộ.';
+
+  @override
+  String get continueAnyway => 'Tiếp tục';
 }

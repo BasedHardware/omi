@@ -2,6 +2,118 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.279",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.277",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.276",
+      "date": "2026-04-09",
+      "changes": [
+        "Replaced Conversations on Dashboard with embedded Chat (Ask omi anything) and moved the Conversations list to its own sidebar page"
+      ]
+    },
+    {
+      "version": "0.11.275",
+      "date": "2026-04-09",
+      "changes": [
+        "Fixed call recordings being labeled as a single speaker by re-enabling system audio capture (now with drift compensation, no more crackling)"
+      ]
+    },
+    {
+      "version": "0.11.273",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.272",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.271",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.270",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.269",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.268",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.267",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.266",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.265",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.264",
+      "date": "2026-04-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.262",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.261",
+      "date": "2026-04-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.260",
       "date": "2026-04-08",
       "changes": [

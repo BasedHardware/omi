@@ -1713,12 +1713,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'УСТРОЙСТВА',
-      one: 'УСТРОЙСТВО',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -9015,10 +9010,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get willSyncAutomatically => 'ще се синхронизира автоматично';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Активиране на местоположение';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Разрешението за местоположение е необходимо за намиране на близки Bluetooth устройства.';
 
   @override
   String get voiceRecordingFound => 'Намерен запис';
@@ -9034,4 +9030,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get audioOutput => 'Аудио изход';
+
+  @override
+  String get firmwareWarningTitle => 'Важно: Прочетете преди актуализация';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Този фърмуер ще форматира SD картата. Моля, уверете се, че всички офлайн данни са синхронизирани преди обновяване.\n\nАко видите мигаща червена светлина след инсталирането на тази версия, не се притеснявайте. Просто свържете устройството с приложението и то трябва да стане синьо. Червената светлина означава, че часовникът на устройството все още не е синхронизиран.';
+
+  @override
+  String get continueAnyway => 'Продължи';
 }

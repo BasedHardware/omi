@@ -1718,12 +1718,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -9022,10 +9017,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get willSyncAutomatically => 'se va sincroniza automat';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Activează locația';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription =>
+      'Permisiunea de locație este necesară pentru a găsi dispozitivele Bluetooth din apropiere.';
 
   @override
   String get voiceRecordingFound => 'Înregistrare găsită';
@@ -9041,4 +9037,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get audioOutput => 'Ieșire audio';
+
+  @override
+  String get firmwareWarningTitle => 'Important: Citiți înainte de actualizare';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Acest firmware va formata cardul SD. Vă rugăm să vă asigurați că toate datele offline sunt sincronizate înainte de actualizare.\n\nDacă vedeți o lumină roșie care clipește după instalarea acestei versiuni, nu vă faceți griji. Pur și simplu conectați dispozitivul la aplicație și ar trebui să devină albastru. Lumina roșie înseamnă că ceasul dispozitivului nu a fost încă sincronizat.';
+
+  @override
+  String get continueAnyway => 'Continuă';
 }

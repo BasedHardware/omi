@@ -316,7 +316,7 @@ actor RewindIndexer {
     }
 
     /// Process a frame with additional metadata (focus status, etc.)
-    func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, advice: String?) async {
+    func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, insight: String?) async {
         guard await ensureInitialized() else { return }
 
         do {
@@ -376,14 +376,14 @@ actor RewindIndexer {
                 }
             }
 
-            // Encode tasks and advice as JSON
+            // Encode tasks and insight as JSON
             var tasksJson: String?
             if let tasks = extractedTasks, !tasks.isEmpty {
                 let data = try JSONEncoder().encode(tasks)
                 tasksJson = String(data: data, encoding: .utf8)
             }
 
-            let adviceJson: String? = advice
+            let adviceJson: String? = insight
 
             let screenshot = Screenshot(
                 timestamp: frame.captureTime,

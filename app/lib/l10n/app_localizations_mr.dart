@@ -1710,12 +1710,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8690,12 +8685,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count संभाषण$_temp0 तयार केले गेले';
   }
 
@@ -9010,4 +9000,14 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get audioOutput => 'ऑडिओ आउटपुट';
+
+  @override
+  String get firmwareWarningTitle => 'महत्त्वाचे: अपडेट करण्यापूर्वी वाचा';
+
+  @override
+  String get firmwareFormatWarning =>
+      'हे फर्मवेअर SD कार्ड फॉर्मेट करेल. कृपया अपग्रेड करण्यापूर्वी सर्व ऑफलाइन डेटा सिंक झाला आहे याची खात्री करा.\n\nहा आवृत्ती इंस्टॉल केल्यानंतर लाल दिवा चमकत असल्यास काळजी करू नका. फक्त डिव्हाइस अ‍ॅपशी कनेक्ट करा आणि ते निळे व्हायला हवे. लाल दिवा म्हणजे डिव्हाइसचे घड्याळ अजून सिंक झालेले नाही.';
+
+  @override
+  String get continueAnyway => 'पुढे सुरू ठेवा';
 }

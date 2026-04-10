@@ -1708,12 +1708,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -8979,10 +8974,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get willSyncAutomatically => 'synkronoidaan automaattisesti';
 
   @override
-  String get enableLocationTitle => 'Enable Location';
+  String get enableLocationTitle => 'Ota sijainti käyttöön';
 
   @override
-  String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+  String get enableLocationDescription => 'Sijaintilupa tarvitaan lähellä olevien Bluetooth-laitteiden löytämiseen.';
 
   @override
   String get voiceRecordingFound => 'Tallenne löytyi';
@@ -8998,4 +8993,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get audioOutput => 'Äänilähtö';
+
+  @override
+  String get firmwareWarningTitle => 'Tärkeää: Lue ennen päivitystä';
+
+  @override
+  String get firmwareFormatWarning =>
+      'Tämä laiteohjelmisto alustaa SD-kortin. Varmista, että kaikki offline-tiedot on synkronoitu ennen päivitystä.\n\nJos näet vilkkuvan punaisen valon tämän version asentamisen jälkeen, älä huoli. Yhdistä laite sovellukseen ja sen pitäisi muuttua siniseksi. Punainen valo tarkoittaa, että laitteen kelloa ei ole vielä synkronoitu.';
+
+  @override
+  String get continueAnyway => 'Jatka';
 }

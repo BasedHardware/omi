@@ -1706,12 +1706,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8675,12 +8670,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8995,4 +8985,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioOutput => 'Audio Output';
+
+  @override
+  String get firmwareWarningTitle => 'Important: Read Before Updating';
+
+  @override
+  String get firmwareFormatWarning =>
+      'This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device\'s clock hasn\'t been synced yet.';
+
+  @override
+  String get continueAnyway => 'Continue';
 }
