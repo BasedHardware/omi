@@ -98,7 +98,11 @@ export async function GET(request: NextRequest) {
       const cohort = raw[date];
       if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-      const first = cohort.counts[0] || 0;
+      // Use cohort.first (unfiltered cohort size) as denominator, not counts[0].
+      // When a platform filter is applied, counts[0] only includes users matching
+      // the filter on day 0, while counts[N] includes different users matching on
+      // day N — making counts[N] > counts[0] possible, giving >100% retention.
+      const first = cohort.first ?? cohort.counts[0] ?? 0;
       if (first === 0) continue;
 
       totalUsers += first;
@@ -123,8 +127,7 @@ export async function GET(request: NextRequest) {
         const cohort = raw[date];
         if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-        // Use counts[0] as base when filtering, since `first` may be unfiltered
-        const first = cohort.counts[0] || 0;
+        const first = cohort.first ?? cohort.counts[0] ?? 0;
         if (first === 0) continue;
         if (dayIdx >= cohort.counts.length) continue;
 
