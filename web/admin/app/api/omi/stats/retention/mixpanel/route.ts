@@ -98,11 +98,10 @@ export async function GET(request: NextRequest) {
       const cohort = raw[date];
       if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-      // Use cohort.first (unfiltered cohort size) as denominator, not counts[0].
-      // When a platform filter is applied, counts[0] only includes users matching
-      // the filter on day 0, while counts[N] includes different users matching on
-      // day N — making counts[N] > counts[0] possible, giving >100% retention.
-      const first = cohort.first ?? cohort.counts[0] ?? 0;
+      // Use counts[0] as denominator so "Users" reflects the filtered platform.
+      // Cap at 100% because Mixpanel's where-filter applies per-day independently:
+      // a user might match on day N but not day 0, making counts[N] > counts[0].
+      const first = cohort.counts[0] || 0;
       if (first === 0) continue;
 
       totalUsers += first;
@@ -110,9 +109,10 @@ export async function GET(request: NextRequest) {
       const curve: { day: number; retention: number }[] = [];
 
       for (let dayIdx = 0; dayIdx < cohort.counts.length; dayIdx++) {
+        const pct = (cohort.counts[dayIdx] / first) * 100;
         curve.push({
           day: dayIdx,
-          retention: Math.round((cohort.counts[dayIdx] / first) * 100 * 100) / 100,
+          retention: Math.round(Math.min(pct, 100) * 100) / 100,
         });
       }
 
@@ -127,11 +127,11 @@ export async function GET(request: NextRequest) {
         const cohort = raw[date];
         if (!cohort || !Array.isArray(cohort.counts)) continue;
 
-        const first = cohort.first ?? cohort.counts[0] ?? 0;
+        const first = cohort.counts[0] || 0;
         if (first === 0) continue;
         if (dayIdx >= cohort.counts.length) continue;
 
-        sumPct += (cohort.counts[dayIdx] / first) * 100;
+        sumPct += Math.min((cohort.counts[dayIdx] / first) * 100, 100);
         cohortCount++;
       }
 
