@@ -206,8 +206,8 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   init() {
-    // Auto-refresh memories every 120 seconds
-    Timer.publish(every: 120.0, on: .main, in: .common)
+    // Auto-refresh memories periodically
+    Timer.publish(every: PollingConfig.memoriesPollInterval, on: .main, in: .common)
       .autoconnect()
       .sink { [weak self] _ in
         Task { await self?.refreshMemoriesIfNeeded() }
