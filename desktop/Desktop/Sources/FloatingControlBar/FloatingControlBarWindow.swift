@@ -1396,8 +1396,8 @@ class FloatingControlBarManager {
     }
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        let shouldPlayVoice = barWindow.state.currentQueryFromVoice
-        prepareVisibleQueryState(message, in: barWindow, fromVoice: shouldPlayVoice)
+        let queryFromVoice = barWindow.state.currentQueryFromVoice
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
 
         // Check weekly usage limit for free users
