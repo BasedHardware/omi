@@ -538,6 +538,34 @@ class TestAcceptSkipsLocked:
             # Token should NOT have been burned
             mock_redis.try_accept_task_share.assert_not_called()
 
+    def test_accept_rollback_on_post_claim_race(self):
+        """If items become locked after pre-check but before copy, rollback token and return 402."""
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "uid_alice",
+                "display_name": "Alice",
+                "task_ids": ["t1"],
+            }
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.side_effect = [
+                # Pre-validation: unlocked
+                {"id": "t1", "description": "OK", "is_locked": False},
+                # Copy pass: now locked (race)
+                {"id": "t1", "description": "OK", "is_locked": True},
+            ]
+
+            try:
+                accept_shared_action_items(request, uid="uid_bob")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 402
+
+            # Token should have been rolled back
+            mock_redis.undo_accept_task_share.assert_called_once_with("tok1", "uid_bob")
+
 
 class TestPendingSyncFiltersLocked:
     """Gap 1: GET /v1/action-items/pending-sync must filter locked items."""
