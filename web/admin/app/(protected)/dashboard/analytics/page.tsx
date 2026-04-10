@@ -184,6 +184,11 @@ interface DauTrendsData {
   days: number;
 }
 
+interface CrashRateData {
+  data: { date: string; crashes: number; users: number; crashFreeRate: number }[];
+  days: number;
+}
+
 interface ViralMetrics {
   growthAccounting: {
     week: string;
@@ -358,6 +363,9 @@ export default function AnalyticsPage() {
 
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
     useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
+
+  const { data: crashRate, isLoading: crashRateLoading } =
+    useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", token] : null, authFetcher, swrOpts);
 
   const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
 
@@ -1339,6 +1347,58 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       </div>
+
+      {/* Crash Rate */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">App Stability</h2>
+          {crashRate?.data && (() => {
+            const recent = crashRate.data.slice(-7);
+            const totalCrashes = recent.reduce((s, d) => s + d.crashes, 0);
+            const totalUsers = recent.reduce((s, d) => s + d.users, 0);
+            const rate = totalUsers > 0 ? ((1 - totalCrashes / totalUsers) * 100).toFixed(1) : "100.0";
+            return (
+              <span className="text-sm text-muted-foreground">
+                {rate}% crash-free (7d) · {totalCrashes} crashes
+              </span>
+            );
+          })()}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">Daily crashes vs active users (last 30 days)</p>
+        <div className="h-[300px]">
+          {crashRateLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (crashRate?.data?.length ?? 0) > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={crashRate!.data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[90, 100]} />
+                <Tooltip
+                  formatter={(value: number, name: string) => {
+                    if (name === "crashFreeRate") return [`${value}%`, "Crash-Free Rate"];
+                    if (name === "crashes") return [value.toLocaleString(), "Crashes"];
+                    return [value.toLocaleString(), "Active Users"];
+                  }}
+                  labelFormatter={fullDate}
+                  contentStyle={tooltipStyle}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="crashes" name="Crashes" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="left" dataKey="users" name="Active Users" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.3} />
+                <Line yAxisId="right" type="monotone" dataKey="crashFreeRate" name="Crash-Free Rate" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              No crash data yet — events will appear after v0.11.277+
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Daily New Users + Rolling Avg */}
       <Card className="p-6">

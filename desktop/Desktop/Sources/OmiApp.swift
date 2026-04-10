@@ -342,6 +342,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Initialize analytics (MixPanel + PostHog)
     AnalyticsManager.shared.initialize()
+    AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.appLaunched()
     AnalyticsManager.shared.trackDisplayInfo()
 
@@ -1057,6 +1058,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    // Mark clean exit so crash detection works on next launch
+    UserDefaults.standard.set(true, forKey: "lastSessionCleanExit")
+
     // Remove window observers
     for observer in windowObservers {
       NotificationCenter.default.removeObserver(observer)

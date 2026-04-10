@@ -278,6 +278,35 @@ class AnalyticsManager {
     )
   }
 
+  // MARK: - Crash Detection
+
+  /// Detect if the previous session crashed (no clean exit) and report to PostHog.
+  /// Must be called AFTER analytics initialization but BEFORE appLaunched().
+  func detectAndReportCrash() {
+    guard !Self.isDevBuild else { return }
+
+    let cleanExitKey = "lastSessionCleanExit"
+    let hasLaunchedBeforeKey = "crashDetection_hasLaunchedBefore"
+
+    let hadPreviousSession = UserDefaults.standard.bool(forKey: hasLaunchedBeforeKey)
+    let lastCleanExit = UserDefaults.standard.bool(forKey: cleanExitKey)
+
+    // Mark that we've launched at least once (skip crash report on very first launch)
+    UserDefaults.standard.set(true, forKey: hasLaunchedBeforeKey)
+
+    // Clear the flag — will be set back to true only on clean exit
+    UserDefaults.standard.set(false, forKey: cleanExitKey)
+
+    if hadPreviousSession && !lastCleanExit {
+      log("Analytics: Previous session did not exit cleanly — reporting crash")
+      let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+      PostHogManager.shared.track("App Crash Detected", properties: [
+        "app_version": version,
+        "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+      ])
+    }
+  }
+
   // MARK: - App Lifecycle Events
 
   func appLaunched() {
