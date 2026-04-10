@@ -197,14 +197,15 @@ struct DesktopHomeView: View {
               await AgentVMService.shared.ensureProvisioned()
             }
             // Refresh conversations when app becomes active (e.g. switching back from another app)
-            // Cooldown: skip if last activation refresh was less than 60 seconds ago
             .onReceive(
               NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             ) { _ in
+              // Cooldown: only refresh conversations if last activation was 60+ seconds ago
               let now = Date()
-              guard now.timeIntervalSince(lastActivationRefresh) >= PollingConfig.activationCooldown else { return }
-              lastActivationRefresh = now
-              Task { await appState.refreshConversations() }
+              if now.timeIntervalSince(lastActivationRefresh) >= PollingConfig.activationCooldown {
+                lastActivationRefresh = now
+                Task { await appState.refreshConversations() }
+              }
               // Auto-start monitoring when returning to app if screen analysis is enabled
               // but monitoring is not running. Handles the case where the user granted
               // screen recording permission in System Settings and switched back.
