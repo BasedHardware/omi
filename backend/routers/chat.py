@@ -901,7 +901,7 @@ def rate_message(
 
     # Also store in analytics collection
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value)
+    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
 
     # Try to submit feedback to LangSmith
     try:

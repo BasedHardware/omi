@@ -1709,8 +1709,10 @@ interface ChatRatingsData {
 }
 
 function ChatRatingsChart({ token }: { token: string | null }) {
+  const [platform, setPlatform] = useState<"all" | "desktop" | "mobile">("all");
+
   const { data, isLoading } = useSWR<ChatRatingsData>(
-    token ? ["/api/omi/chat-lab/ratings", token] : null,
+    token ? [`/api/omi/chat-lab/ratings?platform=${platform}`, token] : null,
     authenticatedFetcher
   );
 
@@ -1735,7 +1737,24 @@ function ChatRatingsChart({ token }: { token: string | null }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Chat Response Ratings</span>
+          <div className="flex items-center gap-3">
+            <span>Chat Response Ratings</span>
+            <div className="flex rounded-md overflow-hidden border border-border text-xs font-medium">
+              {(["all", "desktop", "mobile"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPlatform(p)}
+                  className={`px-3 py-1 transition-colors ${
+                    platform === p
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {p === "all" ? "All" : p === "desktop" ? "Desktop" : "Mobile"}
+                </button>
+              ))}
+            </div>
+          </div>
           {stats.total > 0 && (
             <div className="flex items-center gap-4 text-sm font-normal">
               <span className="text-green-500">{stats.up} 👍</span>
