@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set active = "conversations" %}
+{% set s = conversation.structured or {} %}
+{% block title %}{{ s.title or 'Conversation' }} - Omi Manager{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+  <div class="mb-6">
+    <a href="/conversations" class="text-sm text-indigo-600 hover:underline">&larr; Back to conversations</a>
+  </div>
+
+  <!-- Header -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <div class="flex items-start gap-4">
+      <span class="text-4xl">{{ s.emoji or '' }}</span>
+      <div class="flex-1">
+        <h2 class="text-2xl font-bold mb-1">{{ s.title or 'Untitled' }}</h2>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-100 text-cyan-700">{{ s.category or '-' }}</span>
+          {% if conversation.source %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">{{ conversation.source }}</span>
+          {% endif %}
+          {% if conversation.language %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">{{ conversation.language }}</span>
+          {% endif %}
+        </div>
+        <p class="text-gray-600 text-sm leading-relaxed">{{ s.overview or '' }}</p>
+      </div>
+    </div>
+    <div class="flex gap-6 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400">
+      <span>ID: {{ conversation.id }}</span>
+      <span>Created: {{ (conversation.created_at or '')[:16] }}</span>
+      {% if conversation.started_at %}<span>Started: {{ (conversation.started_at or '')[:16] }}</span>{% endif %}
+      {% if conversation.finished_at %}<span>Finished: {{ (conversation.finished_at or '')[:16] }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Action Items -->
+  {% set action_items = s.action_items or [] %}
+  {% if action_items %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <h3 class="text-lg font-semibold mb-3">Action Items</h3>
+    <div class="space-y-2">
+      {% for ai in action_items %}
+      <div class="flex items-center gap-3 p-3 rounded-lg {{ 'bg-green-50' if ai.completed else 'bg-amber-50' }}">
+        <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0
+          {{ 'border-green-500 bg-green-500 text-white' if ai.completed else 'border-amber-400' }}">
+          {% if ai.completed %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
+        </span>
+        <span class="text-sm {{ 'line-through text-gray-400' if ai.completed else 'text-gray-700' }}">{{ ai.description }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Transcript -->
+  {% set segments = conversation.transcript_segments or [] %}
+  {% if segments %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <h3 class="text-lg font-semibold mb-3">Transcript</h3>
+    <div class="space-y-3 max-h-96 overflow-y-auto">
+      {% for seg in segments %}
+      <div class="flex gap-3">
+        <span class="flex-shrink-0 w-20 text-xs font-medium text-indigo-600 pt-0.5">
+          {{ seg.speaker_name or ('Speaker ' ~ (seg.speaker_id if seg.speaker_id is not none else '?')) }}
+        </span>
+        <p class="text-sm text-gray-700 flex-1">{{ seg.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Events -->
+  {% set events = s.events or [] %}
+  {% if events %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <h3 class="text-lg font-semibold mb-3">Events</h3>
+    <div class="space-y-2">
+      {% for ev in events %}
+      <div class="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+        <svg class="w-5 h-5 text-purple-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <div>
+          <span class="text-sm font-medium">{{ ev.title }}</span>
+          {% if ev.description %}<p class="text-xs text-gray-500">{{ ev.description }}</p>{% endif %}
+          <span class="text-xs text-gray-400">{{ ev.start }} ({{ ev.duration }}min)</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Delete -->
+  <div class="flex justify-end">
+    <form method="post" action="/conversations/{{ conversation.id }}/delete" onsubmit="return confirm('Delete this conversation permanently?')">
+      <button type="submit" class="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+        Delete Conversation
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
