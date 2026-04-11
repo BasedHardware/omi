@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% set active = "memories" %}
+{% block title %}Memories - Omi Manager{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold">Memories</h2>
+    <button onclick="document.getElementById('create-modal').classList.remove('hidden')"
+            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">
+      + New Memory
+    </button>
+  </div>
+
+  <!-- Search bar -->
+  <form method="get" class="flex gap-3 mb-6">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search memories..."
+           class="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+    <select name="category" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <option value="">All categories</option>
+      <option value="interesting" {{ 'selected' if category == 'interesting' }}>Interesting</option>
+      <option value="system" {{ 'selected' if category == 'system' }}>System</option>
+      <option value="manual" {{ 'selected' if category == 'manual' }}>Manual</option>
+    </select>
+    <button type="submit" class="bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition">Search</button>
+    {% if query or category %}
+    <a href="/memories" class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100 transition">Clear</a>
+    {% endif %}
+  </form>
+
+  <!-- Bulk action bar -->
+  <div id="bulk-bar" data-name="memory_ids" class="hidden bg-indigo-600 text-white px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+    <span><strong id="selected-count">0</strong> selected</span>
+    <div class="flex gap-2">
+      <button onclick="bulkAction('/api/memories/bulk-delete', 'memory_ids', 'Delete selected memories?')"
+              class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium transition">Delete Selected</button>
+    </div>
+  </div>
+
+  <!-- Results count -->
+  <p class="text-sm text-gray-500 mb-3">{{ memories|length }} memor{{ 'y' if memories|length == 1 else 'ies' }} found</p>
+
+  <!-- Table -->
+  {% if memories %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="w-10 px-4 py-3"><input type="checkbox" onchange="toggleSelectAll(this, 'memory_ids')" class="rounded"></th>
+          <th class="text-left px-4 py-3 font-medium text-gray-600">Content</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-600 w-28">Category</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-600 w-24">Visibility</th>
+          <th class="text-left px-4 py-3 font-medium text-gray-600 w-28">Created</th>
+          <th class="w-24 px-4 py-3 font-medium text-gray-600">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for m in memories %}
+        <tr class="hover:bg-gray-50 transition" id="row-{{ m.id }}">
+          <td class="px-4 py-3 checkbox-cell"><input type="checkbox" name="memory_ids" value="{{ m.id }}" class="rounded"></td>
+          <td class="px-4 py-3">
+            <div class="max-w-md">{{ m.content }}</div>
+            {% if m.tags %}<div class="mt-1">{% for tag in m.tags %}<span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full mr-1">{{ tag }}</span>{% endfor %}</div>{% endif %}
+          </td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">{{ m.category or '-' }}</span></td>
+          <td class="px-4 py-3 text-xs">{{ m.visibility or 'private' }}</td>
+          <td class="px-4 py-3 text-xs text-gray-400">{{ (m.created_at or '')[:10] }}</td>
+          <td class="px-4 py-3">
+            <div class="flex gap-1">
+              <button onclick="openEditMemory('{{ m.id }}', `{{ m.content|e }}`, '{{ m.visibility or 'private' }}', '{{ m.category or '' }}')"
+                      class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">Edit</button>
+              <form method="post" action="/memories/{{ m.id }}/delete" onsubmit="return confirm('Delete this memory?')" class="inline">
+                <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium ml-2">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+    <p class="text-gray-400">No memories found.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+    <h3 class="text-lg font-semibold mb-4">New Memory</h3>
+    <form method="post" action="/memories/create">
+      <textarea name="content" rows="3" required placeholder="What should I remember?"
+                class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3 focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Category</label>
+          <select name="category" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Auto-detect</option>
+            <option value="interesting">Interesting</option>
+            <option value="system">System</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Visibility</label>
+          <select name="visibility" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="private">Private</option>
+            <option value="public">Public</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Tags (comma separated)</label>
+        <input type="text" name="tags" placeholder="work, important" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="document.getElementById('create-modal').classList.add('hidden')"
+                class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100">Cancel</button>
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+    <h3 class="text-lg font-semibold mb-4">Edit Memory</h3>
+    <form method="post" id="edit-form">
+      <textarea name="content" id="edit-content" rows="3" required
+                class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm mb-3 focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Category</label>
+          <select name="category" id="edit-category" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Keep current</option>
+            <option value="interesting">Interesting</option>
+            <option value="system">System</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Visibility</label>
+          <select name="visibility" id="edit-visibility" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="private">Private</option>
+            <option value="public">Public</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="document.getElementById('edit-modal').classList.add('hidden')"
+                class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100">Cancel</button>
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEditMemory(id, content, visibility, category) {
+  document.getElementById('edit-form').action = '/memories/' + id + '/edit';
+  document.getElementById('edit-content').value = content;
+  document.getElementById('edit-visibility').value = visibility;
+  document.getElementById('edit-category').value = category;
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+</script>
+{% endblock %}
