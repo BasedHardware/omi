@@ -20,6 +20,7 @@ import {
   Bell,
   BarChart3,
   ShieldAlert,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,11 @@ export function DashboardSidebar() {
       title: "Analytics",
       href: "/dashboard/analytics",
       icon: BarChart3,
+    },
+    {
+      title: "Chat Lab",
+      href: "/dashboard/chat-lab",
+      icon: FlaskConical,
     },
     {
       title: "Distributors",
