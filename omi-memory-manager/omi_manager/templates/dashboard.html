@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% set active = "dashboard" %}
+{% block title %}Dashboard - Omi Manager{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl">
+  <h2 class="text-2xl font-bold mb-6">Dashboard</h2>
+
+  {% if errors %}
+  <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+    <p class="font-medium">Connection errors:</p>
+    {% for k, v in errors.items() %}
+    <p class="text-sm mt-1">{{ k }}: {{ v }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Memories</h3>
+        <span class="text-2xl font-bold text-indigo-600">{{ memories|length }}</span>
+      </div>
+      <a href="/memories" class="text-indigo-600 text-sm hover:underline">View all &rarr;</a>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Pending Tasks</h3>
+        <span class="text-2xl font-bold text-amber-600">{{ tasks|length }}</span>
+      </div>
+      <a href="/tasks" class="text-indigo-600 text-sm hover:underline">View all &rarr;</a>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Conversations</h3>
+        <span class="text-2xl font-bold text-green-600">{{ conversations|length }}</span>
+      </div>
+      <a href="/conversations" class="text-indigo-600 text-sm hover:underline">View all &rarr;</a>
+    </div>
+  </div>
+
+  <!-- Recent Memories -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Recent Memories</h3>
+      <a href="/memories" class="text-sm text-indigo-600 hover:underline">See all</a>
+    </div>
+    {% if memories %}
+    <div class="space-y-3">
+      {% for m in memories %}
+      <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700 mt-0.5">{{ m.category or 'other' }}</span>
+        <p class="text-sm text-gray-700 flex-1">{{ m.content }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-400 text-sm">No memories yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Pending Tasks -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Pending Tasks</h3>
+      <a href="/tasks" class="text-sm text-indigo-600 hover:underline">See all</a>
+    </div>
+    {% if tasks %}
+    <div class="space-y-2">
+      {% for t in tasks %}
+      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+        <span class="w-2 h-2 rounded-full {{ 'bg-green-400' if t.completed else 'bg-amber-400' }}"></span>
+        <p class="text-sm text-gray-700 flex-1">{{ t.description }}</p>
+        {% if t.due_at %}
+        <span class="text-xs text-gray-400">Due: {{ t.due_at[:10] }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-400 text-sm">No pending tasks.</p>
+    {% endif %}
+  </div>
+
+  <!-- Recent Conversations -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Recent Conversations</h3>
+      <a href="/conversations" class="text-sm text-indigo-600 hover:underline">See all</a>
+    </div>
+    {% if conversations %}
+    <div class="space-y-3">
+      {% for c in conversations %}
+      {% set s = c.structured or {} %}
+      <a href="/conversations/{{ c.id }}" class="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-lg">{{ s.emoji or '' }}</span>
+          <span class="font-medium text-sm">{{ s.title or 'Untitled' }}</span>
+          <span class="text-xs text-gray-400 ml-auto">{{ (c.created_at or '')[:10] }}</span>
+        </div>
+        <p class="text-xs text-gray-500 line-clamp-2">{{ (s.overview or '')[:120] }}</p>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-400 text-sm">No conversations yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
