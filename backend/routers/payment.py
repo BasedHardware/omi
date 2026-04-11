@@ -217,33 +217,32 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         for definition in get_paid_plan_definitions():
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
-            if not monthly_price_id or not annual_price_id:
-                continue
-
-            monthly_price = stripe.Price.retrieve(monthly_price_id)
-            annual_price = stripe.Price.retrieve(annual_price_id)
-            pricing_options.append(
-                PricingOption(
-                    id=monthly_price.id,
-                    title=f'{definition["title"]} Monthly',
-                    price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                    description=None,
-                    interval=monthly_price.recurring.interval,
-                    unit_amount=monthly_price.unit_amount,
-                    is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+            if monthly_price_id:
+                monthly_price = stripe.Price.retrieve(monthly_price_id)
+                pricing_options.append(
+                    PricingOption(
+                        id=monthly_price.id,
+                        title=f'{definition["title"]} Monthly',
+                        price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                        description=None,
+                        interval=monthly_price.recurring.interval,
+                        unit_amount=monthly_price.unit_amount,
+                        is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                    )
                 )
-            )
-            pricing_options.append(
-                PricingOption(
-                    id=annual_price.id,
-                    title=f'{definition["title"]} Annual',
-                    price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                    description=definition["annual_description"],
-                    interval=annual_price.recurring.interval,
-                    unit_amount=annual_price.unit_amount,
-                    is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+            if annual_price_id:
+                annual_price = stripe.Price.retrieve(annual_price_id)
+                pricing_options.append(
+                    PricingOption(
+                        id=annual_price.id,
+                        title=f'{definition["title"]} Annual',
+                        price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                        description=definition["annual_description"],
+                        interval=annual_price.recurring.interval,
+                        unit_amount=annual_price.unit_amount,
+                        is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                    )
                 )
-            )
 
         if not pricing_options:
             raise HTTPException(status_code=500, detail="Price configuration not found")

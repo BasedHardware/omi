@@ -272,7 +272,7 @@ env:
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
   - name: STRIPE_PRO_MONTHLY_PRICE_ID
-    value: ""
+    value: "price_1TAfBB1F8wnoWYvw8XBFM1dX"
   - name: STRIPE_PRO_ANNUAL_PRICE_ID
     value: ""
   - name: SUBSCRIPTION_LAUNCH_DATE
