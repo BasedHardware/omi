@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed floating bar close button requiring multiple clicks by enlarging the hit area"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.291",
+      "date": "2026-04-11",
+      "changes": [
+        "Fixed floating bar close button requiring multiple clicks by enlarging the hit area"
+      ]
+    },
     {
       "version": "0.11.289",
       "date": "2026-04-11",
