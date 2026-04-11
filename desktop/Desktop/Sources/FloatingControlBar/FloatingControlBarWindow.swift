@@ -1015,8 +1015,8 @@ class FloatingControlBarManager {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func showNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
-        let notification = FloatingBarNotification(title: title, message: message, assistantId: assistantId)
+    func showNotification(title: String, message: String, assistantId: String, sound: NotificationSound, screenshotData: Data? = nil) {
+        let notification = FloatingBarNotification(title: title, message: message, assistantId: assistantId, screenshotData: screenshotData)
         guard let window else {
             log("FloatingControlBarManager: dropping notification because window is not set up")
             return
@@ -1281,7 +1281,22 @@ class FloatingControlBarManager {
 
         let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageText = bodyText.isEmpty ? notification.title : bodyText
-        guard let message = provider.appendAssistantMessage(messageText) else { return }
+
+        let notificationContext = """
+<proactive_notification_context>
+The following message was a proactive notification you sent to the user based on their screen activity.
+The user did NOT ask for this — you observed their screen and proactively sent this tip/insight.
+If the user asks about it, answer as if you wrote it and explain the reasoning behind it.
+
+Your proactive message: \(messageText)
+Source: \(notification.assistantId) assistant
+</proactive_notification_context>
+"""
+        guard let message = provider.appendAssistantMessage(
+            messageText,
+            notificationContext: notificationContext,
+            notificationScreenshot: notification.screenshotData
+        ) else { return }
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
             message: message,

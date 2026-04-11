@@ -194,6 +194,7 @@ actor InsightAssistant: ProactiveAssistant {
         _ adviceResult: InsightExtractionResult,
         screenshotId: Int64?,
         windowTitle: String? = nil,
+        screenshotData: Data? = nil,
         sendEvent: @escaping (String, [String: Any]) -> Void
     ) async {
         // Check if AI has new insight (should almost always be true now - only false for duplicates)
@@ -255,7 +256,7 @@ actor InsightAssistant: ProactiveAssistant {
             InsightAssistantSettings.shared.notificationsEnabled
         }
         if notificationsEnabled {
-            await sendInsightNotification(insight: extractedInsight)
+            await sendInsightNotification(insight: extractedInsight, screenshotData: screenshotData)
         }
 
         // Send event to Flutter
@@ -344,14 +345,15 @@ actor InsightAssistant: ProactiveAssistant {
     }
 
     /// Send a notification for the insight (uses short headline for notification body)
-    private func sendInsightNotification(insight: ExtractedInsight) async {
+    private func sendInsightNotification(insight: ExtractedInsight, screenshotData: Data? = nil) async {
         let message = insight.headline ?? insight.insight
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
                 title: "Insight",
                 message: message,
-                assistantId: identifier
+                assistantId: identifier,
+                screenshotData: screenshotData
             )
         }
     }
@@ -444,7 +446,7 @@ actor InsightAssistant: ProactiveAssistant {
             }
 
             // Handle the result with screenshot ID for SQLite storage
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle) { type, data in
+            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle, screenshotData: frame.jpegData) { type, data in
                 Task { @MainActor in
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }
