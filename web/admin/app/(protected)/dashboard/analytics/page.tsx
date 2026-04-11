@@ -1709,7 +1709,7 @@ interface ChatRatingsData {
 }
 
 function ChatRatingsChart({ token }: { token: string | null }) {
-  const [platform, setPlatform] = useState<"all" | "desktop" | "mobile">("all");
+  const [platform, setPlatform] = useState<"all" | "desktop" | "mobile">("desktop");
 
   const { data, isLoading } = useSWR<ChatRatingsData>(
     token ? [`/api/omi/chat-lab/ratings?platform=${platform}`, token] : null,
