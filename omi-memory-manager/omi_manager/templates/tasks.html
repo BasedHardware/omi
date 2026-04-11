@@ -3,49 +3,103 @@
 {% block title %}Tasks - Omi Manager{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-2xl font-bold">Tasks</h2>
-    <button onclick="document.getElementById('create-modal').classList.remove('hidden')"
-            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">
-      + New Task
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl lg:text-2xl font-bold">Tasks</h2>
+    <button onclick="openModal('create-modal')"
+            class="bg-indigo-600 text-white px-3 lg:px-4 py-2 rounded-lg text-xs lg:text-sm font-medium active:bg-indigo-700">
+      + New
     </button>
   </div>
 
   <!-- Search + Filter -->
-  <form method="get" class="flex gap-3 mb-6">
+  <form method="get" class="flex flex-col sm:flex-row gap-2 mb-4">
     <input type="text" name="q" value="{{ query }}" placeholder="Search tasks..."
-           class="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-    <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-      <option value="all" {{ 'selected' if status == 'all' }}>All</option>
-      <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
-      <option value="done" {{ 'selected' if status == 'done' }}>Completed</option>
-    </select>
-    <button type="submit" class="bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition">Search</button>
-    {% if query or status != 'all' %}
-    <a href="/tasks" class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100 transition">Clear</a>
-    {% endif %}
+           class="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+    <div class="flex gap-2">
+      <select name="status" class="flex-1 sm:flex-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
+        <option value="all" {{ 'selected' if status == 'all' }}>All</option>
+        <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
+        <option value="done" {{ 'selected' if status == 'done' }}>Done</option>
+      </select>
+      <button type="submit" class="bg-gray-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium active:bg-gray-900">Search</button>
+      {% if query or status != 'all' %}
+      <a href="/tasks" class="px-3 py-2.5 rounded-lg text-sm border border-gray-300 active:bg-gray-100 flex items-center">Clear</a>
+      {% endif %}
+    </div>
   </form>
 
   <!-- Bulk bar -->
-  <div id="bulk-bar" data-name="task_ids" class="hidden bg-indigo-600 text-white px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
-    <span><strong id="selected-count">0</strong> selected</span>
+  <div id="bulk-bar" data-name="task_ids" class="hidden sticky top-0 z-20 bg-indigo-600 text-white px-4 py-3 rounded-lg mb-3 flex items-center justify-between">
+    <span class="text-sm"><strong id="selected-count">0</strong> selected</span>
     <div class="flex gap-2">
-      <button onclick="bulkAction('/api/tasks/bulk-complete', 'task_ids', 'Complete selected tasks?')"
-              class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm font-medium transition">Complete Selected</button>
-      <button onclick="bulkAction('/api/tasks/bulk-delete', 'task_ids', 'Delete selected tasks?')"
-              class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium transition">Delete Selected</button>
+      <button onclick="bulkAction('/api/tasks/bulk-complete', 'task_ids', 'Complete selected?')"
+              class="bg-green-500 active:bg-green-600 text-white px-3 py-1.5 rounded text-xs font-medium">Complete</button>
+      <button onclick="bulkAction('/api/tasks/bulk-delete', 'task_ids', 'Delete selected?')"
+              class="bg-red-500 active:bg-red-600 text-white px-3 py-1.5 rounded text-xs font-medium">Delete</button>
     </div>
   </div>
 
-  <p class="text-sm text-gray-500 mb-3">{{ tasks|length }} task{{ 's' if tasks|length != 1 }} found</p>
+  <p class="text-xs text-gray-500 mb-3">{{ tasks|length }} task{{ 's' if tasks|length != 1 }}</p>
 
   {% if tasks %}
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <label class="flex items-center gap-2 mb-3 text-xs text-gray-500 cursor-pointer">
+    <input type="checkbox" onchange="toggleSelectAll(this, 'task_ids')" class="rounded">
+    Select all
+  </label>
+  {% endif %}
+
+  {% if tasks %}
+
+  <!-- Mobile: Cards -->
+  <div class="lg:hidden space-y-2">
+    {% for t in tasks %}
+    <div class="bg-white rounded-xl border border-gray-200 p-4 {{ 'opacity-60' if t.completed }}">
+      <div class="flex items-start gap-3">
+        <input type="checkbox" name="task_ids" value="{{ t.id }}" class="rounded mt-1 shrink-0">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start gap-2 mb-2">
+            <!-- Toggle button -->
+            <form method="post" action="/tasks/{{ t.id }}/toggle" class="shrink-0">
+              <input type="hidden" name="completed" value="{{ 'false' if t.completed else 'true' }}">
+              <button type="submit" class="w-6 h-6 rounded-full border-2 flex items-center justify-center
+                {{ 'border-green-500 bg-green-500 text-white' if t.completed else 'border-gray-300' }}">
+                {% if t.completed %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
+              </button>
+            </form>
+            <p class="text-sm {{ 'line-through text-gray-400' if t.completed else 'text-gray-800' }}">{{ t.description }}</p>
+          </div>
+          <div class="flex items-center justify-between pl-8">
+            <div class="flex items-center gap-2">
+              {% if t.completed %}
+              <span class="px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-100 text-green-700">Done</span>
+              {% else %}
+              <span class="px-2 py-0.5 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700">Pending</span>
+              {% endif %}
+              {% if t.due_at %}
+              <span class="text-[10px] text-gray-400">Due: {{ (t.due_at or '')[:10] }}</span>
+              {% endif %}
+            </div>
+            <div class="flex gap-3">
+              <button onclick="openEditTask('{{ t.id }}', `{{ t.description|e }}`, '{{ (t.due_at or '')[:16] }}')"
+                      class="text-indigo-600 text-xs font-medium">Edit</button>
+              <form method="post" action="/tasks/{{ t.id }}/delete" onsubmit="return confirm('Delete?')" class="inline">
+                <button type="submit" class="text-red-500 text-xs font-medium">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Desktop: Table -->
+  <div class="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
     <table class="w-full text-sm">
       <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
-          <th class="w-10 px-4 py-3"><input type="checkbox" onchange="toggleSelectAll(this, 'task_ids')" class="rounded"></th>
+          <th class="w-10 px-4 py-3"></th>
           <th class="w-10 px-4 py-3"></th>
           <th class="text-left px-4 py-3 font-medium text-gray-600">Description</th>
           <th class="text-left px-4 py-3 font-medium text-gray-600 w-24">Status</th>
@@ -57,7 +111,7 @@
       <tbody class="divide-y divide-gray-100">
         {% for t in tasks %}
         <tr class="hover:bg-gray-50 transition {{ 'opacity-60' if t.completed }}">
-          <td class="px-4 py-3 checkbox-cell"><input type="checkbox" name="task_ids" value="{{ t.id }}" class="rounded"></td>
+          <td class="px-4 py-3"><input type="checkbox" name="task_ids" value="{{ t.id }}" class="rounded"></td>
           <td class="px-4 py-3">
             <form method="post" action="/tasks/{{ t.id }}/toggle">
               <input type="hidden" name="completed" value="{{ 'false' if t.completed else 'true' }}">
@@ -70,9 +124,9 @@
           <td class="px-4 py-3 {{ 'line-through text-gray-400' if t.completed }}">{{ t.description }}</td>
           <td class="px-4 py-3">
             {% if t.completed %}
-            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Done</span>
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Done</span>
             {% else %}
-            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Pending</span>
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Pending</span>
             {% endif %}
           </td>
           <td class="px-4 py-3 text-xs text-gray-500">{{ (t.due_at or '')[:10] or '-' }}</td>
@@ -81,7 +135,7 @@
             <div class="flex gap-1">
               <button onclick="openEditTask('{{ t.id }}', `{{ t.description|e }}`, '{{ (t.due_at or '')[:16] }}')"
                       class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">Edit</button>
-              <form method="post" action="/tasks/{{ t.id }}/delete" onsubmit="return confirm('Delete this task?')" class="inline">
+              <form method="post" action="/tasks/{{ t.id }}/delete" onsubmit="return confirm('Delete?')" class="inline">
                 <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium ml-2">Delete</button>
               </form>
             </div>
@@ -91,57 +145,60 @@
       </tbody>
     </table>
   </div>
+
   {% else %}
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-    <p class="text-gray-400">No tasks found.</p>
+  <div class="bg-white rounded-xl border border-gray-200 p-12 text-center">
+    <p class="text-gray-400 text-sm">No tasks found.</p>
   </div>
   {% endif %}
 </div>
 
 <!-- Create Modal -->
-<div id="create-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
-    <h3 class="text-lg font-semibold mb-4">New Task</h3>
+<div id="create-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end lg:items-center justify-center">
+  <div class="bg-white w-full lg:max-w-lg lg:mx-4 rounded-t-2xl lg:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">New Task</h3>
+      <button onclick="closeModal('create-modal')" class="text-gray-400 p-1">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <form method="post" action="/tasks/create">
       <div class="mb-3">
         <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
         <input type="text" name="description" required placeholder="What needs to be done?"
-               class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
       </div>
       <div class="mb-4">
         <label class="block text-xs font-medium text-gray-600 mb-1">Due date (optional)</label>
         <input type="datetime-local" name="due_at"
-               class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
       </div>
-      <div class="flex justify-end gap-3">
-        <button type="button" onclick="document.getElementById('create-modal').classList.add('hidden')"
-                class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100">Cancel</button>
-        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Create</button>
-      </div>
+      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg text-sm font-medium active:bg-indigo-700">Create Task</button>
     </form>
   </div>
 </div>
 
 <!-- Edit Modal -->
-<div id="edit-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
-    <h3 class="text-lg font-semibold mb-4">Edit Task</h3>
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end lg:items-center justify-center">
+  <div class="bg-white w-full lg:max-w-lg lg:mx-4 rounded-t-2xl lg:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Edit Task</h3>
+      <button onclick="closeModal('edit-modal')" class="text-gray-400 p-1">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <form method="post" id="edit-form">
       <div class="mb-3">
         <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
         <input type="text" name="description" id="edit-description" required
-               class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
       </div>
       <div class="mb-4">
         <label class="block text-xs font-medium text-gray-600 mb-1">Due date</label>
         <input type="datetime-local" name="due_at" id="edit-due"
-               class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
       </div>
-      <div class="flex justify-end gap-3">
-        <button type="button" onclick="document.getElementById('edit-modal').classList.add('hidden')"
-                class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100">Cancel</button>
-        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Save</button>
-      </div>
+      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg text-sm font-medium active:bg-indigo-700">Save Changes</button>
     </form>
   </div>
 </div>
@@ -153,7 +210,7 @@ function openEditTask(id, description, due) {
   document.getElementById('edit-form').action = '/tasks/' + id + '/edit';
   document.getElementById('edit-description').value = description;
   document.getElementById('edit-due').value = due;
-  document.getElementById('edit-modal').classList.remove('hidden');
+  openModal('edit-modal');
 }
 </script>
 {% endblock %}
