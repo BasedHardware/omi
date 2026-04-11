@@ -285,5 +285,22 @@ def dashboard(limit):
     show_conversations_table(client.list_conversations(limit=limit))
 
 
+# ══════════════════════════════════════════════════════════
+#  WEB SERVER
+# ══════════════════════════════════════════════════════════
+
+
+@main.command()
+@click.option("--host", "-h", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", "-p", default=5050, help="Port to bind to")
+@click.option("--debug", is_flag=True, help="Enable debug mode")
+def web(host, port, debug):
+    """Launch the web interface in your browser."""
+    from omi_manager.web import run_web
+
+    console.print(f"[bold green]Starting Omi Manager web UI at http://{host}:{port}[/bold green]")
+    run_web(host=host, port=port, debug=debug)
+
+
 if __name__ == "__main__":
     main()
