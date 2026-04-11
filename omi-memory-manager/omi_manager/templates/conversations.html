@@ -3,42 +3,82 @@
 {% block title %}Conversations - Omi Manager{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-2xl font-bold">Conversations</h2>
-    <button onclick="document.getElementById('create-modal').classList.remove('hidden')"
-            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">
-      + New Conversation
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl lg:text-2xl font-bold">Conversations</h2>
+    <button onclick="openModal('create-modal')"
+            class="bg-indigo-600 text-white px-3 lg:px-4 py-2 rounded-lg text-xs lg:text-sm font-medium active:bg-indigo-700">
+      + New
     </button>
   </div>
 
   <!-- Search -->
-  <form method="get" class="flex gap-3 mb-6">
+  <form method="get" class="flex gap-2 mb-4">
     <input type="text" name="q" value="{{ query }}" placeholder="Search conversations..."
-           class="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-    <button type="submit" class="bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition">Search</button>
+           class="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+    <button type="submit" class="bg-gray-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium active:bg-gray-900">Search</button>
     {% if query %}
-    <a href="/conversations" class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100 transition">Clear</a>
+    <a href="/conversations" class="px-3 py-2.5 rounded-lg text-sm border border-gray-300 active:bg-gray-100 flex items-center">Clear</a>
     {% endif %}
   </form>
 
   <!-- Bulk bar -->
-  <div id="bulk-bar" data-name="conv_ids" class="hidden bg-indigo-600 text-white px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
-    <span><strong id="selected-count">0</strong> selected</span>
-    <div class="flex gap-2">
-      <button onclick="bulkAction('/api/conversations/bulk-delete', 'conv_ids', 'Delete selected conversations?')"
-              class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm font-medium transition">Delete Selected</button>
-    </div>
+  <div id="bulk-bar" data-name="conv_ids" class="hidden sticky top-0 z-20 bg-indigo-600 text-white px-4 py-3 rounded-lg mb-3 flex items-center justify-between">
+    <span class="text-sm"><strong id="selected-count">0</strong> selected</span>
+    <button onclick="bulkAction('/api/conversations/bulk-delete', 'conv_ids', 'Delete selected conversations?')"
+            class="bg-red-500 active:bg-red-600 text-white px-3 py-1.5 rounded text-xs font-medium">Delete</button>
   </div>
 
-  <p class="text-sm text-gray-500 mb-3">{{ conversations|length }} conversation{{ 's' if conversations|length != 1 }} found</p>
+  <p class="text-xs text-gray-500 mb-3">{{ conversations|length }} conversation{{ 's' if conversations|length != 1 }}</p>
 
   {% if conversations %}
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <label class="flex items-center gap-2 mb-3 text-xs text-gray-500 cursor-pointer">
+    <input type="checkbox" onchange="toggleSelectAll(this, 'conv_ids')" class="rounded">
+    Select all
+  </label>
+  {% endif %}
+
+  {% if conversations %}
+
+  <!-- Mobile: Cards -->
+  <div class="lg:hidden space-y-2">
+    {% for c in conversations %}
+    {% set s = c.structured or {} %}
+    <div class="bg-white rounded-xl border border-gray-200 p-4 active:bg-gray-50">
+      <div class="flex items-start gap-3">
+        <input type="checkbox" name="conv_ids" value="{{ c.id }}" class="rounded mt-1 shrink-0">
+        <div class="flex-1 min-w-0">
+          <a href="/conversations/{{ c.id }}" class="block">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-base">{{ s.emoji or '' }}</span>
+              <span class="font-medium text-sm text-gray-800 flex-1 line-clamp-1">{{ s.title or 'Untitled' }}</span>
+            </div>
+            <p class="text-xs text-gray-500 line-clamp-2 mb-2 pl-7">{{ (s.overview or '')[:120] }}</p>
+          </a>
+          <div class="flex items-center justify-between pl-7">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 text-[10px] font-medium rounded-full bg-cyan-100 text-cyan-700">{{ s.category or '-' }}</span>
+              <span class="text-[10px] text-gray-400">{{ (c.created_at or '')[:10] }}</span>
+            </div>
+            <div class="flex gap-3">
+              <a href="/conversations/{{ c.id }}" class="text-indigo-600 text-xs font-medium">View</a>
+              <form method="post" action="/conversations/{{ c.id }}/delete" onsubmit="return confirm('Delete?')" class="inline">
+                <button type="submit" class="text-red-500 text-xs font-medium">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Desktop: Table -->
+  <div class="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
     <table class="w-full text-sm">
       <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
-          <th class="w-10 px-4 py-3"><input type="checkbox" onchange="toggleSelectAll(this, 'conv_ids')" class="rounded"></th>
+          <th class="w-10 px-4 py-3"></th>
           <th class="w-10 px-4 py-3"></th>
           <th class="text-left px-4 py-3 font-medium text-gray-600">Title</th>
           <th class="text-left px-4 py-3 font-medium text-gray-600 w-28">Category</th>
@@ -51,18 +91,18 @@
         {% for c in conversations %}
         {% set s = c.structured or {} %}
         <tr class="hover:bg-gray-50 transition">
-          <td class="px-4 py-3 checkbox-cell"><input type="checkbox" name="conv_ids" value="{{ c.id }}" class="rounded"></td>
+          <td class="px-4 py-3"><input type="checkbox" name="conv_ids" value="{{ c.id }}" class="rounded"></td>
           <td class="px-4 py-3 text-lg">{{ s.emoji or '' }}</td>
           <td class="px-4 py-3 font-medium">
             <a href="/conversations/{{ c.id }}" class="text-indigo-600 hover:underline">{{ s.title or 'Untitled' }}</a>
           </td>
-          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-100 text-cyan-700">{{ s.category or '-' }}</span></td>
+          <td class="px-4 py-3"><span class="px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-100 text-cyan-700">{{ s.category or '-' }}</span></td>
           <td class="px-4 py-3 text-gray-500 max-w-xs truncate">{{ (s.overview or '')[:100] }}</td>
           <td class="px-4 py-3 text-xs text-gray-400">{{ (c.created_at or '')[:10] }}</td>
           <td class="px-4 py-3">
             <div class="flex gap-1">
               <a href="/conversations/{{ c.id }}" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">View</a>
-              <form method="post" action="/conversations/{{ c.id }}/delete" onsubmit="return confirm('Delete this conversation?')" class="inline">
+              <form method="post" action="/conversations/{{ c.id }}/delete" onsubmit="return confirm('Delete?')" class="inline">
                 <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium ml-2">Delete</button>
               </form>
             </div>
@@ -72,26 +112,32 @@
       </tbody>
     </table>
   </div>
+
   {% else %}
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-    <p class="text-gray-400">No conversations found.</p>
+  <div class="bg-white rounded-xl border border-gray-200 p-12 text-center">
+    <p class="text-gray-400 text-sm">No conversations found.</p>
   </div>
   {% endif %}
 </div>
 
 <!-- Create Modal -->
-<div id="create-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
-    <h3 class="text-lg font-semibold mb-4">New Conversation</h3>
+<div id="create-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end lg:items-center justify-center">
+  <div class="bg-white w-full lg:max-w-lg lg:mx-4 rounded-t-2xl lg:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">New Conversation</h3>
+      <button onclick="closeModal('create-modal')" class="text-gray-400 p-1">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <form method="post" action="/conversations/create">
       <div class="mb-3">
         <label class="block text-xs font-medium text-gray-600 mb-1">Text / Transcript</label>
         <textarea name="text" rows="5" required placeholder="Paste conversation text here..."
-                  class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
       </div>
       <div class="mb-4">
         <label class="block text-xs font-medium text-gray-600 mb-1">Language</label>
-        <select name="language" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <select name="language" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
           <option value="en">English</option>
           <option value="pt">Portuguese</option>
           <option value="es">Spanish</option>
@@ -103,11 +149,7 @@
           <option value="zh">Chinese</option>
         </select>
       </div>
-      <div class="flex justify-end gap-3">
-        <button type="button" onclick="document.getElementById('create-modal').classList.add('hidden')"
-                class="px-4 py-2 rounded-lg text-sm border border-gray-300 hover:bg-gray-100">Cancel</button>
-        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Create</button>
-      </div>
+      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg text-sm font-medium active:bg-indigo-700">Create Conversation</button>
     </form>
   </div>
 </div>
