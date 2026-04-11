@@ -2,25 +2,34 @@
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>{% block title %}Omi Manager{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { spacing: { '18': '4.5rem' } } }
+    }
+  </script>
   <style>
     [x-cloak] { display: none !important; }
-    .checkbox-cell input:checked + label { background: #6366f1; border-color: #6366f1; }
-    .checkbox-cell label { transition: all 0.15s; }
     .toast { animation: slideIn 0.3s ease, fadeOut 0.5s ease 2.5s forwards; }
     @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    /* Prevent body scroll when modal open */
+    body.modal-open { overflow: hidden; }
+    /* Safe area for notch devices */
+    @supports(padding: max(0px)) {
+      .bottom-nav { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+      .main-content-mobile { padding-bottom: max(5rem, calc(4.5rem + env(safe-area-inset-bottom))); }
+    }
   </style>
 </head>
 <body class="h-full bg-gray-50 text-gray-900">
 
-  <!-- Sidebar + Content -->
   <div class="flex h-full">
 
-    <!-- Sidebar -->
-    <nav class="w-56 bg-white border-r border-gray-200 flex flex-col fixed h-full">
+    <!-- Desktop Sidebar (hidden on mobile) -->
+    <nav class="hidden lg:flex w-56 bg-white border-r border-gray-200 flex-col fixed h-full z-30">
       <div class="p-5 border-b border-gray-100">
         <h1 class="text-xl font-bold text-indigo-600">Omi Manager</h1>
       </div>
@@ -53,13 +62,35 @@
     </nav>
 
     <!-- Main content -->
-    <main class="flex-1 ml-56 p-8 overflow-y-auto">
+    <main class="flex-1 lg:ml-56 p-4 lg:p-8 overflow-y-auto main-content-mobile pb-20 lg:pb-8">
       {% block content %}{% endblock %}
     </main>
   </div>
 
+  <!-- Mobile Bottom Nav (hidden on desktop) -->
+  <nav class="bottom-nav lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
+    <div class="flex items-center justify-around py-2">
+      <a href="/" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg {{ 'text-indigo-600' if active == 'dashboard' else 'text-gray-400' }}">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+        <span class="text-[10px] font-medium">Home</span>
+      </a>
+      <a href="/memories" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg {{ 'text-indigo-600' if active == 'memories' else 'text-gray-400' }}">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        <span class="text-[10px] font-medium">Memories</span>
+      </a>
+      <a href="/tasks" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg {{ 'text-indigo-600' if active == 'tasks' else 'text-gray-400' }}">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span class="text-[10px] font-medium">Tasks</span>
+      </a>
+      <a href="/conversations" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg {{ 'text-indigo-600' if active == 'conversations' else 'text-gray-400' }}">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        <span class="text-[10px] font-medium">Chats</span>
+      </a>
+    </div>
+  </nav>
+
   <!-- Toast container -->
-  <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+  <div id="toast-container" class="fixed top-4 left-4 right-4 lg:left-auto lg:right-4 lg:w-80 z-50 space-y-2"></div>
 
   <script>
     function showToast(message, type = 'success') {
@@ -72,7 +103,6 @@
       setTimeout(() => div.remove(), 3000);
     }
 
-    // Select all / none
     function toggleSelectAll(source, name) {
       const checkboxes = document.querySelectorAll(`input[name="${name}"]`);
       checkboxes.forEach(cb => cb.checked = source.checked);
@@ -115,7 +145,15 @@
       }
     }
 
-    // Attach checkbox listeners
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+      document.body.classList.remove('modal-open');
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('input[type="checkbox"][name]').forEach(cb => {
         cb.addEventListener('change', updateBulkBar);
