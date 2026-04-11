@@ -359,8 +359,12 @@ struct ChatMessage: Identifiable {
     var contentBlocks: [ChatContentBlock]
     /// Metadata about context used to generate this response (AI messages only)
     var metadata: MessageMetadata?
+    /// Context text for proactive notification messages (not shown to user, sent to Claude)
+    var notificationContext: String?
+    /// Screenshot JPEG data captured when a proactive notification was generated
+    var notificationScreenshot: Data?
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -371,6 +375,8 @@ struct ChatMessage: Identifiable {
         self.citations = citations
         self.contentBlocks = contentBlocks
         self.metadata = metadata
+        self.notificationContext = notificationContext
+        self.notificationScreenshot = notificationScreenshot
     }
 }
 
@@ -1978,11 +1984,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
     @discardableResult
-    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+    func appendAssistantMessage(_ text: String, notificationContext: String? = nil, notificationScreenshot: Data? = nil) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
 
-        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai, notificationContext: notificationContext, notificationScreenshot: notificationScreenshot)
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -2154,6 +2160,22 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 systemPrompt += "\n\n" + suffix
             }
 
+            // Auto-inject notification context: if the most recent AI message before
+            // the user's new message is a proactive notification, tell Claude about it
+            // so it can answer follow-up questions about the notification.
+            var effectiveImageData = imageData
+            if systemPromptSuffix == nil {
+                // Find the last AI message before the user's current message
+                let aiMessages = messages.filter { $0.sender == .ai && !$0.isStreaming }
+                if let lastAI = aiMessages.last, let ctx = lastAI.notificationContext {
+                    systemPrompt += "\n\n" + ctx
+                    // Attach the notification screenshot if no other image is provided
+                    if effectiveImageData == nil, let screenshotData = lastAI.notificationScreenshot {
+                        effectiveImageData = screenshotData
+                    }
+                }
+            }
+
             // Query the active bridge with streaming
             // Callbacks for ACP bridge
             let textDeltaHandler: ACPBridge.TextDeltaHandler = { [weak self] delta in
@@ -2237,7 +2259,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
                 resume: resume,
-                imageData: imageData,
+                imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
