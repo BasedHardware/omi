@@ -200,12 +200,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
     }
 
-    func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {
+    func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default, screenshotData: Data? = nil) {
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
             assistantId: assistantId,
-            sound: sound
+            sound: sound,
+            screenshotData: screenshotData
         )
 
         // Keep the floating-bar preview, but still deliver the real macOS
