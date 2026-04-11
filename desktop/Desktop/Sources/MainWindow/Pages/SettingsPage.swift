@@ -6179,6 +6179,7 @@ struct SettingsContentView: View {
         let availablePlans = try? await APIClient.shared.getAvailablePlans()
         await MainActor.run {
           userSubscription = subscription
+          subscriptionError = nil
           fallbackPlanCatalog = availablePlans.map { planCatalog(from: $0.plans) } ?? []
           if let selectedPlanIdForCheckout,
             subscription.subscription.plan.rawValue == selectedPlanIdForCheckout
@@ -6349,11 +6350,27 @@ struct SettingsContentView: View {
   private func completeLocalTestSubscriptionIfNeeded() async {
     guard let expectedPriceId = pendingSubscriptionPriceId else { return }
     let checkoutSessionId = pendingCheckoutSessionId
-    let baseURL = await APIClient.shared.rustBackendURL
-    guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/")
-    else {
+    let pythonBaseURL = await APIClient.shared.baseURL
+    let rustBaseURL = await APIClient.shared.rustBackendURL
+
+    if let checkoutSessionId, isLocalURL(pythonBaseURL) {
+      guard
+        let encodedSessionId = checkoutSessionId.addingPercentEncoding(
+          withAllowedCharacters: .urlQueryAllowed),
+        let url = URL(string: "\(pythonBaseURL)v1/payments/success?session_id=\(encodedSessionId)")
+      else {
+        return
+      }
+
+      do {
+        _ = try await URLSession.shared.data(from: url)
+      } catch {
+        logError("Failed to complete local python test subscription", error: error)
+      }
       return
     }
+
+    guard isLocalURL(rustBaseURL) else { return }
 
     guard
       let encodedPriceId = expectedPriceId.addingPercentEncoding(
@@ -6362,7 +6379,7 @@ struct SettingsContentView: View {
       return
     }
 
-    var urlString = "\(baseURL)test/complete-subscription?price_id=\(encodedPriceId)"
+    var urlString = "\(rustBaseURL)test/complete-subscription?price_id=\(encodedPriceId)"
     if let checkoutSessionId,
       let encodedSessionId = checkoutSessionId.addingPercentEncoding(
         withAllowedCharacters: .urlQueryAllowed)
@@ -6377,6 +6394,10 @@ struct SettingsContentView: View {
     } catch {
       logError("Failed to complete local test subscription", error: error)
     }
+  }
+
+  private func isLocalURL(_ url: String) -> Bool {
+    url.hasPrefix("http://127.0.0.1:") || url.hasPrefix("http://localhost:")
   }
 
   private func openURLInDefaultBrowser(_ url: URL) {
