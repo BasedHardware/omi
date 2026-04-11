@@ -532,7 +532,9 @@ def get_all_ratings(rating_type: str = 'memory_summary'):
     return [rating.to_dict() for rating in ratings]
 
 
-def set_chat_message_rating_score(uid: str, message_id: str, value: int, reason: str = None, platform: str = None):
+def set_chat_message_rating_score(
+    uid: str, message_id: str, value: int, reason: str = None, platform: str = None, app_version: str = None
+):
     """
     Store chat message rating/feedback.
 
@@ -543,6 +545,7 @@ def set_chat_message_rating_score(uid: str, message_id: str, value: int, reason:
         reason: Optional reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination',
                 'not_helpful_or_irrelevant', 'didnt_follow_instructions', 'other')
         platform: 'desktop' or 'mobile' — identifies where the rating came from
+        app_version: App version string (e.g. '0.11.276') — maps to a specific prompt version
     """
     doc_id = document_id_from_seed('chat_message' + message_id)
     data = {
@@ -557,6 +560,8 @@ def set_chat_message_rating_score(uid: str, message_id: str, value: int, reason:
         data['reason'] = reason
     if platform:
         data['platform'] = platform
+    if app_version:
+        data['app_version'] = app_version
     db.collection('analytics').document(doc_id).set(data)
 
 

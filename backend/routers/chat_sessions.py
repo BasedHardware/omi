@@ -48,6 +48,7 @@ class SaveMessageRequest(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
+    app_version: str | None = None
 
 
 class InitialMessageRequest(BaseModel):
@@ -177,7 +178,7 @@ def rate_message(
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='desktop')
+    set_chat_message_rating_score(uid, message_id, value, platform='desktop', app_version=request.app_version)
     return {'status': 'ok'}
 
 
