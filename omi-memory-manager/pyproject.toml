@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omi-memory-manager"
+version = "1.0.0"
+description = "CLI tool to manage Omi tasks, memories, and conversations"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.28",
+    "rich>=13.0",
+    "click>=8.0",
+]
+
+[project.scripts]
+omi = "omi_manager.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["omi_manager*"]
