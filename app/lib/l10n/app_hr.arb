@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Konfiguriraj svoju AI osobu",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Persona",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Konfigurira svoju AI personu",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Konfigurira davatelja STT-a",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "O personi",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Osobnost razgovora",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Vaši podaci",
     "setYourName": "Postavite svoje ime",
     "changeYourName": "Promijenite svoje ime",
-    "manageYourOmiPersona": "Upravljajte svojom Omi persona",
     "voiceAndPeople": "Glas i osobe",
     "teachOmiYourVoice": "Učite Omi vaš glas",
     "tellOmiWhoSaidIt": "Recite Omi tko je to rekao 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Provjera sljedećih 7 dana",
     "shortcuts": "Prečaci",
     "shortcutChangeInstruction": "Kliknite na prečac kako bi ga promijenili. Pritisnite Escape kako bi odustali.",
-    "configurePersonaDescription": "Konfigurira AI persona",
     "configureSTTProvider": "Konfigurirajte STT davatelja",
     "setConversationEndDescription": "Postavite kada se razgovori automatski završavaju",
     "importDataDescription": "Uvezite podatke iz drugih izvora",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Kreirajte svoj klon",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Kreirajte svoj digitalni klon",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "Aplikacija",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Persona",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Čuvaj {item} javno",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Upravljaj aplikacijom",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Ažurirajte detalje osobe",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Obriši {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Konfigurirajte vašu AI ličnost",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Povežite AI asistente sa vašim podacima",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8034,8 +7996,6 @@
     "makePersonaPublic": "Učini ličnost javnom",
     "connectedKnowledgeData": "Povezani podaci znanja",
     "enterName": "Unesite ime",
-    "disconnectTwitter": "Odvoji Twitter",
-    "disconnectTwitterConfirmation": "Jeste li sigurni da želite odvajiti svoj Twitter račun? Vaša ličnost više neće imati pristup vašim Twitter podacima.",
     "getOmiDeviceDescription": "Kreirajte točniji klon sa vašim osobnim razgovorima",
     "getOmi": "Preuzmi Omi",
     "iHaveOmiDevice": "Imam Omi uređaj",
@@ -8754,68 +8714,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter handle nije pronađen",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter handle je suspendiran",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Provjera Twitter handlea nije uspjela",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Dohvaćanje vašeg persona nije uspjelo",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Stvaranje vašeg persona nije uspjelo",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Molim vas povežite najmanje jedan izvor znanja (Omi ili Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona je uspješno ažuriran",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Ažuriranje persona nije uspjelo",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Molim vas odaberite sliku",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Stvaranje vašeg persona nije uspjelo. Molim vas pokušajte kasnije.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Neuspjelo stvaranje persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Omogućavanje persona nije uspjelo",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Greška pri omogućavanju persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Dohvaćanje podržanih zemalja nije uspjelo. Molim vas pokušajte kasnije.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8815,6 @@
     "aiGenPleaseGenerateAppFirst": "Molim vas prvo generirajte aplikaciju",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Koji je vaš X handle?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Predobučit ćemo vaš Omi klon\ntemeljem aktivnosti vašeg računa",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Molim vas unesite vaš X handle",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Molim vas unesite valjani X handle",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Dalje",
     "@nextButton": {

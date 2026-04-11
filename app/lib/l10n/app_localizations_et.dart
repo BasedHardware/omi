@@ -637,9 +637,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get saving => 'Salvestamine...';
 
   @override
-  String get personaConfig => 'Seadistage oma AI isiksus';
-
-  @override
   String get beta => 'BEETA';
 
   @override
@@ -1708,7 +1705,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -2421,12 +2423,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get createKeyToGetStarted => 'Loo võti alustamiseks';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Seadista oma AI-isik';
-
-  @override
   String get configureSttProvider => 'Seadista STT pakkuja';
 
   @override
@@ -2941,9 +2937,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Rakendusest';
-
-  @override
-  String get aboutThePersona => 'Persoonast';
 
   @override
   String get chatPersonality => 'Vestluse isiksus';
@@ -3481,9 +3474,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get changeYourName => 'Muuda oma nime';
 
   @override
-  String get manageYourOmiPersona => 'Halda oma Omi personat';
-
-  @override
   String get voiceAndPeople => 'Hääl ja Inimesed';
 
   @override
@@ -3892,9 +3882,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klõpsake kiirklahvil, et seda muuta. Tühistamiseks vajutage Escape.';
 
   @override
-  String get configurePersonaDescription => 'Konfigureerige oma AI isikut';
-
-  @override
   String get configureSTTProvider => 'Konfigureerige STT pakkuja';
 
   @override
@@ -4249,16 +4236,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get createAndShareYourApp => 'Loo ja jaga oma rakendust';
 
   @override
-  String get createMyClone => 'Loo minu kloon';
-
-  @override
-  String get createYourDigitalClone => 'Loo oma digitaalne kloon';
-
-  @override
   String get itemApp => 'Rakendus';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4287,9 +4265,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get manageApp => 'Halda rakendust';
-
-  @override
-  String get updatePersonaDetails => 'Uuenda persona üksikasju';
 
   @override
   String deleteItemTitle(String item) {
@@ -5812,9 +5787,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chooseFile => 'Vali fail';
 
   @override
-  String get configureAiPersona => 'Seadistage oma AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Ühendage AI-assistendid oma andmetega';
 
   @override
@@ -6535,13 +6507,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enterName => 'Sisesta nimi';
 
   @override
-  String get disconnectTwitter => 'Katkesta Twitteri ühendus';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Kas olete kindel, et soovite oma Twitteri konto ühenduse katkestada? Teie persona ei kasuta enam seda.';
-
-  @override
   String get getOmiDeviceDescription => 'Looge täpsem kloon oma isiklike vestluste põhjal';
 
   @override
@@ -7099,49 +7064,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Personat ei saa teiste võimetega valida';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitteri kontot ei leitud';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitteri konto on peatatud';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitteri konto kinnitamine ebaõnnestus';
-
-  @override
-  String get personaFailedToFetch => 'Teie persona toomine ebaõnnestus';
-
-  @override
-  String get personaFailedToCreate => 'Persona loomine ebaõnnestus';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Ühendage vähemalt üks andmeallikas (Omi või Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona edukalt värskendatud';
-
-  @override
-  String get personaFailedToUpdate => 'Persona värskendamine ebaõnnestus';
-
-  @override
-  String get personaPleaseSelectImage => 'Valige pilt';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Persona loomine ebaõnnestus. Proovige hiljem uuesti.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona loomine ebaõnnestus: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona lubamine ebaõnnestus';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Viga persona lubamisel: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Toetatud riikide toomine ebaõnnestus. Proovige hiljem uuesti.';
 
   @override
@@ -7214,21 +7136,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Palun genereeri kõigepealt rakendus';
-
-  @override
-  String get xHandleTitle => 'Mis on teie X kasutajanimi?';
-
-  @override
-  String get xHandleDescription => 'Me eelkoolitame teie Omi klooni\nteie konto tegevuse põhjal';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Palun sisestage oma X kasutajanimi';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Palun sisestage kehtiv X kasutajanimi';
 
   @override
   String get nextButton => 'Järgmine';

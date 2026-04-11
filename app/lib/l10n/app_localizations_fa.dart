@@ -637,9 +637,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get saving => 'درحال ذخیره...';
 
   @override
-  String get personaConfig => 'پیکربندی شخصیت AI خود';
-
-  @override
   String get beta => 'بتا';
 
   @override
@@ -1710,7 +1707,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -2426,12 +2428,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get createKeyToGetStarted => 'کلید را برای شروع ایجاد کنید';
 
   @override
-  String get persona => 'شخصیت';
-
-  @override
-  String get configureYourAiPersona => 'شخصیت هوش مصنوعی خود را پیکربندی کنید';
-
-  @override
   String get configureSttProvider => 'ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید';
 
   @override
@@ -2946,9 +2942,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'درباره برنامه';
-
-  @override
-  String get aboutThePersona => 'درباره شخصیت';
 
   @override
   String get chatPersonality => 'شخصیت چت';
@@ -3485,9 +3478,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get changeYourName => 'نام خود را تغییر دهید';
 
   @override
-  String get manageYourOmiPersona => 'شخصیت Omi خود را مدیریت کنید';
-
-  @override
   String get voiceAndPeople => 'صوت و افراد';
 
   @override
@@ -3896,9 +3886,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get shortcutChangeInstruction => 'برای تغییر میانبر، روی آن کلیک کنید. برای انصراف، Escape را فشار دهید.';
 
   @override
-  String get configurePersonaDescription => 'شخصیت هوش مصنوعی خود را پیکربندی کنید';
-
-  @override
   String get configureSTTProvider => 'پیکربندی ارائه‌دهنده STT';
 
   @override
@@ -4251,16 +4238,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get createAndShareYourApp => 'برنامه خود را ایجاد و اشتراک کنید';
 
   @override
-  String get createMyClone => 'کلون خود را ایجاد کنید';
-
-  @override
-  String get createYourDigitalClone => 'کلون دیجیتالی خود را ایجاد کنید';
-
-  @override
   String get itemApp => 'برنامه';
-
-  @override
-  String get itemPersona => 'شخصیت';
 
   @override
   String keepItemPublic(String item) {
@@ -4289,9 +4267,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get manageApp => 'مدیریت برنامه';
-
-  @override
-  String get updatePersonaDetails => 'به‌روزرسانی جزئیات شخصیت';
 
   @override
   String deleteItemTitle(String item) {
@@ -5814,9 +5789,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chooseFile => 'انتخاب فایل';
 
   @override
-  String get configureAiPersona => 'پیکربندی نقش هوش مصنوعی خود';
-
-  @override
   String get connectAiAssistantsToYourData => 'کمک دستیاران هوش مصنوعی را به داده های خود متصل کنید';
 
   @override
@@ -6536,13 +6508,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get enterName => 'نام را وارد کنید';
 
   @override
-  String get disconnectTwitter => 'قطع اتصال Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'آیا مطمئن هستید که می خواهید حساب Twitter خود را قطع کنید؟ نقش شما دیگر دسترسی به داده های Twitter خود نخواهد داشت.';
-
-  @override
   String get getOmiDeviceDescription => 'کلون دقیق تری با مکالمات شخصی خود ایجاد کنید';
 
   @override
@@ -7102,49 +7067,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona نمی‌تواند با سایر توانایی‌ها انتخاب شود';
 
   @override
-  String get personaTwitterHandleNotFound => 'دستهِ Twitter یافت نشد';
-
-  @override
-  String get personaTwitterHandleSuspended => 'دستهِ Twitter معلق است';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'تأیید دستهِ Twitter ناموفق بود';
-
-  @override
-  String get personaFailedToFetch => 'دریافت شخصیّت شما ناموفق بود';
-
-  @override
-  String get personaFailedToCreate => 'ایجاد شخصیّت شما ناموفق بود';
-
-  @override
-  String get personaConnectKnowledgeSource => 'لطفاً حداقل یک منبع داده دانش را متصل کنید (Omi یا Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'شخصیّت با موفقیت به‌روز شد';
-
-  @override
-  String get personaFailedToUpdate => 'به‌روزرسانی شخصیّت ناموفق بود';
-
-  @override
-  String get personaPleaseSelectImage => 'لطفاً یک تصویر انتخاب کنید';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ایجاد شخصیّت شما ناموفق بود. لطفاً بعداً دوباره تلاش کنید.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'ایجاد شخصیّت ناموفق بود: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'فعال‌کردن شخصیّت ناموفق بود';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'خطا در فعال‌کردن شخصیّت: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'دریافت کشورهای پشتیبانی‌شده ناموفق بود. لطفاً بعداً دوباره تلاش کنید.';
 
   @override
@@ -7217,21 +7139,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'لطفاً ابتدا یک برنامه تولید کنید';
-
-  @override
-  String get xHandleTitle => 'دستهِ X شما چیست؟';
-
-  @override
-  String get xHandleDescription => 'ما کلون Omi شما را بر اساس\nفعالیت حساب شما از پیش آموزش خواهیم داد';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'لطفاً دستهِ X خود را وارد کنید';
-
-  @override
-  String get xHandlePleaseEnterValid => 'لطفاً یک دستهِ X معتبر وارد کنید';
 
   @override
   String get nextButton => 'بعدی';
@@ -8676,7 +8583,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

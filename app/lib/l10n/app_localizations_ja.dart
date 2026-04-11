@@ -624,9 +624,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saving => '保存中...';
 
   @override
-  String get personaConfig => 'AIペルソナを設定';
-
-  @override
   String get beta => 'ベータ';
 
   @override
@@ -2384,12 +2381,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createKeyToGetStarted => '開始するにはキーを作成してください';
 
   @override
-  String get persona => 'ペルソナ';
-
-  @override
-  String get configureYourAiPersona => 'AIペルソナを設定する';
-
-  @override
   String get configureSttProvider => 'STTプロバイダーを設定';
 
   @override
@@ -2892,9 +2883,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'アプリについて';
-
-  @override
-  String get aboutThePersona => 'ペルソナについて';
 
   @override
   String get chatPersonality => 'チャットパーソナリティ';
@@ -3424,9 +3412,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get changeYourName => '名前を変更';
 
   @override
-  String get manageYourOmiPersona => 'Omiペルソナを管理';
-
-  @override
   String get voiceAndPeople => '音声と人物';
 
   @override
@@ -3831,9 +3816,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shortcutChangeInstruction => 'ショートカットをクリックして変更します。Escapeキーでキャンセル。';
 
   @override
-  String get configurePersonaDescription => 'AIペルソナを設定';
-
-  @override
   String get configureSTTProvider => 'STTプロバイダーを設定';
 
   @override
@@ -4177,16 +4159,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createAndShareYourApp => 'アプリを作成して共有';
 
   @override
-  String get createMyClone => 'クローンを作成';
-
-  @override
-  String get createYourDigitalClone => 'デジタルクローンを作成';
-
-  @override
   String get itemApp => 'アプリ';
-
-  @override
-  String get itemPersona => 'ペルソナ';
 
   @override
   String keepItemPublic(String item) {
@@ -4215,9 +4188,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get manageApp => 'アプリを管理';
-
-  @override
-  String get updatePersonaDetails => 'ペルソナの詳細を更新';
 
   @override
   String deleteItemTitle(String item) {
@@ -5710,9 +5680,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chooseFile => 'ファイルを選択';
 
   @override
-  String get configureAiPersona => 'AIペルソナを設定';
-
-  @override
   String get connectAiAssistantsToYourData => 'AIアシスタントをデータに接続';
 
   @override
@@ -6423,12 +6390,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterName => '名前を入力';
 
   @override
-  String get disconnectTwitter => 'Twitterを切断';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Twitterアカウントを切断してもよろしいですか？ペルソナはTwitterデータにアクセスできなくなります。';
-
-  @override
   String get getOmiDeviceDescription => '個人の会話でより正確なクローンを作成';
 
   @override
@@ -6978,49 +6939,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'ペルソナは他の機能と同時に選択できません';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitterハンドルが見つかりません';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitterハンドルは停止されています';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitterハンドルの確認に失敗しました';
-
-  @override
-  String get personaFailedToFetch => 'ペルソナの取得に失敗しました';
-
-  @override
-  String get personaFailedToCreate => 'ペルソナの作成に失敗しました';
-
-  @override
-  String get personaConnectKnowledgeSource => '少なくとも1つのデータソース（OmiまたはTwitter）を接続してください';
-
-  @override
-  String get personaUpdatedSuccessfully => 'ペルソナが正常に更新されました';
-
-  @override
-  String get personaFailedToUpdate => 'ペルソナの更新に失敗しました';
-
-  @override
-  String get personaPleaseSelectImage => '画像を選択してください';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ペルソナの作成に失敗しました。後でもう一度お試しください。';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'ペルソナの作成に失敗: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'ペルソナの有効化に失敗しました';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'ペルソナの有効化エラー: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => '対応国の取得に失敗しました。後でもう一度お試しください。';
 
   @override
@@ -7093,21 +7011,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '先にアプリを生成してください';
-
-  @override
-  String get xHandleTitle => 'Xのユーザー名は？';
-
-  @override
-  String get xHandleDescription => 'アカウントのアクティビティに基づいて\nOmiクローンを事前トレーニングします';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Xのユーザー名を入力してください';
-
-  @override
-  String get xHandlePleaseEnterValid => '有効なXのユーザー名を入力してください';
 
   @override
   String get nextButton => '次へ';
@@ -8534,7 +8437,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 

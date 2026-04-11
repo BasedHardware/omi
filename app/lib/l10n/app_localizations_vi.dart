@@ -637,9 +637,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saving => 'Đang lưu...';
 
   @override
-  String get personaConfig => 'Cấu hình nhân cách AI của bạn';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1714,7 +1711,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -2424,12 +2426,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createKeyToGetStarted => 'Tạo khóa để bắt đầu';
 
   @override
-  String get persona => 'Nhân cách';
-
-  @override
-  String get configureYourAiPersona => 'Cấu hình nhân vật AI của bạn';
-
-  @override
   String get configureSttProvider => 'Cấu hình nhà cung cấp STT';
 
   @override
@@ -2945,9 +2941,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Về ứng dụng';
-
-  @override
-  String get aboutThePersona => 'Về persona';
 
   @override
   String get chatPersonality => 'Tính cách chat';
@@ -3486,9 +3479,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get changeYourName => 'Thay đổi tên của bạn';
 
   @override
-  String get manageYourOmiPersona => 'Quản lý persona Omi của bạn';
-
-  @override
   String get voiceAndPeople => 'Giọng nói & Con người';
 
   @override
@@ -3898,9 +3888,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get shortcutChangeInstruction => 'Nhấp vào phím tắt để thay đổi. Nhấn Escape để hủy.';
 
   @override
-  String get configurePersonaDescription => 'Cấu hình nhân vật AI của bạn';
-
-  @override
   String get configureSTTProvider => 'Cấu hình nhà cung cấp STT';
 
   @override
@@ -4254,16 +4241,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createAndShareYourApp => 'Tạo và chia sẻ ứng dụng của bạn';
 
   @override
-  String get createMyClone => 'Tạo bản sao của tôi';
-
-  @override
-  String get createYourDigitalClone => 'Tạo bản sao kỹ thuật số của bạn';
-
-  @override
   String get itemApp => 'Ứng dụng';
-
-  @override
-  String get itemPersona => 'Nhân cách';
 
   @override
   String keepItemPublic(String item) {
@@ -4292,9 +4270,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get manageApp => 'Quản lý ứng dụng';
-
-  @override
-  String get updatePersonaDetails => 'Cập nhật chi tiết persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5819,9 +5794,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chooseFile => 'Chọn tệp';
 
   @override
-  String get configureAiPersona => 'Cấu hình nhân cách AI của bạn';
-
-  @override
   String get connectAiAssistantsToYourData => 'Kết nối trợ lý AI với dữ liệu của bạn';
 
   @override
@@ -6539,13 +6511,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enterName => 'Nhập tên';
 
   @override
-  String get disconnectTwitter => 'Ngắt kết nối Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Bạn có chắc chắn muốn ngắt kết nối tài khoản Twitter? Nhân cách của bạn sẽ không còn được huấn luyện từ hoạt động Twitter của bạn nữa.';
-
-  @override
   String get getOmiDeviceDescription => 'Tạo bản sao chính xác hơn với các cuộc trò chuyện cá nhân của bạn';
 
   @override
@@ -7104,49 +7069,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Không thể chọn Persona cùng với các khả năng khác';
 
   @override
-  String get personaTwitterHandleNotFound => 'Không tìm thấy tài khoản Twitter';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Tài khoản Twitter đã bị đình chỉ';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Xác minh tài khoản Twitter thất bại';
-
-  @override
-  String get personaFailedToFetch => 'Không thể lấy persona của bạn';
-
-  @override
-  String get personaFailedToCreate => 'Không thể tạo persona của bạn';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Vui lòng kết nối ít nhất một nguồn dữ liệu (Omi hoặc Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Cập nhật persona thành công';
-
-  @override
-  String get personaFailedToUpdate => 'Cập nhật persona thất bại';
-
-  @override
-  String get personaPleaseSelectImage => 'Vui lòng chọn một hình ảnh';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Không thể tạo persona. Vui lòng thử lại sau.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Tạo persona thất bại: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Không thể kích hoạt persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Lỗi kích hoạt persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Không thể lấy danh sách quốc gia hỗ trợ. Vui lòng thử lại sau.';
 
   @override
@@ -7219,22 +7141,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vui lòng tạo ứng dụng trước';
-
-  @override
-  String get xHandleTitle => 'Tên X của bạn là gì?';
-
-  @override
-  String get xHandleDescription =>
-      'Chúng tôi sẽ huấn luyện trước bản sao Omi của bạn\ndựa trên hoạt động tài khoản của bạn';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Vui lòng nhập tên X của bạn';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Vui lòng nhập tên X hợp lệ';
 
   @override
   String get nextButton => 'Tiếp';

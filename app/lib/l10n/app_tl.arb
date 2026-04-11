@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "I-configure ang iyong AI persona",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Persona",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "I-configure ang iyong AI persona",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "I-configure ang STT provider",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "Tungkol sa Persona",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Chat Personality",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Ang Iyong Impormasyon",
     "setYourName": "Itakda ang Iyong Pangalan",
     "changeYourName": "Baguhin ang Iyong Pangalan",
-    "manageYourOmiPersona": "Pamahalaan ang iyong Omi persona",
     "voiceAndPeople": "Boses & Tao",
     "teachOmiYourVoice": "Turuan ang Omi ng iyong boses",
     "tellOmiWhoSaidIt": "Sabihin sa Omi kung sino ang nagsabi nito 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Sinusuri ang susunod na 7 araw",
     "shortcuts": "Mga Shortcut",
     "shortcutChangeInstruction": "I-click sa isang shortcut upang baguhin ito. Pindutin ang Escape upang kanselahin.",
-    "configurePersonaDescription": "I-configure ang iyong AI persona",
     "configureSTTProvider": "I-configure ang STT provider",
     "setConversationEndDescription": "Itakda kung kailan mag-auto-end ang mga conversation",
     "importDataDescription": "Mag-import ng data mula sa ibang mga source",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Lumikha ng Aking Clone",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Lumikha ng iyong digital clone",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "App",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Persona",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Panatilihing Pampubliko ang {item}",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Pamahalaan ang App",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "I-update ang Persona Details",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Burahin ang {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "I-configure ang iyong AI persona",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Ikonekta ang AI assistants sa iyong data",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8034,8 +7996,6 @@
     "makePersonaPublic": "Gawing Public ang Persona",
     "connectedKnowledgeData": "Connected Knowledge Data",
     "enterName": "Lagyan ng pangalan",
-    "disconnectTwitter": "Idiskonekta ang Twitter",
-    "disconnectTwitterConfirmation": "Sigurado ka ba na gusto mong idiskonekta ang iyong Twitter account? Ang iyong persona ay hindi na may access sa iyong Twitter data.",
     "getOmiDeviceDescription": "Lumikha ng mas accurate na clone na may iyong personal na mga pag-usap",
     "getOmi": "Kunin ang Omi",
     "iHaveOmiDevice": "Mayroon akong Omi device",
@@ -8754,68 +8714,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Ang Twitter handle ay hindi nahanap",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Ang Twitter handle ay suspended",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Nabigo ang pag-verify ng Twitter handle",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Nabigo ang pagkuha ng iyong persona",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Nabigo ang paglikha ng iyong persona",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Mangyaring kumonekta sa hindi bababa sa isang knowledge data source (Omi o Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Matagumpay na na-update ang persona",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Nabigo ang pag-update ng persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Mangyaring pumili ng imahe",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Nabigo ang paglikha ng iyong persona. Mangyaring subukan ulit mamaya.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Nabigo ang paglikha ng persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Nabigo ang pag-enable ng persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Nagkamalian sa pag-enable ng persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Nabigo ang pagkuha ng mga supported countries. Mangyaring subukan ulit mamaya.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8815,6 @@
     "aiGenPleaseGenerateAppFirst": "Mangyaring maggenerate ng app muna",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Ano ang iyong X handle?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Kami ay pre-train ang iyong Omi clone\nbatay sa activity ng iyong account",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Mangyaring magpasok ng iyong X handle",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Mangyaring magpasok ng valid na X handle",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Susunod",
     "@nextButton": {

@@ -637,9 +637,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get saving => 'Lagrer...';
 
   @override
-  String get personaConfig => 'Konfigurer din AI-persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1709,7 +1706,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 FUNNET I NÆRHETEN';
   }
 
@@ -2419,12 +2421,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get createKeyToGetStarted => 'Opprett en nøkkel for å komme i gang';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSttProvider => 'Konfigurer STT-leverandør';
 
   @override
@@ -2939,9 +2935,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Om appen';
-
-  @override
-  String get aboutThePersona => 'Om personaen';
 
   @override
   String get chatPersonality => 'Chat-personlighet';
@@ -3479,9 +3472,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get changeYourName => 'Endre navnet ditt';
 
   @override
-  String get manageYourOmiPersona => 'Administrer din Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Stemme og Personer';
 
   @override
@@ -3891,9 +3881,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klikk på en snarvei for å endre den. Trykk Escape for å avbryte.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSTTProvider => 'Konfigurer STT-leverandør';
 
   @override
@@ -4248,16 +4235,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get createAndShareYourApp => 'Lag og del appen din';
 
   @override
-  String get createMyClone => 'Lag min klon';
-
-  @override
-  String get createYourDigitalClone => 'Lag din digitale klon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4286,9 +4264,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get manageApp => 'Administrer app';
-
-  @override
-  String get updatePersonaDetails => 'Oppdater persona-detaljer';
 
   @override
   String deleteItemTitle(String item) {
@@ -5811,9 +5786,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get chooseFile => 'Velg fil';
 
   @override
-  String get configureAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Koble AI-assistenter til dataene dine';
 
   @override
@@ -6531,13 +6503,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get enterName => 'Skriv inn navn';
 
   @override
-  String get disconnectTwitter => 'Koble fra Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Er du sikker på at du vil koble fra Twitter-kontoen din? Personaen din vil ikke lenger ha tilgang til Twitter-dataene dine.';
-
-  @override
   String get getOmiDeviceDescription => 'Lag en mer nøyaktig klon med dine personlige samtaler';
 
   @override
@@ -7094,49 +7059,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan ikke velges med andre funksjoner';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-konto ikke funnet';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-konto er suspendert';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Kunne ikke verifisere Twitter-konto';
-
-  @override
-  String get personaFailedToFetch => 'Kunne ikke hente din persona';
-
-  @override
-  String get personaFailedToCreate => 'Kunne ikke opprette persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Koble til minst én datakilde (Omi eller Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona oppdatert';
-
-  @override
-  String get personaFailedToUpdate => 'Kunne ikke oppdatere persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Velg et bilde';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Kunne ikke opprette persona. Prøv igjen senere.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Kunne ikke opprette persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Kunne ikke aktivere persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Feil ved aktivering av persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Kunne ikke hente støttede land. Prøv igjen senere.';
 
   @override
@@ -7209,21 +7131,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vennligst generer en app først';
-
-  @override
-  String get xHandleTitle => 'Hva er X-håndtaket ditt?';
-
-  @override
-  String get xHandleDescription => 'Vi vil forhåndstrene Omi-klonen din\\nbasert på kontoens aktivitet';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Vennligst skriv inn X-håndtaket ditt';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Vennligst skriv inn et gyldig X-håndtak';
 
   @override
   String get nextButton => 'Neste';

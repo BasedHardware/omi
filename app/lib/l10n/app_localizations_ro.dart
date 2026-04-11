@@ -639,9 +639,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get saving => 'Se salvează...';
 
   @override
-  String get personaConfig => 'Configurează personalitatea AI';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1718,7 +1715,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOZITIVE',
+      one: 'DISPOZITIV',
+    );
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -2432,12 +2434,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createKeyToGetStarted => 'Creează o cheie pentru a începe';
 
   @override
-  String get persona => 'Personaj';
-
-  @override
-  String get configureYourAiPersona => 'Configurează-ți personajul AI';
-
-  @override
   String get configureSttProvider => 'Configurare furnizor STT';
 
   @override
@@ -2956,9 +2952,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Despre aplicație';
-
-  @override
-  String get aboutThePersona => 'Despre persona';
 
   @override
   String get chatPersonality => 'Personalitate chat';
@@ -3498,9 +3491,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get changeYourName => 'Schimbați numele';
 
   @override
-  String get manageYourOmiPersona => 'Gestionați persona Omi';
-
-  @override
   String get voiceAndPeople => 'Voce și Oameni';
 
   @override
@@ -3913,9 +3903,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Faceți clic pe o comandă rapidă pentru a o modifica. Apăsați Escape pentru a anula.';
 
   @override
-  String get configurePersonaDescription => 'Configurați-vă persona AI';
-
-  @override
   String get configureSTTProvider => 'Configurați furnizorul STT';
 
   @override
@@ -4270,16 +4257,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createAndShareYourApp => 'Creează și partajează aplicația ta';
 
   @override
-  String get createMyClone => 'Creează clona mea';
-
-  @override
-  String get createYourDigitalClone => 'Creează clona ta digitală';
-
-  @override
   String get itemApp => 'Aplicație';
-
-  @override
-  String get itemPersona => 'Personaj';
 
   @override
   String keepItemPublic(String item) {
@@ -4308,9 +4286,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get manageApp => 'Gestionează aplicația';
-
-  @override
-  String get updatePersonaDetails => 'Actualizează detaliile persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5840,9 +5815,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chooseFile => 'Alege fișier';
 
   @override
-  String get configureAiPersona => 'Configurează-ți personajul AI';
-
-  @override
   String get connectAiAssistantsToYourData => 'Conectează asistenții AI la datele tale';
 
   @override
@@ -6565,13 +6537,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get enterName => 'Introdu numele';
 
   @override
-  String get disconnectTwitter => 'Deconectare Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Sunteți sigur că doriți să deconectați contul Twitter? Persona dvs. nu va mai avea acces la datele Twitter.';
-
-  @override
   String get getOmiDeviceDescription => 'Creează o clonă mai precisă cu conversațiile tale personale';
 
   @override
@@ -7132,49 +7097,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nu poate fi selectată cu alte capacități';
 
   @override
-  String get personaTwitterHandleNotFound => 'Cont Twitter negăsit';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Cont Twitter suspendat';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Verificarea contului Twitter a eșuat';
-
-  @override
-  String get personaFailedToFetch => 'Nu s-a putut obține persona dvs.';
-
-  @override
-  String get personaFailedToCreate => 'Nu s-a putut crea persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Conectați cel puțin o sursă de date (Omi sau Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona actualizată cu succes';
-
-  @override
-  String get personaFailedToUpdate => 'Actualizarea personei a eșuat';
-
-  @override
-  String get personaPleaseSelectImage => 'Selectați o imagine';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Crearea personei a eșuat. Încercați mai târziu.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Crearea personei a eșuat: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Activarea personei a eșuat';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Eroare la activarea personei: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nu s-au putut obține țările acceptate. Încercați mai târziu.';
 
   @override
@@ -7247,21 +7169,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vă rugăm să generați mai întâi o aplicație';
-
-  @override
-  String get xHandleTitle => 'Care este numele tău de utilizator X?';
-
-  @override
-  String get xHandleDescription => 'Vom pre-antrena clona dvs. Omi\npe baza activității contului dvs.';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Te rugăm să introduci numele tău de utilizator X';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Te rugăm să introduci un nume de utilizator X valid';
 
   @override
   String get nextButton => 'Următorul';

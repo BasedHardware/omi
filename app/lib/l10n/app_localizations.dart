@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -1400,12 +1400,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saving...'**
   String get saving;
-
-  /// Persona configuration subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get personaConfig;
 
   /// Beta label for experimental features
   ///
@@ -4689,18 +4683,6 @@ abstract class AppLocalizations {
   /// **'Create a key to get started'**
   String get createKeyToGetStarted;
 
-  /// Persona feature name
-  ///
-  /// In en, this message translates to:
-  /// **'Persona'**
-  String get persona;
-
-  /// Description for persona settings
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configureYourAiPersona;
-
   /// Description for transcription settings
   ///
   /// In en, this message translates to:
@@ -5696,12 +5678,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'About the App'**
   String get aboutTheApp;
-
-  /// Section title for persona description
-  ///
-  /// In en, this message translates to:
-  /// **'About the Persona'**
-  String get aboutThePersona;
 
   /// Title for chat personality section
   ///
@@ -6729,12 +6705,6 @@ abstract class AppLocalizations {
   /// **'Change Your Name'**
   String get changeYourName;
 
-  /// No description provided for @manageYourOmiPersona.
-  ///
-  /// In en, this message translates to:
-  /// **'Manage your Omi persona'**
-  String get manageYourOmiPersona;
-
   /// Voice and people section title
   ///
   /// In en, this message translates to:
@@ -7503,12 +7473,6 @@ abstract class AppLocalizations {
   /// **'Click on a shortcut to change it. Press Escape to cancel.'**
   String get shortcutChangeInstruction;
 
-  /// No description provided for @configurePersonaDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configurePersonaDescription;
-
   /// No description provided for @configureSTTProvider.
   ///
   /// In en, this message translates to:
@@ -8151,29 +8115,11 @@ abstract class AppLocalizations {
   /// **'Create and share your app'**
   String get createAndShareYourApp;
 
-  /// Option to create digital clone
-  ///
-  /// In en, this message translates to:
-  /// **'Create my Clone'**
-  String get createMyClone;
-
-  /// Subtitle for create clone option
-  ///
-  /// In en, this message translates to:
-  /// **'Create your digital clone'**
-  String get createYourDigitalClone;
-
   /// The word 'App' used as parameter in other strings
   ///
   /// In en, this message translates to:
   /// **'App'**
   String get itemApp;
-
-  /// The word 'Persona' used as parameter in other strings
-  ///
-  /// In en, this message translates to:
-  /// **'Persona'**
-  String get itemPersona;
 
   /// Toggle label to keep app or persona public
   ///
@@ -8210,12 +8156,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage App'**
   String get manageApp;
-
-  /// Menu item to update persona details
-  ///
-  /// In en, this message translates to:
-  /// **'Update Persona Details'**
-  String get updatePersonaDetails;
 
   /// Menu item to delete app or persona
   ///
@@ -11037,12 +10977,6 @@ abstract class AppLocalizations {
   /// **'Choose File'**
   String get chooseFile;
 
-  /// Description for persona settings
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configureAiPersona;
-
   /// Description for MCP server feature
   ///
   /// In en, this message translates to:
@@ -12363,18 +12297,6 @@ abstract class AppLocalizations {
   /// **'Enter name'**
   String get enterName;
 
-  /// No description provided for @disconnectTwitter.
-  ///
-  /// In en, this message translates to:
-  /// **'Disconnect Twitter'**
-  String get disconnectTwitter;
-
-  /// No description provided for @disconnectTwitterConfirmation.
-  ///
-  /// In en, this message translates to:
-  /// **'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.'**
-  String get disconnectTwitterConfirmation;
-
   /// No description provided for @getOmiDeviceDescription.
   ///
   /// In en, this message translates to:
@@ -13377,84 +13299,6 @@ abstract class AppLocalizations {
   /// **'Persona cannot be selected with other capabilities'**
   String get addAppPersonaConflictWithCapabilities;
 
-  /// Error shown when Twitter handle is not found
-  ///
-  /// In en, this message translates to:
-  /// **'Twitter handle not found'**
-  String get personaTwitterHandleNotFound;
-
-  /// Error shown when Twitter handle is suspended
-  ///
-  /// In en, this message translates to:
-  /// **'Twitter handle is suspended'**
-  String get personaTwitterHandleSuspended;
-
-  /// Error shown when Twitter handle verification fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to verify Twitter handle'**
-  String get personaFailedToVerifyTwitter;
-
-  /// Error shown when fetching persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to fetch your persona'**
-  String get personaFailedToFetch;
-
-  /// Error shown when creating persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create your persona'**
-  String get personaFailedToCreate;
-
-  /// Error shown when no knowledge source is connected
-  ///
-  /// In en, this message translates to:
-  /// **'Please connect at least one knowledge data source (Omi or Twitter)'**
-  String get personaConnectKnowledgeSource;
-
-  /// Success message when persona is updated
-  ///
-  /// In en, this message translates to:
-  /// **'Persona updated successfully'**
-  String get personaUpdatedSuccessfully;
-
-  /// Error shown when updating persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to update persona'**
-  String get personaFailedToUpdate;
-
-  /// Error shown when no image is selected for persona
-  ///
-  /// In en, this message translates to:
-  /// **'Please select an image'**
-  String get personaPleaseSelectImage;
-
-  /// Error shown when creating persona fails with retry suggestion
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create your persona. Please try again later.'**
-  String get personaFailedToCreateTryLater;
-
-  /// Error shown when creating persona fails with error details
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create persona: {error}'**
-  String personaFailedToCreateWithError(String error);
-
-  /// Error shown when enabling persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable persona'**
-  String get personaFailedToEnable;
-
-  /// Error shown when enabling persona fails with error details
-  ///
-  /// In en, this message translates to:
-  /// **'Error enabling persona: {error}'**
-  String personaErrorEnablingWithError(String error);
-
   /// Error message when fetching supported countries fails
   ///
   /// In en, this message translates to:
@@ -13598,36 +13442,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please generate an app first'**
   String get aiGenPleaseGenerateAppFirst;
-
-  /// Title asking user for their X (Twitter) handle
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s your X handle?'**
-  String get xHandleTitle;
-
-  /// Description explaining why X handle is needed
-  ///
-  /// In en, this message translates to:
-  /// **'We will pre-train your Omi clone\nbased on your account\'s activity'**
-  String get xHandleDescription;
-
-  /// Placeholder hint for X handle input field
-  ///
-  /// In en, this message translates to:
-  /// **'@nikshevchenko'**
-  String get xHandleHint;
-
-  /// Validation error when X handle is empty
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter your X handle'**
-  String get xHandlePleaseEnter;
-
-  /// Validation error when X handle is invalid
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter a valid X handle'**
-  String get xHandlePleaseEnterValid;
 
   /// Button text to proceed to next step
   ///
@@ -16856,56 +16670,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'be',
-    'bg',
-    'bn',
-    'bs',
-    'ca',
-    'cs',
-    'da',
-    'de',
-    'el',
-    'en',
-    'es',
-    'et',
-    'fa',
-    'fi',
-    'fr',
-    'he',
-    'hi',
-    'hr',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'ko',
-    'lt',
-    'lv',
-    'mk',
-    'mr',
-    'ms',
-    'nl',
-    'no',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'sr',
-    'sv',
-    'ta',
-    'te',
-    'th',
-    'tl',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'be',
+        'bg',
+        'bn',
+        'bs',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fa',
+        'fi',
+        'fr',
+        'he',
+        'hi',
+        'hr',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'kn',
+        'ko',
+        'lt',
+        'lv',
+        'mk',
+        'mr',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sl',
+        'sr',
+        'sv',
+        'ta',
+        'te',
+        'th',
+        'tl',
+        'tr',
+        'uk',
+        'ur',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -17014,10 +16828,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

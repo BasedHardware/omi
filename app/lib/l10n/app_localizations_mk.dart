@@ -638,9 +638,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get saving => 'Зачувување...';
 
   @override
-  String get personaConfig => 'Конфигурирај ја твојата AI личност';
-
-  @override
   String get beta => 'БЕТА';
 
   @override
@@ -1714,7 +1711,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -2436,12 +2438,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get createKeyToGetStarted => 'Создај клуч за да почнеш';
 
   @override
-  String get persona => 'Персона';
-
-  @override
-  String get configureYourAiPersona => 'Конфигурирај твоја AI персона';
-
-  @override
   String get configureSttProvider => 'Конфигурирај STT обезбедувач';
 
   @override
@@ -2956,9 +2952,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'За апликацијата';
-
-  @override
-  String get aboutThePersona => 'За персоната';
 
   @override
   String get chatPersonality => 'Личност на разговор';
@@ -3498,9 +3491,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get changeYourName => 'Промени го твоето име';
 
   @override
-  String get manageYourOmiPersona => 'Управувај со твоја Omi персона';
-
-  @override
   String get voiceAndPeople => 'Глас и луѓе';
 
   @override
@@ -3911,9 +3901,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get shortcutChangeInstruction => 'Кликни на кратенка за да је промениш. Притисни Escape за откажување.';
 
   @override
-  String get configurePersonaDescription => 'Конфигурирај твоја AI персона';
-
-  @override
   String get configureSTTProvider => 'Конфигурирај STT добавувач';
 
   @override
@@ -4269,16 +4256,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get createAndShareYourApp => 'Создај и дели твоја апликација';
 
   @override
-  String get createMyClone => 'Создај мој клон';
-
-  @override
-  String get createYourDigitalClone => 'Создај твој дигитален клон';
-
-  @override
   String get itemApp => 'Апликација';
-
-  @override
-  String get itemPersona => 'Персона';
 
   @override
   String keepItemPublic(String item) {
@@ -4307,9 +4285,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get manageApp => 'Управувај апликација';
-
-  @override
-  String get updatePersonaDetails => 'Ажурирај детали на персона';
 
   @override
   String deleteItemTitle(String item) {
@@ -5841,9 +5816,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get chooseFile => 'Избери датотека';
 
   @override
-  String get configureAiPersona => 'Конфигурирајте ја вашата ИИ личност';
-
-  @override
   String get connectAiAssistantsToYourData => 'Поврзи ИИ асистенти со твојите податоци';
 
   @override
@@ -6566,13 +6538,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get enterName => 'Внеси име';
 
   @override
-  String get disconnectTwitter => 'Откажи врска со Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Си ли сигурен дека сакаш да го откажеш твојот Twitter сметка? Твојата личност повеќе нема пристап до твоите Twitter податоци.';
-
-  @override
   String get getOmiDeviceDescription => 'Создај пошточен клон со твои лични разговори';
 
   @override
@@ -7136,49 +7101,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona не може да биде избрана со други способности';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter рачка не е пронајдена';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter рачката е суспендирана';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Неуспешна проверка на Twitter рачката';
-
-  @override
-  String get personaFailedToFetch => 'Неуспешно преземање на вашата persona';
-
-  @override
-  String get personaFailedToCreate => 'Неуспешно создавање на вашата persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Ве молиме поврзете најмалку еден извор на знаење (Omi или Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona е успешно ажурирана';
-
-  @override
-  String get personaFailedToUpdate => 'Неуспешно ажурирање на persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Ве молиме одберете слика';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Неуспешно создавање на вашата persona. Ве молиме обидете се подоцна.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Неуспешно создавање на persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Неуспешна активирање на persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Грешка при активирање на persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Неуспешно преземање на поддржани держави. Ве молиме обидете се подоцна.';
 
   @override
@@ -7252,21 +7174,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Ве молиме прво генерирајте апликација';
-
-  @override
-  String get xHandleTitle => 'Која е вашата X рачка?';
-
-  @override
-  String get xHandleDescription => 'Ние ќе предвое вашиот Omi клон\nврз основа на активноста на вашата сметка';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Ве молиме внесете вашата X рачка';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Ве молиме внесете валидна X рачка';
 
   @override
   String get nextButton => 'Следно';
@@ -8720,7 +8627,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

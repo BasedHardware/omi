@@ -636,9 +636,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saving => 'Išsaugoma...';
 
   @override
-  String get personaConfig => 'Konfigūruokite savo DI asmens charakteristikų';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1707,7 +1704,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -2420,12 +2422,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createKeyToGetStarted => 'Sukurkite raktą, kad pradėtumėte';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Sukonfigūruokite savo AI asmenybę';
-
-  @override
   String get configureSttProvider => 'Konfigūruoti STT teikėją';
 
   @override
@@ -2940,9 +2936,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Apie programą';
-
-  @override
-  String get aboutThePersona => 'Apie asmenybę';
 
   @override
   String get chatPersonality => 'Pokalbio asmenybė';
@@ -3479,9 +3472,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get changeYourName => 'Pakeisti savo vardą';
 
   @override
-  String get manageYourOmiPersona => 'Valdyti savo Omi personą';
-
-  @override
   String get voiceAndPeople => 'Balsas ir Žmonės';
 
   @override
@@ -3891,9 +3881,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Spustelėkite spartųjį klavišą, kad jį pakeistumėte. Paspauskite Escape, kad atšauktumėte.';
 
   @override
-  String get configurePersonaDescription => 'Sukonfigūruokite savo AI personą';
-
-  @override
   String get configureSTTProvider => 'Sukonfigūruoti STT teikėją';
 
   @override
@@ -4246,16 +4233,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createAndShareYourApp => 'Sukurkite ir dalinkitės savo programėle';
 
   @override
-  String get createMyClone => 'Sukurti mano kloną';
-
-  @override
-  String get createYourDigitalClone => 'Sukurkite savo skaitmeninį kloną';
-
-  @override
   String get itemApp => 'Programėlė';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4284,9 +4262,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get manageApp => 'Valdyti programėlę';
-
-  @override
-  String get updatePersonaDetails => 'Atnaujinti personas informaciją';
 
   @override
   String deleteItemTitle(String item) {
@@ -5812,9 +5787,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get chooseFile => 'Pasirinkti failą';
 
   @override
-  String get configureAiPersona => 'Konfigūruoti savo AI personą';
-
-  @override
   String get connectAiAssistantsToYourData => 'Prijungti AI asistentus prie savo duomenų';
 
   @override
@@ -6536,13 +6508,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get enterName => 'Įveskite vardą';
 
   @override
-  String get disconnectTwitter => 'Atjungti Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Ar tikrai norite atjungti savo Twitter paskyrą? Jūsų persona nebegalės pasiekti jūsų Twitter duomenų.';
-
-  @override
   String get getOmiDeviceDescription => 'Sukurkite tikslesnį kloną naudodami savo asmeninius pokalbius';
 
   @override
@@ -7101,49 +7066,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona negalima pasirinkti su kitomis galimybėmis';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter paskyra nerasta';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter paskyra sustabdyta';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Nepavyko patvirtinti Twitter paskyros';
-
-  @override
-  String get personaFailedToFetch => 'Nepavyko gauti jūsų persona';
-
-  @override
-  String get personaFailedToCreate => 'Nepavyko sukurti persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Prijunkite bent vieną duomenų šaltinį (Omi arba Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona sėkmingai atnaujinta';
-
-  @override
-  String get personaFailedToUpdate => 'Nepavyko atnaujinti persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Pasirinkite vaizdą';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Nepavyko sukurti persona. Bandykite vėliau.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Nepavyko sukurti persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Nepavyko įjungti persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Klaida įjungiant persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nepavyko gauti palaikomų šalių. Bandykite vėliau.';
 
   @override
@@ -7216,21 +7138,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Pirmiausia sugeneruokite programėlę';
-
-  @override
-  String get xHandleTitle => 'Koks jūsų X vardas?';
-
-  @override
-  String get xHandleDescription => 'Mes iš anksto apmokysime jūsų Omi kloną';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Įveskite savo X vardą';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Įveskite teisingą X vardą';
 
   @override
   String get nextButton => 'Toliau';

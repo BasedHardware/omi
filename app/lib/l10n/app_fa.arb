@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "پیکربندی شخصیت AI خود",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "بتا",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "شخصیت",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "شخصیت هوش مصنوعی خود را پیکربندی کنید",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "درباره شخصیت",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "شخصیت چت",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "اطلاعات شما",
     "setYourName": "نام خود را تنظیم کنید",
     "changeYourName": "نام خود را تغییر دهید",
-    "manageYourOmiPersona": "شخصیت Omi خود را مدیریت کنید",
     "voiceAndPeople": "صوت و افراد",
     "teachOmiYourVoice": "Omi را صدای خود را یاد دهید",
     "tellOmiWhoSaidIt": "به Omi بگویید کی آن را گفت 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "بررسی ۷ روز بعد",
     "shortcuts": "میانبرها",
     "shortcutChangeInstruction": "برای تغییر میانبر، روی آن کلیک کنید. برای انصراف، Escape را فشار دهید.",
-    "configurePersonaDescription": "شخصیت هوش مصنوعی خود را پیکربندی کنید",
     "configureSTTProvider": "پیکربندی ارائه‌دهنده STT",
     "setConversationEndDescription": "تنظیم زمان خودکار پایان گفتگوها",
     "importDataDescription": "داده‌ها را از منابع دیگر وارد کنید",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "کلون خود را ایجاد کنید",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "کلون دیجیتالی خود را ایجاد کنید",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "برنامه",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "شخصیت",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} را عمومی نگه دارید",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "مدیریت برنامه",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "به‌روزرسانی جزئیات شخصیت",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "حذف {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "پیکربندی نقش هوش مصنوعی خود",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "کمک دستیاران هوش مصنوعی را به داده های خود متصل کنید",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8034,8 +7996,6 @@
     "makePersonaPublic": "نقش را عمومی کنید",
     "connectedKnowledgeData": "داده های دانش متصل شده",
     "enterName": "نام را وارد کنید",
-    "disconnectTwitter": "قطع اتصال Twitter",
-    "disconnectTwitterConfirmation": "آیا مطمئن هستید که می خواهید حساب Twitter خود را قطع کنید؟ نقش شما دیگر دسترسی به داده های Twitter خود نخواهد داشت.",
     "getOmiDeviceDescription": "کلون دقیق تری با مکالمات شخصی خود ایجاد کنید",
     "getOmi": "دریافت Omi",
     "iHaveOmiDevice": "من دستگاه Omi دارم",
@@ -8754,68 +8714,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "دستهِ Twitter یافت نشد",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "دستهِ Twitter معلق است",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "تأیید دستهِ Twitter ناموفق بود",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "دریافت شخصیّت شما ناموفق بود",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "ایجاد شخصیّت شما ناموفق بود",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "لطفاً حداقل یک منبع داده دانش را متصل کنید (Omi یا Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "شخصیّت با موفقیت به‌روز شد",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "به‌روزرسانی شخصیّت ناموفق بود",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "لطفاً یک تصویر انتخاب کنید",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "ایجاد شخصیّت شما ناموفق بود. لطفاً بعداً دوباره تلاش کنید.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "ایجاد شخصیّت ناموفق بود: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "فعال‌کردن شخصیّت ناموفق بود",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "خطا در فعال‌کردن شخصیّت: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "دریافت کشورهای پشتیبانی‌شده ناموفق بود. لطفاً بعداً دوباره تلاش کنید.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8815,6 @@
     "aiGenPleaseGenerateAppFirst": "لطفاً ابتدا یک برنامه تولید کنید",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "دستهِ X شما چیست؟",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "ما کلون Omi شما را بر اساس\nفعالیت حساب شما از پیش آموزش خواهیم داد",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "لطفاً دستهِ X خود را وارد کنید",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "لطفاً یک دستهِ X معتبر وارد کنید",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "بعدی",
     "@nextButton": {

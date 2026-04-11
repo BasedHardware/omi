@@ -637,9 +637,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get saving => 'Kaydediliyor...';
 
   @override
-  String get personaConfig => 'Yapay zeka kişiliğinizi yapılandırın';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1714,7 +1711,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'CİHAZ',
+      one: 'CİHAZ',
+    );
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -2427,12 +2429,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createKeyToGetStarted => 'Başlamak için bir anahtar oluşturun';
 
   @override
-  String get persona => 'Kişilik';
-
-  @override
-  String get configureYourAiPersona => 'AI kişiliğinizi yapılandırın';
-
-  @override
   String get configureSttProvider => 'STT sağlayıcısını yapılandır';
 
   @override
@@ -2947,9 +2943,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Uygulama Hakkında';
-
-  @override
-  String get aboutThePersona => 'Persona Hakkında';
 
   @override
   String get chatPersonality => 'Sohbet Kişiliği';
@@ -3486,9 +3479,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get changeYourName => 'Adınızı değiştirin';
 
   @override
-  String get manageYourOmiPersona => 'Omi personanızı yönetin';
-
-  @override
   String get voiceAndPeople => 'Ses ve İnsanlar';
 
   @override
@@ -3899,9 +3889,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get shortcutChangeInstruction => 'Değiştirmek için bir kısayola tıklayın. İptal etmek için Escape\'e basın.';
 
   @override
-  String get configurePersonaDescription => 'Yapay zeka kişiliğinizi yapılandırın';
-
-  @override
   String get configureSTTProvider => 'STT sağlayıcısını yapılandır';
 
   @override
@@ -4256,16 +4243,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createAndShareYourApp => 'Uygulamanızı oluşturun ve paylaşın';
 
   @override
-  String get createMyClone => 'Klonumu Oluştur';
-
-  @override
-  String get createYourDigitalClone => 'Dijital klonunuzu oluşturun';
-
-  @override
   String get itemApp => 'Uygulama';
-
-  @override
-  String get itemPersona => 'Kişilik';
 
   @override
   String keepItemPublic(String item) {
@@ -4294,9 +4272,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get manageApp => 'Uygulamayı Yönet';
-
-  @override
-  String get updatePersonaDetails => 'Persona Ayrıntılarını Güncelle';
 
   @override
   String deleteItemTitle(String item) {
@@ -5822,9 +5797,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chooseFile => 'Dosya Seç';
 
   @override
-  String get configureAiPersona => 'AI kişiliğinizi yapılandırın';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI asistanlarını verilerinize bağlayın';
 
   @override
@@ -6545,13 +6517,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get enterName => 'Ad girin';
 
   @override
-  String get disconnectTwitter => 'Twitter\'ı Bağlantıdan Kes';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Twitter hesabınızı bağlantıdan kesmek istediğinizden emin misiniz? Kişiliğiniz artık Twitter verilerinize erişemeyecek.';
-
-  @override
   String get getOmiDeviceDescription => 'Kişisel konuşmalarınızla daha doğru bir klon oluşturun';
 
   @override
@@ -7109,49 +7074,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona diğer yeteneklerle birlikte seçilemez';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter hesabı bulunamadı';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter hesabı askıya alındı';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter hesabı doğrulanamadı';
-
-  @override
-  String get personaFailedToFetch => 'Persona alınamadı';
-
-  @override
-  String get personaFailedToCreate => 'Persona oluşturulamadı';
-
-  @override
-  String get personaConnectKnowledgeSource => 'En az bir veri kaynağı bağlayın (Omi veya Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona başarıyla güncellendi';
-
-  @override
-  String get personaFailedToUpdate => 'Persona güncellenemedi';
-
-  @override
-  String get personaPleaseSelectImage => 'Bir görsel seçin';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Persona oluşturulamadı. Daha sonra tekrar deneyin.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona oluşturulamadı: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona etkinleştirilemedi';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Persona etkinleştirilirken hata: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Desteklenen ülkeler alınamadı. Daha sonra tekrar deneyin.';
 
   @override
@@ -7224,21 +7146,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Lütfen önce bir uygulama oluşturun';
-
-  @override
-  String get xHandleTitle => 'X kullanıcı adınız nedir?';
-
-  @override
-  String get xHandleDescription => 'Omi klonunuzu hesabınızın\netkinliğine göre önceden eğiteceğiz';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Lütfen X kullanıcı adınızı girin';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Lütfen geçerli bir X kullanıcı adı girin';
 
   @override
   String get nextButton => 'İleri';

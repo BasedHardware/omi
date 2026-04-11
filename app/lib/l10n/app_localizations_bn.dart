@@ -635,9 +635,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get saving => 'সংরক্ষণ করছে...';
 
   @override
-  String get personaConfig => 'আপনার AI ব্যক্তিত্ব কনফিগার করুন';
-
-  @override
   String get beta => 'বিটা';
 
   @override
@@ -1709,7 +1706,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -2427,12 +2429,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get createKeyToGetStarted => 'শুরু করতে একটি চাবি তৈরি করুন';
 
   @override
-  String get persona => 'ব্যক্তিত্ব';
-
-  @override
-  String get configureYourAiPersona => 'আপনার AI ব্যক্তিত্ব কনফিগার করুন';
-
-  @override
   String get configureSttProvider => 'STT প্রদানকারী কনফিগার করুন';
 
   @override
@@ -2945,9 +2941,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'অ্যাপ সম্পর্কে';
-
-  @override
-  String get aboutThePersona => 'ব্যক্তিত্ব সম্পর্কে';
 
   @override
   String get chatPersonality => 'চ্যাট ব্যক্তিত্ব';
@@ -3484,9 +3477,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get changeYourName => 'আপনার নাম পরিবর্তন করুন';
 
   @override
-  String get manageYourOmiPersona => 'আপনার Omi পার্সোনা পরিচালনা করুন';
-
-  @override
   String get voiceAndPeople => 'ভয়েস ও মানুষ';
 
   @override
@@ -3895,9 +3885,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get shortcutChangeInstruction => 'এটি পরিবর্তন করতে একটি শর্টকাট ক্লিক করুন। বাতিল করতে Escape চাপুন।';
 
   @override
-  String get configurePersonaDescription => 'আপনার AI পার্সোনা কনফিগার করুন';
-
-  @override
   String get configureSTTProvider => 'STT প্রদানকারী কনফিগার করুন';
 
   @override
@@ -4252,16 +4239,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get createAndShareYourApp => 'আপনার অ্যাপ তৈরি এবং শেয়ার করুন';
 
   @override
-  String get createMyClone => 'আমার ক্লোন তৈরি করুন';
-
-  @override
-  String get createYourDigitalClone => 'আপনার ডিজিটাল ক্লোন তৈরি করুন';
-
-  @override
   String get itemApp => 'অ্যাপ';
-
-  @override
-  String get itemPersona => 'পার্সোনা';
 
   @override
   String keepItemPublic(String item) {
@@ -4290,9 +4268,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get manageApp => 'অ্যাপ পরিচালনা করুন';
-
-  @override
-  String get updatePersonaDetails => 'পার্সোনা বিবরণ আপডেট করুন';
 
   @override
   String deleteItemTitle(String item) {
@@ -5819,9 +5794,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get chooseFile => 'ফাইল নির্বাচন করুন';
 
   @override
-  String get configureAiPersona => 'আপনার AI ব্যক্তিত্ব কনফিগার করুন';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI সহায়কদের আপনার ডেটার সাথে সংযুক্ত করুন';
 
   @override
@@ -6542,13 +6514,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get enterName => 'নাম প্রবেশ করুন';
 
   @override
-  String get disconnectTwitter => 'Twitter ডিসকানেক্ট করুন';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'আপনি কি নিশ্চিত যে আপনি আপনার Twitter অ্যাকাউন্ট ডিসকানেক্ট করতে চান? আপনার ব্যক্তিত্ব আপনার Twitter ডেটা অ্যাক্সেস করতে পারবে না।';
-
-  @override
   String get getOmiDeviceDescription => 'আপনার ব্যক্তিগত কথোপকথনের সাথে আরও সঠিক ক্লোন তৈরি করুন';
 
   @override
@@ -7109,49 +7074,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'অন্যান্য ক্ষমতার সাথে পার্সোনা নির্বাচন করা যায় না';
 
   @override
-  String get personaTwitterHandleNotFound => 'টুইটার হ্যান্ডেল পাওয়া যায়নি';
-
-  @override
-  String get personaTwitterHandleSuspended => 'টুইটার হ্যান্ডেল স্থগিত করা হয়েছে';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'টুইটার হ্যান্ডেল যাচাই করতে ব্যর্থ';
-
-  @override
-  String get personaFailedToFetch => 'আপনার পার্সোনা নিয়ে আসতে ব্যর্থ';
-
-  @override
-  String get personaFailedToCreate => 'পার্সোনা তৈরি করতে ব্যর্থ';
-
-  @override
-  String get personaConnectKnowledgeSource => 'দয়া করে কমপক্ষে একটি জ্ঞান ডেটা উৎস (Omi বা টুইটার) সংযুক্ত করুন';
-
-  @override
-  String get personaUpdatedSuccessfully => 'পার্সোনা সফলভাবে আপডেট হয়েছে';
-
-  @override
-  String get personaFailedToUpdate => 'পার্সোনা আপডেট করতে ব্যর্থ';
-
-  @override
-  String get personaPleaseSelectImage => 'একটি ছবি নির্বাচন করুন';
-
-  @override
-  String get personaFailedToCreateTryLater => 'আপনার পার্সোনা তৈরি করতে ব্যর্থ। দয়া করে পরে আবার চেষ্টা করুন।';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'পার্সোনা তৈরি করতে ব্যর্থ: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'পার্সোনা সক্ষম করতে ব্যর্থ';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'পার্সোনা সক্ষম করতে ত্রুটি: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'সমর্থিত দেশ নিয়ে আসতে ব্যর্থ। দয়া করে পরে আবার চেষ্টা করুন।';
 
   @override
@@ -7224,22 +7146,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'প্রথমে একটি অ্যাপ তৈরি করুন';
-
-  @override
-  String get xHandleTitle => 'আপনার X হ্যান্ডেল কী?';
-
-  @override
-  String get xHandleDescription =>
-      'আমরা আপনার অ্যাকাউন্টের কার্যকলাপের উপর ভিত্তি করে আপনার Omi ক্লোন প্রাক-প্রশিক্ষণ দেব';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'আপনার X হ্যান্ডেল লিখুন';
-
-  @override
-  String get xHandlePleaseEnterValid => 'একটি বৈধ X হ্যান্ডেল লিখুন';
 
   @override
   String get nextButton => 'পরবর্তী';
@@ -8683,7 +8589,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

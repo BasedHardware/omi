@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "ನಿಮ್ಮ AI ಪರಿಚಯ ಕಾನ್ಫಿಗರ್",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "ವ್ಯಕ್ತಿತ್ವ",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವ ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT ಪ್ರದಾನಕಾರಿ ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "ವ್ಯಕ್ತಿತ್ವ ಬಗ್ಗೆ",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "ಚ್ಯಾಟ್ ವ್ಯಕ್ತಿತ್ವ",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "ನಿಮ್ಮ ಮಾಹಿತಿ",
     "setYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ಹೊಂದಿಸಿ",
     "changeYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ಬದಲಿಸಿ",
-    "manageYourOmiPersona": "ನಿಮ್ಮ Omi ವ್ಯಕ್ತಿತ್ವವನ್ನು ನಿರ್ವಹಿಸಿ",
     "voiceAndPeople": "ಧ್ವನಿ ಮತ್ತು ಜನರು",
     "teachOmiYourVoice": "Omi ಗೆ ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಕಲಿಸಿ",
     "tellOmiWhoSaidIt": "Omi ಗೆ ಅದನ್ನು ಯಾರು ಹೇಳಿದ್ದಾರೆ ಎಂದು ಹೇಳಿ 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "ಮುಂದಿನ 7 ದಿನಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದೆ",
     "shortcuts": "ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು",
     "shortcutChangeInstruction": "ಅದನ್ನು ಬದಲಾಯಿಸಲು ಶಾರ್ಟ್‌ಕಟ್‌ನಲ್ಲಿ ಕ್ಲಿಕ್ ಮಾಡಿ. ರದ್ದು ಮಾಡಲು Escape ಒತ್ತಿರಿ.",
-    "configurePersonaDescription": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವವನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "configureSTTProvider": "STT ಪೂರೈಕೆದಾರವನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "setConversationEndDescription": "ಸಂವಾದಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಕೊನೆಗೊಳ್ಳುವ ಸಮಯ ಹೊಂದಿಸಿ",
     "importDataDescription": "ಇತರ ಮೂಲಗಳು ಪೈಶನ್ ಆಮದು",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "ನನ್ನ ಕ್ಲೋನ್ ರಚಿಸಿ",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "ನಿಮ್ಮ ಡಿಜಿಟಲ್ ಕ್ಲೋನ್ ರಚಿಸಿ",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "ಅಪ್ಲಿಕೇಶನ",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "ವ್ಯಕ್ತಿತ್ವ",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} ಸಾರ್ವಜನಿಕ ಇಟ್ಟುಕೊಳ್ಳಿ",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "ಅಪ್ಲಿಕೇಶನ ನಿರ್ವಹಿಸಿ",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "ವ್ಯಕ್ತಿತ್ವ ವಿವರಗಳನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಿ",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} ಅಳಿಸಿ",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವ ಸಂರಚನೆ ಮಾಡಿ",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI ಸಹಾಯಕಗಳನ್ನು ನಿಮ್ಮ ಡೇಟಾಕ್ಕೆ ಸಂಪರ್ಕಿಸಿ",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8034,8 +7996,6 @@
     "makePersonaPublic": "ವ್ಯಕ್ತಿತ್ವ ಸಾರ್ವಜನಿಕ ಮಾಡಿ",
     "connectedKnowledgeData": "ಸಂಪರ್ಕಿತ ಜ್ಞಾನ ಡೇಟಾ",
     "enterName": "ಹೆಸರು ನೆರವಿಸಿ",
-    "disconnectTwitter": "Twitter ನೊಂದಿಂದ ಸಂಪರ್ಕ ಕಟ್ಟುವುದು",
-    "disconnectTwitterConfirmation": "ನಿಮ್ಮ Twitter ಖಾತೆ ಸಂಪರ್ಕ ಕಟ್ಟುವುದನ್ನು ಖಾತ್ರಿ ಮಾಡುತ್ತೀರಾ? ನಿಮ್ಮ ವ್ಯಕ್ತಿತ್ವವು ಈಗಾಗಲೇ ನಿಮ್ಮ Twitter ಡೇಟಾಗೆ ಪ್ರವೇಶವನ್ನು ಹೊಂದುವುದಿಲ್ಲ.",
     "getOmiDeviceDescription": "ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಸಂಭಾಷಣೆಗಳು ಹೊಂದಿದ ನಿಖರ ಕ್ಲೋನ್ ರಚಿಸಿ",
     "getOmi": "Omi ಪಡೆಯಿರಿ",
     "iHaveOmiDevice": "ನನ್ನ Omi ಸಾಧನ ಇದೆ",
@@ -8754,68 +8714,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಕಂಡುಬಂದಿಲ್ಲ",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಸ್ಥಗಿತಗೊಂಡಿದೆ",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಪರಿಶೀಲಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "ನಿಮ್ಮ Persona ಪಡೆಯಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "ನಿಮ್ಮ Persona ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "ದಯವಿಟ್ಟು ಕನಿಷ್ಠ ಒಂದು ಜ್ಞಾನ ಡೇಟಾ ಮೂಲ (Omi ಅಥವಾ Twitter) ಸಂಪರ್ಕಿಸಿ",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಿತ",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Persona ನವೀಕರಣ ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "ದಯವಿಟ್ಟು ಚಿತ್ರ ಆಯ್ಕೆ ಮಾಡಿ",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "ನಿಮ್ಮ Persona ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Persona ರಚಿಸುವಲ್ಲಿ ವಿಫಲ: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Persona ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Persona ಸಕ್ರಿಯಗೊಳಿಸುವಲ್ಲಿ ದೋಷ: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "ಬೆಂಬಲಿತ ದೇಶಗಳನ್ನು ಪಡೆಯಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8815,6 @@
     "aiGenPleaseGenerateAppFirst": "ದಯವಿಟ್ಟು ಮೊದಲು ಒಂದು ಅ್ಯಪ್ ಉತ್ಪನ್ನ ಮಾಡಿ",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "ನಿಮ್ಮ X ಹ್ಯಾಂಡಲ್ ಎನ್ನುವುದು ಏನು?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "ನಾವು ನಿಮ್ಮ Omi ಕ್ಲೋನ್ ಪ್ರಾಥಮಿಕವಾಗಿ ತರಿಸುತ್ತೇವೆ\nನಿಮ್ಮ ಖಾತೆಯ ಚಟುವಟಿಕೆ ಭಿತ್ತಿಯ ಆಧಾರದ ಮೇಲೆ",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "ದಯವಿಟ್ಟು ನಿಮ್ಮ X ಹ್ಯಾಂಡಲ್ ನಮೂದಿಸಿ",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "ದಯವಿಟ್ಟು ಮಾನ್ಯ X ಹ್ಯಾಂಡಲ್ ನಮೂದಿಸಿ",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "ಮುಂದೆ",
     "@nextButton": {
