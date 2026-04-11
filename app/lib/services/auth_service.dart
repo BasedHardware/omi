@@ -152,17 +152,6 @@ class AuthService {
     }
   }
 
-  Future<void> signInAnonymously() async {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      var user = FirebaseAuth.instance.currentUser!;
-      SharedPreferencesUtil().uid = user.uid;
-      await getIdToken();
-    } catch (e) {
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-    }
-  }
-
   Future<void> signOut() async {
     _clearCachedAuth();
     await FirebaseAuth.instance.signOut();
@@ -224,8 +213,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
@@ -511,15 +499,13 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user
-              .updateProfile(displayName: fullName)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  Logger.debug('updateProfile timed out on web platform');
-                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                },
-              );
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -565,8 +551,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
