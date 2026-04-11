@@ -17,15 +17,20 @@ export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
+  const { searchParams } = new URL(request.url);
+  // 'all' | 'desktop' | 'mobile' — filters by platform field on analytics docs
+  const platform = searchParams.get('platform') || 'all';
+
   try {
     const db = getDb();
 
-    // Ratings are stored in the `analytics` collection with type='chat_message'.
-    // Each doc has: value (1=up, -1=down), created_at, uid, message_id
+    // Ratings are in the `analytics` collection with type='chat_message'.
+    // Each doc has: value (1/-1), created_at, uid, message_id, platform ('desktop'/'mobile')
+    // Historical docs before the platform tag was added have no platform field.
     const snapshot = await db
       .collection('analytics')
       .where('type', '==', 'chat_message')
-      .limit(5000)
+      .limit(10000)
       .get();
 
     const weeklyStats = new Map<string, { thumbs_up: number; thumbs_down: number }>();
@@ -34,6 +39,13 @@ export async function GET(request: NextRequest) {
       const data = doc.data();
       const value = data.value;
       if (value !== 1 && value !== -1) continue;
+
+      // Platform filter
+      if (platform !== 'all') {
+        const docPlatform = data.platform;
+        if (platform === 'desktop' && docPlatform !== 'desktop') continue;
+        if (platform === 'mobile' && docPlatform !== 'mobile') continue;
+      }
 
       const createdAt = data.created_at;
       if (!createdAt) continue;
@@ -59,7 +71,7 @@ export async function GET(request: NextRequest) {
     const total_up = result.reduce((sum, w) => sum + w.thumbs_up, 0);
     const total_down = result.reduce((sum, w) => sum + w.thumbs_down, 0);
 
-    return NextResponse.json({ weeks: result, total_up, total_down });
+    return NextResponse.json({ weeks: result, total_up, total_down, platform });
   } catch (error) {
     console.error('[Chat Lab] Error fetching ratings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

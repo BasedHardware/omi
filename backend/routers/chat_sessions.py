@@ -177,7 +177,7 @@ def rate_message(
     # Also write to analytics collection (same as mobile endpoint) so ratings
     # appear in the admin dashboard chat ratings chart.
     value = request.rating if request.rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value)
+    set_chat_message_rating_score(uid, message_id, value, platform='desktop')
     return {'status': 'ok'}
 
 
