@@ -29,6 +29,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private var playbackTask: Task<Void, Never>?
   private var fillerTask: Task<Void, Never>?
   private var currentMode: PlaybackMode?
+  private var currentResponseID: String?
+  private var interruptedResponseID: String?
+  private var shouldInterruptNextResponse = false
   private var streamedText = ""
   private var bufferedText = ""
   private var synthesisQueue: [String] = []
@@ -78,9 +81,23 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   func updateStreamingResponseIfEnabled(_ message: ChatMessage?, isFinal: Bool) {
     guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
+    guard let message else { return }
+
+    if currentResponseID != message.id {
+      resetPlaybackPipeline(clearMode: false)
+      currentResponseID = message.id
+      interruptedResponseID = shouldInterruptNextResponse ? message.id : nil
+      shouldInterruptNextResponse = false
+    }
 
     let text = Self.cleanedPlaybackText(from: message)
     guard !text.isEmpty, Self.shouldSpeak(text) else { return }
+
+    if interruptedResponseID == message.id {
+      streamedText = text
+      bufferedText = ""
+      return
+    }
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -171,7 +188,21 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
           self.startSynthesisIfNeeded(mode: mode)
         }
       } catch is CancellationError {
+        await MainActor.run {
+          guard let self else { return }
+          self.isSynthesizing = false
+          self.startSynthesisIfNeeded(mode: mode)
+        }
       } catch {
+        if Self.isCancellation(error) {
+          await MainActor.run {
+            guard let self else { return }
+            self.isSynthesizing = false
+            self.startSynthesisIfNeeded(mode: mode)
+          }
+          return
+        }
+
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
@@ -186,20 +217,20 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   func stop() {
-    playbackTask?.cancel()
-    playbackTask = nil
-    fillerTask?.cancel()
-    fillerTask = nil
-    currentMode = nil
-    streamedText = ""
-    bufferedText = ""
-    synthesisQueue.removeAll()
-    audioQueue.removeAll()
-    isSynthesizing = false
-    hasStartedRealPlayback = false
-    audioPlayer?.stop()
-    audioPlayer = nil
-    speechSynthesizer.stopSpeaking(at: .immediate)
+    resetPlaybackPipeline(clearMode: true)
+    currentResponseID = nil
+    interruptedResponseID = nil
+    shouldInterruptNextResponse = false
+  }
+
+  func interruptCurrentResponse() {
+    if let currentResponseID {
+      interruptedResponseID = currentResponseID
+      shouldInterruptNextResponse = false
+    } else {
+      shouldInterruptNextResponse = true
+    }
+    resetPlaybackPipeline(clearMode: false)
   }
 
   private func startPlaybackIfNeeded() {
@@ -239,6 +270,25 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       self.audioPlayer = nil
       self.startPlaybackIfNeeded()
     }
+  }
+
+  private func resetPlaybackPipeline(clearMode: Bool) {
+    playbackTask?.cancel()
+    playbackTask = nil
+    fillerTask?.cancel()
+    fillerTask = nil
+    if clearMode {
+      currentMode = nil
+    }
+    streamedText = ""
+    bufferedText = ""
+    synthesisQueue.removeAll()
+    audioQueue.removeAll()
+    isSynthesizing = false
+    hasStartedRealPlayback = false
+    audioPlayer?.stop()
+    audioPlayer = nil
+    speechSynthesizer.stopSpeaking(at: .immediate)
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {
@@ -364,6 +414,23 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     }
 
     return emergencyLimit
+  }
+
+  private nonisolated static func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError {
+      return true
+    }
+
+    let nsError = error as NSError
+    if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+      return true
+    }
+
+    if let urlError = error as? URLError, urlError.code == .cancelled {
+      return true
+    }
+
+    return false
   }
 }
 

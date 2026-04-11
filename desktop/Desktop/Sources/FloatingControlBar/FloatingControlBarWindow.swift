@@ -108,7 +108,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     func handleEscapeKey() {
         if FloatingBarVoicePlaybackService.shared.isSpeaking {
-            FloatingBarVoicePlaybackService.shared.stop()
+            FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
             return
         }
 
@@ -785,8 +785,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        NSSize(
-            width: max(frameSize.width, FloatingControlBarWindow.minBarSize.width),
+        let minimumWidth: CGFloat
+        if state.showingAIConversation {
+            minimumWidth = FloatingControlBarWindow.expandedWidth
+        } else if state.currentNotification != nil {
+            minimumWidth = FloatingControlBarWindow.notificationWidth
+        } else if state.isVoiceListening {
+            minimumWidth = FloatingControlBarWindow.expandedWidth
+        } else if state.isHoveringBar {
+            minimumWidth = FloatingControlBarWindow.expandedBarSize.width
+        } else {
+            minimumWidth = FloatingControlBarWindow.minBarSize.width
+        }
+
+        return NSSize(
+            width: max(frameSize.width, minimumWidth),
             height: max(frameSize.height, FloatingControlBarWindow.minBarSize.height)
         )
     }
@@ -1374,7 +1387,7 @@ class FloatingControlBarManager {
         activeQueryGeneration += 1
         chatCancellable?.cancel()
         chatCancellable = nil
-        FloatingBarVoicePlaybackService.shared.stop()
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
         barWindow.cancelInputHeightObserver()
         barWindow.state.currentQueryFromVoice = fromVoice
         barWindow.state.showingAIConversation = true
@@ -1415,7 +1428,7 @@ class FloatingControlBarManager {
         }
 
         limiter.recordQuery()
-        FloatingBarVoicePlaybackService.shared.stop()
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
