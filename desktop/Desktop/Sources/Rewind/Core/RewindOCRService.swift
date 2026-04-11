@@ -178,29 +178,48 @@ actor RewindOCRService {
                 // that can trigger EXC_BREAKPOINT / _objectAt assertion failures if the
                 // underlying buffer is mutated or released during enumeration (see #5891, #5151).
                 let safeObservations = Array(observations)
+                let count = safeObservations.count
+
+                // Pre-extract all data from bridged observations in one pass to
+                // minimise exposure to Vision's internal buffer lifecycle (#5151).
+                struct RawOCR {
+                    let text: String
+                    let confidence: Float
+                    let box: CGRect
+                }
+
+                var rawResults: [RawOCR] = []
+                rawResults.reserveCapacity(count)
+                for i in 0..<count {
+                    let observation = safeObservations[i]
+                    let candidates = observation.topCandidates(1)
+                    guard let candidate = candidates.first else { continue }
+                    let box = observation.boundingBox
+                    guard box.origin.x.isFinite, box.origin.y.isFinite,
+                          box.width.isFinite, box.height.isFinite else { continue }
+                    rawResults.append(RawOCR(
+                        text: String(candidate.string),
+                        confidence: candidate.confidence,
+                        box: box
+                    ))
+                }
 
                 var blocks: [OCRTextBlock] = []
+                blocks.reserveCapacity(rawResults.count)
                 var fullTextLines: [String] = []
+                fullTextLines.reserveCapacity(rawResults.count)
 
-                for observation in safeObservations {
-                    let candidates = observation.topCandidates(1)
-                    guard !candidates.isEmpty, let candidate = candidates.first else { continue }
-
-                    let boundingBox = observation.boundingBox
-                    // Validate bounding box values are finite before using them
-                    guard boundingBox.origin.x.isFinite, boundingBox.origin.y.isFinite,
-                          boundingBox.width.isFinite, boundingBox.height.isFinite else { continue }
-
+                for raw in rawResults {
                     let block = OCRTextBlock(
-                        text: candidate.string,
-                        x: Double((boundingBox.origin.x * 1000).rounded()) / 1000,
-                        y: Double((boundingBox.origin.y * 1000).rounded()) / 1000,
-                        width: Double((boundingBox.width * 1000).rounded()) / 1000,
-                        height: Double((boundingBox.height * 1000).rounded()) / 1000,
-                        confidence: (Double(candidate.confidence) * 1000).rounded() / 1000
+                        text: raw.text,
+                        x: Double((raw.box.origin.x * 1000).rounded()) / 1000,
+                        y: Double((raw.box.origin.y * 1000).rounded()) / 1000,
+                        width: Double((raw.box.width * 1000).rounded()) / 1000,
+                        height: Double((raw.box.height * 1000).rounded()) / 1000,
+                        confidence: (Double(raw.confidence) * 1000).rounded() / 1000
                     )
                     blocks.append(block)
-                    fullTextLines.append(candidate.string)
+                    fullTextLines.append(raw.text)
                 }
 
                 let result = OCRResult(
