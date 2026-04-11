@@ -491,6 +491,8 @@ struct MessageHoverOverlay<Content: View>: View {
     @State private var showCopied = false
     @State private var showInfoPopover = false
     @State private var hideWorkItem: DispatchWorkItem?
+    @State private var showRatingFeedback = false
+    @State private var lastSubmittedRating: Int?
 
     private var shouldShowBar: Bool {
         (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
@@ -533,54 +535,70 @@ struct MessageHoverOverlay<Content: View>: View {
     }
 
     private var actionBar: some View {
-        HStack(spacing: 6) {
-            // Thumbs up
-            Button(action: {
-                let newRating = message.rating == 1 ? nil : 1
-                onRate(newRating)
-            }) {
-                Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .scaledFont(size: 11)
-                    .foregroundColor(message.rating == 1 ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Helpful response")
-
-            // Thumbs down
-            Button(action: {
-                let newRating = message.rating == -1 ? nil : -1
-                onRate(newRating)
-            }) {
-                Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .scaledFont(size: 11)
-                    .foregroundColor(message.rating == -1 ? .red : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Not helpful")
-
-            // Copy
-            Button(action: { copyMessageText() }) {
-                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                    .scaledFont(size: 11)
-                    .foregroundColor(showCopied ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Copy response")
-
-            // Info (developer context)
-            if message.metadata != nil {
-                Button(action: { showInfoPopover.toggle() }) {
-                    Image(systemName: "info.circle")
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 6) {
+                // Thumbs up
+                Button(action: {
+                    let newRating = message.rating == 1 ? nil : 1
+                    guard newRating != lastSubmittedRating else { return }
+                    lastSubmittedRating = newRating
+                    onRate(newRating)
+                    if newRating != nil { showRatingFeedbackBriefly() }
+                }) {
+                    Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                         .scaledFont(size: 11)
-                        .foregroundColor(showInfoPopover ? .white : .secondary)
+                        .foregroundColor(message.rating == 1 ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help("View response context")
-                .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                    MessageMetadataPopover(metadata: message.metadata!)
+                .help("Helpful response")
+
+                // Thumbs down
+                Button(action: {
+                    let newRating = message.rating == -1 ? nil : -1
+                    guard newRating != lastSubmittedRating else { return }
+                    lastSubmittedRating = newRating
+                    onRate(newRating)
+                    if newRating != nil { showRatingFeedbackBriefly() }
+                }) {
+                    Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        .scaledFont(size: 11)
+                        .foregroundColor(message.rating == -1 ? .red : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Not helpful")
+
+                // Copy
+                Button(action: { copyMessageText() }) {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 11)
+                        .foregroundColor(showCopied ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy response")
+
+                // Info (developer context)
+                if message.metadata != nil {
+                    Button(action: { showInfoPopover.toggle() }) {
+                        Image(systemName: "info.circle")
+                            .scaledFont(size: 11)
+                            .foregroundColor(showInfoPopover ? .white : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("View response context")
+                    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                        MessageMetadataPopover(metadata: message.metadata!)
+                    }
                 }
             }
+
+            if showRatingFeedback {
+                Text("Thank you!")
+                    .scaledFont(size: 9)
+                    .foregroundColor(.secondary)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
         .frame(width: actionBarWidth, alignment: .trailing)
         .padding(.top, 1)
         .opacity(shouldShowBar ? 1 : 0)
@@ -593,6 +611,13 @@ struct MessageHoverOverlay<Content: View>: View {
                 hideWorkItem?.cancel()
                 hideWorkItem = nil
             }
+        }
+    }
+
+    private func showRatingFeedbackBriefly() {
+        showRatingFeedback = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            showRatingFeedback = false
         }
     }
 

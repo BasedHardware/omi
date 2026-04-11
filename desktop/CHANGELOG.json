@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed floating bar close button requiring multiple clicks by enlarging the hit area"
+  ],
   "releases": [
     {
       "version": "0.11.287",
