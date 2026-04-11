@@ -18,33 +18,62 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
 
   const { searchParams } = new URL(request.url);
-  // 'all' | 'desktop' | 'mobile' — filters by platform field on analytics docs
   const platform = searchParams.get('platform') || 'all';
+  const groupBy = searchParams.get('group_by') || 'week'; // 'week' or 'version'
 
   try {
     const db = getDb();
 
-    // Ratings are in the `analytics` collection with type='chat_message'.
-    // Each doc has: value (1/-1), created_at, uid, message_id, platform ('desktop'/'mobile')
-    // Historical docs before the platform tag was added have no platform field.
     const snapshot = await db
       .collection('analytics')
       .where('type', '==', 'chat_message')
       .limit(10000)
       .get();
 
+    if (groupBy === 'version') {
+      // Group by app_version
+      const versionStats = new Map<string, { thumbs_up: number; thumbs_down: number }>();
+
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        const value = data.value;
+        if (value !== 1 && value !== -1) continue;
+        if (platform !== 'all') {
+          if (platform === 'desktop' && data.platform !== 'desktop') continue;
+          if (platform === 'mobile' && data.platform !== 'mobile') continue;
+        }
+
+        const version = data.app_version || 'unknown';
+        const entry = versionStats.get(version) || { thumbs_up: 0, thumbs_down: 0 };
+        if (value === 1) entry.thumbs_up++;
+        else entry.thumbs_down++;
+        versionStats.set(version, entry);
+      }
+
+      const versions = Array.from(versionStats.entries())
+        .map(([version, stats]) => ({
+          version,
+          thumbs_up: stats.thumbs_up,
+          thumbs_down: stats.thumbs_down,
+        }))
+        .sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }));
+
+      const total_up = versions.reduce((s, v) => s + v.thumbs_up, 0);
+      const total_down = versions.reduce((s, v) => s + v.thumbs_down, 0);
+
+      return NextResponse.json({ versions, total_up, total_down, platform, group_by: 'version' });
+    }
+
+    // Default: group by week
     const weeklyStats = new Map<string, { thumbs_up: number; thumbs_down: number }>();
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
       const value = data.value;
       if (value !== 1 && value !== -1) continue;
-
-      // Platform filter
       if (platform !== 'all') {
-        const docPlatform = data.platform;
-        if (platform === 'desktop' && docPlatform !== 'desktop') continue;
-        if (platform === 'mobile' && docPlatform !== 'mobile') continue;
+        if (platform === 'desktop' && data.platform !== 'desktop') continue;
+        if (platform === 'mobile' && data.platform !== 'mobile') continue;
       }
 
       const createdAt = data.created_at;
@@ -71,7 +100,7 @@ export async function GET(request: NextRequest) {
     const total_up = result.reduce((sum, w) => sum + w.thumbs_up, 0);
     const total_down = result.reduce((sum, w) => sum + w.thumbs_down, 0);
 
-    return NextResponse.json({ weeks: result, total_up, total_down, platform });
+    return NextResponse.json({ weeks: result, total_up, total_down, platform, group_by: 'week' });
   } catch (error) {
     console.error('[Chat Lab] Error fetching ratings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

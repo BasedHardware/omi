@@ -4374,8 +4374,10 @@ extension APIClient {
   func rateMessage(messageId: String, rating: Int?) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
+      let app_version: String?
     }
-    let body = RateRequest(rating: rating)
+    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    let body = RateRequest(rating: rating, app_version: version)
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }
