@@ -6,7 +6,8 @@ import Combine
 ///
 /// State machine:
 ///   idle → [Option down] → listening → [Option up] → finalizing → sends query → idle
-///   idle → [Option tap+tap within 400ms] → lockedListening → [Option tap] → finalizing → idle
+///   idle → [Quick tap] → pendingLockDecision → [tap again within 400ms] → lockedListening
+///   pendingLockDecision → [timeout] → finalizing → sends query → idle
 @MainActor
 class PushToTalkManager: ObservableObject {
   static let shared = PushToTalkManager()
@@ -16,6 +17,7 @@ class PushToTalkManager: ObservableObject {
   enum PTTState {
     case idle
     case listening
+    case pendingLockDecision
     case lockedListening
     case finalizing
   }
@@ -32,6 +34,7 @@ class PushToTalkManager: ObservableObject {
   private var lastOptionDownTime: TimeInterval = 0
   private var lastOptionUpTime: TimeInterval = 0
   private let doubleTapThreshold: TimeInterval = 0.4
+  private let tapToLockMaxHoldDuration: TimeInterval = 0.22
 
   // Transcription
   private var transcriptionService: TranscriptionService?
@@ -40,6 +43,7 @@ class PushToTalkManager: ObservableObject {
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
   private var hasMicPermission: Bool = false
+  private var isCurrentSessionFollowUp = false
 
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
@@ -152,6 +156,7 @@ class PushToTalkManager: ObservableObject {
     case .idle:
       // Check for double-tap: if last Option-up was recent, enter locked mode
       if ShortcutSettings.shared.doubleTapForLock && (now - lastOptionUpTime) < doubleTapThreshold {
+        lastOptionUpTime = 0
         enterLockedListening()
       } else {
         lastOptionDownTime = now
@@ -161,6 +166,10 @@ class PushToTalkManager: ObservableObject {
     case .listening:
       // Already listening (hold mode), ignore repeated flagsChanged
       break
+
+    case .pendingLockDecision:
+      stopListening()
+      enterLockedListening()
 
     case .lockedListening:
       // Tap while locked → finalize
@@ -177,37 +186,34 @@ class PushToTalkManager: ObservableObject {
     switch state {
     case .listening:
       let holdDuration = now - lastOptionDownTime
-      lastOptionUpTime = now
 
-      if ShortcutSettings.shared.doubleTapForLock && holdDuration < doubleTapThreshold {
-        // Short tap — delay briefly to allow double-tap detection
-        let workItem = DispatchWorkItem { [weak self] in
-          Task { @MainActor in
-            guard let self = self, self.state == .listening else { return }
-            self.finalize()
-          }
-        }
-        finalizeWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapThreshold, execute: workItem)
+      if ShortcutSettings.shared.doubleTapForLock && holdDuration < tapToLockMaxHoldDuration {
+        lastOptionUpTime = now
+        enterPendingLockDecision()
       } else {
+        lastOptionUpTime = 0
         // Long hold released — finalize immediately
         finalize()
       }
 
+    case .pendingLockDecision:
+      break
+
     case .lockedListening:
       // In locked mode, Option-up is ignored (we finalize on next Option-down)
-      lastOptionUpTime = now
+      break
 
     case .idle, .finalizing:
-      lastOptionUpTime = now
+      break
     }
   }
 
   // MARK: - Listening Lifecycle
 
   private func startListening() {
-    FloatingBarVoicePlaybackService.shared.stop()
+    FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     state = .listening
+    isCurrentSessionFollowUp = barState?.showingAIResponse == true
     transcriptSegments = []
     lastInterimText = ""
     finalizeWorkItem?.cancel()
@@ -220,13 +226,7 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    // Check if an AI conversation is already active — enter follow-up mode
-    let isFollowUp = barState?.showingAIResponse == true
-    if isFollowUp {
-      barState?.isVoiceFollowUp = true
-      barState?.voiceFollowUpTranscript = ""
-    }
-
+    let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
     updateBarState()
 
@@ -236,10 +236,11 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func enterLockedListening() {
-    FloatingBarVoicePlaybackService.shared.stop()
+    FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
     state = .lockedListening
+    isCurrentSessionFollowUp = barState?.showingAIResponse == true
 
     // Play start-of-PTT sound for locked mode
     if ShortcutSettings.shared.pttSoundsEnabled {
@@ -248,13 +249,7 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    // Check if an AI conversation is already active — enter follow-up mode
-    let isFollowUp = barState?.showingAIResponse == true
-    if isFollowUp {
-      barState?.isVoiceFollowUp = true
-      barState?.voiceFollowUpTranscript = ""
-    }
-
+    let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
 
     // If we were already listening from the first tap, keep going.
@@ -271,6 +266,23 @@ class PushToTalkManager: ObservableObject {
     log("PushToTalkManager: entered locked listening mode (followUp=\(isFollowUp))")
   }
 
+  private func enterPendingLockDecision() {
+    guard state == .listening else { return }
+
+    state = .pendingLockDecision
+    audioCaptureService?.stopCapture()
+    updateBarState()
+
+    let workItem = DispatchWorkItem { [weak self] in
+      Task { @MainActor in
+        guard let self, self.state == .pendingLockDecision else { return }
+        self.finalize()
+      }
+    }
+    finalizeWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapThreshold, execute: workItem)
+  }
+
   private func stopListening() {
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
@@ -283,6 +295,7 @@ class PushToTalkManager: ObservableObject {
     batchAudioLock.lock()
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
+    isCurrentSessionFollowUp = false
     updateBarState()
   }
 
@@ -290,16 +303,15 @@ class PushToTalkManager: ObservableObject {
   func cancelListening() {
     guard state != .idle else { return }
     log("PushToTalkManager: cancelling listening")
-    barState?.isVoiceFollowUp = false
-    barState?.voiceFollowUpTranscript = ""
     stopListening()
   }
 
   private var finalizedMode: String = "hold"
 
   private func finalize() {
-    guard state == .listening || state == .lockedListening else { return }
+    guard state == .listening || state == .lockedListening || state == .pendingLockDecision else { return }
 
+    lastOptionUpTime = 0
     finalizedMode = state == .lockedListening ? "locked" : "hold"
     state = .finalizing
     finalizeWorkItem?.cancel()
@@ -405,7 +417,7 @@ class PushToTalkManager: ObservableObject {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     let hasQuery = !query.isEmpty
-    let wasFollowUp = barState?.isVoiceFollowUp == true
+    let wasFollowUp = isCurrentSessionFollowUp
 
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode,
@@ -413,9 +425,7 @@ class PushToTalkManager: ObservableObject {
       transcriptLength: query.count
     )
 
-    // Clear follow-up state
-    barState?.isVoiceFollowUp = false
-    barState?.voiceFollowUpTranscript = ""
+    isCurrentSessionFollowUp = false
 
     // Reset state — skip PTT collapse resize when we have a query,
     // because openAIInputWithQuery will resize to the correct size.
@@ -543,20 +553,22 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
-    guard state == .listening || state == .lockedListening || state == .finalizing else { return }
+    guard
+      state == .listening || state == .lockedListening || state == .pendingLockDecision
+        || state == .finalizing
+    else { return }
 
     for segment in segments {
       transcriptSegments.append(segment.text)
     }
     lastInterimText = ""
 
-    // Update live transcript in the bar
-    let liveText = transcriptSegments.joined(separator: " ")
-    barState?.voiceTranscript = liveText
-
-    // Also update follow-up transcript if in follow-up mode
-    if barState?.isVoiceFollowUp == true {
-      barState?.voiceFollowUpTranscript = liveText
+    if state == .listening || state == .lockedListening {
+      let liveText = transcriptSegments.joined(separator: " ")
+      barState?.voiceTranscript = liveText
+      if isCurrentSessionFollowUp {
+        barState?.voiceFollowUpTranscript = liveText
+      }
     }
 
     // In finalizing state, segments mean backend is done — send immediately
@@ -573,11 +585,13 @@ class PushToTalkManager: ObservableObject {
   private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
     let wasListening = barState.isVoiceListening
-    barState.isVoiceListening =
-      (state == .listening || state == .lockedListening || state == .finalizing)
+    let isShowingVoiceUI = (state == .listening || state == .lockedListening)
+    barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
-    if state == .idle {
+    barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI
+    if !isShowingVoiceUI {
       barState.voiceTranscript = ""
+      barState.voiceFollowUpTranscript = ""
     }
 
     // Skip resize when in follow-up mode, expanded AI conversation, or during onboarding
