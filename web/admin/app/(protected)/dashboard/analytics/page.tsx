@@ -1688,6 +1688,93 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       )}
+      {/* Chat Ratings by Week */}
+      <ChatRatingsChart token={token} />
     </div>
+  );
+}
+
+// --- Chat Ratings Chart (Firebase analytics collection) ---
+
+interface RatingWeek {
+  week: string;
+  thumbs_up: number;
+  thumbs_down: number;
+}
+
+interface ChatRatingsData {
+  weeks: RatingWeek[];
+  total_up: number;
+  total_down: number;
+}
+
+function ChatRatingsChart({ token }: { token: string | null }) {
+  const { data, isLoading } = useSWR<ChatRatingsData>(
+    token ? ["/api/omi/chat-lab/ratings", token] : null,
+    authenticatedFetcher
+  );
+
+  const stats = useMemo(() => {
+    if (!data) return { total: 0, up: 0, down: 0, pct: 0 };
+    const { total_up: up, total_down: down } = data;
+    const total = up + down;
+    return { total, up, down, pct: total > 0 ? Math.round((up / total) * 100) : 0 };
+  }, [data]);
+
+  const chartData = useMemo(() => {
+    if (!data?.weeks) return [];
+    return data.weeks.map((w) => ({
+      ...w,
+      satisfaction: w.thumbs_up + w.thumbs_down > 0
+        ? Math.round((w.thumbs_up / (w.thumbs_up + w.thumbs_down)) * 100)
+        : 0,
+    }));
+  }, [data]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Chat Response Ratings</span>
+          {stats.total > 0 && (
+            <div className="flex items-center gap-4 text-sm font-normal">
+              <span className="text-green-500">{stats.up} 👍</span>
+              <span className="text-red-500">{stats.down} 👎</span>
+              <span className={`font-bold ${stats.pct >= 60 ? "text-green-500" : stats.pct >= 40 ? "text-yellow-500" : "text-red-500"}`}>
+                {stats.pct}% positive
+              </span>
+            </div>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading ratings...
+          </div>
+        ) : !chartData.length ? (
+          <div className="text-center text-muted-foreground py-12">
+            No chat ratings data available
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={250}>
+            <ComposedChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+              <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="count" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8 }}
+                labelStyle={{ color: "#ccc" }}
+              />
+              <Legend />
+              <Bar yAxisId="count" dataKey="thumbs_up" name="👍 Likes" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="count" dataKey="thumbs_down" name="👎 Dislikes" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 }

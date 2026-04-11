@@ -2724,6 +2724,41 @@ struct SettingsContentView: View {
       troubleshootingSubsection
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
+
+      advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
+      devToolsSubsection
+    }
+  }
+
+  // MARK: - Dev Tools Subsection
+
+  private var devToolsSubsection: some View {
+    VStack(spacing: 20) {
+      settingsCard(settingId: "advanced.devtools.chatlab") {
+        HStack(spacing: 12) {
+          Image(systemName: "flask.fill")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Chat Prompt Lab")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Iterate on chat system prompts with real questions, AI grading, and production ratings")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+          Spacer()
+          Button("Open") {
+            ChatLabWindowManager.shared.openWindow(chatProvider: chatProvider)
+          }
+          .buttonStyle(.plain)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 6)
+          .background(OmiColors.purplePrimary)
+          .foregroundColor(.white)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+      }
     }
   }
 

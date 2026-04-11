@@ -1542,6 +1542,69 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
 
+    // MARK: - Chat Lab Helpers
+
+    /// Build a system prompt for the Chat Lab using a custom template but real user context.
+    func labBuildSystemPrompt(floatingPrefix: String, mainTemplate: String) -> String {
+        let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.givenName
+
+        var prompt = floatingPrefix + "\n\n" + mainTemplate
+        prompt = prompt.replacingOccurrences(of: "{user_name}", with: userName)
+        prompt = prompt.replacingOccurrences(of: "{tz}", with: TimeZone.current.identifier)
+
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_str}", with: df.string(from: Date()))
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone.current
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_iso}", with: isoFormatter.string(from: Date()))
+
+        let utcFormatter = DateFormatter()
+        utcFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        utcFormatter.timeZone = TimeZone(identifier: "UTC")
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_utc}", with: utcFormatter.string(from: Date()))
+
+        prompt = prompt.replacingOccurrences(of: "{memories_section}", with: formatMemoriesSection())
+        prompt = prompt.replacingOccurrences(of: "{goal_section}", with: formatGoalSection())
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: formatTasksSection())
+        prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: formatAIProfileSection())
+        prompt = prompt.replacingOccurrences(of: "{database_schema}", with: cachedDatabaseSchema)
+
+        return prompt
+    }
+
+    /// Run a single question through the ACP bridge for Chat Lab evaluation.
+    /// Uses a unique session key so it doesn't interfere with the real chat.
+    func labRunQuestion(question: String, systemPrompt: String, sessionKey: String) async -> String {
+        // Ensure bridge is running
+        guard await ensureBridgeStarted() else {
+            return "[Bridge not available]"
+        }
+
+        do {
+            let result = try await acpBridge.query(
+                prompt: question,
+                systemPrompt: systemPrompt,
+                sessionKey: sessionKey,
+                model: "claude-sonnet-4-20250514",
+                onTextDelta: { _ in },
+                onToolCall: { callId, name, input in
+                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                    let result = await ChatToolExecutor.execute(toolCall)
+                    log("ChatLab: tool \(name) executed")
+                    return result
+                },
+                onToolActivity: { _, _, _, _ in },
+                onThinkingDelta: { _ in }
+            )
+            return result.text
+        } catch {
+            log("ChatLab: query error: \(error)")
+            return "[Error: \(error.localizedDescription)]"
+        }
+    }
+
     /// Formats the last 10 non-empty messages in the current session as a conversation history string.
     /// Used to seed new ACP sessions with context from the existing chat UI history.
     private func buildConversationHistory() -> String {
