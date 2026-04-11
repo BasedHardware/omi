@@ -15,6 +15,19 @@ struct FloatingBarNotification: Identifiable, Equatable {
     let title: String
     let message: String
     let assistantId: String
+    /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
+    let screenshotData: Data?
+
+    init(title: String, message: String, assistantId: String, screenshotData: Data? = nil) {
+        self.title = title
+        self.message = message
+        self.assistantId = assistantId
+        self.screenshotData = screenshotData
+    }
+
+    static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 /// Observable object holding the state for the floating control bar.
