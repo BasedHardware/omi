@@ -13,6 +13,7 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 from database.wrapped import WrappedStatus
 from models.conversation import Conversation
+from utils.conversations.factory import hydrate_conversations
 from utils.llm.clients import llm_gemini_flash
 from utils.notifications import send_notification
 import json
@@ -760,7 +761,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
             end_date=YEAR_2025_END,
         )
 
-        conversations = [Conversation(**c) for c in conversations_data]
+        conversations = hydrate_conversations(conversations_data)
         logger.info(
             f"[Wrapped] Step 1 complete: Found {len(conversations)} conversations for 2025 (took {time.time() - step_start:.2f}s)"
         )

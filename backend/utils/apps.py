@@ -67,6 +67,7 @@ from database.redis_db import (
 )
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
+from utils.conversations.factory import hydrate_conversations
 from utils.conversations.render import conversations_to_string
 from models.other import Person
 from utils import stripe
@@ -626,7 +627,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations — exclude locked content
-    conversations = [c for c in get_conversations(uid, limit=10) if not c.get('is_locked')]
+    conversations = hydrate_conversations([c for c in get_conversations(uid, limit=10) if not c.get('is_locked')])
     conversation_history = conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
         conversation_history = condense_conversations([conversation_history])
@@ -753,7 +754,7 @@ async def update_persona_prompt(persona: dict):
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
-    conversations = get_conversations(persona['uid'], limit=10)
+    conversations = hydrate_conversations(get_conversations(persona['uid'], limit=10))
     conversation_history = conversations_to_string(conversations)
     uid = persona['uid']
     with track_usage(uid, Features.PERSONA):

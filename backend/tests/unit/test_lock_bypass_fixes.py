@@ -941,7 +941,11 @@ class TestMentorProactiveLockFilter:
                                             mock_render.assert_called_once()
                                             convos_passed = mock_render.call_args[0][0]
                                             assert len(convos_passed) == 1
-                                            assert convos_passed[0].get('is_locked') is not True
+                                            conv = convos_passed[0]
+                                            is_locked = (
+                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
+                                            )
+                                            assert is_locked is not True
 
 
 # =============================================================================
