@@ -207,10 +207,10 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                                                 scheduled_price_id = phase_dict['items'][0]['price']
                                                 break
                         except Exception as e:
-                            logger.error(f"Error checking subscription schedules: {e}")
+                            logger.error(f"Error checking subscription schedules: {sanitize(str(e))}")
 
             except Exception as e:
-                logger.error(f"Error retrieving current subscription: {e}")
+                logger.error(f"Error retrieving current subscription: {sanitize(str(e))}")
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
@@ -263,7 +263,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         return AvailablePlansResponse(plans=pricing_options)
 
     except Exception as e:
-        logger.error(f"Error fetching available plans: {e}")
+        logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
 
 
