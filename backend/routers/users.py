@@ -798,7 +798,10 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                     )
                 )
             except Exception as e:
-                logger.error(f"Error retrieving monthly price from Stripe for {definition['plan_id']}: {e}")
+                logger.error(
+                    f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
+                    f"(price_id={monthly_price_id}): {e}"
+                )
 
         if annual_price_id:
             try:
@@ -817,7 +820,10 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                     )
                 )
             except Exception as e:
-                logger.error(f"Error retrieving annual price from Stripe for {definition['plan_id']}: {e}")
+                logger.error(
+                    f"Error retrieving annual price from Stripe for {definition['plan_id']} "
+                    f"(price_id={annual_price_id}): {e}"
+                )
 
         if plan_prices:
             available_plans.append(
