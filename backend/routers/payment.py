@@ -39,6 +39,7 @@ from fastapi.responses import HTMLResponse
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
+from utils.log_sanitizer import sanitize
 import os
 import logging
 
@@ -234,7 +235,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                 except Exception as e:
                     logger.error(
                         f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
-                        f"(price_id={monthly_price_id}): {e}"
+                        f"(price_id={monthly_price_id}): {sanitize(str(e))}"
                     )
             if annual_price_id:
                 try:
@@ -253,7 +254,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                 except Exception as e:
                     logger.error(
                         f"Error retrieving annual price from Stripe for {definition['plan_id']} "
-                        f"(price_id={annual_price_id}): {e}"
+                        f"(price_id={annual_price_id}): {sanitize(str(e))}"
                     )
 
         if not pricing_options:
