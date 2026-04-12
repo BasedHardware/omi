@@ -5770,7 +5770,9 @@ struct SettingsContentView: View {
     let isSelected = selectedPlanIdForCheckout == plan.id
     let accent = planAccentColor(for: plan.id)
     let isCurrentPlan = isCurrentSubscriptionPlan(plan)
-    let canPurchase = !isCurrentPlan
+    let isProUser = userSubscription?.subscription.plan == .pro
+    let isDowngrade = isProUser && plan.id == "unlimited"
+    let canPurchase = !isCurrentPlan && !isDowngrade
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
