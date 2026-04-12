@@ -6249,7 +6249,7 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          let response = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
