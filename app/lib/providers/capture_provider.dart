@@ -214,6 +214,12 @@ class CaptureProvider extends ChangeNotifier
       ServiceManager.instance().mic.stop();
       // Let iOS fully release the session before we re-activate it.
       await Future.delayed(const Duration(milliseconds: 250));
+      // Re-check state after the await: the user may have tapped stop during
+      // the delay window. Without this guard we would restart recording
+      // against the user's intent.
+      if (recordingState != RecordingState.interrupted && recordingState != RecordingState.record) {
+        return;
+      }
       await streamRecording();
     } catch (e, st) {
       Logger.error('[CaptureProvider] failed to restart phone mic: $e\n$st');
