@@ -23,7 +23,9 @@ for _mod in [
 
 from models.conversation import AppResult, Conversation
 from models.conversation_enums import CategoryEnum
-from models.structured import ActionItem, Structured
+from models.other import Person
+from models.structured import ActionItem, Event, Structured
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.factory import hydrate_conversation, hydrate_conversations
 from utils.conversations.render import conversations_to_string
 
@@ -142,6 +144,49 @@ class TestRender:
     def test_empty_list(self):
         result = conversations_to_string([])
         assert result == ""
+
+    def test_events_rendered(self):
+        conv = _make_conversation(
+            structured=Structured(
+                title="t",
+                overview="o",
+                category=CategoryEnum.personal,
+                events=[Event(title="Standup", start=datetime(2026, 1, 15, 10, 0, tzinfo=timezone.utc), duration=30)],
+            )
+        )
+        result = conversations_to_string([conv])
+        assert "Standup" in result
+        assert "30 minutes" in result
+
+    def test_attendees_rendered(self):
+        conv = _make_conversation(
+            transcript_segments=[
+                TranscriptSegment(text="hello", speaker_id=0, is_user=False, start=0.0, end=1.0, person_id="p1")
+            ]
+        )
+        people = [Person(id="p1", name="Alice")]
+        result = conversations_to_string([conv], people=people)
+        assert "Attendees: Alice" in result
+
+    def test_transcript_rendered(self):
+        conv = _make_conversation(
+            transcript_segments=[TranscriptSegment(text="hello world", speaker_id=0, is_user=True, start=0.0, end=1.0)]
+        )
+        result = conversations_to_string([conv], use_transcript=True)
+        assert "Transcript:" in result
+        assert "hello world" in result
+
+    def test_started_finished_rendered(self):
+        conv = _make_conversation()
+        result = conversations_to_string([conv])
+        assert "Started:" in result
+        assert "Finished:" in result
+
+    def test_no_started_finished_when_none(self):
+        conv = _make_conversation(started_at=None, finished_at=None)
+        result = conversations_to_string([conv])
+        assert "Started:" not in result
+        assert "Finished:" not in result
 
 
 class TestConversationModelNoRenderMethod:
