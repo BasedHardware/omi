@@ -274,7 +274,7 @@ env:
   - name: STRIPE_PRO_MONTHLY_PRICE_ID
     value: "price_1TAfBB1F8wnoWYvw8XBFM1dX"
   - name: STRIPE_PRO_ANNUAL_PRICE_ID
-    value: ""
+    value: "price_1TLFac1F8wnoWYvwtPxZhtzE"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
