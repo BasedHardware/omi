@@ -283,6 +283,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
+        provider.recordingState == RecordingState.interrupted ||
         _isPhoneMicPaused;
 
     // Determine pause state based on recording type
