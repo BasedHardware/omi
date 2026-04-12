@@ -6239,6 +6239,33 @@ struct SettingsContentView: View {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
 
+    // If user already has an active paid subscription (not canceled), use upgrade endpoint
+    // to schedule the plan change at end of billing period (no double-charging)
+    if hasPaidSubscription,
+       let subscription = userSubscription?.subscription,
+       !subscription.cancelAtPeriodEnd
+    {
+      Task {
+        do {
+          let response = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = nil
+            loadSubscriptionInfo()
+          }
+        } catch {
+          logError("Failed to schedule plan change", error: error)
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = "Failed to schedule plan change."
+          }
+        }
+      }
+      return
+    }
+
     Task {
       do {
         let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
