@@ -146,10 +146,18 @@ class BottomNavBar extends StatelessWidget {
                 child: Consumer<CaptureProvider>(
                   builder: (context, captureProvider, child) {
                     final isRecording = captureProvider.recordingState == RecordingState.record;
+                    final isInterrupted = captureProvider.recordingState == RecordingState.interrupted;
                     final isInitializing = captureProvider.recordingState == RecordingState.initialising;
+                    // Tap-to-stop semantics apply whether the pipeline is healthy
+                    // (`record`) or transiently broken (`interrupted`). Colour
+                    // differs so the UI doesn't lie about being actively capturing.
+                    final showStopAffordance = isRecording || isInterrupted;
                     if (!showCenterButton) {
                       return const SizedBox.shrink();
                     }
+
+                    final Color buttonColor =
+                        isInterrupted ? Colors.orange : (isRecording ? Colors.red : Colors.deepPurple);
 
                     return GestureDetector(
                       onTap: () async {
@@ -162,13 +170,13 @@ class BottomNavBar extends StatelessWidget {
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: isRecording ? Colors.red : Colors.deepPurple,
+                          color: buttonColor,
                           border: Border.all(color: Colors.black, width: 5),
                         ),
                         child: isInitializing
                             ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                             : Icon(
-                                isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
+                                showStopAffordance ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
                                 color: Colors.white,
                                 size: 24,
                               ),
@@ -186,7 +194,7 @@ class BottomNavBar extends StatelessWidget {
   Future<void> _handleRecordButtonPress(BuildContext context, CaptureProvider captureProvider) async {
     final recordingState = captureProvider.recordingState;
 
-    if (recordingState == RecordingState.record) {
+    if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
       await captureProvider.stopStreamRecording();
       captureProvider.forceProcessingCurrentConversation();
       MixpanelManager().phoneMicRecordingStopped();
