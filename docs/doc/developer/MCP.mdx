@@ -81,24 +81,36 @@ The API key can also be provided with each tool call. If not provided, the serve
 
 <AccordionGroup>
   <Accordion title="get_memories" icon="brain">
-    Retrieve a list of user memories.
+    Retrieve a list of user memories with optional filtering.
 
     **Parameters:**
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
-    | `limit` | number | No | Maximum number of memories to retrieve (default: 100) |
-    | `categories` | array | No | Categories to filter by (default: []) |
+    | `categories` | array | No | Categories to filter by |
+    | `limit` | number | No | Maximum number of memories (default: 100) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
 
     **Returns:** JSON object containing list of memories
   </Accordion>
+  <Accordion title="search_memories" icon="magnifying-glass">
+    Semantic search across memories. Returns results ranked by relevance.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `query` | string | Yes | Natural language search query |
+    | `limit` | number | No | Maximum number of results (default: 10) |
+
+    **Returns:** List of memories with `relevance_score` field
+  </Accordion>
   <Accordion title="create_memory" icon="plus">
-    Create a new memory.
+    Create a new memory. Category is auto-detected if not provided.
 
     **Parameters:**
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
     | `content` | string | Yes | Content of the memory |
-    | `category` | MemoryFilterOptions | Yes | Category of the memory |
+    | `category` | string | No | Category of the memory |
 
     **Returns:** Created memory object
   </Accordion>
@@ -124,15 +136,41 @@ The API key can also be provided with each tool call. If not provided, the serve
     **Returns:** Status of the operation
   </Accordion>
   <Accordion title="get_conversations" icon="comments">
-    Retrieve a list of user conversations.
+    Retrieve a list of conversations with optional date and category filtering.
 
     **Parameters:**
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
-    | `include_discarded` | boolean | No | Include discarded conversations (default: false) |
-    | `limit` | number | No | Maximum number of conversations (default: 25) |
+    | `start_date` | string | No | Filter after this date (YYYY-MM-DD) |
+    | `end_date` | string | No | Filter before this date (YYYY-MM-DD) |
+    | `categories` | array | No | Categories to filter by |
+    | `limit` | number | No | Maximum number of conversations (default: 20) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
 
-    **Returns:** List of conversation objects containing transcripts, timestamps, geolocation, and structured summaries
+    **Returns:** List of conversation metadata (use `get_conversation_by_id` for full transcripts)
+  </Accordion>
+  <Accordion title="search_conversations" icon="magnifying-glass">
+    Semantic search across conversations. Returns results ranked by relevance.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `query` | string | Yes | Natural language search query |
+    | `start_date` | string | No | Filter after this date (YYYY-MM-DD) |
+    | `end_date` | string | No | Filter before this date (YYYY-MM-DD) |
+    | `limit` | number | No | Maximum number of results (default: 10) |
+
+    **Returns:** List of matching conversations ranked by relevance
+  </Accordion>
+  <Accordion title="get_conversation_by_id" icon="file-lines">
+    Retrieve a single conversation by ID, including the full transcript.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `conversation_id` | string | Yes | The ID of the conversation |
+
+    **Returns:** Full conversation object with transcript segments
   </Accordion>
 </AccordionGroup>
 
