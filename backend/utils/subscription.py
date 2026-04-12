@@ -6,6 +6,7 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ def validate_stripe_price_ids():
             except Exception as e:
                 logger.error(
                     f"STARTUP: Stripe price validation failed for {definition['plan_id']} {interval} "
-                    f"(price_id={price_id}): {e} — this plan will be invisible to users"
+                    f"(price_id={price_id}): {sanitize(str(e))} — this plan will be invisible to users"
                 )
 
 
