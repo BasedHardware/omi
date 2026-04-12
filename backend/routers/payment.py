@@ -310,19 +310,25 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
             )
 
+        # Determine the target plan type and interval for metadata/messages
+        target_plan = get_plan_type_from_price_id(request.price_id)
+        target_price = stripe.Price.retrieve(request.price_id)
+        target_interval = target_price.recurring.interval  # "month" or "year"
+        current_plan = get_plan_type_from_price_id(current_price_id)
+
         # Create a subscription schedule from the existing subscription
         schedule = stripe.SubscriptionSchedule.create(
             from_subscription=stripe_sub['id'],
         )
 
-        # Update the schedule with the new phase (annual plan)
+        # Update the schedule: keep current plan until period end, then switch to new plan
         updated_schedule = stripe.SubscriptionSchedule.modify(
             schedule.id,
             phases=[
                 {
                     'items': [
                         {
-                            'price': current_price_id,  # Keep current monthly plan
+                            'price': current_price_id,
                             'quantity': 1,
                         }
                     ],
@@ -332,33 +338,23 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 {
                     'items': [
                         {
-                            'price': request.price_id,  # New annual plan
+                            'price': request.price_id,
                         }
                     ],
                 },
             ],
-            metadata={'uid': uid, 'upgrade_type': 'monthly_to_annual'},
+            metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_to_{target_plan.value}_{target_interval}'},
         )
 
         logger.info(f"updated_schedule: {updated_schedule}")
 
-        # Update the subscription in our database to reflect the scheduled change
-        # The current_period_end will be extended to include the annual period
-        monthly_period_end = stripe_sub['current_period_end']
-        annual_end_timestamp = monthly_period_end + 31536000  # 12 months after monthly ends
-        current_subscription.current_period_end = annual_end_timestamp
-
-        logger.info(f"Updated subscription: {current_subscription.dict()}")
-
-        users_db.update_user_subscription(uid, current_subscription.dict())
-
-        # Calculate remaining days
+        # Calculate remaining days on current plan
         remaining_seconds = stripe_sub['current_period_end'] - int(time.time())
-        remaining_days = max(0, remaining_seconds // 86400)  # Convert seconds to days
+        remaining_days = max(0, remaining_seconds // 86400)
 
         return {
             "status": "success",
-            "message": f"Upgrade scheduled successfully! Your monthly plan continues until {remaining_days} days from now, then automatically switches to annual. You'll get 13 months of coverage total.",
+            "message": f"Plan change scheduled! Your current plan continues for {remaining_days} more days, then automatically switches to {target_plan.value.title()} ({target_interval}ly).",
             "subscription": current_subscription.dict(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
