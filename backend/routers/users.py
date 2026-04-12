@@ -42,6 +42,7 @@ from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
+from utils.conversations.factory import hydrate_conversation, hydrate_conversations
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
@@ -416,7 +417,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
-    memory = Conversation(**memory)
+    memory = hydrate_conversation(memory)
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
 
@@ -1022,7 +1023,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
     if not conversations_data or len(conversations_data) == 0:
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    conversations = hydrate_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
