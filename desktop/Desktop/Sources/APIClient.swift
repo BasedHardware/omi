@@ -3916,8 +3916,8 @@ struct CheckoutSessionResponse: Codable {
 struct UpgradeSubscriptionResponse: Codable {
   let status: String
   let message: String
-  let daysRemaining: Int
-  let scheduleId: String
+  let daysRemaining: Int?
+  let scheduleId: String?
 
   enum CodingKeys: String, CodingKey {
     case status, message
