@@ -218,31 +218,43 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
-                monthly_price = stripe.Price.retrieve(monthly_price_id)
-                pricing_options.append(
-                    PricingOption(
-                        id=monthly_price.id,
-                        title=f'{definition["title"]} Monthly',
-                        price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                        description=None,
-                        interval=monthly_price.recurring.interval,
-                        unit_amount=monthly_price.unit_amount,
-                        is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                try:
+                    monthly_price = stripe.Price.retrieve(monthly_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=monthly_price.id,
+                            title=f'{definition["title"]} Monthly',
+                            price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                            description=None,
+                            interval=monthly_price.recurring.interval,
+                            unit_amount=monthly_price.unit_amount,
+                            is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
+                        f"(price_id={monthly_price_id}): {e}"
+                    )
             if annual_price_id:
-                annual_price = stripe.Price.retrieve(annual_price_id)
-                pricing_options.append(
-                    PricingOption(
-                        id=annual_price.id,
-                        title=f'{definition["title"]} Annual',
-                        price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                        description=definition["annual_description"],
-                        interval=annual_price.recurring.interval,
-                        unit_amount=annual_price.unit_amount,
-                        is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                try:
+                    annual_price = stripe.Price.retrieve(annual_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=annual_price.id,
+                            title=f'{definition["title"]} Annual',
+                            price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                            description=definition["annual_description"],
+                            interval=annual_price.recurring.interval,
+                            unit_amount=annual_price.unit_amount,
+                            is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving annual price from Stripe for {definition['plan_id']} "
+                        f"(price_id={annual_price_id}): {e}"
+                    )
 
         if not pricing_options:
             raise HTTPException(status_code=500, detail="Price configuration not found")
@@ -789,7 +801,8 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 async def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -797,12 +810,14 @@ async def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 async def stripe_cancel():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -810,7 +825,8 @@ async def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/payments/customer-portal')
@@ -843,7 +859,8 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 async def portal_return():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -851,7 +868,8 @@ async def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payment-methods/status")
