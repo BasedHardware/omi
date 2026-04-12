@@ -128,7 +128,9 @@ _stub_package("utils.other")
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
-render_mod.conversations_to_string = MagicMock(return_value="[conversations formatted]")
+render_mod.conversations_to_string = MagicMock(
+    side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
+)
 factory_mod = _stub_module("utils.conversations.factory")
 factory_mod.hydrate_conversation = MagicMock(
     side_effect=lambda d: d if not isinstance(d, dict) else type('FakeConv', (), d)()
