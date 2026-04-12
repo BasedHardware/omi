@@ -6345,6 +6345,7 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
               userSubscription = subscription
               subscriptionError = nil
@@ -6358,7 +6359,7 @@ struct SettingsContentView: View {
             await MainActor.run {
               userSubscription = subscription
               subscriptionError =
-                "Payment completed, but plan refresh is still catching up. Click Refresh in a moment."
+                "Payment completed, but plan refresh is still catching up. Please try reloading this page in a moment."
               pendingSubscriptionPriceId = nil
               pendingCheckoutSessionId = nil
             }
