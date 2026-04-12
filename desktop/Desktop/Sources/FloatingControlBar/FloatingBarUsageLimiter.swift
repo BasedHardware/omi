@@ -23,13 +23,17 @@ final class FloatingBarUsageLimiter: ObservableObject {
     func fetchPlan() async {
         do {
             let response = try await APIClient.shared.getUserSubscription()
-            let plan = response.subscription.plan
-            hasPaidPlan = plan != .basic && response.subscription.status == .active
-            UserDefaults.standard.set(plan.rawValue, forKey: Self.cachedPlanKey)
-            planFetched = true
+            applyPlan(plan: response.subscription.plan, status: response.subscription.status)
         } catch {
             log("FloatingBarUsageLimiter: failed to fetch plan: \(error.localizedDescription)")
         }
+    }
+
+    /// Update cached plan directly from an already-fetched subscription (no extra API call).
+    func applyPlan(plan: SubscriptionPlanType, status: SubscriptionStatusType) {
+        hasPaidPlan = plan != .basic && status == .active
+        UserDefaults.standard.set(plan.rawValue, forKey: Self.cachedPlanKey)
+        planFetched = true
     }
 
     var isLimitReached: Bool {
