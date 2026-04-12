@@ -6498,22 +6498,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get sharePublicLink => 'Jaa julkinen linkki';
 
   @override
-  String get makePersonaPublic => 'Tee persoonasta julkinen';
-
-  @override
   String get connectedKnowledgeData => 'Yhdistetty tietolähteisiin';
 
   @override
   String get enterName => 'Syötä nimi';
-
-  @override
-  String get getOmiDeviceDescription => 'Luo tarkempi klooni henkilökohtaisilla keskusteluillasi';
-
-  @override
-  String get getOmi => 'Hanki Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Minulla on Omi-laite';
 
   @override
   String get goal => 'TAVOITE';
@@ -7744,9 +7732,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get categoryConversationAnalysis => 'Keskusteluanalyysi';
 
   @override
-  String get categoryPersonalityClone => 'Persoonallisuusklooni';
-
-  @override
   String get categoryHealth => 'Terveys';
 
   @override
@@ -7847,9 +7832,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integraatiot';
-
-  @override
-  String get categoryPersonalityClones => 'Persoonallisuuskloonit';
 
   @override
   String get categoryProductivityLifestyle => 'Tuottavuus ja elämäntapa';

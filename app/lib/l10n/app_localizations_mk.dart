@@ -6529,22 +6529,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get sharePublicLink => 'Дели јавна врска';
 
   @override
-  String get makePersonaPublic => 'Направи личност јавна';
-
-  @override
   String get connectedKnowledgeData => 'Поврзани податоци на знаење';
 
   @override
   String get enterName => 'Внеси име';
-
-  @override
-  String get getOmiDeviceDescription => 'Создај пошточен клон со твои лични разговори';
-
-  @override
-  String get getOmi => 'Земи Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Имам Omi уред';
 
   @override
   String get goal => 'ЦЕЛ';
@@ -7789,9 +7777,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get categoryConversationAnalysis => 'Анализа на Разговор';
 
   @override
-  String get categoryPersonalityClone => 'Клон на Личност';
-
-  @override
   String get categoryHealth => 'Здравје';
 
   @override
@@ -7892,9 +7877,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Интеграции';
-
-  @override
-  String get categoryPersonalityClones => 'Клонови на Личност';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивност и Начин на Живот';

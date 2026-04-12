@@ -6515,22 +6515,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get sharePublicLink => 'Дзелісь публічным спасылкай';
 
   @override
-  String get makePersonaPublic => 'Зрабіць персону публічнай';
-
-  @override
   String get connectedKnowledgeData => 'Падлучаныя даныя ведаў';
 
   @override
   String get enterName => 'Ўвядзіце імя';
-
-  @override
-  String get getOmiDeviceDescription => 'Стварыце больш дакладны клон з вашымі личнымі разговорамі';
-
-  @override
-  String get getOmi => 'Атрымаць Omi';
-
-  @override
-  String get iHaveOmiDevice => 'У мяне ёсць прыбор Omi';
 
   @override
   String get goal => 'МЭТА';
@@ -7769,9 +7757,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get categoryConversationAnalysis => 'Аналіз разьмовы';
 
   @override
-  String get categoryPersonalityClone => 'Копія персаналітэта';
-
-  @override
   String get categoryHealth => 'Здаровье';
 
   @override
@@ -7872,9 +7857,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Інтэграцыі';
-
-  @override
-  String get categoryPersonalityClones => 'Копіі персаналітэта';
 
   @override
   String get categoryProductivityLifestyle => 'Прадуктыўнасць і стыль жыцця';

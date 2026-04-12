@@ -6517,22 +6517,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get sharePublicLink => 'Openbare link delen';
 
   @override
-  String get makePersonaPublic => 'Persona openbaar maken';
-
-  @override
   String get connectedKnowledgeData => 'Verbonden kennisgegevens';
 
   @override
   String get enterName => 'Voer naam in';
-
-  @override
-  String get getOmiDeviceDescription => 'Maak een nauwkeuriger kloon met je persoonlijke gesprekken';
-
-  @override
-  String get getOmi => 'Omi aanschaffen';
-
-  @override
-  String get iHaveOmiDevice => 'Ik heb een Omi-apparaat';
 
   @override
   String get goal => 'DOEL';
@@ -7770,9 +7758,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Gesprekanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
-
-  @override
   String get categoryHealth => 'Gezondheid';
 
   @override
@@ -7873,9 +7858,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integraties';
-
-  @override
-  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
 
   @override
   String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';

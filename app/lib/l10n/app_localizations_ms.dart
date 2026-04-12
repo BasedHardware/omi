@@ -6518,22 +6518,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get sharePublicLink => 'Kongsi Pautan Awam';
 
   @override
-  String get makePersonaPublic => 'Jadikan Persona Awam';
-
-  @override
   String get connectedKnowledgeData => 'Data Pengetahuan Tersambung';
 
   @override
   String get enterName => 'Masukkan nama';
-
-  @override
-  String get getOmiDeviceDescription => 'Cipta klon yang lebih tepat dengan perbualan peribadi anda';
-
-  @override
-  String get getOmi => 'Dapatkan Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Saya mempunyai peranti Omi';
 
   @override
   String get goal => 'MATLAMAT';
@@ -7768,9 +7756,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analisis Perbualan';
 
   @override
-  String get categoryPersonalityClone => 'Klon Personaliti';
-
-  @override
   String get categoryHealth => 'Kesihatan';
 
   @override
@@ -7871,9 +7856,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrasi';
-
-  @override
-  String get categoryPersonalityClones => 'Klon Personaliti';
 
   @override
   String get categoryProductivityLifestyle => 'Produktiviti & Gaya Hidup';

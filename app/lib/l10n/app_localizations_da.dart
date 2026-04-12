@@ -6481,22 +6481,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get sharePublicLink => 'Del offentligt link';
 
   @override
-  String get makePersonaPublic => 'Gør persona offentlig';
-
-  @override
   String get connectedKnowledgeData => 'Tilsluttede vidensdata';
 
   @override
   String get enterName => 'Indtast navn';
-
-  @override
-  String get getOmiDeviceDescription => 'Få en Omi-enhed for at begynde';
-
-  @override
-  String get getOmi => 'Få Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Jeg har en Omi-enhed';
 
   @override
   String get goal => 'MÅL';
@@ -7729,9 +7717,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get categoryConversationAnalysis => 'Samtaleanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Personlighedsklon';
-
-  @override
   String get categoryHealth => 'Sundhed';
 
   @override
@@ -7832,9 +7817,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationer';
-
-  @override
-  String get categoryPersonalityClones => 'Personlighedskloner';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitet og livsstil';

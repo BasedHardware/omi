@@ -6499,22 +6499,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get sharePublicLink => 'Bendrinti viešą nuorodą';
 
   @override
-  String get makePersonaPublic => 'Padaryti personą viešą';
-
-  @override
   String get connectedKnowledgeData => 'Susieti žinių duomenys';
 
   @override
   String get enterName => 'Įveskite vardą';
-
-  @override
-  String get getOmiDeviceDescription => 'Sukurkite tikslesnį kloną naudodami savo asmeninius pokalbius';
-
-  @override
-  String get getOmi => 'Gauti Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Turiu Omi įrenginį';
 
   @override
   String get goal => 'TIKSLAS';
@@ -7751,9 +7739,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get categoryConversationAnalysis => 'Pokalbių analizė';
 
   @override
-  String get categoryPersonalityClone => 'Asmenybės klonas';
-
-  @override
   String get categoryHealth => 'Sveikata';
 
   @override
@@ -7854,9 +7839,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracijos';
-
-  @override
-  String get categoryPersonalityClones => 'Asmenybių klonai';
 
   @override
   String get categoryProductivityLifestyle => 'Produktyvumas ir gyvenimo būdas';

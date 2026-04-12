@@ -6546,22 +6546,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sharePublicLink => 'Öffentlichen Link teilen';
 
   @override
-  String get makePersonaPublic => 'Persona öffentlich machen';
-
-  @override
   String get connectedKnowledgeData => 'Verbundene Wissensdaten';
 
   @override
   String get enterName => 'Name eingeben';
-
-  @override
-  String get getOmiDeviceDescription => 'Hol dir ein Omi-Gerät, um Gespräche automatisch aufzuzeichnen';
-
-  @override
-  String get getOmi => 'Omi holen';
-
-  @override
-  String get iHaveOmiDevice => 'Ich habe ein Omi-Gerät';
 
   @override
   String get goal => 'ZIEL';
@@ -7810,9 +7798,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get categoryConversationAnalysis => 'Gesprächsanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Persönlichkeitsklon';
-
-  @override
   String get categoryHealth => 'Gesundheit';
 
   @override
@@ -7913,9 +7898,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationen';
-
-  @override
-  String get categoryPersonalityClones => 'Persönlichkeitsklone';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivität & Lebensstil';

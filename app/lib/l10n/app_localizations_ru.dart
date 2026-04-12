@@ -6513,22 +6513,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get sharePublicLink => 'Поделиться публичной ссылкой';
 
   @override
-  String get makePersonaPublic => 'Сделать персонажа публичным';
-
-  @override
   String get connectedKnowledgeData => 'Подключённые данные';
 
   @override
   String get enterName => 'Введите имя';
-
-  @override
-  String get getOmiDeviceDescription => 'Создайте более точный клон с помощью ваших личных разговоров';
-
-  @override
-  String get getOmi => 'Получить Omi';
-
-  @override
-  String get iHaveOmiDevice => 'У меня есть устройство Omi';
 
   @override
   String get goal => 'ЦЕЛЬ';
@@ -7770,9 +7758,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get categoryConversationAnalysis => 'Анализ разговоров';
 
   @override
-  String get categoryPersonalityClone => 'Клон личности';
-
-  @override
   String get categoryHealth => 'Здоровье';
 
   @override
@@ -7873,9 +7858,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Интеграции';
-
-  @override
-  String get categoryPersonalityClones => 'Клоны личности';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивность и образ жизни';

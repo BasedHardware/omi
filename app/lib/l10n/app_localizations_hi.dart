@@ -6473,22 +6473,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get sharePublicLink => 'सार्वजनिक लिंक साझा करें';
 
   @override
-  String get makePersonaPublic => 'व्यक्तित्व को सार्वजनिक बनाएं';
-
-  @override
   String get connectedKnowledgeData => 'कनेक्टेड ज्ञान डेटा';
 
   @override
   String get enterName => 'नाम दर्ज करें';
-
-  @override
-  String get getOmiDeviceDescription => 'अपने Omi डिवाइस से वार्तालाप रिकॉर्ड करें';
-
-  @override
-  String get getOmi => 'Omi प्राप्त करें';
-
-  @override
-  String get iHaveOmiDevice => 'मेरे पास Omi डिवाइस है';
 
   @override
   String get goal => 'लक्ष्य';
@@ -7723,9 +7711,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get categoryConversationAnalysis => 'वार्तालाप विश्लेषण';
 
   @override
-  String get categoryPersonalityClone => 'व्यक्तित्व क्लोन';
-
-  @override
   String get categoryHealth => 'स्वास्थ्य';
 
   @override
@@ -7826,9 +7811,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'एकीकरण';
-
-  @override
-  String get categoryPersonalityClones => 'व्यक्तित्व क्लोन';
 
   @override
   String get categoryProductivityLifestyle => 'उत्पादकता और जीवनशैली';

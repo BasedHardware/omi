@@ -6533,22 +6533,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get sharePublicLink => 'Compartir enllaç públic';
 
   @override
-  String get makePersonaPublic => 'Fer el personatge públic';
-
-  @override
   String get connectedKnowledgeData => 'Dades de coneixement connectades';
 
   @override
   String get enterName => 'Introdueix el nom';
-
-  @override
-  String get getOmiDeviceDescription => 'Crea un clon més precís amb les teves converses personals';
-
-  @override
-  String get getOmi => 'Obtenir Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Tinc un dispositiu Omi';
 
   @override
   String get goal => 'OBJECTIU';
@@ -7793,9 +7781,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get categoryConversationAnalysis => 'Anàlisi de converses';
 
   @override
-  String get categoryPersonalityClone => 'Clon de personalitat';
-
-  @override
   String get categoryHealth => 'Salut';
 
   @override
@@ -7896,9 +7881,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracions';
-
-  @override
-  String get categoryPersonalityClones => 'Clons de personalitat';
 
   @override
   String get categoryProductivityLifestyle => 'Productivitat i estil de vida';

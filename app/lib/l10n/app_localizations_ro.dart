@@ -6528,22 +6528,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get sharePublicLink => 'Partajează link public';
 
   @override
-  String get makePersonaPublic => 'Fă personajul public';
-
-  @override
   String get connectedKnowledgeData => 'Date de cunoștințe conectate';
 
   @override
   String get enterName => 'Introdu numele';
-
-  @override
-  String get getOmiDeviceDescription => 'Creează o clonă mai precisă cu conversațiile tale personale';
-
-  @override
-  String get getOmi => 'Obține Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Am un dispozitiv Omi';
 
   @override
   String get goal => 'OBIECTIV';
@@ -7784,9 +7772,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analiză conversații';
 
   @override
-  String get categoryPersonalityClone => 'Clonă de personalitate';
-
-  @override
   String get categoryHealth => 'Sănătate';
 
   @override
@@ -7887,9 +7872,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrări';
-
-  @override
-  String get categoryPersonalityClones => 'Clone de personalitate';
 
   @override
   String get categoryProductivityLifestyle => 'Productivitate și stil de viață';

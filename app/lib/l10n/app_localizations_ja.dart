@@ -6381,22 +6381,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sharePublicLink => '公開リンクを共有';
 
   @override
-  String get makePersonaPublic => 'ペルソナを公開';
-
-  @override
   String get connectedKnowledgeData => '接続されたナレッジデータ';
 
   @override
   String get enterName => '名前を入力';
-
-  @override
-  String get getOmiDeviceDescription => '個人の会話でより正確なクローンを作成';
-
-  @override
-  String get getOmi => 'Omiを入手';
-
-  @override
-  String get iHaveOmiDevice => 'Omiデバイスを持っています';
 
   @override
   String get goal => '目標';
@@ -7612,9 +7600,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get categoryConversationAnalysis => '会話分析';
 
   @override
-  String get categoryPersonalityClone => 'パーソナリティクローン';
-
-  @override
   String get categoryHealth => '健康';
 
   @override
@@ -7715,9 +7700,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '連携';
-
-  @override
-  String get categoryPersonalityClones => 'パーソナリティクローン';
 
   @override
   String get categoryProductivityLifestyle => '生産性とライフスタイル';

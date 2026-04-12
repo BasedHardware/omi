@@ -6371,22 +6371,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sharePublicLink => '分享公开链接';
 
   @override
-  String get makePersonaPublic => '公开角色';
-
-  @override
   String get connectedKnowledgeData => '已连接的知识数据';
 
   @override
   String get enterName => '输入姓名';
-
-  @override
-  String get getOmiDeviceDescription => '通过您的个人对话创建更准确的克隆';
-
-  @override
-  String get getOmi => '获取 Omi';
-
-  @override
-  String get iHaveOmiDevice => '我有 Omi 设备';
 
   @override
   String get goal => '目标';
@@ -7602,9 +7590,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get categoryConversationAnalysis => '对话分析';
 
   @override
-  String get categoryPersonalityClone => '人格克隆';
-
-  @override
   String get categoryHealth => '健康';
 
   @override
@@ -7705,9 +7690,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '集成';
-
-  @override
-  String get categoryPersonalityClones => '人格克隆';
 
   @override
   String get categoryProductivityLifestyle => '生产力与生活方式';

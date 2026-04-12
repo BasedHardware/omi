@@ -6520,22 +6520,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get sharePublicLink => 'Сподели публична връзка';
 
   @override
-  String get makePersonaPublic => 'Направи персоната публична';
-
-  @override
   String get connectedKnowledgeData => 'Свързани данни от знания';
 
   @override
   String get enterName => 'Въведете име';
-
-  @override
-  String get getOmiDeviceDescription => 'Създайте по-точен клонинг с вашите лични разговори';
-
-  @override
-  String get getOmi => 'Вземете Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Имам Omi устройство';
 
   @override
   String get goal => 'ЦЕЛ';
@@ -7776,9 +7764,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get categoryConversationAnalysis => 'Анализ на разговори';
 
   @override
-  String get categoryPersonalityClone => 'Клониране на личност';
-
-  @override
   String get categoryHealth => 'Здраве';
 
   @override
@@ -7879,9 +7864,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Интеграции';
-
-  @override
-  String get categoryPersonalityClones => 'Клонове на личности';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивност и начин на живот';

@@ -6510,22 +6510,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get sharePublicLink => 'Kopīgot publisko saiti';
 
   @override
-  String get makePersonaPublic => 'Padarīt personu publisku';
-
-  @override
   String get connectedKnowledgeData => 'Pievienotie zināšanu dati';
 
   @override
   String get enterName => 'Ievadiet vārdu';
-
-  @override
-  String get getOmiDeviceDescription => 'Izveidojiet precīzāku klonu ar savām personīgajām sarunām';
-
-  @override
-  String get getOmi => 'Iegūt Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Man ir Omi ierīce';
 
   @override
   String get goal => 'MĒRĶIS';
@@ -7763,9 +7751,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get categoryConversationAnalysis => 'Sarunu analīze';
 
   @override
-  String get categoryPersonalityClone => 'Personības klons';
-
-  @override
   String get categoryHealth => 'Veselība';
 
   @override
@@ -7866,9 +7851,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrācijas';
-
-  @override
-  String get categoryPersonalityClones => 'Personības kloni';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitāte un dzīvesveids';

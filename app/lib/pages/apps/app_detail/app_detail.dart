@@ -77,8 +77,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
     switch (category) {
       case 'conversation-analysis':
         return FontAwesomeIcons.solidComments;
-      case 'personality-emulation':
-        return FontAwesomeIcons.solidUser;
       case 'health-and-wellness':
         return FontAwesomeIcons.solidHeart;
       case 'education-and-learning':

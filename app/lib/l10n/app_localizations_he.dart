@@ -6443,22 +6443,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get sharePublicLink => 'שתף קישור ציבורי';
 
   @override
-  String get makePersonaPublic => 'הפוך אישיות לציבורית';
-
-  @override
   String get connectedKnowledgeData => 'נתוני ידע מחוברים';
 
   @override
   String get enterName => 'הזן שם';
-
-  @override
-  String get getOmiDeviceDescription => 'צור קלון מדויק יותר עם השיחות האישיות שלך';
-
-  @override
-  String get getOmi => 'קבל Omi';
-
-  @override
-  String get iHaveOmiDevice => 'יש לי מכשיר Omi';
 
   @override
   String get goal => 'יעד';
@@ -7682,9 +7670,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get categoryConversationAnalysis => 'ניתוח שיחות';
 
   @override
-  String get categoryPersonalityClone => 'שיבוט אישיות';
-
-  @override
   String get categoryHealth => 'בריאות';
 
   @override
@@ -7785,9 +7770,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'אינטגרציות';
-
-  @override
-  String get categoryPersonalityClones => 'שיבוטי אישיות';
 
   @override
   String get categoryProductivityLifestyle => 'פרודוקטיביות ואורח חיים';

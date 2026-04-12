@@ -6506,22 +6506,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get sharePublicLink => 'عوامی لنک شیئر کریں';
 
   @override
-  String get makePersonaPublic => 'پرسونا کو عوامی بنائیں';
-
-  @override
   String get connectedKnowledgeData => 'منسلک Knowledge ڈیٹا';
 
   @override
   String get enterName => 'نام درج کریں';
-
-  @override
-  String get getOmiDeviceDescription => 'اپنی ذاتی بات چیت کے ساتھ زیادہ درست کلون بنائیں';
-
-  @override
-  String get getOmi => 'Omi حاصل کریں';
-
-  @override
-  String get iHaveOmiDevice => 'میرے پاس Omi ڈیوائس ہے';
 
   @override
   String get goal => 'مقصد';
@@ -7760,9 +7748,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get categoryConversationAnalysis => 'بات چیت کا تجزیہ';
 
   @override
-  String get categoryPersonalityClone => 'شخصیت کا کلون';
-
-  @override
   String get categoryHealth => 'صحت';
 
   @override
@@ -7863,9 +7848,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'انضمامات';
-
-  @override
-  String get categoryPersonalityClones => 'شخصیت کے کلون';
 
   @override
   String get categoryProductivityLifestyle => 'پروڈکٹیویٹی اور طرز زندگی';

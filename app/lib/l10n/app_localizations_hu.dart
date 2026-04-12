@@ -6527,22 +6527,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get sharePublicLink => 'Nyilvános link megosztása';
 
   @override
-  String get makePersonaPublic => 'Persona nyilvánossá tétele';
-
-  @override
   String get connectedKnowledgeData => 'Csatlakoztatott tudásadatok';
 
   @override
   String get enterName => 'Név megadása';
-
-  @override
-  String get getOmiDeviceDescription => 'Hozz létre pontosabb klónt a személyes beszélgetéseiddel';
-
-  @override
-  String get getOmi => 'Omi beszerzése';
-
-  @override
-  String get iHaveOmiDevice => 'Van Omi eszközöm';
 
   @override
   String get goal => 'CÉL';
@@ -7782,9 +7770,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get categoryConversationAnalysis => 'Beszélgetéselemzés';
 
   @override
-  String get categoryPersonalityClone => 'Személyiségklón';
-
-  @override
   String get categoryHealth => 'Egészség';
 
   @override
@@ -7885,9 +7870,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrációk';
-
-  @override
-  String get categoryPersonalityClones => 'Személyiségklónok';
 
   @override
   String get categoryProductivityLifestyle => 'Termelékenység és életmód';

@@ -6541,22 +6541,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get sharePublicLink => 'பொதுவான இணைப்பைப் பகிர்ந்து கொள்ளுங்கள்';
 
   @override
-  String get makePersonaPublic => 'பொது தகவல் பகிர்ந்து கொள்ளுங்கள்';
-
-  @override
   String get connectedKnowledgeData => 'இணைக்கப்பட்ட ஞ்ஞான தரவு';
 
   @override
   String get enterName => 'பெயரை உள்ளிடவும்';
-
-  @override
-  String get getOmiDeviceDescription => 'உங்கள் தனிப்பட்ட உரையாடல்களுடன் மிகவும் துல்லியமான நகல் உருவாக்கவும்';
-
-  @override
-  String get getOmi => 'Omi பெறவும்';
-
-  @override
-  String get iHaveOmiDevice => 'என்னிடம் Omi சாதனம் உள்ளது';
 
   @override
   String get goal => 'லக்ష्य';
@@ -7804,9 +7792,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get categoryConversationAnalysis => 'உரையாடல் பகுப்பாய்வு';
 
   @override
-  String get categoryPersonalityClone => 'ஆளுமை க்ளோன்';
-
-  @override
   String get categoryHealth => 'ஆரோக்கியம்';
 
   @override
@@ -7907,9 +7892,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'ஒருங்கிணைப்புகள்';
-
-  @override
-  String get categoryPersonalityClones => 'ஆளுமை க்ளோன்கள்';
 
   @override
   String get categoryProductivityLifestyle => 'உற்பादகத்வம் & வாழ்க்கைப் பாணி';

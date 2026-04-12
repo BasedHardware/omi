@@ -6504,22 +6504,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get sharePublicLink => 'Поділитися публічним посиланням';
 
   @override
-  String get makePersonaPublic => 'Зробити персону публічною';
-
-  @override
   String get connectedKnowledgeData => 'Підключені дані знань';
 
   @override
   String get enterName => 'Введіть ім\'я';
-
-  @override
-  String get getOmiDeviceDescription => 'Створіть більш точний клон за допомогою ваших особистих розмов';
-
-  @override
-  String get getOmi => 'Отримати Omi';
-
-  @override
-  String get iHaveOmiDevice => 'У мене є пристрій Omi';
 
   @override
   String get goal => 'ЦІЛЬ';
@@ -7757,9 +7745,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get categoryConversationAnalysis => 'Аналіз розмов';
 
   @override
-  String get categoryPersonalityClone => 'Клон особистості';
-
-  @override
   String get categoryHealth => 'Здоров\'я';
 
   @override
@@ -7860,9 +7845,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Інтеграції';
-
-  @override
-  String get categoryPersonalityClones => 'Клони особистості';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивність та спосіб життя';

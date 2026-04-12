@@ -6496,22 +6496,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get sharePublicLink => 'Zdieľať verejný odkaz';
 
   @override
-  String get makePersonaPublic => 'Zverejniť osobnosť';
-
-  @override
   String get connectedKnowledgeData => 'Pripojené znalostné údaje';
 
   @override
   String get enterName => 'Zadajte meno';
-
-  @override
-  String get getOmiDeviceDescription => 'Vytvorte presnejší klon s vašimi osobnými konverzáciami';
-
-  @override
-  String get getOmi => 'Získať Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mám zariadenie Omi';
 
   @override
   String get goal => 'CIEĽ';
@@ -7736,9 +7724,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analýza konverzácií';
 
   @override
-  String get categoryPersonalityClone => 'Klon osobnosti';
-
-  @override
   String get categoryHealth => 'Zdravie';
 
   @override
@@ -7839,9 +7824,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrácie';
-
-  @override
-  String get categoryPersonalityClones => 'Klony osobností';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivita a životný štýl';

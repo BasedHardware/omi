@@ -6543,22 +6543,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get sharePublicLink => 'Κοινοποίηση δημόσιου συνδέσμου';
 
   @override
-  String get makePersonaPublic => 'Δημοσίευση περσόνας';
-
-  @override
   String get connectedKnowledgeData => 'Συνδεδεμένα δεδομένα γνώσης';
 
   @override
   String get enterName => 'Εισαγωγή ονόματος';
-
-  @override
-  String get getOmiDeviceDescription => 'Δημιουργήστε έναν πιο ακριβή κλώνο με τις προσωπικές σας συνομιλίες';
-
-  @override
-  String get getOmi => 'Αποκτήστε Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Έχω συσκευή Omi';
 
   @override
   String get goal => 'ΣΤΟΧΟΣ';
@@ -7801,9 +7789,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
 
   @override
-  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
-
-  @override
   String get categoryHealth => 'Υγεία';
 
   @override
@@ -7904,9 +7889,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Ενσωματώσεις';
-
-  @override
-  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
 
   @override
   String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';

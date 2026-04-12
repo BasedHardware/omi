@@ -6514,22 +6514,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get sharePublicLink => 'Bagikan tautan publik';
 
   @override
-  String get makePersonaPublic => 'Jadikan Persona Publik';
-
-  @override
   String get connectedKnowledgeData => 'Data pengetahuan terhubung';
 
   @override
   String get enterName => 'Masukkan nama';
-
-  @override
-  String get getOmiDeviceDescription => 'Dapatkan perangkat Omi untuk pengalaman penuh';
-
-  @override
-  String get getOmi => 'Dapatkan Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Saya punya perangkat Omi';
 
   @override
   String get goal => 'TUJUAN';
@@ -7756,9 +7744,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analisis Percakapan';
 
   @override
-  String get categoryPersonalityClone => 'Klon Kepribadian';
-
-  @override
   String get categoryHealth => 'Kesehatan';
 
   @override
@@ -7859,9 +7844,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrasi';
-
-  @override
-  String get categoryPersonalityClones => 'Klon Kepribadian';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitas & Gaya Hidup';

@@ -6536,22 +6536,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get sharePublicLink => 'Condividi link pubblico';
 
   @override
-  String get makePersonaPublic => 'Rendi pubblica la Persona';
-
-  @override
   String get connectedKnowledgeData => 'Dati di conoscenza collegati';
 
   @override
   String get enterName => 'Inserisci il nome';
-
-  @override
-  String get getOmiDeviceDescription => 'Ottieni un dispositivo Omi per l\'esperienza completa';
-
-  @override
-  String get getOmi => 'Ottieni Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Ho un dispositivo Omi';
 
   @override
   String get goal => 'OBIETTIVO';
@@ -7794,9 +7782,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analisi delle conversazioni';
 
   @override
-  String get categoryPersonalityClone => 'Clone di personalità';
-
-  @override
   String get categoryHealth => 'Salute';
 
   @override
@@ -7897,9 +7882,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrazioni';
-
-  @override
-  String get categoryPersonalityClones => 'Cloni di personalità';
 
   @override
   String get categoryProductivityLifestyle => 'Produttività e stile di vita';

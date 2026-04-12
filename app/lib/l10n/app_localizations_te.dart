@@ -6537,22 +6537,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get sharePublicLink => 'పబ్లిక్ లింక్ షేర్ చేయండి';
 
   @override
-  String get makePersonaPublic => 'పర్సోనాను పబ్లిక్ చేయండి';
-
-  @override
   String get connectedKnowledgeData => 'కనెక్ట్ చేసిన జ్ఞాన డేటా';
 
   @override
   String get enterName => 'పేరు నమోదు చేయండి';
-
-  @override
-  String get getOmiDeviceDescription => 'మీ వ్యక్తిగత సంభాషణలతో మరింత ఖచ్చితమైన క్లోన్ సృష్టించండి';
-
-  @override
-  String get getOmi => 'Omi పొందండి';
-
-  @override
-  String get iHaveOmiDevice => 'నా వద్ద Omi పరికరం ఉంది';
 
   @override
   String get goal => 'లక్ష్యం';
@@ -7792,9 +7780,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get categoryConversationAnalysis => 'సంభాషణ విశ్లేషణ';
 
   @override
-  String get categoryPersonalityClone => 'వ్యక్తిత్వ క్లోన్';
-
-  @override
   String get categoryHealth => 'ఆరోగ్యం';
 
   @override
@@ -7895,9 +7880,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'ఇంటిగ్రేషన్‌లు';
-
-  @override
-  String get categoryPersonalityClones => 'వ్యక్తిత్వ క్లోన్‌లు';
 
   @override
   String get categoryProductivityLifestyle => 'ఉత్పాదకత & జీవనశైలి';

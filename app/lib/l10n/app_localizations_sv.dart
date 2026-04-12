@@ -6500,22 +6500,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get sharePublicLink => 'Dela offentlig länk';
 
   @override
-  String get makePersonaPublic => 'Gör persona offentlig';
-
-  @override
   String get connectedKnowledgeData => 'Ansluten kunskapsdata';
 
   @override
   String get enterName => 'Ange namn';
-
-  @override
-  String get getOmiDeviceDescription => 'Skapa en mer exakt klon med dina personliga konversationer';
-
-  @override
-  String get getOmi => 'Skaffa Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Jag har en Omi-enhet';
 
   @override
   String get goal => 'MÅL';
@@ -7750,9 +7738,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get categoryConversationAnalysis => 'Samtalsanalys';
 
   @override
-  String get categoryPersonalityClone => 'Personlighetsklon';
-
-  @override
   String get categoryHealth => 'Hälsa';
 
   @override
@@ -7853,9 +7838,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationer';
-
-  @override
-  String get categoryPersonalityClones => 'Personlighetskloner';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitet & livsstil';

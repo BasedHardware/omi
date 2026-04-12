@@ -6552,22 +6552,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get sharePublicLink => 'Ibahagi ang Public Link';
 
   @override
-  String get makePersonaPublic => 'Gawing Public ang Persona';
-
-  @override
   String get connectedKnowledgeData => 'Connected Knowledge Data';
 
   @override
   String get enterName => 'Lagyan ng pangalan';
-
-  @override
-  String get getOmiDeviceDescription => 'Lumikha ng mas accurate na clone na may iyong personal na mga pag-usap';
-
-  @override
-  String get getOmi => 'Kunin ang Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mayroon akong Omi device';
 
   @override
   String get goal => 'LAYUNIN';
@@ -7817,9 +7805,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Conversation Analysis';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
-
-  @override
   String get categoryHealth => 'Kalusugan';
 
   @override
@@ -7920,9 +7905,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrations';
-
-  @override
-  String get categoryPersonalityClones => 'Personality Clones';
 
   @override
   String get categoryProductivityLifestyle => 'Productivity & Lifestyle';

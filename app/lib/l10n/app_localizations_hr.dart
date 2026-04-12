@@ -6515,22 +6515,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get sharePublicLink => 'Dijeli javnu vezu';
 
   @override
-  String get makePersonaPublic => 'Učini ličnost javnom';
-
-  @override
   String get connectedKnowledgeData => 'Povezani podaci znanja';
 
   @override
   String get enterName => 'Unesite ime';
-
-  @override
-  String get getOmiDeviceDescription => 'Kreirajte točniji klon sa vašim osobnim razgovorima';
-
-  @override
-  String get getOmi => 'Preuzmi Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Imam Omi uređaj';
 
   @override
   String get goal => 'CILJ';
@@ -7774,9 +7762,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analiza Razgovora';
 
   @override
-  String get categoryPersonalityClone => 'Klon Ličnosti';
-
-  @override
   String get categoryHealth => 'Zdravlje';
 
   @override
@@ -7877,9 +7862,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracije';
-
-  @override
-  String get categoryPersonalityClones => 'Klonovi Ličnosti';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivnost i Stil Života';

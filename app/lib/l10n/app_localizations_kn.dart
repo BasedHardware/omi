@@ -6520,22 +6520,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get sharePublicLink => 'ಸಾರ್ವಜನಿಕ ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ';
 
   @override
-  String get makePersonaPublic => 'ವ್ಯಕ್ತಿತ್ವ ಸಾರ್ವಜನಿಕ ಮಾಡಿ';
-
-  @override
   String get connectedKnowledgeData => 'ಸಂಪರ್ಕಿತ ಜ್ಞಾನ ಡೇಟಾ';
 
   @override
   String get enterName => 'ಹೆಸರು ನೆರವಿಸಿ';
-
-  @override
-  String get getOmiDeviceDescription => 'ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಸಂಭಾಷಣೆಗಳು ಹೊಂದಿದ ನಿಖರ ಕ್ಲೋನ್ ರಚಿಸಿ';
-
-  @override
-  String get getOmi => 'Omi ಪಡೆಯಿರಿ';
-
-  @override
-  String get iHaveOmiDevice => 'ನನ್ನ Omi ಸಾಧನ ಇದೆ';
 
   @override
   String get goal => 'ಗುರಿ';
@@ -7775,9 +7763,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get categoryConversationAnalysis => 'ಸಂಭಾಷಣೆ ವಿಶ್ಲೇಷಣೆ';
 
   @override
-  String get categoryPersonalityClone => 'ವ್ಯಕ್ತಿತ್ವ ಕ್ಲೋನ್';
-
-  @override
   String get categoryHealth => 'ಸ್ವಾಸ್ಥ್ಯ';
 
   @override
@@ -7878,9 +7863,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'ಏಕೀಕರಣಗಳು';
-
-  @override
-  String get categoryPersonalityClones => 'ವ್ಯಕ್ತಿತ್ವ ಕ್ಲೋನ್ಗಳು';
 
   @override
   String get categoryProductivityLifestyle => 'ಉತ್ಪಾದನೆ ಮತ್ತು ಜೀವನಧರೆ';

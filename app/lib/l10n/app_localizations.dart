@@ -12279,12 +12279,6 @@ abstract class AppLocalizations {
   /// **'Share Public Link'**
   String get sharePublicLink;
 
-  /// No description provided for @makePersonaPublic.
-  ///
-  /// In en, this message translates to:
-  /// **'Make Persona Public'**
-  String get makePersonaPublic;
-
   /// No description provided for @connectedKnowledgeData.
   ///
   /// In en, this message translates to:
@@ -12296,24 +12290,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter name'**
   String get enterName;
-
-  /// No description provided for @getOmiDeviceDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Create a more accurate clone with your personal conversations'**
-  String get getOmiDeviceDescription;
-
-  /// No description provided for @getOmi.
-  ///
-  /// In en, this message translates to:
-  /// **'Get Omi'**
-  String get getOmi;
-
-  /// No description provided for @iHaveOmiDevice.
-  ///
-  /// In en, this message translates to:
-  /// **'I have Omi device'**
-  String get iHaveOmiDevice;
 
   /// No description provided for @goal.
   ///
@@ -14469,12 +14445,6 @@ abstract class AppLocalizations {
   /// **'Conversation Analysis'**
   String get categoryConversationAnalysis;
 
-  /// No description provided for @categoryPersonalityClone.
-  ///
-  /// In en, this message translates to:
-  /// **'Personality Clone'**
-  String get categoryPersonalityClone;
-
   /// No description provided for @categoryHealth.
   ///
   /// In en, this message translates to:
@@ -14678,12 +14648,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Integrations'**
   String get capabilityIntegrations;
-
-  /// No description provided for @categoryPersonalityClones.
-  ///
-  /// In en, this message translates to:
-  /// **'Personality Clones'**
-  String get categoryPersonalityClones;
 
   /// No description provided for @categoryProductivityLifestyle.
   ///

@@ -6463,22 +6463,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get sharePublicLink => 'แชร์ลิงก์สาธารณะ';
 
   @override
-  String get makePersonaPublic => 'ทำให้บุคลิกเป็นสาธารณะ';
-
-  @override
   String get connectedKnowledgeData => 'ข้อมูลความรู้ที่เชื่อมต่อแล้ว';
 
   @override
   String get enterName => 'ป้อนชื่อ';
-
-  @override
-  String get getOmiDeviceDescription => 'สร้างโคลนที่แม่นยำยิ่งขึ้นด้วยบทสนทนาส่วนตัวของคุณ';
-
-  @override
-  String get getOmi => 'รับ Omi';
-
-  @override
-  String get iHaveOmiDevice => 'ฉันมีอุปกรณ์ Omi';
 
   @override
   String get goal => 'เป้าหมาย';
@@ -7708,9 +7696,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
 
   @override
-  String get categoryPersonalityClone => 'โคลนบุคลิกภาพ';
-
-  @override
   String get categoryHealth => 'สุขภาพ';
 
   @override
@@ -7811,9 +7796,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'การเชื่อมต่อ';
-
-  @override
-  String get categoryPersonalityClones => 'โคลนบุคลิกภาพ';
 
   @override
   String get categoryProductivityLifestyle => 'ประสิทธิภาพและไลฟ์สไตล์';

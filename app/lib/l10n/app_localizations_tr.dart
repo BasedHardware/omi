@@ -6508,22 +6508,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get sharePublicLink => 'Herkese Açık Bağlantıyı Paylaş';
 
   @override
-  String get makePersonaPublic => 'Kişiliği Herkese Açık Yap';
-
-  @override
   String get connectedKnowledgeData => 'Bağlı Bilgi Verisi';
 
   @override
   String get enterName => 'Ad girin';
-
-  @override
-  String get getOmiDeviceDescription => 'Kişisel konuşmalarınızla daha doğru bir klon oluşturun';
-
-  @override
-  String get getOmi => 'Omi Edinin';
-
-  @override
-  String get iHaveOmiDevice => 'Omi cihazım var';
 
   @override
   String get goal => 'HEDEF';
@@ -7759,9 +7747,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get categoryConversationAnalysis => 'Konuşma Analizi';
 
   @override
-  String get categoryPersonalityClone => 'Kişilik Klonu';
-
-  @override
   String get categoryHealth => 'Sağlık';
 
   @override
@@ -7862,9 +7847,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Entegrasyonlar';
-
-  @override
-  String get categoryPersonalityClones => 'Kişilik Klonları';
 
   @override
   String get categoryProductivityLifestyle => 'Verimlilik ve Yaşam Tarzı';

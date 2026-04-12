@@ -6502,22 +6502,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get sharePublicLink => 'Chia sẻ Liên kết Công khai';
 
   @override
-  String get makePersonaPublic => 'Công khai Nhân cách';
-
-  @override
   String get connectedKnowledgeData => 'Dữ liệu Kiến thức Đã Kết nối';
 
   @override
   String get enterName => 'Nhập tên';
-
-  @override
-  String get getOmiDeviceDescription => 'Tạo bản sao chính xác hơn với các cuộc trò chuyện cá nhân của bạn';
-
-  @override
-  String get getOmi => 'Nhận Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Tôi có thiết bị Omi';
 
   @override
   String get goal => 'MỤC TIÊU';
@@ -7746,9 +7734,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
 
   @override
-  String get categoryPersonalityClone => 'Nhân bản tính cách';
-
-  @override
   String get categoryHealth => 'Sức khỏe';
 
   @override
@@ -7849,9 +7834,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Tích hợp';
-
-  @override
-  String get categoryPersonalityClones => 'Nhân bản tính cách';
 
   @override
   String get categoryProductivityLifestyle => 'Năng suất & Phong cách sống';

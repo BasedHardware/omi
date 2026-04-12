@@ -6447,22 +6447,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get sharePublicLink => 'مشاركة رابط عام';
 
   @override
-  String get makePersonaPublic => 'جعل الشخصية عامة';
-
-  @override
   String get connectedKnowledgeData => 'بيانات المعرفة المتصلة';
 
   @override
   String get enterName => 'أدخل الاسم';
-
-  @override
-  String get getOmiDeviceDescription => 'أنشئ نسخة أكثر دقة مع محادثاتك الشخصية وبياناتك.';
-
-  @override
-  String get getOmi => 'احصل على Omi';
-
-  @override
-  String get iHaveOmiDevice => 'لدي جهاز Omi';
 
   @override
   String get goal => 'هدف';
@@ -7690,9 +7678,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get categoryConversationAnalysis => 'تحليل المحادثة';
 
   @override
-  String get categoryPersonalityClone => 'استنساخ الشخصية';
-
-  @override
   String get categoryHealth => 'الصحة';
 
   @override
@@ -7793,9 +7778,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'التكاملات';
-
-  @override
-  String get categoryPersonalityClones => 'استنساخ الشخصيات';
 
   @override
   String get categoryProductivityLifestyle => 'الإنتاجية ونمط الحياة';

@@ -6505,22 +6505,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get sharePublicLink => 'জনসাধারণ লিংক শেয়ার করুন';
 
   @override
-  String get makePersonaPublic => 'ব্যক্তিত্ব জনসাধারণ করুন';
-
-  @override
   String get connectedKnowledgeData => 'সংযুক্ত জ্ঞান ডেটা';
 
   @override
   String get enterName => 'নাম প্রবেশ করুন';
-
-  @override
-  String get getOmiDeviceDescription => 'আপনার ব্যক্তিগত কথোপকথনের সাথে আরও সঠিক ক্লোন তৈরি করুন';
-
-  @override
-  String get getOmi => 'Omi পান';
-
-  @override
-  String get iHaveOmiDevice => 'আমার কাছে Omi ডিভাইস আছে';
 
   @override
   String get goal => 'লক্ষ্য';
@@ -7755,9 +7743,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get categoryConversationAnalysis => 'কথোপকথন বিশ্লেষণ';
 
   @override
-  String get categoryPersonalityClone => 'ব্যক্তিত্ব ক্লোন';
-
-  @override
   String get categoryHealth => 'স্বাস্থ্য';
 
   @override
@@ -7858,9 +7843,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'সংহতকরণ';
-
-  @override
-  String get categoryPersonalityClones => 'ব্যক্তিত্ব ক্লোন';
 
   @override
   String get categoryProductivityLifestyle => 'উৎপাদনশীলতা ও জীবনযাত্রা';

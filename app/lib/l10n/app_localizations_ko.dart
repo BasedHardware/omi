@@ -6383,22 +6383,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get sharePublicLink => '공개 링크 공유';
 
   @override
-  String get makePersonaPublic => '페르소나 공개하기';
-
-  @override
   String get connectedKnowledgeData => '연결된 지식 데이터';
 
   @override
   String get enterName => '이름 입력';
-
-  @override
-  String get getOmiDeviceDescription => '개인 대화로 더 정확한 클론을 생성하세요';
-
-  @override
-  String get getOmi => 'Omi 받기';
-
-  @override
-  String get iHaveOmiDevice => 'Omi 장치가 있습니다';
 
   @override
   String get goal => '목표';
@@ -7614,9 +7602,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get categoryConversationAnalysis => '대화 분석';
 
   @override
-  String get categoryPersonalityClone => '성격 복제';
-
-  @override
   String get categoryHealth => '건강';
 
   @override
@@ -7717,9 +7702,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '연동';
-
-  @override
-  String get categoryPersonalityClones => '성격 복제';
 
   @override
   String get categoryProductivityLifestyle => '생산성 및 라이프스타일';

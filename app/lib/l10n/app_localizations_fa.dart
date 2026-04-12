@@ -6499,22 +6499,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get sharePublicLink => 'اشتراک گذاری پیوند عمومی';
 
   @override
-  String get makePersonaPublic => 'نقش را عمومی کنید';
-
-  @override
   String get connectedKnowledgeData => 'داده های دانش متصل شده';
 
   @override
   String get enterName => 'نام را وارد کنید';
-
-  @override
-  String get getOmiDeviceDescription => 'کلون دقیق تری با مکالمات شخصی خود ایجاد کنید';
-
-  @override
-  String get getOmi => 'دریافت Omi';
-
-  @override
-  String get iHaveOmiDevice => 'من دستگاه Omi دارم';
 
   @override
   String get goal => 'هدف';
@@ -7750,9 +7738,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get categoryConversationAnalysis => 'تجزیه و تحلیل گفتگو';
 
   @override
-  String get categoryPersonalityClone => 'کلون شخصیت';
-
-  @override
   String get categoryHealth => 'سلامت';
 
   @override
@@ -7853,9 +7838,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'یکپارچگی‌ها';
-
-  @override
-  String get categoryPersonalityClones => 'کلون‌های شخصیت';
 
   @override
   String get categoryProductivityLifestyle => 'بهره‌وری و سبک زندگی';

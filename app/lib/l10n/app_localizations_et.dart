@@ -6498,22 +6498,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get sharePublicLink => 'Jaga avalikku linki';
 
   @override
-  String get makePersonaPublic => 'Tee persona avalikuks';
-
-  @override
   String get connectedKnowledgeData => 'Ühendatud teadmiste andmed';
 
   @override
   String get enterName => 'Sisesta nimi';
-
-  @override
-  String get getOmiDeviceDescription => 'Looge täpsem kloon oma isiklike vestluste põhjal';
-
-  @override
-  String get getOmi => 'Hangi Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mul on Omi seade';
 
   @override
   String get goal => 'EESMÄRK';
@@ -7744,9 +7732,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get categoryConversationAnalysis => 'Vestluste analüüs';
 
   @override
-  String get categoryPersonalityClone => 'Isiksuse kloon';
-
-  @override
   String get categoryHealth => 'Tervis';
 
   @override
@@ -7847,9 +7832,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integratsioonid';
-
-  @override
-  String get categoryPersonalityClones => 'Isiksuse kloonid';
 
   @override
   String get categoryProductivityLifestyle => 'Tootlikkus ja elustiil';
