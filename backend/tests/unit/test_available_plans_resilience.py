@@ -15,10 +15,16 @@ os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
-os.environ["STRIPE_UNLIMITED_MONTHLY_PRICE_ID"] = "price_unlim_m"
-os.environ["STRIPE_UNLIMITED_ANNUAL_PRICE_ID"] = "price_unlim_a"
-os.environ["STRIPE_PRO_MONTHLY_PRICE_ID"] = "price_pro_m"
-os.environ["STRIPE_PRO_ANNUAL_PRICE_ID"] = "price_pro_a"
+# Real Stripe dev price IDs
+UNLIM_MONTHLY = "price_1RrxXL1F8wnoWYvwIddzR902"
+UNLIM_ANNUAL = "price_1RrxXL1F8wnoWYvw3kDbWmjs"
+PRO_MONTHLY = "price_1TAznX1F8wnoWYvwyaSVQbZW"
+PRO_ANNUAL = "price_1TAznX1F8wnoWYvwN8YmzbiC"
+
+os.environ["STRIPE_UNLIMITED_MONTHLY_PRICE_ID"] = UNLIM_MONTHLY
+os.environ["STRIPE_UNLIMITED_ANNUAL_PRICE_ID"] = UNLIM_ANNUAL
+os.environ["STRIPE_PRO_MONTHLY_PRICE_ID"] = PRO_MONTHLY
+os.environ["STRIPE_PRO_ANNUAL_PRICE_ID"] = PRO_ANNUAL
 
 # --- Stub heavy infrastructure before importing any project modules ---
 
@@ -139,11 +145,11 @@ def test_invalid_pro_price_skips_pro_but_unlimited_remains():
     _users_mod.get_user_subscription.return_value = None
 
     def _mock_retrieve(price_id):
-        if price_id in ("price_pro_m", "price_pro_a"):
+        if price_id in (PRO_MONTHLY, PRO_ANNUAL):
             raise Exception(f"No such price: {price_id}")
-        if price_id == "price_unlim_m":
+        if price_id == UNLIM_MONTHLY:
             return _make_stripe_price(price_id, 1900, "month")
-        if price_id == "price_unlim_a":
+        if price_id == UNLIM_ANNUAL:
             return _make_stripe_price(price_id, 18000, "year")
         raise Exception(f"Unexpected price_id: {price_id}")
 
@@ -157,12 +163,12 @@ def test_invalid_pro_price_skips_pro_but_unlimited_remains():
 
     # Unlimited monthly + annual should be present
     plan_ids = {p["id"] for p in plans}
-    assert "price_unlim_m" in plan_ids
-    assert "price_unlim_a" in plan_ids
+    assert UNLIM_MONTHLY in plan_ids
+    assert UNLIM_ANNUAL in plan_ids
 
     # Pro prices should be absent (their retrieval failed)
-    assert "price_pro_m" not in plan_ids
-    assert "price_pro_a" not in plan_ids
+    assert PRO_MONTHLY not in plan_ids
+    assert PRO_ANNUAL not in plan_ids
 
     assert len(plans) == 2
 
@@ -172,8 +178,8 @@ def test_all_valid_prices_returns_all_plans():
     _users_mod.get_user_subscription.return_value = None
 
     def _mock_retrieve(price_id):
-        intervals = {"price_unlim_m": "month", "price_unlim_a": "year", "price_pro_m": "month", "price_pro_a": "year"}
-        amounts = {"price_unlim_m": 1900, "price_unlim_a": 18000, "price_pro_m": 990, "price_pro_a": 9900}
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", PRO_MONTHLY: "month", PRO_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, PRO_MONTHLY: 990, PRO_ANNUAL: 9900}
         if price_id not in intervals:
             raise Exception(f"Unexpected price_id: {price_id}")
         return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
@@ -185,7 +191,7 @@ def test_all_valid_prices_returns_all_plans():
     assert response.status_code == 200
     plans = response.json()["plans"]
     plan_ids = {p["id"] for p in plans}
-    assert plan_ids == {"price_unlim_m", "price_unlim_a", "price_pro_m", "price_pro_a"}
+    assert plan_ids == {UNLIM_MONTHLY, UNLIM_ANNUAL, PRO_MONTHLY, PRO_ANNUAL}
     assert len(plans) == 4
 
 
