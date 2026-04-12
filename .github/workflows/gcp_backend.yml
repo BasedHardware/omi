@@ -70,6 +70,17 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Set Stripe Pro price IDs
+        id: stripe-pro-prices
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "monthly=price_1TAfBB1F8wnoWYvw8XBFM1dX" >> $GITHUB_OUTPUT
+            echo "annual=price_1TLFac1F8wnoWYvwtPxZhtzE" >> $GITHUB_OUTPUT
+          else
+            echo "monthly=price_1TAznX1F8wnoWYvwyaSVQbZW" >> $GITHUB_OUTPUT
+            echo "annual=price_1TAznX1F8wnoWYvwN8YmzbiC" >> $GITHUB_OUTPUT
+          fi
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
         uses: google-github-actions/deploy-cloudrun@v2
@@ -77,6 +88,10 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            STRIPE_PRO_MONTHLY_PRICE_ID=${{ steps.stripe-pro-prices.outputs.monthly }}
+            STRIPE_PRO_ANNUAL_PRICE_ID=${{ steps.stripe-pro-prices.outputs.annual }}
+          env_vars_update_strategy: merge
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -85,6 +100,10 @@ jobs:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            STRIPE_PRO_MONTHLY_PRICE_ID=${{ steps.stripe-pro-prices.outputs.monthly }}
+            STRIPE_PRO_ANNUAL_PRICE_ID=${{ steps.stripe-pro-prices.outputs.annual }}
+          env_vars_update_strategy: merge
 
       - name: Connect to GKE cluster
         run: |
@@ -104,6 +123,10 @@ jobs:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            STRIPE_PRO_MONTHLY_PRICE_ID=${{ steps.stripe-pro-prices.outputs.monthly }}
+            STRIPE_PRO_ANNUAL_PRICE_ID=${{ steps.stripe-pro-prices.outputs.annual }}
+          env_vars_update_strategy: merge
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
