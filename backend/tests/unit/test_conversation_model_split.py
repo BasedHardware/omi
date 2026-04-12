@@ -1,7 +1,7 @@
-"""Tests for conversation model split (#6423).
+"""Tests for conversation model split (#6423) and Phase 4 decoupling (#6484).
 
 Verifies that splitting models/conversation.py into separate files
-maintains backward compatibility and correct behavior.
+maintains correct behavior and that re-exports have been removed.
 """
 
 from datetime import datetime, timezone
@@ -9,48 +9,8 @@ from datetime import datetime, timezone
 import pytest
 
 
-class TestImportBackwardCompatibility:
-    """All existing import patterns must continue to work via re-exports."""
-
-    def test_enums_importable_from_conversation(self):
-        from models.conversation import (
-            CategoryEnum,
-            ConversationSource,
-            ConversationStatus,
-            ConversationVisibility,
-            ExternalIntegrationConversationSource,
-            PostProcessingModel,
-            PostProcessingStatus,
-        )
-
-        assert CategoryEnum.other.value == 'other'
-        assert ConversationSource.omi.value == 'omi'
-        assert ConversationStatus.completed.value == 'completed'
-        assert ConversationVisibility.private.value == 'private'
-        assert PostProcessingStatus.not_started.value == 'not_started'
-        assert PostProcessingModel.fal_whisperx.value == 'fal_whisperx'
-        assert ExternalIntegrationConversationSource.audio.value == 'audio_transcript'
-
-    def test_structured_models_importable_from_conversation(self):
-        from models.conversation import ActionItem, ActionItemsExtraction, Event, Structured
-
-        assert ActionItem(description="test").description == "test"
-        assert Event(title="test", start=datetime.now(timezone.utc)).title == "test"
-        assert Structured().title == ''
-        assert ActionItemsExtraction().action_items == []
-
-    def test_domain_models_importable_from_conversation(self):
-        from models.conversation import (
-            AudioFile,
-            CalendarMeetingContext,
-            ConversationPhoto,
-            Geolocation,
-            MeetingParticipant,
-        )
-
-        assert Geolocation(latitude=0, longitude=0).latitude == 0
-        assert MeetingParticipant().name is None
-        assert ConversationPhoto(base64="abc").base64 == "abc"
+class TestLocallyDefinedModelsImportable:
+    """Models defined in conversation.py must be importable."""
 
     def test_core_models_importable_from_conversation(self):
         from models.conversation import (
@@ -85,56 +45,68 @@ class TestImportBackwardCompatibility:
 
         assert SearchRequest(query="test").query == "test"
 
-    def test_star_import_provides_all_needed_symbols(self):
-        """Star import controlled by __all__ provides re-exported model symbols."""
+
+class TestReExportsRemoved:
+    """Phase 4a (#6484): re-exports removed — use canonical modules."""
+
+    def test_no_reexport_symbols_in_all(self):
+        """__all__ must only contain locally-defined symbols."""
+        import models.conversation as mod
+
+        reexport_symbols = [
+            'ActionItem',
+            'ActionItemsExtraction',
+            'AudioFile',
+            'CalendarMeetingContext',
+            'CategoryEnum',
+            'ConversationPhoto',
+            'ConversationSource',
+            'ConversationStatus',
+            'ConversationVisibility',
+            'Event',
+            'ExternalIntegrationConversationSource',
+            'Geolocation',
+            'MeetingParticipant',
+            'Message',
+            'Person',
+            'PostProcessingModel',
+            'PostProcessingStatus',
+            'Structured',
+            'TranscriptSegment',
+        ]
+        if hasattr(mod, '__all__'):
+            for sym in reexport_symbols:
+                assert sym not in mod.__all__, f'{sym} should not be in __all__ (use canonical module)'
+
+    def test_canonical_imports_work(self):
+        """All moved symbols import from their canonical modules."""
+        from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
+        from models.structured import Structured, ActionItem, Event, ActionItemsExtraction
+        from models.audio_file import AudioFile
+        from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+        from models.conversation_photo import ConversationPhoto
+        from models.geolocation import Geolocation
+
+        assert CategoryEnum.other.value == 'other'
+        assert ConversationSource.omi.value == 'omi'
+        assert Structured().title == ''
+        assert ActionItem(description="test").description == "test"
+        assert Geolocation(latitude=0, longitude=0).latitude == 0
+
+    def test_star_import_excludes_reexports(self):
+        """Star import only provides locally-defined symbols."""
         ns = {}
         exec('from models.conversation import *', ns)
-        # Core models defined in conversation.py
         assert 'Conversation' in ns
         assert 'CreateConversation' in ns
         assert 'AppResult' in ns
-        # Re-exported symbols from new modules
-        assert 'TranscriptSegment' in ns
-        assert 'Message' in ns
-        assert 'Person' in ns
-        assert 'PostProcessingStatus' in ns
-        assert 'ConversationSource' in ns
-        assert 'CategoryEnum' in ns
-        assert 'Structured' in ns
-        # __all__ controls star import — typing symbols no longer leak
+        # Re-exported symbols no longer in __all__
+        assert 'CategoryEnum' not in ns
+        assert 'Structured' not in ns
+        assert 'TranscriptSegment' not in ns
+        assert 'ActionItem' not in ns
+        # Typing symbols excluded
         assert 'List' not in ns
-
-    def test_identity_preserved_across_import_paths(self):
-        """Re-exported classes must be the same object, not copies."""
-        from models.conversation import CategoryEnum as CE_conv
-        from models.conversation_enums import CategoryEnum as CE_enum
-
-        assert CE_conv is CE_enum
-
-        from models.conversation import Structured as S_conv
-        from models.structured import Structured as S_struct
-
-        assert S_conv is S_struct
-
-        from models.conversation import Geolocation as G_conv
-        from models.geolocation import Geolocation as G_geo
-
-        assert G_conv is G_geo
-
-        from models.conversation import AudioFile as AF_conv
-        from models.audio_file import AudioFile as AF_audio
-
-        assert AF_conv is AF_audio
-
-        from models.conversation import ConversationPhoto as CP_conv
-        from models.conversation_photo import ConversationPhoto as CP_photo
-
-        assert CP_conv is CP_photo
-
-        from models.conversation import CalendarMeetingContext as CMC_conv
-        from models.calendar_context import CalendarMeetingContext as CMC_cal
-
-        assert CMC_conv is CMC_cal
 
 
 class TestDirectImportsFromNewModules:
@@ -412,12 +384,14 @@ class TestPhase3NarrowImports:
         assert ConversationPhoto(base64="abc").base64 == "abc"
 
     def test_all_controls_star_import(self):
-        """__all__ restricts star import to defined + re-exported symbols only."""
+        """__all__ restricts star import to locally-defined symbols only."""
         import models.conversation as mod
 
         assert hasattr(mod, '__all__')
         assert 'Conversation' in mod.__all__
-        assert 'CategoryEnum' in mod.__all__
+        # Re-exports removed in Phase 4a (#6484)
+        assert 'CategoryEnum' not in mod.__all__
+        assert 'Structured' not in mod.__all__
         # Typing symbols excluded
         assert 'List' not in mod.__all__
         assert 'Optional' not in mod.__all__
@@ -590,3 +564,218 @@ class TestConversationSummaryWithTranscript:
         assert "Hello team" in summary.transcript_text
         assert "Hi there" in summary.transcript_text
         assert sorted(summary.person_ids) == ["p1", "p2"]
+
+
+class TestPhase4ConsumerMigration:
+    """Phase 4b (#6484): consumers decoupled from Conversation import."""
+
+    def test_trends_extractor_accepts_segments_and_person_ids(self):
+        """trends_extractor no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/trends.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'trends_extractor':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids']
+                return
+        pytest.fail('trends_extractor function not found')
+
+    def test_retrieve_memory_context_params_accepts_segments(self):
+        """retrieve_memory_context_params no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/chat.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'retrieve_memory_context_params':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids']
+                return
+        pytest.fail('retrieve_memory_context_params function not found')
+
+    def test_obtain_emotional_message_accepts_segments(self):
+        """obtain_emotional_message no longer accepts Conversation object."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path('utils/llm/chat.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'obtain_emotional_message':
+                params = [arg.arg for arg in node.args.args]
+                assert params == ['uid', 'transcript_segments', 'person_ids', 'context', 'emotion']
+                return
+        pytest.fail('obtain_emotional_message function not found')
+
+    def test_removed_imports_not_present(self):
+        """Files that had Conversation import removed no longer import it."""
+        import pathlib
+
+        for file_path in [
+            'utils/retrieval/agentic.py',
+            'routers/speech_profile.py',
+            'utils/llm/trends.py',
+            'routers/chat.py',
+            'utils/chat.py',
+        ]:
+            source = pathlib.Path(file_path).read_text()
+            assert (
+                'from models.conversation import' not in source
+            ), f'{file_path} still imports from models.conversation'
+
+    def test_type_checking_only_imports(self):
+        """Files using TYPE_CHECKING should not have runtime Conversation import."""
+        import pathlib
+
+        source = pathlib.Path('utils/retrieval/graph.py').read_text()
+        assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
+        assert 'from __future__ import annotations' in source
+
+
+class TestPhase4RuntimeBehavior:
+    """Phase 4b (#6484): runtime tests for narrowed interfaces."""
+
+    def test_extract_memory_ids_from_dicts(self):
+        """extract_memory_ids handles dict inputs (used by routers/chat.py and utils/chat.py)."""
+        from utils.conversation_helpers import extract_memory_ids
+
+        memories = [
+            {'id': 'conv-1', 'structured': {'title': 'Test'}},
+            {'id': 'conv-2', 'structured': {'title': 'Test 2'}},
+        ]
+        assert extract_memory_ids(memories) == ['conv-1', 'conv-2']
+
+    def test_extract_memory_ids_from_objects(self):
+        """extract_memory_ids handles Conversation objects."""
+        from models.conversation import Conversation
+        from models.structured import Structured
+        from utils.conversation_helpers import extract_memory_ids
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id='conv-obj',
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            structured=Structured(title='Test'),
+        )
+        assert extract_memory_ids([conv]) == ['conv-obj']
+
+    def test_extract_memory_ids_mixed(self):
+        """extract_memory_ids handles mixed dict/object inputs."""
+        from models.conversation import Conversation
+        from models.structured import Structured
+        from utils.conversation_helpers import extract_memory_ids
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id='conv-obj',
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            structured=Structured(title='Test'),
+        )
+        memories = [{'id': 'conv-dict'}, conv]
+        assert extract_memory_ids(memories) == ['conv-dict', 'conv-obj']
+
+    def test_extract_memory_ids_limit(self):
+        """extract_memory_ids respects the limit parameter."""
+        from utils.conversation_helpers import extract_memory_ids
+
+        memories = [{'id': f'conv-{i}'} for i in range(10)]
+        assert len(extract_memory_ids(memories, limit=3)) == 3
+
+    def test_extract_memory_ids_empty(self):
+        """extract_memory_ids handles empty list."""
+        from utils.conversation_helpers import extract_memory_ids
+
+        assert extract_memory_ids([]) == []
+
+    def test_call_sites_use_extract_memory_ids(self):
+        """Verify routers/chat.py and utils/chat.py use the shared helper."""
+        import pathlib
+
+        for file_path in ['routers/chat.py', 'utils/chat.py']:
+            source = pathlib.Path(file_path).read_text()
+            assert 'extract_memory_ids' in source, f'{file_path} should use extract_memory_ids'
+            assert 'from utils.conversation_helpers import extract_memory_ids' in source
+
+    def test_trends_extractor_signature_callable(self):
+        """trends_extractor can be called with the new signature shape."""
+        import sys
+        from unittest.mock import patch, MagicMock
+        from models.transcript_segment import TranscriptSegment
+
+        segments = [
+            TranscriptSegment(text="Tesla stock is up", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True),
+        ]
+        person_ids = ['p1']
+
+        # Pre-mock heavy dependencies to avoid GCP credential chain
+        mock_db_module = MagicMock()
+        mock_llm_clients = MagicMock()
+        saved_modules = {}
+        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients']:
+            saved_modules[mod_name] = sys.modules.get(mod_name)
+            sys.modules[mod_name] = mock_db_module if 'database' in mod_name else mock_llm_clients
+
+        try:
+            # Force reimport with mocked deps
+            for mod_name in ['utils.llm.trends']:
+                sys.modules.pop(mod_name, None)
+
+            import utils.llm.trends as trends_mod
+
+            trends_mod.users_db = MagicMock()
+            trends_mod.users_db.get_people_by_ids.return_value = []
+            trends_mod.get_user_name = MagicMock(return_value='TestUser')
+            trends_mod.llm_mini = MagicMock()
+            trends_mod.llm_mini.with_structured_output.return_value.invoke.return_value = MagicMock(items=[])
+
+            result = trends_mod.trends_extractor('test-uid', segments, person_ids)
+            assert result == []
+        finally:
+            for mod_name, saved in saved_modules.items():
+                if saved is None:
+                    sys.modules.pop(mod_name, None)
+                else:
+                    sys.modules[mod_name] = saved
+            sys.modules.pop('utils.llm.trends', None)
+
+    def test_save_trends_accepts_str(self):
+        """database/trends.py save_trends accepts memory_id as str."""
+        import sys
+        from unittest.mock import MagicMock
+        from models.trend import Trend, TrendEnum, TrendType
+
+        trends = [Trend(category=TrendEnum.company, topics=['Tesla'], type=TrendType.best)]
+
+        # Mock Firestore
+        mock_client = MagicMock()
+        saved = sys.modules.get('database._client')
+        sys.modules['database._client'] = MagicMock(db=mock_client, document_id_from_seed=lambda s: f'id-{s}')
+
+        try:
+            sys.modules.pop('database.trends', None)
+            import database.trends as trends_db_mod
+
+            mock_doc_ref = MagicMock()
+            mock_client.collection.return_value.document.return_value = mock_doc_ref
+            mock_doc_ref.collection.return_value.document.return_value = mock_doc_ref
+
+            trends_db_mod.save_trends('conv-123', trends)
+
+            # Verify the string ID was used in the ArrayUnion call
+            mock_doc_ref.update.assert_called()
+            call_args = mock_doc_ref.update.call_args[0][0]
+            assert 'memory_ids' in call_args
+        finally:
+            if saved is None:
+                sys.modules.pop('database._client', None)
+            else:
+                sys.modules['database._client'] = saved
+            sys.modules.pop('database.trends', None)

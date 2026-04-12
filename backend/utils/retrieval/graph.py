@@ -6,9 +6,14 @@ Claude decides implicitly whether to use tools, eliminating the need for
 the requires_context() LLM classification call.
 """
 
+from __future__ import annotations
+
 import uuid
 import asyncio
-from typing import List, Optional, AsyncGenerator, Tuple
+from typing import List, Optional, AsyncGenerator, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models.conversation import Conversation
 
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
@@ -16,7 +21,6 @@ from langchain_openai import ChatOpenAI
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
-from models.conversation import Conversation
 from utils.llm.chat import retrieve_is_file_question
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
