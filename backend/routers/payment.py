@@ -289,7 +289,13 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
 
 @router.post('/v1/payments/upgrade-subscription')
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Schedule an upgrade/downgrade to take effect at the end of the current billing period."""
+    """Upgrade or change a user's subscription plan.
+
+    - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
+      Stripe prorates automatically. User gets new features right away.
+    - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
+      takes effect at end of current billing period.
+    """
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
@@ -302,6 +308,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
+        current_item_id = stripe_sub['items']['data'][0]['id']
 
         # Check if user is trying to upgrade to the same plan
         if current_price_id == request.price_id:
@@ -310,19 +317,60 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
             )
 
-        # Create a subscription schedule from the existing subscription
+        target_plan = get_plan_type_from_price_id(request.price_id)
+        target_price = stripe.Price.retrieve(request.price_id)
+        target_interval = target_price.recurring.interval  # "month" or "year"
+        current_plan = get_plan_type_from_price_id(current_price_id)
+
+        # Block downgrades from Pro to Unlimited
+        if current_plan == PlanType.pro and target_plan == PlanType.unlimited:
+            raise HTTPException(
+                status_code=400,
+                detail="Downgrading from Pro to Unlimited is not available. Please contact support if you need to change your plan.",
+            )
+
+        # Cross-plan change (e.g. Unlimited→Pro): immediate swap with proration
+        if current_plan != target_plan:
+            updated_sub = stripe.Subscription.modify(
+                stripe_sub['id'],
+                items=[{'id': current_item_id, 'price': request.price_id}],
+                proration_behavior='create_prorations',
+                metadata={'uid': uid, 'sub_type': target_plan.value},
+            )
+
+            # Update our database immediately
+            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            if new_subscription:
+                users_db.update_user_subscription(uid, new_subscription.dict())
+                set_credits_invalidation_signal(uid)
+                if is_paid_plan(new_subscription.plan):
+                    conversations_db.unlock_all_conversations(uid)
+                    memories_db.unlock_all_memories(uid)
+                    action_items_db.unlock_all_action_items(uid)
+                    clear_fair_use_on_upgrade(uid)
+
+            logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
+
+            return {
+                "status": "success",
+                "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
+                "subscription": new_subscription.dict() if new_subscription else current_subscription.dict(),
+                "days_remaining": 0,
+                "schedule_id": None,
+            }
+
+        # Same plan, different interval (e.g. monthly→annual): schedule for end of period
         schedule = stripe.SubscriptionSchedule.create(
             from_subscription=stripe_sub['id'],
         )
 
-        # Update the schedule with the new phase (annual plan)
         updated_schedule = stripe.SubscriptionSchedule.modify(
             schedule.id,
             phases=[
                 {
                     'items': [
                         {
-                            'price': current_price_id,  # Keep current monthly plan
+                            'price': current_price_id,
                             'quantity': 1,
                         }
                     ],
@@ -332,33 +380,22 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 {
                     'items': [
                         {
-                            'price': request.price_id,  # New annual plan
+                            'price': request.price_id,
                         }
                     ],
                 },
             ],
-            metadata={'uid': uid, 'upgrade_type': 'monthly_to_annual'},
+            metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
         )
 
-        logger.info(f"updated_schedule: {updated_schedule}")
+        logger.info(f"Scheduled interval change for user {uid}: {current_plan.value} monthly -> {target_interval}")
 
-        # Update the subscription in our database to reflect the scheduled change
-        # The current_period_end will be extended to include the annual period
-        monthly_period_end = stripe_sub['current_period_end']
-        annual_end_timestamp = monthly_period_end + 31536000  # 12 months after monthly ends
-        current_subscription.current_period_end = annual_end_timestamp
-
-        logger.info(f"Updated subscription: {current_subscription.dict()}")
-
-        users_db.update_user_subscription(uid, current_subscription.dict())
-
-        # Calculate remaining days
         remaining_seconds = stripe_sub['current_period_end'] - int(time.time())
-        remaining_days = max(0, remaining_seconds // 86400)  # Convert seconds to days
+        remaining_days = max(0, remaining_seconds // 86400)
 
         return {
             "status": "success",
-            "message": f"Upgrade scheduled successfully! Your monthly plan continues until {remaining_days} days from now, then automatically switches to annual. You'll get 13 months of coverage total.",
+            "message": f"Upgrade scheduled! Your monthly plan continues for {remaining_days} more days, then automatically switches to annual.",
             "subscription": current_subscription.dict(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
@@ -367,8 +404,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error scheduling subscription upgrade: {e}")
-        raise HTTPException(status_code=500, detail="Failed to schedule subscription upgrade. Please try again.")
+        logger.error(f"Error processing subscription change: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
 
 
 class CancelSubscriptionRequest(BaseModel):
@@ -498,9 +535,18 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
                 else:
+                    # Cancel the old subscription to prevent double-charging
+                    old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
-                        f"User {uid} has existing subscription {existing_subscription.stripe_subscription_id}, processing new subscription {session.get('subscription')}"
+                        f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
                     )
+                    try:
+                        stripe.Subscription.cancel(old_sub_id)
+                        logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
+                        )
 
             _update_subscription_from_session(uid, session)
             set_credits_invalidation_signal(uid)
