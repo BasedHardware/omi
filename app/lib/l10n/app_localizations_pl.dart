@@ -8912,4 +8912,18 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Kontynuuj';
+
+  @override
+  String get tasksClearCompleted => 'Wyczyść ukończone';
+
+  @override
+  String get tasksSelectAll => 'Zaznacz wszystko';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Usuń $count zadanie(a)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Oznaczono jako ukończone';
 }

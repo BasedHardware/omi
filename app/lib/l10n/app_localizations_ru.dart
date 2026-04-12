@@ -8922,4 +8922,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Продолжить';
+
+  @override
+  String get tasksClearCompleted => 'Очистить выполненные';
+
+  @override
+  String get tasksSelectAll => 'Выбрать все';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Удалить $count задачу(и)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Отмечено как выполненное';
 }

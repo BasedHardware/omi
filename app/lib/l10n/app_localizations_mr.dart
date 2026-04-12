@@ -8904,4 +8904,18 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'पुढे सुरू ठेवा';
+
+  @override
+  String get tasksClearCompleted => 'पूर्ण झालेले साफ करा';
+
+  @override
+  String get tasksSelectAll => 'सर्व निवडा';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count कार्य हटवा';
+  }
+
+  @override
+  String get tasksMarkComplete => 'पूर्ण म्हणून चिन्हांकित';
 }

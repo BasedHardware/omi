@@ -8944,4 +8944,18 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get continueAnyway => 'కొనసాగించు';
+
+  @override
+  String get tasksClearCompleted => 'పూర్తయినవి తీసివేయి';
+
+  @override
+  String get tasksSelectAll => 'అన్నీ ఎంచుకో';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count పని(లు) తొలగించు';
+  }
+
+  @override
+  String get tasksMarkComplete => 'పూర్తయినట్లు గుర్తించబడింది';
 }

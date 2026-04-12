@@ -10621,5 +10621,9 @@
     },
     "firmwareWarningTitle": "Mahalaga: Basahin Bago Mag-update",
     "firmwareFormatWarning": "Ang firmware na ito ay magfo-format ng SD card. Pakitiyak na ang lahat ng offline na data ay naka-sync bago mag-upgrade.\n\nKung makakita ka ng kumukurap na pulang ilaw pagkatapos i-install ang bersyong ito, huwag mag-alala. Ikonekta lang ang device sa app at dapat itong maging asul. Ang pulang ilaw ay nangangahulugang hindi pa na-sync ang orasan ng device.",
-    "continueAnyway": "Magpatuloy"
+    "continueAnyway": "Magpatuloy",
+    "tasksClearCompleted": "Linisin ang natapos",
+    "tasksSelectAll": "Piliin lahat",
+    "tasksDeleteSelected": "Burahin ang {count} gawain",
+    "tasksMarkComplete": "Minarkahan bilang kumpleto"
 }

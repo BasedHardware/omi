@@ -8908,4 +8908,18 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'جاری رکھیں';
+
+  @override
+  String get tasksClearCompleted => 'مکمل کو صاف کریں';
+
+  @override
+  String get tasksSelectAll => 'سب منتخب کریں';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count کام حذف کریں';
+  }
+
+  @override
+  String get tasksMarkComplete => 'مکمل کے طور پر نشان زد';
 }

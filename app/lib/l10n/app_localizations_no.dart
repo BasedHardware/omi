@@ -8889,4 +8889,18 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Fortsett';
+
+  @override
+  String get tasksClearCompleted => 'Fjern fullførte';
+
+  @override
+  String get tasksSelectAll => 'Velg alle';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Slett $count oppgave(r)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Merket som fullført';
 }

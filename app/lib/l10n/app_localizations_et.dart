@@ -8890,4 +8890,18 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Jätka';
+
+  @override
+  String get tasksClearCompleted => 'Kustuta lõpetatud';
+
+  @override
+  String get tasksSelectAll => 'Vali kõik';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Kustuta $count ülesanne(t)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Märgitud lõpetatuks';
 }

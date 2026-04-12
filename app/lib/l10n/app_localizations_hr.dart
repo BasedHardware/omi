@@ -8923,4 +8923,18 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Nastavi';
+
+  @override
+  String get tasksClearCompleted => 'Obriši završene';
+
+  @override
+  String get tasksSelectAll => 'Odaberi sve';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Obriši $count zadatak(e)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Označeno kao završeno';
 }

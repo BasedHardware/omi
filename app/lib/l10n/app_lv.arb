@@ -2898,5 +2898,9 @@
     "enableLocationDescription": "Atrašanās vietas atļauja ir nepieciešama, lai atrastu tuvumā esošās Bluetooth ierīces.",
     "firmwareWarningTitle": "Svarīgi: Izlasiet pirms atjaunināšanas",
     "firmwareFormatWarning": "Šī programmaparatūra formatēs SD karti. Lūdzu, pārliecinieties, ka visi bezsaistes dati ir sinhronizēti pirms jaunināšanas.\n\nJa pēc šīs versijas instalēšanas redzat mirgojoššu sarkanu gaismu, neuztraucieties. Vienkārši pievienojiet ierīci lietotnei, un tai vajadzētu kļūt zilai. Sarkanā gaisma nozīmē, ka ierīces pulkstenis vēl nav sinhronizēts.",
-    "continueAnyway": "Turpināt"
+    "continueAnyway": "Turpināt",
+    "tasksClearCompleted": "Notīrīt paveiktos",
+    "tasksSelectAll": "Atlasīt visu",
+    "tasksDeleteSelected": "Dzēst {count} uzdevumu(s)",
+    "tasksMarkComplete": "Atzīmēts kā pabeigts"
 }

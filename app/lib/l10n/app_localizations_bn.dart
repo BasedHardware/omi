@@ -8902,4 +8902,18 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get continueAnyway => 'চালিয়ে যান';
+
+  @override
+  String get tasksClearCompleted => 'সম্পন্নগুলো মুছুন';
+
+  @override
+  String get tasksSelectAll => 'সব নির্বাচন করুন';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$countটি কাজ মুছুন';
+  }
+
+  @override
+  String get tasksMarkComplete => 'সম্পন্ন হিসেবে চিহ্নিত';
 }

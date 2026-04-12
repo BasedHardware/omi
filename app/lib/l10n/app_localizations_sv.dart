@@ -8897,4 +8897,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Fortsätt';
+
+  @override
+  String get tasksClearCompleted => 'Rensa avslutade';
+
+  @override
+  String get tasksSelectAll => 'Välj alla';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Ta bort $count uppgift(er)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Markerad som klar';
 }

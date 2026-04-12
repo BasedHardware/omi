@@ -8903,4 +8903,18 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Lanjutkan';
+
+  @override
+  String get tasksClearCompleted => 'Hapus yang selesai';
+
+  @override
+  String get tasksSelectAll => 'Pilih semua';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Hapus $count tugas';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Ditandai selesai';
 }

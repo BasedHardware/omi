@@ -8881,4 +8881,18 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Pokračovať';
+
+  @override
+  String get tasksClearCompleted => 'Vymazať dokončené';
+
+  @override
+  String get tasksSelectAll => 'Vybrať všetko';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Odstrániť $count úlohu(y)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Označené ako dokončené';
 }

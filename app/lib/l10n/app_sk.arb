@@ -2903,5 +2903,9 @@
     "enableLocationDescription": "Na nájdenie blízkych Bluetooth zariadení je potrebné povolenie polohy.",
     "firmwareWarningTitle": "Dôležité: Prečítajte si pred aktualizáciou",
     "firmwareFormatWarning": "Tento firmvér naformátuje SD kartu. Pred aktualizáciou sa uistite, že všetky offline dáta sú synchronizované.\n\nAk po inštalácii tejto verzie uvidíte blikajúce červené svetlo, neznepokojujte sa. Jednoducho pripojte zariadenie k aplikácii a malo by sa rozsvietiť namodro. Červené svetlo znamená, že hodiny zariadenia ešte neboli synchronizované.",
-    "continueAnyway": "Pokračovať"
+    "continueAnyway": "Pokračovať",
+    "tasksClearCompleted": "Vymazať dokončené",
+    "tasksSelectAll": "Vybrať všetko",
+    "tasksDeleteSelected": "Odstrániť {count} úlohu(y)",
+    "tasksMarkComplete": "Označené ako dokončené"
 }

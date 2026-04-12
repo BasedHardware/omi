@@ -2898,5 +2898,9 @@
     "enableLocationDescription": "Kebenaran lokasi diperlukan untuk mencari peranti Bluetooth berdekatan.",
     "firmwareWarningTitle": "Penting: Baca Sebelum Mengemas Kini",
     "firmwareFormatWarning": "Firmware ini akan memformat kad SD. Sila pastikan semua data luar talian telah disegerakkan sebelum menaik taraf.\n\nJika anda melihat lampu merah berkelip selepas memasang versi ini, jangan risau. Sambungkan sahaja peranti ke aplikasi dan ia sepatutnya bertukar biru. Lampu merah bermakna jam peranti belum disegerakkan lagi.",
-    "continueAnyway": "Teruskan"
+    "continueAnyway": "Teruskan",
+    "tasksClearCompleted": "Kosongkan yang selesai",
+    "tasksSelectAll": "Pilih semua",
+    "tasksDeleteSelected": "Padam {count} tugas",
+    "tasksMarkComplete": "Ditandai selesai"
 }

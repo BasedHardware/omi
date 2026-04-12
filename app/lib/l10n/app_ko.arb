@@ -2898,5 +2898,9 @@
     "enableLocationDescription": "근처 블루투스 기기를 찾으려면 위치 권한이 필요합니다.",
     "firmwareWarningTitle": "중요: 업데이트 전 확인사항",
     "firmwareFormatWarning": "이 펌웨어는 SD 카드를 포맷합니다. 업그레이드 전에 모든 오프라인 데이터가 동기화되었는지 확인하세요.\n\n이 버전 설치 후 빨간 불이 깜빡이더라도 걱정하지 마세요. 기기를 앱에 연결하면 파란색으로 바뀝니다. 빨간 불은 기기의 시계가 아직 동기화되지 않았다는 의미입니다.",
-    "continueAnyway": "계속"
+    "continueAnyway": "계속",
+    "tasksClearCompleted": "완료된 항목 지우기",
+    "tasksSelectAll": "모두 선택",
+    "tasksDeleteSelected": "{count}개 작업 삭제",
+    "tasksMarkComplete": "완료로 표시됨"
 }

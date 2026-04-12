@@ -2898,5 +2898,9 @@
     "enableLocationDescription": "L'autorizzazione alla posizione è necessaria per trovare i dispositivi Bluetooth nelle vicinanze.",
     "firmwareWarningTitle": "Importante: Leggere prima dell'aggiornamento",
     "firmwareFormatWarning": "Questo firmware formatterà la scheda SD. Assicurati che tutti i dati offline siano sincronizzati prima dell'aggiornamento.\n\nSe vedi una luce rossa lampeggiante dopo aver installato questa versione, non preoccuparti. Collega semplicemente il dispositivo all'app e dovrebbe diventare blu. La luce rossa significa che l'orologio del dispositivo non è ancora stato sincronizzato.",
-    "continueAnyway": "Continua"
+    "continueAnyway": "Continua",
+    "tasksClearCompleted": "Cancella completati",
+    "tasksSelectAll": "Seleziona tutto",
+    "tasksDeleteSelected": "Elimina {count} attività",
+    "tasksMarkComplete": "Contrassegnato come completato"
 }

@@ -8936,4 +8936,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Continuă';
+
+  @override
+  String get tasksClearCompleted => 'Șterge finalizate';
+
+  @override
+  String get tasksSelectAll => 'Selectează tot';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Șterge $count sarcină(i)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Marcat ca finalizat';
 }

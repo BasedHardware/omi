@@ -8901,4 +8901,18 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Tęsti';
+
+  @override
+  String get tasksClearCompleted => 'Išvalyti atliktus';
+
+  @override
+  String get tasksSelectAll => 'Pasirinkti viską';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Ištrinti $count užduotį(is)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Pažymėta kaip atlikta';
 }

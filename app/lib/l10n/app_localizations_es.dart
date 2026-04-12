@@ -8912,4 +8912,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Continuar';
+
+  @override
+  String get tasksClearCompleted => 'Borrar completadas';
+
+  @override
+  String get tasksSelectAll => 'Seleccionar todo';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Eliminar $count tarea(s)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Marcado como completado';
 }

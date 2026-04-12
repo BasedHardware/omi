@@ -8959,4 +8959,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get continueAnyway => 'தொடரவும்';
+
+  @override
+  String get tasksClearCompleted => 'முடிந்தவற்றை அழி';
+
+  @override
+  String get tasksSelectAll => 'அனைத்தையும் தேர்ந்தெடு';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count பணி(களை) நீக்கு';
+  }
+
+  @override
+  String get tasksMarkComplete => 'முடிந்தது என குறிக்கப்பட்டது';
 }

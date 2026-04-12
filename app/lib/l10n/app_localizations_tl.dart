@@ -8973,4 +8973,18 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Magpatuloy';
+
+  @override
+  String get tasksClearCompleted => 'Linisin ang natapos';
+
+  @override
+  String get tasksSelectAll => 'Piliin lahat';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Burahin ang $count gawain';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Minarkahan bilang kumpleto';
 }

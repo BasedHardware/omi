@@ -8956,4 +8956,18 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Συνέχεια';
+
+  @override
+  String get tasksClearCompleted => 'Εκκαθάριση ολοκληρωμένων';
+
+  @override
+  String get tasksSelectAll => 'Επιλογή όλων';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Διαγραφή $count εργασίας(ών)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Επισημάνθηκε ως ολοκληρωμένο';
 }

@@ -8895,4 +8895,18 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get continueAnyway => 'ادامه';
+
+  @override
+  String get tasksClearCompleted => 'پاک کردن تکمیل‌شده‌ها';
+
+  @override
+  String get tasksSelectAll => 'انتخاب همه';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'حذف $count وظیفه';
+  }
+
+  @override
+  String get tasksMarkComplete => 'به عنوان تکمیل‌شده علامت‌گذاری شد';
 }

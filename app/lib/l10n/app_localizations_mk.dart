@@ -8941,4 +8941,18 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Продолжи';
+
+  @override
+  String get tasksClearCompleted => 'Исчисти завршени';
+
+  @override
+  String get tasksSelectAll => 'Избери сè';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Избриши $count задача(и)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Означено како завршено';
 }

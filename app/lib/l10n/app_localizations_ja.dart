@@ -8744,4 +8744,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get continueAnyway => '続行';
+
+  @override
+  String get tasksClearCompleted => '完了済みをクリア';
+
+  @override
+  String get tasksSelectAll => 'すべて選択';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count件のタスクを削除';
+  }
+
+  @override
+  String get tasksMarkComplete => '完了としてマーク';
 }

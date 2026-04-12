@@ -2898,5 +2898,9 @@
     "enableLocationDescription": "Asukoha luba on vajalik läheduses olevate Bluetooth-seadmete leidmiseks.",
     "firmwareWarningTitle": "Oluline: Lugege enne uuendamist",
     "firmwareFormatWarning": "See püsivara vormindab SD-kaardi. Palun veenduge, et kõik võrguühenduseta andmed on enne uuendamist sünkroniseeritud.\n\nKui näete pärast selle versiooni installimist vilkuvat punast tuld, ärge muretsege. Ühendage seade lihtsalt rakendusega ja see peaks muutuma siniseks. Punane tuli tähendab, et seadme kell pole veel sünkroniseeritud.",
-    "continueAnyway": "Jätka"
+    "continueAnyway": "Jätka",
+    "tasksClearCompleted": "Kustuta lõpetatud",
+    "tasksSelectAll": "Vali kõik",
+    "tasksDeleteSelected": "Kustuta {count} ülesanne(t)",
+    "tasksMarkComplete": "Märgitud lõpetatuks"
 }

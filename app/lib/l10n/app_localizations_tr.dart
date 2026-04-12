@@ -8906,4 +8906,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Devam Et';
+
+  @override
+  String get tasksClearCompleted => 'Tamamlananları temizle';
+
+  @override
+  String get tasksSelectAll => 'Tümünü seç';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count görevi sil';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Tamamlandı olarak işaretlendi';
 }

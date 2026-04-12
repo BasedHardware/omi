@@ -8924,4 +8924,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get continueAnyway => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get tasksClearCompleted => 'ಪೂರ್ಣಗೊಂಡವನ್ನು ತೆರವು ಮಾಡಿ';
+
+  @override
+  String get tasksSelectAll => 'ಎಲ್ಲ ಆಯ್ಕೆ ಮಾಡಿ';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count ಕಾರ್ಯ(ಗಳನ್ನು) ಅಳಿಸಿ';
+  }
+
+  @override
+  String get tasksMarkComplete => 'ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ';
 }

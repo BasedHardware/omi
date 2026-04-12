@@ -8968,4 +8968,18 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Fortfahren';
+
+  @override
+  String get tasksClearCompleted => 'Erledigte löschen';
+
+  @override
+  String get tasksSelectAll => 'Alle auswählen';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count Aufgabe(n) löschen';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Als erledigt markiert';
 }

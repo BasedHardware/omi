@@ -16622,6 +16622,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueAnyway;
+
+  /// No description provided for @tasksClearCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Completed'**
+  String get tasksClearCompleted;
+
+  /// No description provided for @tasksSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get tasksSelectAll;
+
+  /// No description provided for @tasksDeleteSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {count} task(s)'**
+  String tasksDeleteSelected(int count);
+
+  /// No description provided for @tasksMarkComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked as complete'**
+  String get tasksMarkComplete;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
