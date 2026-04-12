@@ -253,8 +253,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     List<Widget> pages = [
       AuthComponent(
         onSignIn: () async {
-          SharedPreferencesUtil().hasOmiDevice = true;
-          SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);

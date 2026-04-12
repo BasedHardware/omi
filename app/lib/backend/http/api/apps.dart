@@ -91,7 +91,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -670,159 +670,6 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
-  print(jsonEncode(personaData));
-  try {
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v1/personas',
-      files: [file],
-      fileFieldName: 'file',
-      fields: {'persona_data': jsonEncode(personaData)},
-    );
-
-    if (response.statusCode == 200) {
-      Logger.debug('createPersonaApp Response body: ${jsonDecode(response.body)}');
-      return jsonDecode(response.body);
-    } else {
-      Logger.debug('Failed to submit app. Status code: ${response.statusCode}');
-      return {};
-    }
-  } catch (e) {
-    Logger.debug('An error occurred createPersonaApp: $e');
-    return {};
-  }
-}
-
-Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
-  Logger.debug(jsonEncode(personaData));
-  try {
-    List<File> files = file != null ? [file] : [];
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v1/personas/${personaData['id']}',
-      files: files,
-      fileFieldName: 'file',
-      fields: {'persona_data': jsonEncode(personaData)},
-      method: 'PATCH',
-    );
-
-    if (response.statusCode == 200) {
-      Logger.debug('updatePersonaApp Response body: ${jsonDecode(response.body)}');
-      return true;
-    } else {
-      Logger.debug('Failed to update app. Status code: ${response.statusCode}');
-      return false;
-    }
-  } catch (e) {
-    Logger.debug('An error occurred updatePersonaApp: $e');
-    return false;
-  }
-}
-
-Future<bool> checkPersonaUsername(String username) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/check-username?username=$username',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return false;
-    log('checkPersonaUsernames: ${response.body}');
-    return jsonDecode(response.body)['is_taken'];
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return true;
-  }
-}
-
-Future<Map?> getTwitterProfileData(String handle) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/personas/twitter/profile?handle=$handle',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return null;
-    log('getTwitterProfileData: ${response.body}');
-    return jsonDecode(response.body);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return null;
-  }
-}
-
-Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, String? personaId) async {
-  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
-  if (personaId != null) {
-    url += '&persona_id=$personaId';
-  }
-  var response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
-  try {
-    if (response == null || response.statusCode != 200) return (false, null);
-    log('verifyTwitterOwnership: ${response.body}');
-    var data = jsonDecode(response.body);
-    return ((data['verified'] ?? false) as bool, data['persona_id'] as String?);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return (false, null);
-  }
-}
-
-Future<String> getPersonaInitialMessage(String username) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/personas/twitter/initial-message?username=$username',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return '';
-    log('getPersonaInitialMessage: ${response.body}');
-    return jsonDecode(response.body)['message'];
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return '';
-  }
-}
-
-Future<App?> getUserPersonaServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/personas', headers: {}, body: '', method: 'GET');
-  try {
-    if (response == null || response.statusCode != 200) return null;
-    log('getPersonaProfile: ${response.body}');
-    var res = jsonDecode(response.body);
-    return App.fromJson(res);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return null;
-  }
-}
-
-Future<String?> generateUsername(String handle) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/personas/generate-username?handle=$handle',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return null;
-    log('generateUsername: ${response.body}');
-    var res = jsonDecode(response.body);
-    return res['username'];
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return null;
-  }
-}
-
 Future<bool> migrateAppOwnerId(String oldId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
@@ -838,19 +685,6 @@ Future<bool> migrateAppOwnerId(String oldId) async {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return false;
-  }
-}
-
-Future<Map<String, dynamic>?> getUpsertUserPersonaServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/user/persona', headers: {}, body: '', method: 'POST');
-  try {
-    if (response == null || response.statusCode != 200) return null;
-    log('getUpsertUserPersonaServer: ${response.body}');
-    return jsonDecode(response.body);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return null;
   }
 }
 

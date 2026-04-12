@@ -638,9 +638,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get saving => 'Opslaan...';
 
   @override
-  String get personaConfig => 'Configureer je AI-persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1713,7 +1710,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'APPARATEN',
+      one: 'APPARAAT',
+    );
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -2428,12 +2430,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createKeyToGetStarted => 'Maak een sleutel aan om te beginnen';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Configureer je AI-persona';
-
-  @override
   String get configureSttProvider => 'STT-provider configureren';
 
   @override
@@ -2948,9 +2944,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Over de app';
-
-  @override
-  String get aboutThePersona => 'Over de persona';
 
   @override
   String get chatPersonality => 'Chatpersoonlijkheid';
@@ -3489,9 +3482,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get changeYourName => 'Wijzig uw naam';
 
   @override
-  String get manageYourOmiPersona => 'Beheer uw Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Stem & Mensen';
 
   @override
@@ -3903,9 +3893,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klik op een sneltoets om deze te wijzigen. Druk op Escape om te annuleren.';
 
   @override
-  String get configurePersonaDescription => 'Configureer je AI-persona';
-
-  @override
   String get configureSTTProvider => 'STT-provider configureren';
 
   @override
@@ -4260,16 +4247,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createAndShareYourApp => 'Maak en deel uw app';
 
   @override
-  String get createMyClone => 'Mijn kloon maken';
-
-  @override
-  String get createYourDigitalClone => 'Maak uw digitale kloon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4298,9 +4276,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get manageApp => 'App beheren';
-
-  @override
-  String get updatePersonaDetails => 'Persona-details bijwerken';
 
   @override
   String deleteItemTitle(String item) {
@@ -5828,9 +5803,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get chooseFile => 'Bestand kiezen';
 
   @override
-  String get configureAiPersona => 'Configureer je AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Verbind AI-assistenten met je gegevens';
 
   @override
@@ -6545,29 +6517,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get sharePublicLink => 'Openbare link delen';
 
   @override
-  String get makePersonaPublic => 'Persona openbaar maken';
-
-  @override
   String get connectedKnowledgeData => 'Verbonden kennisgegevens';
 
   @override
   String get enterName => 'Voer naam in';
-
-  @override
-  String get disconnectTwitter => 'Twitter ontkoppelen';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Weet je zeker dat je je Twitter-account wilt ontkoppelen? Je persona heeft dan geen toegang meer tot je Twitter-gegevens.';
-
-  @override
-  String get getOmiDeviceDescription => 'Maak een nauwkeuriger kloon met je persoonlijke gesprekken';
-
-  @override
-  String get getOmi => 'Omi aanschaffen';
-
-  @override
-  String get iHaveOmiDevice => 'Ik heb een Omi-apparaat';
 
   @override
   String get goal => 'DOEL';
@@ -7119,49 +7072,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan niet worden geselecteerd met andere functies';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-handle niet gevonden';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-handle is geschorst';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter-handle verificatie mislukt';
-
-  @override
-  String get personaFailedToFetch => 'Ophalen van persona mislukt';
-
-  @override
-  String get personaFailedToCreate => 'Aanmaken van persona mislukt';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Verbind minstens één gegevensbron (Omi of Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona succesvol bijgewerkt';
-
-  @override
-  String get personaFailedToUpdate => 'Bijwerken van persona mislukt';
-
-  @override
-  String get personaPleaseSelectImage => 'Selecteer een afbeelding';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Aanmaken van persona mislukt. Probeer het later opnieuw.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Aanmaken van persona mislukt: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Activeren van persona mislukt';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Fout bij activeren persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Ophalen van ondersteunde landen mislukt. Probeer het later opnieuw.';
 
   @override
@@ -7234,21 +7144,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Genereer eerst een app';
-
-  @override
-  String get xHandleTitle => 'Wat is je X-handle?';
-
-  @override
-  String get xHandleDescription => 'We trainen je Omi-kloon voor\nop basis van de activiteit van je account';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Voer je X-handle in';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Voer een geldige X-handle in';
 
   @override
   String get nextButton => 'Volgende';
@@ -7863,9 +7758,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Gesprekanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
-
-  @override
   String get categoryHealth => 'Gezondheid';
 
   @override
@@ -7966,9 +7858,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integraties';
-
-  @override
-  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
 
   @override
   String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';

@@ -637,9 +637,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get saving => 'Sparar...';
 
   @override
-  String get personaConfig => 'Konfigurera din AI-persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1711,7 +1708,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -2423,12 +2425,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createKeyToGetStarted => 'Skapa en nyckel för att komma igång';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurera din AI-persona';
-
-  @override
   String get configureSttProvider => 'Konfigurera STT-leverantör';
 
   @override
@@ -2943,9 +2939,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Om appen';
-
-  @override
-  String get aboutThePersona => 'Om personan';
 
   @override
   String get chatPersonality => 'Chattpersonlighet';
@@ -3483,9 +3476,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get changeYourName => 'Ändra ditt namn';
 
   @override
-  String get manageYourOmiPersona => 'Hantera din Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Röst och Personer';
 
   @override
@@ -3896,9 +3886,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klicka på en genväg för att ändra den. Tryck på Escape för att avbryta.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurera din AI-persona';
-
-  @override
   String get configureSTTProvider => 'Konfigurera STT-leverantör';
 
   @override
@@ -4253,16 +4240,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createAndShareYourApp => 'Skapa och dela din app';
 
   @override
-  String get createMyClone => 'Skapa min klon';
-
-  @override
-  String get createYourDigitalClone => 'Skapa din digitala klon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4291,9 +4269,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get manageApp => 'Hantera app';
-
-  @override
-  String get updatePersonaDetails => 'Uppdatera persona-detaljer';
 
   @override
   String deleteItemTitle(String item) {
@@ -5814,9 +5789,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chooseFile => 'Välj fil';
 
   @override
-  String get configureAiPersona => 'Konfigurera din AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Anslut AI-assistenter till dina data';
 
   @override
@@ -6528,29 +6500,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get sharePublicLink => 'Dela offentlig länk';
 
   @override
-  String get makePersonaPublic => 'Gör persona offentlig';
-
-  @override
   String get connectedKnowledgeData => 'Ansluten kunskapsdata';
 
   @override
   String get enterName => 'Ange namn';
-
-  @override
-  String get disconnectTwitter => 'Koppla från Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Är du säker på att du vill koppla från ditt Twitter-konto? Din persona kommer inte längre att använda din Twitter-aktivitet.';
-
-  @override
-  String get getOmiDeviceDescription => 'Skapa en mer exakt klon med dina personliga konversationer';
-
-  @override
-  String get getOmi => 'Skaffa Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Jag har en Omi-enhet';
 
   @override
   String get goal => 'MÅL';
@@ -7101,49 +7054,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan inte väljas med andra funktioner';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-konto hittades inte';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-konto är avstängt';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Kunde inte verifiera Twitter-konto';
-
-  @override
-  String get personaFailedToFetch => 'Kunde inte hämta din persona';
-
-  @override
-  String get personaFailedToCreate => 'Kunde inte skapa persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Anslut minst en datakälla (Omi eller Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona uppdaterad';
-
-  @override
-  String get personaFailedToUpdate => 'Kunde inte uppdatera persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Välj en bild';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Kunde inte skapa persona. Försök igen senare.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Kunde inte skapa persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Kunde inte aktivera persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Fel vid aktivering av persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Kunde inte hämta länder. Försök igen senare.';
 
   @override
@@ -7216,21 +7126,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Generera en app först';
-
-  @override
-  String get xHandleTitle => 'Vad är ditt X-användarnamn?';
-
-  @override
-  String get xHandleDescription => 'Vi kommer att förträna din Omi-klon\nbaserat på ditt kontos aktivitet';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Ange ditt X-användarnamn';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Ange ett giltigt X-användarnamn';
 
   @override
   String get nextButton => 'Nästa';
@@ -7843,9 +7738,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get categoryConversationAnalysis => 'Samtalsanalys';
 
   @override
-  String get categoryPersonalityClone => 'Personlighetsklon';
-
-  @override
   String get categoryHealth => 'Hälsa';
 
   @override
@@ -7946,9 +7838,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationer';
-
-  @override
-  String get categoryPersonalityClones => 'Personlighetskloner';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitet & livsstil';

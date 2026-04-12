@@ -634,9 +634,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saving => 'Saving...';
 
   @override
-  String get personaConfig => 'Configure your AI persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1706,7 +1703,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -2425,12 +2427,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createKeyToGetStarted => 'Create a key to get started';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Configure your AI persona';
-
-  @override
   String get configureSttProvider => 'Configure STT provider';
 
   @override
@@ -2944,9 +2940,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'About the App';
-
-  @override
-  String get aboutThePersona => 'About the Persona';
 
   @override
   String get chatPersonality => 'Chat Personality';
@@ -3483,9 +3476,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get changeYourName => 'Change Your Name';
 
   @override
-  String get manageYourOmiPersona => 'Manage your Omi persona';
-
-  @override
   String get voiceAndPeople => 'Voice & People';
 
   @override
@@ -3895,9 +3885,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shortcutChangeInstruction => 'Click on a shortcut to change it. Press Escape to cancel.';
 
   @override
-  String get configurePersonaDescription => 'Configure your AI persona';
-
-  @override
   String get configureSTTProvider => 'Configure STT provider';
 
   @override
@@ -4250,16 +4237,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createAndShareYourApp => 'Create and share your app';
 
   @override
-  String get createMyClone => 'Create my Clone';
-
-  @override
-  String get createYourDigitalClone => 'Create your digital clone';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4288,9 +4266,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get manageApp => 'Manage App';
-
-  @override
-  String get updatePersonaDetails => 'Update Persona Details';
 
   @override
   String deleteItemTitle(String item) {
@@ -5811,9 +5786,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chooseFile => 'Choose File';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
 
   @override
@@ -6519,29 +6491,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sharePublicLink => 'Share Public Link';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
-
-  @override
   String get connectedKnowledgeData => 'Connected Knowledge Data';
 
   @override
   String get enterName => 'Enter name';
-
-  @override
-  String get disconnectTwitter => 'Disconnect Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
-
-  @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
-
-  @override
-  String get getOmi => 'Get Omi';
-
-  @override
-  String get iHaveOmiDevice => 'I have Omi device';
 
   @override
   String get goal => 'GOAL';
@@ -7094,49 +7047,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
-
-  @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
-
-  @override
-  String get personaFailedToCreate => 'Failed to create your persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
-
-  @override
-  String get personaFailedToUpdate => 'Failed to update persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Please select an image';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Failed to enable persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
 
   @override
@@ -7209,21 +7119,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Please generate an app first';
-
-  @override
-  String get xHandleTitle => 'What\'s your X handle?';
-
-  @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
 
   @override
   String get nextButton => 'Next';
@@ -7835,9 +7730,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryConversationAnalysis => 'Conversation Analysis';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
-
-  @override
   String get categoryHealth => 'Health';
 
   @override
@@ -7938,9 +7830,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrations';
-
-  @override
-  String get categoryPersonalityClones => 'Personality Clones';
 
   @override
   String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
@@ -8670,7 +8559,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

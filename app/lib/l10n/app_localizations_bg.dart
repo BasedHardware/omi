@@ -638,9 +638,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get saving => 'Запазване...';
 
   @override
-  String get personaConfig => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get beta => 'БЕТА';
 
   @override
@@ -1713,7 +1710,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -2425,12 +2427,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get createKeyToGetStarted => 'Създайте ключ, за да започнете';
 
   @override
-  String get persona => 'Персона';
-
-  @override
-  String get configureYourAiPersona => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get configureSttProvider => 'Конфигуриране на доставчик на STT';
 
   @override
@@ -2946,9 +2942,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'За приложението';
-
-  @override
-  String get aboutThePersona => 'За персоната';
 
   @override
   String get chatPersonality => 'Личност на чата';
@@ -3487,9 +3480,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get changeYourName => 'Променете вашето име';
 
   @override
-  String get manageYourOmiPersona => 'Управлявайте вашата Omi персона';
-
-  @override
   String get voiceAndPeople => 'Глас и Хора';
 
   @override
@@ -3903,9 +3893,6 @@ class AppLocalizationsBg extends AppLocalizations {
       'Щракнете върху пряк път, за да го промените. Натиснете Escape, за да отмените.';
 
   @override
-  String get configurePersonaDescription => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get configureSTTProvider => 'Конфигуриране на доставчик на STT';
 
   @override
@@ -4260,16 +4247,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get createAndShareYourApp => 'Създайте и споделете вашето приложение';
 
   @override
-  String get createMyClone => 'Създай моя клонинг';
-
-  @override
-  String get createYourDigitalClone => 'Създайте вашия цифров клонинг';
-
-  @override
   String get itemApp => 'Приложение';
-
-  @override
-  String get itemPersona => 'Персона';
 
   @override
   String keepItemPublic(String item) {
@@ -4298,9 +4276,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get manageApp => 'Управление на приложението';
-
-  @override
-  String get updatePersonaDetails => 'Актуализиране на детайлите на персоната';
 
   @override
   String deleteItemTitle(String item) {
@@ -5831,9 +5806,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chooseFile => 'Избери файл';
 
   @override
-  String get configureAiPersona => 'Конфигурирай своята AI персона';
-
-  @override
   String get connectAiAssistantsToYourData => 'Свържи AI асистенти към твоите данни';
 
   @override
@@ -6548,29 +6520,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get sharePublicLink => 'Сподели публична връзка';
 
   @override
-  String get makePersonaPublic => 'Направи персоната публична';
-
-  @override
   String get connectedKnowledgeData => 'Свързани данни от знания';
 
   @override
   String get enterName => 'Въведете име';
-
-  @override
-  String get disconnectTwitter => 'Прекъсни връзката с Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Сигурни ли сте, че искате да прекъснете връзката с Twitter акаунта си? Вашата персона вече няма да има достъп до вашите Twitter данни.';
-
-  @override
-  String get getOmiDeviceDescription => 'Създайте по-точен клонинг с вашите лични разговори';
-
-  @override
-  String get getOmi => 'Вземете Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Имам Omi устройство';
 
   @override
   String get goal => 'ЦЕЛ';
@@ -7124,49 +7077,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona не може да бъде избрана с други способности';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter акаунт не е намерен';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter акаунтът е спрян';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Неуспешна проверка на Twitter акаунт';
-
-  @override
-  String get personaFailedToFetch => 'Неуспешно извличане на вашата персона';
-
-  @override
-  String get personaFailedToCreate => 'Неуспешно създаване на персона';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Моля, свържете поне един източник на данни (Omi или Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Персоната е актуализирана успешно';
-
-  @override
-  String get personaFailedToUpdate => 'Неуспешна актуализация на персона';
-
-  @override
-  String get personaPleaseSelectImage => 'Моля, изберете изображение';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Неуспешно създаване на персона. Опитайте по-късно.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Неуспешно създаване на персона: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Неуспешно активиране на персона';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Грешка при активиране на персона: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Неуспешно извличане на поддържани държави. Опитайте по-късно.';
 
   @override
@@ -7239,22 +7149,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Моля, първо генерирайте приложение';
-
-  @override
-  String get xHandleTitle => 'Какъв е вашият X профил?';
-
-  @override
-  String get xHandleDescription =>
-      'Ще предварително обучим вашия Omi клонинг\nвъз основа на активността на вашия акаунт';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Моля, въведете вашия X профил';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Моля, въведете валиден X профил';
 
   @override
   String get nextButton => 'Напред';
@@ -7870,9 +7764,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get categoryConversationAnalysis => 'Анализ на разговори';
 
   @override
-  String get categoryPersonalityClone => 'Клониране на личност';
-
-  @override
   String get categoryHealth => 'Здраве';
 
   @override
@@ -7973,9 +7864,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Интеграции';
-
-  @override
-  String get categoryPersonalityClones => 'Клонове на личности';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивност и начин на живот';

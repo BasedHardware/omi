@@ -636,9 +636,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get saving => 'Zapisywanie...';
 
   @override
-  String get personaConfig => 'Skonfiguruj swoją osobowość AI';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2429,12 +2426,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get createKeyToGetStarted => 'Utwórz klucz, aby rozpocząć';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Skonfiguruj swoją osobowość AI';
-
-  @override
   String get configureSttProvider => 'Skonfiguruj dostawcę STT';
 
   @override
@@ -2950,9 +2941,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'O aplikacji';
-
-  @override
-  String get aboutThePersona => 'O personie';
 
   @override
   String get chatPersonality => 'Osobowość czatu';
@@ -3490,9 +3478,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get changeYourName => 'Zmień swoje imię';
 
   @override
-  String get manageYourOmiPersona => 'Zarządzaj swoją personą Omi';
-
-  @override
   String get voiceAndPeople => 'Głos i Ludzie';
 
   @override
@@ -3901,9 +3886,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get shortcutChangeInstruction => 'Kliknij skrót, aby go zmienić. Naciśnij Escape, aby anulować.';
 
   @override
-  String get configurePersonaDescription => 'Skonfiguruj swoją personę AI';
-
-  @override
   String get configureSTTProvider => 'Skonfiguruj dostawcę STT';
 
   @override
@@ -4257,16 +4239,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get createAndShareYourApp => 'Stwórz i udostępnij swoją aplikację';
 
   @override
-  String get createMyClone => 'Utwórz mojego klona';
-
-  @override
-  String get createYourDigitalClone => 'Stwórz swój cyfrowy klon';
-
-  @override
   String get itemApp => 'Aplikacja';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4295,9 +4268,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get manageApp => 'Zarządzaj aplikacją';
-
-  @override
-  String get updatePersonaDetails => 'Aktualizuj szczegóły persony';
 
   @override
   String deleteItemTitle(String item) {
@@ -5828,9 +5798,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get chooseFile => 'Wybierz plik';
 
   @override
-  String get configureAiPersona => 'Skonfiguruj swoją personę AI';
-
-  @override
   String get connectAiAssistantsToYourData => 'Połącz asystentów AI ze swoimi danymi';
 
   @override
@@ -6542,29 +6509,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get sharePublicLink => 'Udostępnij publiczny link';
 
   @override
-  String get makePersonaPublic => 'Upublicznij personę';
-
-  @override
   String get connectedKnowledgeData => 'Połączone dane wiedzy';
 
   @override
   String get enterName => 'Wprowadź imię';
-
-  @override
-  String get disconnectTwitter => 'Odłącz Twittera';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Czy na pewno chcesz odłączyć swoje konto Twitter? Twoja persona nie będzie już miała dostępu do danych z Twittera.';
-
-  @override
-  String get getOmiDeviceDescription => 'Stwórz dokładniejszego klona dzięki osobistym rozmowom';
-
-  @override
-  String get getOmi => 'Zdobądź Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mam urządzenie Omi';
 
   @override
   String get goal => 'CEL';
@@ -7115,49 +7063,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nie może być wybrana z innymi funkcjami';
 
   @override
-  String get personaTwitterHandleNotFound => 'Nie znaleziono konta Twitter';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Konto Twitter jest zawieszone';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Weryfikacja konta Twitter nie powiodła się';
-
-  @override
-  String get personaFailedToFetch => 'Pobieranie persony nie powiodło się';
-
-  @override
-  String get personaFailedToCreate => 'Tworzenie persony nie powiodło się';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Połącz co najmniej jedno źródło danych (Omi lub Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona zaktualizowana pomyślnie';
-
-  @override
-  String get personaFailedToUpdate => 'Aktualizacja persony nie powiodła się';
-
-  @override
-  String get personaPleaseSelectImage => 'Wybierz obraz';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Tworzenie persony nie powiodło się. Spróbuj później.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Tworzenie persony nie powiodło się: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Włączenie persony nie powiodło się';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Błąd włączania persony: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Pobieranie obsługiwanych krajów nie powiodło się. Spróbuj później.';
 
   @override
@@ -7230,21 +7135,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Najpierw wygeneruj aplikację';
-
-  @override
-  String get xHandleTitle => 'Jaki jest Twój identyfikator X?';
-
-  @override
-  String get xHandleDescription => 'Wstępnie wytrenujemy Twojego klona Omi\nna podstawie aktywności Twojego konta';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Wprowadź swój identyfikator X';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Wprowadź prawidłowy identyfikator X';
 
   @override
   String get nextButton => 'Dalej';
@@ -7861,9 +7751,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analiza rozmów';
 
   @override
-  String get categoryPersonalityClone => 'Klon osobowości';
-
-  @override
   String get categoryHealth => 'Zdrowie';
 
   @override
@@ -7964,9 +7851,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracje';
-
-  @override
-  String get categoryPersonalityClones => 'Klony osobowości';
 
   @override
   String get categoryProductivityLifestyle => 'Produktywność i styl życia';

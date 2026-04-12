@@ -636,9 +636,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get saving => 'Spremanje...';
 
   @override
-  String get personaConfig => 'Konfiguriraj svoju AI osobu';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1711,7 +1708,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -2430,12 +2432,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get createKeyToGetStarted => 'Kreiraj ključ za početak';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurira svoju AI personu';
-
-  @override
   String get configureSttProvider => 'Konfigurira davatelja STT-a';
 
   @override
@@ -2950,9 +2946,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'O aplikaciji';
-
-  @override
-  String get aboutThePersona => 'O personi';
 
   @override
   String get chatPersonality => 'Osobnost razgovora';
@@ -3491,9 +3484,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get changeYourName => 'Promijenite svoje ime';
 
   @override
-  String get manageYourOmiPersona => 'Upravljajte svojom Omi persona';
-
-  @override
   String get voiceAndPeople => 'Glas i osobe';
 
   @override
@@ -3905,9 +3895,6 @@ class AppLocalizationsHr extends AppLocalizations {
       'Kliknite na prečac kako bi ga promijenili. Pritisnite Escape kako bi odustali.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurira AI persona';
-
-  @override
   String get configureSTTProvider => 'Konfigurirajte STT davatelja';
 
   @override
@@ -4262,16 +4249,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get createAndShareYourApp => 'Kreirajte i dijelite svoju aplikaciju';
 
   @override
-  String get createMyClone => 'Kreirajte svoj klon';
-
-  @override
-  String get createYourDigitalClone => 'Kreirajte svoj digitalni klon';
-
-  @override
   String get itemApp => 'Aplikacija';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4300,9 +4278,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get manageApp => 'Upravljaj aplikacijom';
-
-  @override
-  String get updatePersonaDetails => 'Ažurirajte detalje osobe';
 
   @override
   String deleteItemTitle(String item) {
@@ -5832,9 +5807,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get chooseFile => 'Odaberite datoteku';
 
   @override
-  String get configureAiPersona => 'Konfigurirajte vašu AI ličnost';
-
-  @override
   String get connectAiAssistantsToYourData => 'Povežite AI asistente sa vašim podacima';
 
   @override
@@ -6543,29 +6515,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get sharePublicLink => 'Dijeli javnu vezu';
 
   @override
-  String get makePersonaPublic => 'Učini ličnost javnom';
-
-  @override
   String get connectedKnowledgeData => 'Povezani podaci znanja';
 
   @override
   String get enterName => 'Unesite ime';
-
-  @override
-  String get disconnectTwitter => 'Odvoji Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Jeste li sigurni da želite odvajiti svoj Twitter račun? Vaša ličnost više neće imati pristup vašim Twitter podacima.';
-
-  @override
-  String get getOmiDeviceDescription => 'Kreirajte točniji klon sa vašim osobnim razgovorima';
-
-  @override
-  String get getOmi => 'Preuzmi Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Imam Omi uređaj';
 
   @override
   String get goal => 'CILJ';
@@ -7121,49 +7074,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona se ne može odabrati sa ostalim mogućnostima';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle nije pronađen';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter handle je suspendiran';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Provjera Twitter handlea nije uspjela';
-
-  @override
-  String get personaFailedToFetch => 'Dohvaćanje vašeg persona nije uspjelo';
-
-  @override
-  String get personaFailedToCreate => 'Stvaranje vašeg persona nije uspjelo';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Molim vas povežite najmanje jedan izvor znanja (Omi ili Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona je uspješno ažuriran';
-
-  @override
-  String get personaFailedToUpdate => 'Ažuriranje persona nije uspjelo';
-
-  @override
-  String get personaPleaseSelectImage => 'Molim vas odaberite sliku';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Stvaranje vašeg persona nije uspjelo. Molim vas pokušajte kasnije.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Neuspjelo stvaranje persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Omogućavanje persona nije uspjelo';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Greška pri omogućavanju persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Dohvaćanje podržanih zemalja nije uspjelo. Molim vas pokušajte kasnije.';
 
   @override
@@ -7237,21 +7147,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Molim vas prvo generirajte aplikaciju';
-
-  @override
-  String get xHandleTitle => 'Koji je vaš X handle?';
-
-  @override
-  String get xHandleDescription => 'Predobučit ćemo vaš Omi klon\ntemeljem aktivnosti vašeg računa';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Molim vas unesite vaš X handle';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Molim vas unesite valjani X handle';
 
   @override
   String get nextButton => 'Dalje';
@@ -7867,9 +7762,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analiza Razgovora';
 
   @override
-  String get categoryPersonalityClone => 'Klon Ličnosti';
-
-  @override
   String get categoryHealth => 'Zdravlje';
 
   @override
@@ -7970,9 +7862,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracije';
-
-  @override
-  String get categoryPersonalityClones => 'Klonovi Ličnosti';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivnost i Stil Života';
@@ -8703,7 +8592,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

@@ -377,7 +377,6 @@ class AiAppGeneratorProvider extends ChangeNotifier {
   String getCategoryDisplayName() {
     final categories = {
       'conversation-analysis': 'Conversation Analysis',
-      'personality-emulation': 'Personality Clone',
       'health-and-wellness': 'Health',
       'education-and-learning': 'Education',
       'communication-improvement': 'Communication',

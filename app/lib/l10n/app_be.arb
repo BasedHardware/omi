@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Наладзіць вашу персону AI",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "БЕТА",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Персана",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Наладзьце вашу AI персану",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Наладзьце пастаўшчыка STT",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "Аб персане",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Персанальнасць чата",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Ваша інфармацыя",
     "setYourName": "Ўстаноўце ваше імя",
     "changeYourName": "Змяніце ваше імя",
-    "manageYourOmiPersona": "Кіруйце вашай персоной Omi",
     "voiceAndPeople": "Голас і людзі",
     "teachOmiYourVoice": "Навучыце Omi вашему голасу",
     "tellOmiWhoSaidIt": "Скажыце Omi, хто гэта сказаў 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Праверка наступных 7 дзён",
     "shortcuts": "Ярлыкі",
     "shortcutChangeInstruction": "Клацніце на ярлык, каб змяніць яго. Клацніце Escape для скасавання.",
-    "configurePersonaDescription": "Наканфігуйце вашу персону ШІ",
     "configureSTTProvider": "Наканфігуйце пастаўшчыка STT",
     "setConversationEndDescription": "Ўстаноўце, калі размовы аўтаматычна заканчваюцца",
     "importDataDescription": "Імпартуйце даныя з іншых крыніц",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Стварыце мой клон",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Стварыце ваш лічны цыфровы клон",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "Прыкладанне",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Персона",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Захаваць {item} публічным",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Кіруйце прыкладаннем",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Абнавіць дэталі персоны",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Выдаліць {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Наладзьце сваю AI персону",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Падлучыце AI асістэнтаў да ваших даных",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "Дзелісь публічным спасылкай",
-    "makePersonaPublic": "Зрабіць персону публічнай",
     "connectedKnowledgeData": "Падлучаныя даныя ведаў",
     "enterName": "Ўвядзіце імя",
-    "disconnectTwitter": "Адлучыць Twitter",
-    "disconnectTwitterConfirmation": "Вы ўпэўнены, што хочаце адлучыць ваш рахунак Twitter? Ваша персона больш не будзе мець доступа да ваших даных Twitter.",
-    "getOmiDeviceDescription": "Стварыце больш дакладны клон з вашымі личнымі разговорамі",
-    "getOmi": "Атрымаць Omi",
-    "iHaveOmiDevice": "У мяне ёсць прыбор Omi",
     "goal": "МЭТА",
     "tapToTrackThisGoal": "Натісніце, каб сцягнуць гэту мэту",
     "tapToSetAGoal": "Натісніце, каб ўстаўіць мэту",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Дакладка Twitter не знойдзена",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Дакладка Twitter прыпынена",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Не вдалося правяраць дакладку Twitter",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Не вдалося атрымаць вашу асобу",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Не вдалося стварыць вашу асобу",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Калі ласка, падключыце хаця б адно крыніцу даных ведаў (Omi або Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Персана абнаўлена ўдала",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Не вдалося абнавіць персану",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Калі ласка, выберыце выяву",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Не вдалося стварыць вашу персану. Спрабуйце яшчэ раз позней.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Не вдалося стварыць персану: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Не вдалося ўключыць персану",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Памылка пры ўключэнні персаны: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Не вдалося атрымаць падтрымліваемыя краіны. Спрабуйце яшчэ раз позней.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "Калі ласка, спачатку стварыце дадатак",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Яка ваша дакладка X?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Мы будзем прадварыцельна навучаць вашу копію Omi\nбаспечна вашага аккаунта дзейнасці",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Калі ласка, введзіце вашу дакладку X",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Калі ласка, введзіце правільную дакладку X",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Далей",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "Штодзённыя рэзюмэ",
     "removeFilter": "Прыбраць фільтр",
     "categoryConversationAnalysis": "Аналіз разьмовы",
-    "categoryPersonalityClone": "Копія персаналітэта",
     "categoryHealth": "Здаровье",
     "categoryEducation": "Адукацыя",
     "categoryCommunication": "Камунікацыя",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "Асноўны",
     "capabilityTasks": "Завданні",
     "capabilityIntegrations": "Інтэграцыі",
-    "categoryPersonalityClones": "Копіі персаналітэта",
     "categoryProductivityLifestyle": "Прадуктыўнасць і стыль жыцця",
     "categorySocialEntertainment": "Сацыяльны і забава",
     "categoryProductivityTools": "Прадуктыўнасць і інструменты",

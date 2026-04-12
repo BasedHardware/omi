@@ -474,7 +474,7 @@ class MessageProvider extends ChangeNotifier {
     }
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = false;
 
     MixpanelManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
@@ -550,7 +550,7 @@ class MessageProvider extends ChangeNotifier {
 
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = false;
 
     MixpanelManager().chatMessageSent(
       message: text,

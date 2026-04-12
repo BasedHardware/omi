@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Конфигуриши своју AI особу",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "БЕТА",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Персона",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Конфигуриши своју AI персону",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Конфигуриши STT провајдера",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "О персони",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Личност чата",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Ваше информације",
     "setYourName": "Поставите своје име",
     "changeYourName": "Промените своје име",
-    "manageYourOmiPersona": "Управљајте својом Omi персоном",
     "voiceAndPeople": "Глас и људи",
     "teachOmiYourVoice": "Научите Omi вашем гласу",
     "tellOmiWhoSaidIt": "Скажите Omi ко је то рекао 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Проверавање наредних 7 дана",
     "shortcuts": "Пречице",
     "shortcutChangeInstruction": "Кликните на пречицу да је промените. Притисните Escape да отказете.",
-    "configurePersonaDescription": "Конфигуришите своју AI персону",
     "configureSTTProvider": "Конфигуришите STT провајдера",
     "setConversationEndDescription": "Поставите када разговори аутоматски завршавају",
     "importDataDescription": "Увезите податке из других извора",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Направи мој клон",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Направи своју дигиталну копију",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "Апликација",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Персона",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Držite {item} јавно",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Управљај апликацијом",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Ажурирај детаље персоне",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Обришите {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Конфигуришите своју AI особност",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Повежите AI асистенте са вашим подацима",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "Дели јавну везу",
-    "makePersonaPublic": "Направи особност јавном",
     "connectedKnowledgeData": "Повезани подаци знања",
     "enterName": "Унесите име",
-    "disconnectTwitter": "Откачи Twitter",
-    "disconnectTwitterConfirmation": "Да ли сте сигурни да желите откачити налог на Twitter-у? Ваша особност више неће имати приступ вашим Twitter подацима.",
-    "getOmiDeviceDescription": "Направите потачнији клон са вашим личним разговорима",
-    "getOmi": "Добити Omi",
-    "iHaveOmiDevice": "Имам Omi уређај",
     "goal": "ЦИЉ",
     "tapToTrackThisGoal": "Додирните да пратите овај циљ",
     "tapToSetAGoal": "Додирните да поставите циљ",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter налог није пронађен",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter налог је суспензиван",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Неуспешна верификација Twitter налога",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Неуспешно преузимање ваше persona",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Неуспешно прављење persona",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Молим повежите најмање један извор знања (Omi или Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona је успешно ажурирана",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Неуспешно ажурирање persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Молим одаберите слику",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Неуспешно прављење persona. Молим покушајте касније.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Неуспешно прављење persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Неуспешна активација persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Грешка при активирању persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Неуспешно преузимање подржаних земаља. Молим покушајте касније.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "Молим прво генеришите апликацију",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Који је ваш X налог?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Претходно ћемо тренирати вашу Omi копију\nна основу активности на вашем налогу",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Молим унесите ваш X налог",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Молим унесите исправан X налог",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Даље",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "Дневни резимеи",
     "removeFilter": "Уклони филтер",
     "categoryConversationAnalysis": "Анализа разговора",
-    "categoryPersonalityClone": "Клон личности",
     "categoryHealth": "Здравље",
     "categoryEducation": "Образовање",
     "categoryCommunication": "Комуникација",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "Препоручено",
     "capabilityTasks": "Задаци",
     "capabilityIntegrations": "Интеграције",
-    "categoryPersonalityClones": "Клонови личности",
     "categoryProductivityLifestyle": "Продуктивност и начин живота",
     "categorySocialEntertainment": "Друштво и забава",
     "categoryProductivityTools": "Продуктивност и алати",

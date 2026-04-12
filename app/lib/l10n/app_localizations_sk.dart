@@ -638,9 +638,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saving => 'Ukladanie...';
 
   @override
-  String get personaConfig => 'Nakonfigurujte svoju AI persónu';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1713,7 +1710,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -2426,12 +2428,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createKeyToGetStarted => 'Vytvorte kľúč pre začatie';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Nakonfigurujte svoju AI osobnosť';
-
-  @override
   String get configureSttProvider => 'Konfigurácia poskytovateľa STT';
 
   @override
@@ -2943,9 +2939,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'O aplikácii';
-
-  @override
-  String get aboutThePersona => 'O persóne';
 
   @override
   String get chatPersonality => 'Osobnosť chatu';
@@ -3482,9 +3475,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get changeYourName => 'Zmeniť svoje meno';
 
   @override
-  String get manageYourOmiPersona => 'Spravovať svoju Omi personu';
-
-  @override
   String get voiceAndPeople => 'Hlas a Ľudia';
 
   @override
@@ -3893,9 +3883,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get shortcutChangeInstruction => 'Kliknite na skratku a zmeňte ju. Stlačením Escape zrušíte.';
 
   @override
-  String get configurePersonaDescription => 'Nakonfigurujte svoju AI personu';
-
-  @override
   String get configureSTTProvider => 'Nakonfigurujte poskytovateľa STT';
 
   @override
@@ -4247,16 +4234,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createAndShareYourApp => 'Vytvorte a zdieľajte svoju aplikáciu';
 
   @override
-  String get createMyClone => 'Vytvoriť môj klon';
-
-  @override
-  String get createYourDigitalClone => 'Vytvorte si digitálny klon';
-
-  @override
   String get itemApp => 'Aplikácia';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4285,9 +4263,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get manageApp => 'Spravovať aplikáciu';
-
-  @override
-  String get updatePersonaDetails => 'Aktualizovať detaily persony';
 
   @override
   String deleteItemTitle(String item) {
@@ -5810,9 +5785,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chooseFile => 'Vybrať súbor';
 
   @override
-  String get configureAiPersona => 'Nakonfigurovať AI osobnosť';
-
-  @override
   String get connectAiAssistantsToYourData => 'Pripojiť AI asistentov k vašim údajom';
 
   @override
@@ -6524,28 +6496,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get sharePublicLink => 'Zdieľať verejný odkaz';
 
   @override
-  String get makePersonaPublic => 'Zverejniť osobnosť';
-
-  @override
   String get connectedKnowledgeData => 'Pripojené znalostné údaje';
 
   @override
   String get enterName => 'Zadajte meno';
-
-  @override
-  String get disconnectTwitter => 'Odpojiť Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Naozaj chcete odpojiť Twitter?';
-
-  @override
-  String get getOmiDeviceDescription => 'Vytvorte presnejší klon s vašimi osobnými konverzáciami';
-
-  @override
-  String get getOmi => 'Získať Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mám zariadenie Omi';
 
   @override
   String get goal => 'CIEĽ';
@@ -7095,49 +7049,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nemôže byť vybraná s inými schopnosťami';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter účet nenájdený';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter účet je pozastavený';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Overenie Twitter účtu zlyhalo';
-
-  @override
-  String get personaFailedToFetch => 'Nepodarilo sa načítať vašu personu';
-
-  @override
-  String get personaFailedToCreate => 'Nepodarilo sa vytvoriť personu';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Pripojte aspoň jeden zdroj dát (Omi alebo Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona úspešne aktualizovaná';
-
-  @override
-  String get personaFailedToUpdate => 'Aktualizácia persony zlyhala';
-
-  @override
-  String get personaPleaseSelectImage => 'Vyberte obrázok';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Vytvorenie persony zlyhalo. Skúste to neskôr.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Vytvorenie persony zlyhalo: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Aktivácia persony zlyhala';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Chyba pri aktivácii persony: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nepodarilo sa načítať podporované krajiny. Skúste to neskôr.';
 
   @override
@@ -7210,21 +7121,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Najprv prosím vygenerujte aplikáciu';
-
-  @override
-  String get xHandleTitle => 'Vaša X (Twitter) prezývka';
-
-  @override
-  String get xHandleDescription => 'Zadajte vašu X prezývku pre prepojenie účtu';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Zadajte prosím vašu X prezývku';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Zadajte prosím platnú X prezývku';
 
   @override
   String get nextButton => 'Ďalej';
@@ -7828,9 +7724,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analýza konverzácií';
 
   @override
-  String get categoryPersonalityClone => 'Klon osobnosti';
-
-  @override
   String get categoryHealth => 'Zdravie';
 
   @override
@@ -7931,9 +7824,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrácie';
-
-  @override
-  String get categoryPersonalityClones => 'Klony osobností';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivita a životný štýl';

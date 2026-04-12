@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "קבע את ה-AI Persona שלך",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "בטא",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "אישיות",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "הגדר את אישיות ה-AI שלך",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "הגדר ספק STT",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "על האישיות",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "אישיות הצ'אט",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "המידע שלך",
     "setYourName": "קבע את שמך",
     "changeYourName": "שנה את שמך",
-    "manageYourOmiPersona": "נהל את דמות Omi שלך",
     "voiceAndPeople": "קול ואנשים",
     "teachOmiYourVoice": "לימד את Omi את קולך",
     "tellOmiWhoSaidIt": "ספר ל-Omi מי אמר זאת 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "בדיקה 7 הימים הקרובים",
     "shortcuts": "קיצורים",
     "shortcutChangeInstruction": "לחץ על קיצור כדי לשנות אותו. לחץ Escape כדי לבטל.",
-    "configurePersonaDescription": "הגדר את דמות ה-AI שלך",
     "configureSTTProvider": "הגדר ספק STT",
     "setConversationEndDescription": "הגדר מתי שיחות מסתיימות באופן אוטומטי",
     "importDataDescription": "ייבא נתונים ממקורות אחרים",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "צור את הקלון שלי",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "צור את הקלון הדיגיטלי שלך",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "אפליקציה",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "דמות",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "שמור {item} ציבורית",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "נהל אפליקציה",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "עדכן פרטי דמות",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "מחק {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "הגדר את אישיות ה-AI שלך",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "חבר עוזרי AI לנתונים שלך",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "שתף קישור ציבורי",
-    "makePersonaPublic": "הפוך אישיות לציבורית",
     "connectedKnowledgeData": "נתוני ידע מחוברים",
     "enterName": "הזן שם",
-    "disconnectTwitter": "נתק Twitter",
-    "disconnectTwitterConfirmation": "האם אתה בטוח שאתה רוצה לנתק את חשבון Twitter שלך? האישיות שלך כבר לא תהיה בעלת גישה לנתוני Twitter שלך.",
-    "getOmiDeviceDescription": "צור קלון מדויק יותר עם השיחות האישיות שלך",
-    "getOmi": "קבל Omi",
-    "iHaveOmiDevice": "יש לי מכשיר Omi",
     "goal": "יעד",
     "tapToTrackThisGoal": "הקש כדי לעקוב אחר יעד זה",
     "tapToSetAGoal": "הקש כדי להגדיר יעד",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "כתובת X לא נמצאה",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "כתובת X הושעתה",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "כישלון בוידוא כתובת X",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "כישלון בטעינת ה-Persona שלך",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "כישלון בייצירת ה-Persona שלך",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "אנא חבר לפחות מקור נתונים אחד (Omi או X)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona עודכנה בהצלחה",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "כישלון בעדכון Persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "אנא בחר תמונה",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "כישלון בייצירת ה-Persona שלך. אנא נסה שוב מאוחר יותר.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "כישלון בייצירת Persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "כישלון בהפעלת Persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "שגיאה בהפעלת Persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "כישלון בטעינת מדינות נתמכות. אנא נסה שוב מאוחר יותר.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "אנא צור אפליקציה תחילה",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "מה ה-X Handle שלך?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "אנו נאמן מראש את ה-Omi Clone שלך\nבהתאם לפעילות חשבון שלך",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "אנא הזן את ה-X Handle שלך",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "אנא הזן X Handle תקף",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "הבא",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "סיכומים יומיים",
     "removeFilter": "הסר מסנן",
     "categoryConversationAnalysis": "ניתוח שיחות",
-    "categoryPersonalityClone": "שיבוט אישיות",
     "categoryHealth": "בריאות",
     "categoryEducation": "חינוך",
     "categoryCommunication": "תקשורת",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "בדוגיות",
     "capabilityTasks": "משימות",
     "capabilityIntegrations": "אינטגרציות",
-    "categoryPersonalityClones": "שיבוטי אישיות",
     "categoryProductivityLifestyle": "פרודוקטיביות ואורח חיים",
     "categorySocialEntertainment": "חברתי ובידור",
     "categoryProductivityTools": "פרודוקטיביות וכלים",

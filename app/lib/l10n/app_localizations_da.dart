@@ -636,9 +636,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get saving => 'Gemmer...';
 
   @override
-  String get personaConfig => 'Konfigurer din AI-persona';
-
-  @override
   String get beta => 'Beta';
 
   @override
@@ -2407,12 +2404,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get createKeyToGetStarted => 'Opret en nøgle for at komme i gang';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSttProvider => 'Konfigurer STT-udbyder';
 
   @override
@@ -2927,9 +2918,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Om appen';
-
-  @override
-  String get aboutThePersona => 'Om personaen';
 
   @override
   String get chatPersonality => 'Chat-personlighed';
@@ -3468,9 +3456,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get changeYourName => 'Skift dit navn';
 
   @override
-  String get manageYourOmiPersona => 'Administrer din Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Stemme og Personer';
 
   @override
@@ -3880,9 +3865,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klik på en genvej for at ændre den. Tryk på Escape for at annullere.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSTTProvider => 'Konfigurer STT-udbyder';
 
   @override
@@ -4236,16 +4218,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get createAndShareYourApp => 'Opret og del din app';
 
   @override
-  String get createMyClone => 'Opret min klon';
-
-  @override
-  String get createYourDigitalClone => 'Opret din digitale klon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4274,9 +4247,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get manageApp => 'Administrer app';
-
-  @override
-  String get updatePersonaDetails => 'Opdater persona-detaljer';
 
   @override
   String deleteItemTitle(String item) {
@@ -5800,9 +5770,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get chooseFile => 'Vælg fil';
 
   @override
-  String get configureAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Forbind AI-assistenter til dine data';
 
   @override
@@ -6514,29 +6481,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get sharePublicLink => 'Del offentligt link';
 
   @override
-  String get makePersonaPublic => 'Gør persona offentlig';
-
-  @override
   String get connectedKnowledgeData => 'Tilsluttede vidensdata';
 
   @override
   String get enterName => 'Indtast navn';
-
-  @override
-  String get disconnectTwitter => 'Frakobl Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Er du sikker på, at du vil frakoble din Twitter-konto? Din persona vil ikke længere have adgang til dine Twitter-data.';
-
-  @override
-  String get getOmiDeviceDescription => 'Få en Omi-enhed for at begynde';
-
-  @override
-  String get getOmi => 'Få Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Jeg har en Omi-enhed';
 
   @override
   String get goal => 'MÅL';
@@ -7084,49 +7032,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan ikke vælges med andre funktioner';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-konto ikke fundet';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-konto er suspenderet';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Kunne ikke verificere Twitter-konto';
-
-  @override
-  String get personaFailedToFetch => 'Kunne ikke hente din persona';
-
-  @override
-  String get personaFailedToCreate => 'Kunne ikke oprette persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Tilslut mindst én datakilde (Omi eller Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona opdateret succesfuldt';
-
-  @override
-  String get personaFailedToUpdate => 'Kunne ikke opdatere persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Vælg et billede';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Kunne ikke oprette persona. Prøv igen senere.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Kunne ikke oprette persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Kunne ikke aktivere persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Fejl ved aktivering af persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Kunne ikke hente understøttede lande. Prøv igen senere.';
 
   @override
@@ -7199,21 +7104,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Generer venligst en app først';
-
-  @override
-  String get xHandleTitle => 'Hvad er dit X-brugernavn?';
-
-  @override
-  String get xHandleDescription => 'Indtast dit X-brugernavn (uden @) for at forbinde din profil.';
-
-  @override
-  String get xHandleHint => 'Dit X-brugernavn';
-
-  @override
-  String get xHandlePleaseEnter => 'Indtast venligst dit X-brugernavn';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Indtast venligst et gyldigt X-brugernavn';
 
   @override
   String get nextButton => 'Næste';
@@ -7827,9 +7717,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get categoryConversationAnalysis => 'Samtaleanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Personlighedsklon';
-
-  @override
   String get categoryHealth => 'Sundhed';
 
   @override
@@ -7930,9 +7817,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationer';
-
-  @override
-  String get categoryPersonalityClones => 'Personlighedskloner';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitet og livsstil';

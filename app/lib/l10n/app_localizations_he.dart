@@ -632,9 +632,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get saving => 'שומר...';
 
   @override
-  String get personaConfig => 'קבע את ה-AI Persona שלך';
-
-  @override
   String get beta => 'בטא';
 
   @override
@@ -1699,7 +1696,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -2409,12 +2411,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get createKeyToGetStarted => 'צור מפתח כדי להתחיל';
 
   @override
-  String get persona => 'אישיות';
-
-  @override
-  String get configureYourAiPersona => 'הגדר את אישיות ה-AI שלך';
-
-  @override
   String get configureSttProvider => 'הגדר ספק STT';
 
   @override
@@ -2920,9 +2916,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'על האפליקציה';
-
-  @override
-  String get aboutThePersona => 'על האישיות';
 
   @override
   String get chatPersonality => 'אישיות הצ\'אט';
@@ -3457,9 +3450,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get changeYourName => 'שנה את שמך';
 
   @override
-  String get manageYourOmiPersona => 'נהל את דמות Omi שלך';
-
-  @override
   String get voiceAndPeople => 'קול ואנשים';
 
   @override
@@ -3866,9 +3856,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get shortcutChangeInstruction => 'לחץ על קיצור כדי לשנות אותו. לחץ Escape כדי לבטל.';
 
   @override
-  String get configurePersonaDescription => 'הגדר את דמות ה-AI שלך';
-
-  @override
   String get configureSTTProvider => 'הגדר ספק STT';
 
   @override
@@ -4216,16 +4203,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get createAndShareYourApp => 'צור ושתף את האפליקציה שלך';
 
   @override
-  String get createMyClone => 'צור את הקלון שלי';
-
-  @override
-  String get createYourDigitalClone => 'צור את הקלון הדיגיטלי שלך';
-
-  @override
   String get itemApp => 'אפליקציה';
-
-  @override
-  String get itemPersona => 'דמות';
 
   @override
   String keepItemPublic(String item) {
@@ -4254,9 +4232,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get manageApp => 'נהל אפליקציה';
-
-  @override
-  String get updatePersonaDetails => 'עדכן פרטי דמות';
 
   @override
   String deleteItemTitle(String item) {
@@ -5764,9 +5739,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chooseFile => 'בחר קובץ';
 
   @override
-  String get configureAiPersona => 'הגדר את אישיות ה-AI שלך';
-
-  @override
   String get connectAiAssistantsToYourData => 'חבר עוזרי AI לנתונים שלך';
 
   @override
@@ -6471,29 +6443,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get sharePublicLink => 'שתף קישור ציבורי';
 
   @override
-  String get makePersonaPublic => 'הפוך אישיות לציבורית';
-
-  @override
   String get connectedKnowledgeData => 'נתוני ידע מחוברים';
 
   @override
   String get enterName => 'הזן שם';
-
-  @override
-  String get disconnectTwitter => 'נתק Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'האם אתה בטוח שאתה רוצה לנתק את חשבון Twitter שלך? האישיות שלך כבר לא תהיה בעלת גישה לנתוני Twitter שלך.';
-
-  @override
-  String get getOmiDeviceDescription => 'צור קלון מדויק יותר עם השיחות האישיות שלך';
-
-  @override
-  String get getOmi => 'קבל Omi';
-
-  @override
-  String get iHaveOmiDevice => 'יש לי מכשיר Omi';
 
   @override
   String get goal => 'יעד';
@@ -7040,49 +6993,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'לא ניתן לבחור Persona עם יכולות אחרות';
 
   @override
-  String get personaTwitterHandleNotFound => 'כתובת X לא נמצאה';
-
-  @override
-  String get personaTwitterHandleSuspended => 'כתובת X הושעתה';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'כישלון בוידוא כתובת X';
-
-  @override
-  String get personaFailedToFetch => 'כישלון בטעינת ה-Persona שלך';
-
-  @override
-  String get personaFailedToCreate => 'כישלון בייצירת ה-Persona שלך';
-
-  @override
-  String get personaConnectKnowledgeSource => 'אנא חבר לפחות מקור נתונים אחד (Omi או X)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona עודכנה בהצלחה';
-
-  @override
-  String get personaFailedToUpdate => 'כישלון בעדכון Persona';
-
-  @override
-  String get personaPleaseSelectImage => 'אנא בחר תמונה';
-
-  @override
-  String get personaFailedToCreateTryLater => 'כישלון בייצירת ה-Persona שלך. אנא נסה שוב מאוחר יותר.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'כישלון בייצירת Persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'כישלון בהפעלת Persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'שגיאה בהפעלת Persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'כישלון בטעינת מדינות נתמכות. אנא נסה שוב מאוחר יותר.';
 
   @override
@@ -7155,21 +7065,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'אנא צור אפליקציה תחילה';
-
-  @override
-  String get xHandleTitle => 'מה ה-X Handle שלך?';
-
-  @override
-  String get xHandleDescription => 'אנו נאמן מראש את ה-Omi Clone שלך\nבהתאם לפעילות חשבון שלך';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'אנא הזן את ה-X Handle שלך';
-
-  @override
-  String get xHandlePleaseEnterValid => 'אנא הזן X Handle תקף';
 
   @override
   String get nextButton => 'הבא';
@@ -7775,9 +7670,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get categoryConversationAnalysis => 'ניתוח שיחות';
 
   @override
-  String get categoryPersonalityClone => 'שיבוט אישיות';
-
-  @override
   String get categoryHealth => 'בריאות';
 
   @override
@@ -7878,9 +7770,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'אינטגרציות';
-
-  @override
-  String get categoryPersonalityClones => 'שיבוטי אישיות';
 
   @override
   String get categoryProductivityLifestyle => 'פרודוקטיביות ואורח חיים';
@@ -8604,7 +8493,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 

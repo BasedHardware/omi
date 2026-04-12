@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "బీటా",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "వ్యక్తిత్వం",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT ప్రదాతను కాన్ఫిగర్ చేయండి",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "వ్యక్తిత్వం గురించి",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "చాట్ వ్యక్తిత్వం",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "మీ సమాచారం",
     "setYourName": "మీ పేరు సెట్ చేయండి",
     "changeYourName": "మీ పేరు మార్చండి",
-    "manageYourOmiPersona": "మీ Omi వ్యక్తిత్వాన్ని నిర్వహించండి",
     "voiceAndPeople": "వాయిస్ & ప్రజలు",
     "teachOmiYourVoice": "Omi కు మీ వాయిస్ నేర్పండి",
     "tellOmiWhoSaidIt": "Omi కు ఎవరు చెప్పారో చెప్పండి 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "తరువాత 7 రోజులను పరిశీలిస్తోంది",
     "shortcuts": "షార్టকట్‌లు",
     "shortcutChangeInstruction": "షార్టకట్‌ను మార్చడానికి దానిపై క్లిక్ చేయండి. రద్దు చేయడానికి Escape నొక్కండి.",
-    "configurePersonaDescription": "మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి",
     "configureSTTProvider": "STT ప్రొవైడర్ కాన్ఫిగర్ చేయండి",
     "setConversationEndDescription": "సంభాషణలు స్వయంచాలకంగా ఎప్పుడు ముగియాలో సెట్ చేయండి",
     "importDataDescription": "ఇతర వనరుల నుండి డేటాను దిగుమతి చేయండి",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "నా క్లోన్ సృష్టించండి",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "మీ డిజిటల్ క్లోన్ సృష్టించండి",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "అ్యాప్",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "వ్యక్తిత్వం",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} ను పబ్లిక్‌గా ఉంచండి",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "అ్యాప్ నిర్వహించండి",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "వ్యక్తిత్వ వివరాలను నవీకరించండి",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} ను తొలగించండి",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI సహాయకులను మీ డేటాకు కనెక్ట్ చేయండి",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "పబ్లిక్ లింక్ షేర్ చేయండి",
-    "makePersonaPublic": "పర్సోనాను పబ్లిక్ చేయండి",
     "connectedKnowledgeData": "కనెక్ట్ చేసిన జ్ఞాన డేటా",
     "enterName": "పేరు నమోదు చేయండి",
-    "disconnectTwitter": "ట్విట్టర్ డిస్‌కనెక్ట్ చేయండి",
-    "disconnectTwitterConfirmation": "మీ ట్విట్టర్ ఖాతాను డిస్‌కనెక్ట్ చేయటానికి మీరు నిశ్చితమైనారా? మీ పర్సోనా మీ ట్విట్టర్ డేటాకు ఇకపై యాక్సెస్ కలిగి ఉండదు.",
-    "getOmiDeviceDescription": "మీ వ్యక్తిగత సంభాషణలతో మరింత ఖచ్చితమైన క్లోన్ సృష్టించండి",
-    "getOmi": "Omi పొందండి",
-    "iHaveOmiDevice": "నా వద్ద Omi పరికరం ఉంది",
     "goal": "లక్ష్యం",
     "tapToTrackThisGoal": "ఈ లక్ష్యం ట్రాక్ చేయటానికి నొక్కండి",
     "tapToSetAGoal": "లక్ష్యం సెట్ చేయటానికి నొక్కండి",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter హ్యాండిల్ కనుగొనబడలేదు",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter హ్యాండిల్ సస్పెండ్ చేయబడింది",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Twitter హ్యాండిల్‌ను ధృవీకరించడానికి విఫలమైంది",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "మీ పర్సోనాను పొందడానికి విఫలమైంది",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "మీ పర్సోనాను సృష్టించడానికి విఫలమైంది",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "దయచేసి కనీసం ఒక జ్ఞానం డేటా మూలం (Omi లేదా Twitter) సংయోగం చేయండి",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "పర్సోనా విజయవంతంగా నవీకరించబడింది",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "పర్సోనాను నవీకరించడానికి విఫలమైంది",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "దయచేసి చిత్రం ఎంచుకోండి",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "మీ పర్సోనాను సృష్టించడానికి విఫలమైంది. దయచేసి తరువాత ప్రయత్నించండి.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "పర్సోనాను సృష్టించడానికి విఫలమైంది: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "పర్సోనాను సక్రియం చేయడానికి విఫలమైంది",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "పర్సోనాను సక్రియం చేసేటప్పుడు లోపం: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "సమర్థిత దేశాలను పొందడానికి విఫలమైంది. దయచేసి తరువాత ప్రయత్నించండి.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "దయచేసి మొదటిసారి యాప్‌ను జన్మిస్తోండి",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "మీ X హ్యాండిల్ ఎంటి?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "మేము మీ ఖాతా కార్యకలాపం ఆధారంగా\nమీ Omi క్లోన్‌ను ముందుగా సిద్ధం చేస్తాము",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "దయచేసి మీ X హ్యాండిల్‌ను నమోదు చేయండి",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "దయచేసి చెల్లుబాటు అయిన X హ్యాండిల్‌ను నమోదు చేయండి",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "తరువాత",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "రోజువారీ రీక్యాప్‌లు",
     "removeFilter": "ఫిల్టర్‌ను తీసివేయండి",
     "categoryConversationAnalysis": "సంభాషణ విశ్లేషణ",
-    "categoryPersonalityClone": "వ్యక్తిత్వ క్లోన్",
     "categoryHealth": "ఆరోగ్యం",
     "categoryEducation": "విద్య",
     "categoryCommunication": "సంప్రదായం",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "చిత్రీకరించిన",
     "capabilityTasks": "పనులు",
     "capabilityIntegrations": "ఇంటిగ్రేషన్‌లు",
-    "categoryPersonalityClones": "వ్యక్తిత్వ క్లోన్‌లు",
     "categoryProductivityLifestyle": "ఉత్పాదకత & జీవనశైలి",
     "categorySocialEntertainment": "సామాజిక & వినోదం",
     "categoryProductivityTools": "ఉత్పాదకత & సాధనాలు",

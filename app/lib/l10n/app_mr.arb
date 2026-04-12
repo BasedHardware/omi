@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "आपल्या AI व्यक्तिमत्व कॉन्फिगर करा",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "बीटा",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "व्यक्तिमत्व",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "आपल्या AI व्यक्तिमत्वाची संरचना करा",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT प्रदाता संरचित करा",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "व्यक्तिमत्वबद्दल",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "चॅट व्यक्तिमत्व",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "आपली माहिती",
     "setYourName": "आपले नाव सेट करा",
     "changeYourName": "आपले नाव बदला",
-    "manageYourOmiPersona": "आपल्या Omi व्यक्तिमत्व व्यवस्थापित करा",
     "voiceAndPeople": "व्हॉइस आणि लोक",
     "teachOmiYourVoice": "Omi ला आपल्या आवाजाचे शिक्षण द्या",
     "tellOmiWhoSaidIt": "Omi ला सांगा कि हे कोणी म्हणाले 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "पुढील ७ दिवस तपासत आहे",
     "shortcuts": "शॉर्टकट्स",
     "shortcutChangeInstruction": "शॉर्टकट बदलण्यासाठी एकावर क्लिक करा. रद्द करण्यासाठी Escape दाबा.",
-    "configurePersonaDescription": "आपल्या AI व्यक्तिमत्व कॉन्फिगर करा",
     "configureSTTProvider": "STT प्रदाता कॉन्फिगर करा",
     "setConversationEndDescription": "संभाषण कधी स्वयंचलितपणे समाप्त होतील हे सेट करा",
     "importDataDescription": "इतर स्रोतांकडून डेटा आयात करा",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "माझा क्लोन तयार करा",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "आपल्या डिजिटल क्लोन तयार करा",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "अॅप",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "व्यक्तिमत्व",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} सार्वजनिक ठेवा",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "अॅप व्यवस्थापित करा",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "व्यक्तिमत्व तपशील अपडेट करा",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} हटवा",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "आपल्या AI व्यक्तिमत्व कॉन्फिगर करा",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI सहायकांना आपल्या डेटाशी जोडा",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "सार्वजनिक लिंक शेअर करा",
-    "makePersonaPublic": "व्यक्तिमत्व सार्वजनिक करा",
     "connectedKnowledgeData": "जोडलेला ज्ञान डेटा",
     "enterName": "नाव प्रविष्ट करा",
-    "disconnectTwitter": "Twitter डिस्कनेक्ट करा",
-    "disconnectTwitterConfirmation": "आप आपल्या Twitter खाते डिस्कनेक्ट करायचा आहे? आपल्या व्यक्तिमत्वाला आपल्या Twitter डेटामध्ये अधिक प्रवेश असणार नाही.",
-    "getOmiDeviceDescription": "आपल्या व्यक्तिगत संभाषणांसह अधिक अचूक क्लोन तयार करा",
-    "getOmi": "Omi मिळवा",
-    "iHaveOmiDevice": "माझ्याकडे Omi डिव्हाइस आहे",
     "goal": "लक्ष्य",
     "tapToTrackThisGoal": "या लक्ष्याचा मागोवा घेण्यासाठी टॅप करा",
     "tapToSetAGoal": "लक्ष्य सेट करण्यासाठी टॅप करा",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter हँडल सापडत नाही",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter हँडल निलंबित आहे",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Twitter हँडल सत्यापित करण्यात अयशस्वी",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "आपल्या व्यक्तिमत्व आणले अयशस्वी",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "आपल्या व्यक्तिमत्व तयार करण्यात अयशस्वी",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "कृपया किमान एक ज्ञान डेटा स्रोत कनेक्ट करा (Omi किंवा Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "व्यक्तिमत्व यशस्वीरित्या अपडेट केली गेली",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "व्यक्तिमत्व अपडेट करण्यात अयशस्वी",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "कृपया प्रतिमा निवडा",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "आपल्या व्यक्तिमत्व तयार करण्यात अयशस्वी. कृपया नंतर पुन्हा प्रयत्न करा.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "व्यक्तिमत्व तयार करण्यात अयशस्वी: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "व्यक्तिमत्व सक्षम करण्यात अयशस्वी",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "व्यक्तिमत्व सक्षम करण्यात त्रुटी: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "समर्थित देश आणले अयशस्वी. कृपया नंतर पुन्हा प्रयत्न करा.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "कृपया प्रथम अॅप तयार करा",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "आपल्या X हँडल काय आहे?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "आम्ही आपल्या Omi क्लोन पूर्व-प्रशिक्षण देऊ\nआपल्या खाते कार्यकलापाच्या आधारे",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "कृपया आपल्या X हँडल प्रविष्ट करा",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "कृपया वैध X हँडल प्रविष्ट करा",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "पुढील",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "दैनिक रीकॅप्स",
     "removeFilter": "फिल्टर काढून टाका",
     "categoryConversationAnalysis": "संभाषण विश्लेषण",
-    "categoryPersonalityClone": "व्यक्तिमत्व क्लोन",
     "categoryHealth": "स्वास्थ्य",
     "categoryEducation": "शिक्षा",
     "categoryCommunication": "संप्रेषण",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "वैशिष्ट्यीकृत",
     "capabilityTasks": "कार्य",
     "capabilityIntegrations": "एकीकरण",
-    "categoryPersonalityClones": "व्यक्तिमत्व क्लोन",
     "categoryProductivityLifestyle": "उत्पादकता आणि जीवनशैली",
     "categorySocialEntertainment": "सामाजिक आणि मनोरंजन",
     "categoryProductivityTools": "उत्पादकता आणि साधने",
