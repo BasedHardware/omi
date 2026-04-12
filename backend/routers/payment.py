@@ -498,9 +498,18 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
                 else:
+                    # Cancel the old subscription to prevent double-charging
+                    old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
-                        f"User {uid} has existing subscription {existing_subscription.stripe_subscription_id}, processing new subscription {session.get('subscription')}"
+                        f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
                     )
+                    try:
+                        stripe.Subscription.cancel(old_sub_id)
+                        logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
+                        )
 
             _update_subscription_from_session(uid, session)
             set_credits_invalidation_signal(uid)
