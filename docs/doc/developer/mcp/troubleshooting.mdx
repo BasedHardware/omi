@@ -1,0 +1,106 @@
+---
+title: "Troubleshooting"
+icon: "bug"
+description: "Debug and fix common MCP connection issues"
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Connection refused or 401 Unauthorized" icon="lock">
+    - Verify your API key starts with `omi_mcp_`
+    - Check that the `Authorization` header uses `Bearer` prefix: `Bearer omi_mcp_...`
+    - Generate a new key in the Omi app: **Settings → Developer → MCP**
+    - Ensure the key hasn't been revoked
+  </Accordion>
+  <Accordion title="No tools showing up" icon="toolbox">
+    - Send an `initialize` request first — tools are only available after initialization
+    - Check that your client supports the Streamable HTTP transport (2025-03-26 spec)
+    - Try the `/v1/mcp/sse/info` endpoint to verify the server is reachable:
+      ```bash
+      curl https://api.omi.me/v1/mcp/sse/info
+      ```
+  </Accordion>
+  <Accordion title="Search returns empty results" icon="magnifying-glass">
+    - Semantic search requires conversations/memories to be indexed in the vector database
+    - New data may take a few minutes to be indexed after creation
+    - Try broader queries — very specific queries may not match if phrased differently than the original
+    - Use `get_memories` or `get_conversations` with filters as a fallback
+  </Accordion>
+  <Accordion title="Rate limit errors (429)" icon="gauge-high">
+    - The MCP server has per-user rate limits to prevent abuse
+    - Wait a moment and retry
+    - Reduce the frequency of tool calls in automated workflows
+  </Accordion>
+  <Accordion title="Locked content errors (-32002)" icon="lock">
+    - Some memories and conversations are behind the paid plan
+    - Upgrade your plan to access all content
+    - Locked memories still appear in list/search results with truncated content
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Debugging Tools
+
+<Tabs>
+  <Tab title="MCP Inspector" icon="magnifying-glass">
+    Use the MCP inspector to test tools interactively:
+
+    ```bash
+    npx @modelcontextprotocol/inspector uvx mcp-server-omi
+    ```
+
+    For local development:
+
+    ```bash
+    cd path/to/servers/src/omi
+    npx @modelcontextprotocol/inspector uv run mcp-server-omi
+    ```
+  </Tab>
+  <Tab title="curl" icon="terminal">
+    Test the server directly:
+
+    ```bash
+    # Check server info
+    curl https://api.omi.me/v1/mcp/sse/info
+
+    # Initialize a session
+    curl -X POST https://api.omi.me/v1/mcp/sse \
+      -H "Authorization: Bearer omi_mcp_YOUR_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+
+    # List tools (use the Mcp-Session-Id from the initialize response)
+    curl -X POST https://api.omi.me/v1/mcp/sse \
+      -H "Authorization: Bearer omi_mcp_YOUR_KEY" \
+      -H "Content-Type: application/json" \
+      -H "Mcp-Session-Id: SESSION_ID_HERE" \
+      -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+    ```
+  </Tab>
+  <Tab title="Log Files" icon="file-lines">
+    View Claude Desktop MCP logs:
+
+    ```bash
+    # macOS
+    tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log
+
+    # Windows
+    type %APPDATA%\Claude\logs\mcp-server-omi.log
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="http://discord.omi.me">
+    Get help from the community and team
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/BasedHardware/omi/issues">
+    Report bugs or request features
+  </Card>
+</CardGroup>
