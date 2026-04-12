@@ -880,6 +880,12 @@ def try_accept_task_share(token: str, uid: str) -> bool:
     return False
 
 
+def undo_accept_task_share(token: str, uid: str):
+    """Rollback a task share acceptance (best-effort). Used when post-claim validation fails."""
+    key = f'task_share:{token}:accepted'
+    r.srem(key, uid)
+
+
 CHAT_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
 
 

@@ -199,6 +199,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+
         memories_db.delete_memory(user_id, memory_id)
         return {"success": True}
 
@@ -207,6 +213,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
 
         memories_db.edit_memory(user_id, memory_id, content)
         return {"success": True}

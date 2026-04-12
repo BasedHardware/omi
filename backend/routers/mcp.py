@@ -56,14 +56,25 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     return memory_db
 
 
+def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
+    memory = memories_db.get_memory(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+    return memory
+
+
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     return {"status": "ok"}
 

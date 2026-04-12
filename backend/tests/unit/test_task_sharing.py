@@ -251,8 +251,11 @@ class TestAcceptEndpoint:
 
     def test_accept_prevents_duplicate(self):
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis:
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
             mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Task", "is_locked": False}
             mock_redis.try_accept_task_share.return_value = False
             try:
                 accept_shared_action_items(request, uid="uid_bob")
@@ -263,8 +266,11 @@ class TestAcceptEndpoint:
     def test_accept_returns_503_on_redis_failure(self):
         """If Redis try_accept fails (returns None), should raise 503."""
         request = AcceptSharedTasksRequest(token="tok1")
-        with patch("routers.action_items.redis_db") as mock_redis:
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
             mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Task", "is_locked": False}
             mock_redis.try_accept_task_share.return_value = None
             try:
                 accept_shared_action_items(request, uid="uid_bob")
@@ -408,3 +414,261 @@ class TestTaskShareTTL:
     def test_store_task_share_uses_30_day_ttl(self):
         """Redis store should use TASK_SHARE_TTL (30 days)."""
         assert redis_db.TASK_SHARE_TTL == 60 * 60 * 24 * 30  # 2,592,000 seconds
+
+
+# =============================================================================
+# is_locked enforcement tests (#6511)
+# =============================================================================
+
+
+class TestShareRejectsLocked:
+    """Gap 3: POST /v1/action-items/share must reject locked items."""
+
+    def test_share_rejects_locked_item_with_402(self):
+        request = ShareTasksRequest(task_ids=["t1"])
+        with patch("routers.action_items.action_items_db") as mock_db:
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Secret", "is_locked": True}
+            try:
+                share_action_items(request, uid="uid_alice")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 402
+
+    def test_share_rejects_if_any_locked(self):
+        """Even if first item is unlocked, a locked item in the list should fail."""
+        request = ShareTasksRequest(task_ids=["t1", "t2"])
+        with patch("routers.action_items.action_items_db") as mock_db:
+            mock_db.get_action_item.side_effect = [
+                {"id": "t1", "description": "OK", "is_locked": False},
+                {"id": "t2", "description": "Secret", "is_locked": True},
+            ]
+            try:
+                share_action_items(request, uid="uid_alice")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 402
+
+
+class TestPublicPreviewSkipsLocked:
+    """Gap 2: GET /v1/action-items/shared/{token} must skip locked items."""
+
+    def test_public_preview_skips_locked_items(self):
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "u1",
+                "display_name": "Alice",
+                "task_ids": ["t1", "t2"],
+            }
+            mock_db.get_action_item.side_effect = [
+                {"id": "t1", "description": "Visible", "due_at": None, "is_locked": False},
+                {"id": "t2", "description": "Hidden", "due_at": None, "is_locked": True},
+            ]
+
+            result = get_shared_action_items("valid_tok")
+
+        assert result["count"] == 1
+        assert result["tasks"][0]["description"] == "Visible"
+
+    def test_public_preview_all_locked_returns_empty(self):
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "u1",
+                "display_name": "Alice",
+                "task_ids": ["t1"],
+            }
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Secret", "is_locked": True}
+
+            result = get_shared_action_items("valid_tok")
+
+        assert result["count"] == 0
+        assert result["tasks"] == []
+
+
+class TestAcceptSkipsLocked:
+    """Gap 4: POST /v1/action-items/accept must skip locked items."""
+
+    def test_accept_skips_locked_items(self):
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "uid_alice",
+                "display_name": "Alice",
+                "task_ids": ["t1", "t2"],
+            }
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.side_effect = [
+                # Pre-validation pass
+                {"id": "t1", "description": "OK", "is_locked": False},
+                {"id": "t2", "description": "Secret", "is_locked": True},
+                # Copy pass (only t1 is eligible)
+                {"id": "t1", "description": "OK", "due_at": None, "is_locked": False},
+            ]
+            mock_db.create_action_item.return_value = "new_t1"
+
+            result = accept_shared_action_items(request, uid="uid_bob")
+
+        assert result["count"] == 1
+        assert result["created"] == ["new_t1"]
+
+    def test_accept_all_locked_returns_402_without_burning_token(self):
+        """If all items are locked, return 402 and don't burn the acceptance token."""
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "uid_alice",
+                "display_name": "Alice",
+                "task_ids": ["t1"],
+            }
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Secret", "is_locked": True}
+
+            try:
+                accept_shared_action_items(request, uid="uid_bob")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 402
+
+            # Token should NOT have been burned
+            mock_redis.try_accept_task_share.assert_not_called()
+
+    def test_accept_rollback_on_post_claim_race(self):
+        """If items become locked after pre-check but before copy, rollback token and return 402."""
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db:
+            mock_redis.get_task_share.return_value = {
+                "uid": "uid_alice",
+                "display_name": "Alice",
+                "task_ids": ["t1"],
+            }
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.side_effect = [
+                # Pre-validation: unlocked
+                {"id": "t1", "description": "OK", "is_locked": False},
+                # Copy pass: now locked (race)
+                {"id": "t1", "description": "OK", "is_locked": True},
+            ]
+
+            try:
+                accept_shared_action_items(request, uid="uid_bob")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 402
+
+            # Token should have been rolled back
+            mock_redis.undo_accept_task_share.assert_called_once_with("tok1", "uid_bob")
+
+
+class TestPendingSyncFiltersLocked:
+    """Gap 1: GET /v1/action-items/pending-sync must filter locked items."""
+
+    def test_pending_sync_filters_locked_items(self):
+        from routers.action_items import get_pending_sync_items
+
+        with patch("routers.action_items.action_items_db") as mock_db:
+            mock_db.get_pending_apple_reminders_sync.return_value = {
+                "pending_export": [
+                    {
+                        "id": "t1",
+                        "description": "Visible",
+                        "completed": False,
+                        "is_locked": False,
+                        "due_at": None,
+                        "conversation_id": None,
+                        "exported": False,
+                        "export_date": None,
+                        "export_platform": None,
+                        "apple_reminder_id": None,
+                        "sort_order": 0,
+                        "indent_level": 0,
+                    },
+                    {
+                        "id": "t2",
+                        "description": "Secret",
+                        "completed": False,
+                        "is_locked": True,
+                        "due_at": None,
+                        "conversation_id": None,
+                        "exported": False,
+                        "export_date": None,
+                        "export_platform": None,
+                        "apple_reminder_id": None,
+                        "sort_order": 0,
+                        "indent_level": 0,
+                    },
+                ],
+                "synced_items": [
+                    {
+                        "id": "t3",
+                        "description": "Synced OK",
+                        "completed": False,
+                        "is_locked": False,
+                        "due_at": None,
+                        "conversation_id": None,
+                        "exported": True,
+                        "export_date": None,
+                        "export_platform": "apple_reminders",
+                        "apple_reminder_id": "ar-1",
+                        "sort_order": 0,
+                        "indent_level": 0,
+                    },
+                    {
+                        "id": "t4",
+                        "description": "Locked synced",
+                        "completed": False,
+                        "is_locked": True,
+                        "due_at": None,
+                        "conversation_id": None,
+                        "exported": True,
+                        "export_date": None,
+                        "export_platform": "apple_reminders",
+                        "apple_reminder_id": "ar-2",
+                        "sort_order": 0,
+                        "indent_level": 0,
+                    },
+                ],
+            }
+
+            result = get_pending_sync_items(platform='apple_reminders', uid='test-uid')
+
+        assert len(result["pending_export"]) == 1
+        assert result["pending_export"][0].id == "t1"
+        assert len(result["synced_items"]) == 1
+        assert result["synced_items"][0].id == "t3"
+
+
+class TestSyncBatchSkipsLocked:
+    """Gap 5: PATCH /v1/action-items/sync-batch must skip locked items."""
+
+    def test_sync_batch_skips_locked_updates(self):
+        from routers.action_items import sync_batch_update, SyncBatchRequest, SyncBatchItem
+
+        with patch("routers.action_items.action_items_db") as mock_db:
+            mock_db.get_action_item.side_effect = [
+                {"id": "t1", "description": "OK", "is_locked": False},
+                {"id": "t2", "description": "Secret", "is_locked": True},
+            ]
+            mock_db.batch_sync_update_action_items = MagicMock()
+
+            request = SyncBatchRequest(
+                items=[
+                    SyncBatchItem(id="t1", description="Updated"),
+                    SyncBatchItem(id="t2", description="Should not update"),
+                ]
+            )
+
+            result = sync_batch_update(request, uid='test-uid')
+
+        assert result["updated_count"] == 1
+        # Verify only t1 was sent to batch update
+        call_args = mock_db.batch_sync_update_action_items.call_args[0]
+        assert len(call_args[1]) == 1
+        assert call_args[1][0]['id'] == 't1'
