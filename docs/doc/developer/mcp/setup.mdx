@@ -1,0 +1,127 @@
+---
+title: "Setup"
+icon: "gear"
+description: "Connect your AI assistant to the Omi MCP server"
+---
+
+## Hosted Server (Recommended)
+
+The fastest way to get started — no installation required.
+
+<Steps>
+  <Step title="Generate an API Key" icon="key">
+    Open the Omi app and navigate to **Settings → Developer → MCP** to generate your API key.
+
+    Your key will look like: `omi_mcp_...`
+  </Step>
+  <Step title="Configure Your Client" icon="sliders">
+    Use the following connection details:
+
+    - **Server URL:** `https://api.omi.me/v1/mcp/sse`
+    - **Authorization:** `Bearer omi_mcp_...` (your generated key)
+    - **Transport:** Streamable HTTP (MCP 2025-03-26 spec)
+  </Step>
+</Steps>
+
+---
+
+## Client Configuration
+
+<Tabs>
+  <Tab title="Claude Desktop" icon="robot">
+    Add to your `claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "omi": {
+          "url": "https://api.omi.me/v1/mcp/sse",
+          "headers": {
+            "Authorization": "Bearer omi_mcp_YOUR_KEY_HERE"
+          }
+        }
+      }
+    }
+    ```
+
+    **Config file location:**
+    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+  </Tab>
+  <Tab title="Cursor" icon="i-cursor">
+    Go to **Cursor Settings → MCP** and add a new server:
+
+    - **Name:** Omi
+    - **Transport:** SSE
+    - **URL:** `https://api.omi.me/v1/mcp/sse`
+    - **Headers:** `Authorization: Bearer omi_mcp_YOUR_KEY_HERE`
+  </Tab>
+  <Tab title="Poke" icon="circle-play">
+    <img src="/images/poke-mcp-setup.png" alt="Poke MCP Setup" className="rounded-xl border border-gray-200 dark:border-gray-800" />
+
+    Enter the server URL and API key in Poke's MCP connection settings.
+  </Tab>
+  <Tab title="Custom Client" icon="code">
+    Any MCP client that supports the **Streamable HTTP** transport (2025-03-26 spec) will work:
+
+    ```bash
+    # Endpoint
+    POST https://api.omi.me/v1/mcp/sse
+
+    # Headers
+    Authorization: Bearer omi_mcp_YOUR_KEY_HERE
+    Content-Type: application/json
+    Accept: text/event-stream  # for SSE responses
+
+    # Body (JSON-RPC 2.0)
+    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Docker (Self-Hosted)
+
+If you prefer to run the MCP server locally:
+
+<Steps>
+  <Step title="Generate an API Key" icon="key">
+    Open the Omi app → **Settings → Developer → MCP** to generate your key.
+  </Step>
+  <Step title="Install Docker" icon="docker">
+    Install Docker. We recommend [OrbStack](https://orbstack.dev/) for macOS.
+  </Step>
+  <Step title="Configure Claude Desktop" icon="gear">
+    Add to your `claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "omi": {
+          "command": "docker",
+          "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=omi_mcp_YOUR_KEY_HERE", "omiai/mcp-server"]
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+The API key can also be provided with each tool call. If not provided, the server uses the `OMI_API_KEY` environment variable as a fallback.
+</Tip>
+
+---
+
+## Custom Backend URL
+
+If you are self-hosting the Omi backend:
+
+```bash
+export OMI_API_BASE_URL="https://your-backend-url.com"
+```
+
+<Note>
+Only needed for self-hosted Omi instances. The default URL points to the official Omi API.
+</Note>

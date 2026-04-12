@@ -214,9 +214,23 @@
         "icon": "robot",
         "groups": [
           {
-            "group": "MCP Integration",
+            "group": "Getting Started",
             "pages": [
-              "doc/developer/MCP"
+              "doc/developer/mcp/introduction",
+              "doc/developer/mcp/setup"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "doc/developer/mcp/tools"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "doc/developer/mcp/examples",
+              "doc/developer/mcp/troubleshooting"
             ]
           }
         ]
