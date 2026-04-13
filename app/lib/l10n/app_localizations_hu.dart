@@ -639,9 +639,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saving => 'Mentés...';
 
   @override
-  String get personaConfig => 'AI személyiség beállítása';
-
-  @override
   String get beta => 'BÉTA';
 
   @override
@@ -1720,12 +1717,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ESZKÖZ',
-      one: 'ESZKÖZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -2440,12 +2432,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get createKeyToGetStarted => 'Hozzon létre egy kulcsot a kezdéshez';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurálja AI személyiségét';
-
-  @override
   String get configureSttProvider => 'STT szolgáltató konfigurálása';
 
   @override
@@ -2963,9 +2949,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Az alkalmazásról';
-
-  @override
-  String get aboutThePersona => 'A personáról';
 
   @override
   String get chatPersonality => 'Chat személyiség';
@@ -3504,9 +3487,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get changeYourName => 'Név módosítása';
 
   @override
-  String get manageYourOmiPersona => 'Az Omi persona kezelése';
-
-  @override
   String get voiceAndPeople => 'Hang és Emberek';
 
   @override
@@ -3917,9 +3897,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'Kattintson egy gyorsbillentyűre a módosításához. Nyomja meg az Escape gombot a megszakításhoz.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurálja AI personáját';
-
-  @override
   String get configureSTTProvider => 'STT szolgáltató konfigurálása';
 
   @override
@@ -4274,16 +4251,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get createAndShareYourApp => 'Hozza létre és ossza meg alkalmazását';
 
   @override
-  String get createMyClone => 'Klónom létrehozása';
-
-  @override
-  String get createYourDigitalClone => 'Hozza létre digitális klónját';
-
-  @override
   String get itemApp => 'Alkalmazás';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4312,9 +4280,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get manageApp => 'Alkalmazás kezelése';
-
-  @override
-  String get updatePersonaDetails => 'Persona részleteinek frissítése';
 
   @override
   String deleteItemTitle(String item) {
@@ -5847,9 +5812,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chooseFile => 'Fájl kiválasztása';
 
   @override
-  String get configureAiPersona => 'AI személyiséged konfigurálása';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI asszisztensek csatlakoztatása az adataidhoz';
 
   @override
@@ -6560,29 +6522,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get sharePublicLink => 'Nyilvános link megosztása';
 
   @override
-  String get makePersonaPublic => 'Persona nyilvánossá tétele';
-
-  @override
   String get connectedKnowledgeData => 'Csatlakoztatott tudásadatok';
 
   @override
   String get enterName => 'Név megadása';
-
-  @override
-  String get disconnectTwitter => 'Twitter leválasztása';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Biztosan le szeretnéd választani a Twitter fiókodat? A személyiséged többé nem fér hozzá a Twitter adataidhoz.';
-
-  @override
-  String get getOmiDeviceDescription => 'Hozz létre pontosabb klónt a személyes beszélgetéseiddel';
-
-  @override
-  String get getOmi => 'Omi beszerzése';
-
-  @override
-  String get iHaveOmiDevice => 'Van Omi eszközöm';
 
   @override
   String get goal => 'CÉL';
@@ -7136,49 +7079,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'A Persona nem választható más képességekkel együtt';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter fiók nem található';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter fiók felfüggesztve';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter fiók ellenőrzése sikertelen';
-
-  @override
-  String get personaFailedToFetch => 'Nem sikerült lekérni a personáját';
-
-  @override
-  String get personaFailedToCreate => 'Nem sikerült létrehozni a personát';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Csatlakoztasson legalább egy adatforrást (Omi vagy Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona sikeresen frissítve';
-
-  @override
-  String get personaFailedToUpdate => 'Persona frissítése sikertelen';
-
-  @override
-  String get personaPleaseSelectImage => 'Válasszon képet';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Persona létrehozása sikertelen. Próbálja később.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona létrehozása sikertelen: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona engedélyezése sikertelen';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Hiba a persona engedélyezésekor: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nem sikerült lekérni a támogatott országokat. Próbálja később.';
 
   @override
@@ -7251,21 +7151,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Kérjük, először generálj egy alkalmazást';
-
-  @override
-  String get xHandleTitle => 'Mi az X felhasználóneved?';
-
-  @override
-  String get xHandleDescription => 'Előzetesen betanítjuk az Omi klónodat\na fiókod tevékenysége alapján';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Kérlek, add meg az X felhasználóneved';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Kérlek, adj meg érvényes X felhasználónevet';
 
   @override
   String get nextButton => 'Következő';
@@ -7880,9 +7765,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get categoryConversationAnalysis => 'Beszélgetéselemzés';
 
   @override
-  String get categoryPersonalityClone => 'Személyiségklón';
-
-  @override
   String get categoryHealth => 'Egészség';
 
   @override
@@ -7983,9 +7865,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrációk';
-
-  @override
-  String get categoryPersonalityClones => 'Személyiségklónok';
 
   @override
   String get categoryProductivityLifestyle => 'Termelékenység és életmód';
@@ -9048,4 +8927,18 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Folytatás';
+
+  @override
+  String get tasksClearCompleted => 'Befejezettek törlése';
+
+  @override
+  String get tasksSelectAll => 'Az összes kijelölése';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count feladat törlése';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Befejezettként megjelölve';
 }

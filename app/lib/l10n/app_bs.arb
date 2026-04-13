@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Konfigurišite vašu AI ličnost",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Persona",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Konfiguriši svoju AI personu",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Konfiguriši STT pružatelja",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "O personi",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Ličnost chata",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Tvoje podatke",
     "setYourName": "Postavi svoje ime",
     "changeYourName": "Promijeni svoje ime",
-    "manageYourOmiPersona": "Upravljaj svojom Omi personom",
     "voiceAndPeople": "Glas i ljudi",
     "teachOmiYourVoice": "Nauči Omi svoj glas",
     "tellOmiWhoSaidIt": "Reci Omi tko je to rekao 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Provjera sljedećih 7 dana",
     "shortcuts": "Prečaci",
     "shortcutChangeInstruction": "Klikni na prečac da ga promijeniš. Pritisni Escape da otkazes.",
-    "configurePersonaDescription": "Konfiguriraj svoju AI personu",
     "configureSTTProvider": "Konfiguriraj pružatelja STT-a",
     "setConversationEndDescription": "Postavi kada se razgovori automatski završavaju",
     "importDataDescription": "Uvezi podatke iz drugih izvora",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Stvori moj klon",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Stvori svoj digitalni klon",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "Aplikacija",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Persona",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Čuvaj {item} javnim",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Upravljaj aplikacijom",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Ažurira detalje persone",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Obriši {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Konfiguriši svoju AI personu",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Poveži AI asistente sa tvojim podacima",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "Dijeli javnu vezu",
-    "makePersonaPublic": "Učini personu javnom",
     "connectedKnowledgeData": "Povezani podaci znanja",
     "enterName": "Unesi ime",
-    "disconnectTwitter": "Prekini veza sa Twitterom",
-    "disconnectTwitterConfirmation": "Jeste li sigurni da želite prekinuti vezu sa vašim Twitter računom? Vaša persona više neće imati pristup vašim Twitter podacima.",
-    "getOmiDeviceDescription": "Kreiraj precizniji klon sa svojim osobnim razgovorima",
-    "getOmi": "Uzmi Omi",
-    "iHaveOmiDevice": "Imam Omi uređaj",
     "goal": "CILJ",
     "tapToTrackThisGoal": "Tapni da pratišs ovaj cilj",
     "tapToSetAGoal": "Tapni da postaviš cilj",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter handle nije pronađen",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter handle je suspendovan",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Greška pri verifikaciji Twitter handle-a",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Greška pri učitavanju vaše persone",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Greška pri kreiranju vaše persone",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Molimo povežite najmanje jedan izvor znanja (Omi ili Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona je uspješno ažurirana",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Greška pri ažuriranju persone",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Molimo odaberite sliku",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Greška pri kreiranju vaše persone. Molimo pokušajte ponovo kasnije.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Greška pri kreiranju persone: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Greška pri omogućavanju persone",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Greška pri omogućavanju persone: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Greška pri učitavanju podržanih država. Molimo pokušajte ponovo kasnije.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "Molimo prvo generirajte aplikaciju",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Koji je vaš X handle?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Predtreniraćemo vaš Omi clone\nna osnovu aktivnosti vašeg naloga",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Molimo unesite vaš X handle",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Molimo unesite važeći X handle",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Dalje",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "Dnevni rezimei",
     "removeFilter": "Uklonite filter",
     "categoryConversationAnalysis": "Analiza razgovora",
-    "categoryPersonalityClone": "Klon ličnosti",
     "categoryHealth": "Zdravlje",
     "categoryEducation": "Edukacija",
     "categoryCommunication": "Komunikacija",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "Istaknuto",
     "capabilityTasks": "Zadaci",
     "capabilityIntegrations": "Integracije",
-    "categoryPersonalityClones": "Klonovi ličnosti",
     "categoryProductivityLifestyle": "Produktivnost i stil života",
     "categorySocialEntertainment": "Društveno i zabava",
     "categoryProductivityTools": "Produktivnost i alati",
@@ -10749,5 +10621,9 @@
     },
     "firmwareWarningTitle": "Važno: Pročitajte prije ažuriranja",
     "firmwareFormatWarning": "Ovaj firmware će formatirati SD karticu. Molimo osigurajte da su svi offline podaci sinhronizovani prije nadogradnje.\n\nAko vidite trepćuće crveno svjetlo nakon instaliranja ove verzije, ne brinite. Jednostavno povežite uređaj s aplikacijom i trebao bi postati plav. Crveno svjetlo znači da sat uređaja još nije sinhronizovan.",
-    "continueAnyway": "Nastavi"
+    "continueAnyway": "Nastavi",
+    "tasksClearCompleted": "Obriši završene",
+    "tasksSelectAll": "Odaberi sve",
+    "tasksDeleteSelected": "Obriši {count} zadatak(e)",
+    "tasksMarkComplete": "Označeno kao završeno"
 }

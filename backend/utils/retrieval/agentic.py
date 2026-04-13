@@ -19,7 +19,6 @@ agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('age
 
 from models.app import App
 from models.chat import Message, ChatSession, PageContext
-from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
     search_conversations_tool,

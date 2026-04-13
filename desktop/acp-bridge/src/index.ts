@@ -1167,6 +1167,11 @@ async function main(): Promise<void> {
         }
         break;
 
+      case "invalidate_session":
+        sessions.delete(msg.sessionKey);
+        logErr(`Invalidated cached ACP session for key=${msg.sessionKey}`);
+        break;
+
       case "authenticate": {
         // Legacy fallback: OAuth flow now handles auth internally.
         // This handler is kept for backward compatibility.

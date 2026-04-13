@@ -68,7 +68,7 @@ def get_better_conversation_chunk(
 
 
 def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[str, List[Conversation]]:
-    topics = retrieve_memory_context_params(uid, memory)
+    topics = retrieve_memory_context_params(uid, memory.transcript_segments, memory.get_person_ids())
     logger.info(f'retrieve_memory_rag_context {topics}')
     if not topics:
         return '', []

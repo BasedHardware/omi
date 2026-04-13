@@ -3913,6 +3913,19 @@ struct CheckoutSessionResponse: Codable {
   }
 }
 
+struct UpgradeSubscriptionResponse: Codable {
+  let status: String
+  let message: String
+  let daysRemaining: Int?
+  let scheduleId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case status, message
+    case daysRemaining = "days_remaining"
+    case scheduleId = "schedule_id"
+  }
+}
+
 struct AvailablePlanPriceOption: Codable, Identifiable {
   let id: String
   let title: String
@@ -4374,8 +4387,10 @@ extension APIClient {
   func rateMessage(messageId: String, rating: Int?) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
+      let app_version: String?
     }
-    let body = RateRequest(rating: rating)
+    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    let body = RateRequest(rating: rating, app_version: version)
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }
@@ -4708,6 +4723,18 @@ extension APIClient {
     }
 
     return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+  }
+
+  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+    struct Request: Encodable {
+      let priceId: String
+
+      enum CodingKeys: String, CodingKey {
+        case priceId = "price_id"
+      }
+    }
+
+    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {

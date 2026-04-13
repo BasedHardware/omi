@@ -2,6 +2,120 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.299",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.298",
+      "date": "2026-04-13",
+      "changes": [
+        "Minimized pauses when Omi reads long voice responses out loud",
+        "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update",
+        "Improved chat tool discoverability: richer database schema with column descriptions, table relationships, FTS search patterns, new search_tasks tool, and enriched daily recap with focus sessions, memories, and observations"
+      ]
+    },
+    {
+      "version": "0.11.296",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.295",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.294",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.293",
+      "date": "2026-04-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.291",
+      "date": "2026-04-11",
+      "changes": [
+        "Fixed floating bar close button requiring multiple clicks by enlarging the hit area"
+      ]
+    },
+    {
+      "version": "0.11.289",
+      "date": "2026-04-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.287",
+      "date": "2026-04-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.286",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.285",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.284",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.282",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.281",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.279",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.277",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.276",
       "date": "2026-04-09",
       "changes": [

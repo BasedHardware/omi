@@ -152,17 +152,6 @@ class AuthService {
     }
   }
 
-  Future<void> signInAnonymously() async {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      var user = FirebaseAuth.instance.currentUser!;
-      SharedPreferencesUtil().uid = user.uid;
-      await getIdToken();
-    } catch (e) {
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-    }
-  }
-
   Future<void> signOut() async {
     _clearCachedAuth();
     await FirebaseAuth.instance.signOut();

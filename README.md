@@ -142,7 +142,7 @@ Open-source AI wearables that pair with the mobile app for 24h+ continuous captu
 - [Audio Streaming Apps](https://docs.omi.me/doc/developer/apps/AudioStreaming)
 - [Custom Chat Tools](https://docs.omi.me/doc/developer/apps/ChatTools)
 - [Submit to App Store](https://docs.omi.me/doc/developer/apps/Submitting)
-  
+
 ### API & SDKs
 - [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
 - [Python SDK](sdks/python/)

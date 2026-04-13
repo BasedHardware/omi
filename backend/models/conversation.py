@@ -4,10 +4,9 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from models.audio_file import AudioFile
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
 from models.conversation_enums import (
-    CategoryEnum,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -18,13 +17,12 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
-from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
+from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 
-# Re-export moved symbols so that `from models.conversation import CategoryEnum` etc. still works.
-# Wildcard imports have been migrated to explicit imports (Phase 3, #6423), so __all__ is safe now.
+# Only locally-defined symbols are exported. Use canonical modules for moved types:
+#   models.conversation_enums, models.structured, models.audio_file, etc.
 __all__ = [
-    # Defined here
     'AppResult',
     'BulkAssignSegmentsRequest',
     'Conversation',
@@ -44,26 +42,6 @@ __all__ = [
     'UpdateActionItemDescriptionRequest',
     'UpdateConversation',
     'UpdateSegmentTextRequest',
-    # Re-exports (backward compat — prefer importing from the canonical module)
-    'ActionItem',
-    'ActionItemsExtraction',
-    'AudioFile',
-    'CalendarMeetingContext',
-    'CategoryEnum',
-    'ConversationPhoto',
-    'ConversationSource',
-    'ConversationStatus',
-    'ConversationVisibility',
-    'Event',
-    'ExternalIntegrationConversationSource',
-    'Geolocation',
-    'MeetingParticipant',
-    'Message',
-    'Person',
-    'PostProcessingModel',
-    'PostProcessingStatus',
-    'Structured',
-    'TranscriptSegment',
 ]
 
 

@@ -57,6 +57,56 @@ struct SettingsPage: View {
   }
 }
 
+struct SubscriptionPlanCatalogMerger {
+  static func merge(
+    primary: [SubscriptionPlanOption],
+    fallback: [SubscriptionPlanOption]
+  ) -> [SubscriptionPlanOption] {
+    var mergedById: [String: SubscriptionPlanOption] = [:]
+
+    for plan in fallback {
+      mergedById[plan.id] = plan
+    }
+
+    for plan in primary {
+      if let existing = mergedById[plan.id] {
+        mergedById[plan.id] = SubscriptionPlanOption(
+          id: plan.id,
+          title: plan.title.isEmpty ? existing.title : plan.title,
+          features: plan.features.isEmpty ? existing.features : plan.features,
+          prices: mergePrices(primary: plan.prices, fallback: existing.prices)
+        )
+      } else {
+        mergedById[plan.id] = plan
+      }
+    }
+
+    return Array(mergedById.values)
+  }
+
+  private static func mergePrices(
+    primary: [SubscriptionPriceOption],
+    fallback: [SubscriptionPriceOption]
+  ) -> [SubscriptionPriceOption] {
+    var mergedById: [String: SubscriptionPriceOption] = [:]
+
+    for price in fallback {
+      mergedById[price.id] = price
+    }
+
+    for price in primary {
+      mergedById[price.id] = price
+    }
+
+    return Array(mergedById.values).sorted { lhs, rhs in
+      if lhs.title != rhs.title {
+        return lhs.title < rhs.title
+      }
+      return lhs.id < rhs.id
+    }
+  }
+}
+
 /// Dark-themed settings content matching the main window style
 struct SettingsContentView: View {
   // AppState for transcription control
@@ -2674,6 +2724,41 @@ struct SettingsContentView: View {
       troubleshootingSubsection
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
+
+      advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
+      devToolsSubsection
+    }
+  }
+
+  // MARK: - Dev Tools Subsection
+
+  private var devToolsSubsection: some View {
+    VStack(spacing: 20) {
+      settingsCard(settingId: "advanced.devtools.chatlab") {
+        HStack(spacing: 12) {
+          Image(systemName: "flask.fill")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Chat Prompt Lab")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Iterate on chat system prompts with real questions, AI grading, and production ratings")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+          Spacer()
+          Button("Open") {
+            ChatLabWindowManager.shared.openWindow(chatProvider: chatProvider)
+          }
+          .buttonStyle(.plain)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 6)
+          .background(OmiColors.purplePrimary)
+          .foregroundColor(.white)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+      }
     }
   }
 
@@ -5609,32 +5694,7 @@ struct SettingsContentView: View {
     primary: [SubscriptionPlanOption],
     fallback: [SubscriptionPlanOption]
   ) -> [SubscriptionPlanOption] {
-    var mergedById: [String: SubscriptionPlanOption] = [:]
-
-    for plan in fallback {
-      mergedById[plan.id] = plan
-    }
-
-    for plan in primary {
-      if let existing = mergedById[plan.id] {
-        let mergedPrices = Array(
-          Dictionary(uniqueKeysWithValues: (existing.prices + plan.prices).map { ($0.id, $0) })
-            .values
-        )
-        .sorted { $0.title < $1.title }
-
-        mergedById[plan.id] = SubscriptionPlanOption(
-          id: plan.id,
-          title: plan.title.isEmpty ? existing.title : plan.title,
-          features: plan.features.isEmpty ? existing.features : plan.features,
-          prices: mergedPrices
-        )
-      } else {
-        mergedById[plan.id] = plan
-      }
-    }
-
-    return Array(mergedById.values)
+    SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
   }
 
   private func fallbackFeatures(for planId: String) -> [String] {
@@ -5710,7 +5770,9 @@ struct SettingsContentView: View {
     let isSelected = selectedPlanIdForCheckout == plan.id
     let accent = planAccentColor(for: plan.id)
     let isCurrentPlan = isCurrentSubscriptionPlan(plan)
-    let canPurchase = !isCurrentPlan
+    let isProUser = userSubscription?.subscription.plan == .pro
+    let isDowngrade = isProUser && plan.id == "unlimited"
+    let canPurchase = !isCurrentPlan && !isDowngrade
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
@@ -6154,6 +6216,7 @@ struct SettingsContentView: View {
         let availablePlans = try? await APIClient.shared.getAvailablePlans()
         await MainActor.run {
           userSubscription = subscription
+          subscriptionError = nil
           fallbackPlanCatalog = availablePlans.map { planCatalog(from: $0.plans) } ?? []
           if let selectedPlanIdForCheckout,
             subscription.subscription.plan.rawValue == selectedPlanIdForCheckout
@@ -6177,6 +6240,33 @@ struct SettingsContentView: View {
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
+
+    // If user already has an active paid subscription (not canceled), use upgrade endpoint
+    // to schedule the plan change at end of billing period (no double-charging)
+    if hasPaidSubscription,
+       let subscription = userSubscription?.subscription,
+       !subscription.cancelAtPeriodEnd
+    {
+      Task {
+        do {
+          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = nil
+            loadSubscriptionInfo()
+          }
+        } catch {
+          logError("Failed to schedule plan change", error: error)
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = "Failed to schedule plan change."
+          }
+        }
+      }
+      return
+    }
 
     Task {
       do {
@@ -6285,6 +6375,10 @@ struct SettingsContentView: View {
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {
+              FloatingBarUsageLimiter.shared.applyPlan(
+                plan: subscription.subscription.plan,
+                status: subscription.subscription.status
+              )
               userSubscription = subscription
               subscriptionError = nil
               pendingSubscriptionPriceId = nil
@@ -6297,7 +6391,7 @@ struct SettingsContentView: View {
             await MainActor.run {
               userSubscription = subscription
               subscriptionError =
-                "Payment completed, but plan refresh is still catching up. Click Refresh in a moment."
+                "Payment completed, but plan refresh is still catching up. Please try reloading this page in a moment."
               pendingSubscriptionPriceId = nil
               pendingCheckoutSessionId = nil
             }
@@ -6324,11 +6418,27 @@ struct SettingsContentView: View {
   private func completeLocalTestSubscriptionIfNeeded() async {
     guard let expectedPriceId = pendingSubscriptionPriceId else { return }
     let checkoutSessionId = pendingCheckoutSessionId
-    let baseURL = await APIClient.shared.rustBackendURL
-    guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/")
-    else {
+    let pythonBaseURL = await APIClient.shared.baseURL
+    let rustBaseURL = await APIClient.shared.rustBackendURL
+
+    if let checkoutSessionId, isLocalURL(pythonBaseURL) {
+      guard
+        let encodedSessionId = checkoutSessionId.addingPercentEncoding(
+          withAllowedCharacters: .urlQueryAllowed),
+        let url = URL(string: "\(pythonBaseURL)v1/payments/success?session_id=\(encodedSessionId)")
+      else {
+        return
+      }
+
+      do {
+        _ = try await URLSession.shared.data(from: url)
+      } catch {
+        logError("Failed to complete local python test subscription", error: error)
+      }
       return
     }
+
+    guard isLocalURL(rustBaseURL) else { return }
 
     guard
       let encodedPriceId = expectedPriceId.addingPercentEncoding(
@@ -6337,7 +6447,7 @@ struct SettingsContentView: View {
       return
     }
 
-    var urlString = "\(baseURL)test/complete-subscription?price_id=\(encodedPriceId)"
+    var urlString = "\(rustBaseURL)test/complete-subscription?price_id=\(encodedPriceId)"
     if let checkoutSessionId,
       let encodedSessionId = checkoutSessionId.addingPercentEncoding(
         withAllowedCharacters: .urlQueryAllowed)
@@ -6352,6 +6462,10 @@ struct SettingsContentView: View {
     } catch {
       logError("Failed to complete local test subscription", error: error)
     }
+  }
+
+  private func isLocalURL(_ url: String) -> Bool {
+    url.hasPrefix("http://127.0.0.1:") || url.hasPrefix("http://localhost:")
   }
 
   private func openURLInDefaultBrowser(_ url: URL) {

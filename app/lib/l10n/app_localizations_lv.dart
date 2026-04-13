@@ -637,9 +637,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get saving => 'Saglabā...';
 
   @override
-  String get personaConfig => 'Konfigurēt savu AI personību';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1712,12 +1709,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'IERĪCES',
-      one: 'IERĪCE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -2431,12 +2423,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get createKeyToGetStarted => 'Izveidojiet atslēgu, lai sāktu';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurējiet savu AI personu';
-
-  @override
   String get configureSttProvider => 'Konfigurēt STT pakalpojumu sniedzēju';
 
   @override
@@ -2951,9 +2937,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Par lietotni';
-
-  @override
-  String get aboutThePersona => 'Par personu';
 
   @override
   String get chatPersonality => 'Tērzēšanas personība';
@@ -3490,9 +3473,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get changeYourName => 'Mainīt savu vārdu';
 
   @override
-  String get manageYourOmiPersona => 'Pārvaldīt savu Omi personu';
-
-  @override
   String get voiceAndPeople => 'Balss un Cilvēki';
 
   @override
@@ -3902,9 +3882,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get shortcutChangeInstruction => 'Noklikšķiniet uz saīsnes, lai to mainītu. Nospiediet Escape, lai atceltu.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurējiet savu AI personu';
-
-  @override
   String get configureSTTProvider => 'Konfigurēt STT nodrošinātāju';
 
   @override
@@ -4259,16 +4236,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get createAndShareYourApp => 'Izveidojiet un dalieties ar savu lietotni';
 
   @override
-  String get createMyClone => 'Izveidot manu klonu';
-
-  @override
-  String get createYourDigitalClone => 'Izveidojiet savu digitālo klonu';
-
-  @override
   String get itemApp => 'Lietotne';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4297,9 +4265,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get manageApp => 'Pārvaldīt lietotni';
-
-  @override
-  String get updatePersonaDetails => 'Atjaunināt personas datus';
 
   @override
   String deleteItemTitle(String item) {
@@ -5827,9 +5792,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chooseFile => 'Izvēlēties failu';
 
   @override
-  String get configureAiPersona => 'Konfigurējiet savu AI personu';
-
-  @override
   String get connectAiAssistantsToYourData => 'Savienojiet AI asistentus ar saviem datiem';
 
   @override
@@ -6543,29 +6505,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get sharePublicLink => 'Kopīgot publisko saiti';
 
   @override
-  String get makePersonaPublic => 'Padarīt personu publisku';
-
-  @override
   String get connectedKnowledgeData => 'Pievienotie zināšanu dati';
 
   @override
   String get enterName => 'Ievadiet vārdu';
-
-  @override
-  String get disconnectTwitter => 'Atvienot Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Vai tiešām vēlaties atvienot savu Twitter kontu? Jūsu personai vairs nebūs piekļuves jūsu Twitter datiem.';
-
-  @override
-  String get getOmiDeviceDescription => 'Izveidojiet precīzāku klonu ar savām personīgajām sarunām';
-
-  @override
-  String get getOmi => 'Iegūt Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Man ir Omi ierīce';
 
   @override
   String get goal => 'MĒRĶIS';
@@ -7116,49 +7059,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nevar izvēlēties kopā ar citām spējām';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter konts nav atrasts';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter konts ir apturēts';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Neizdevās verificēt Twitter kontu';
-
-  @override
-  String get personaFailedToFetch => 'Neizdevās iegūt jūsu personu';
-
-  @override
-  String get personaFailedToCreate => 'Neizdevās izveidot personu';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Lūdzu, pievienojiet vismaz vienu datu avotu (Omi vai Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona veiksmīgi atjaunināta';
-
-  @override
-  String get personaFailedToUpdate => 'Neizdevās atjaunināt personu';
-
-  @override
-  String get personaPleaseSelectImage => 'Lūdzu, izvēlieties attēlu';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Neizdevās izveidot personu. Mēģiniet vēlāk.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Neizdevās izveidot personu: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Neizdevās iespējot personu';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Kļūda, iespējojot personu: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Neizdevās iegūt atbalstītās valstis. Mēģiniet vēlāk.';
 
   @override
@@ -7231,21 +7131,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Lūdzu, vispirms ģenerējiet lietotni';
-
-  @override
-  String get xHandleTitle => 'Kāds ir jūsu X lietotājvārds?';
-
-  @override
-  String get xHandleDescription => 'Mēs iepriekš apmācīsim jūsu Omi klonu\nbalstoties uz jūsu konta aktivitāti';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Lūdzu, ievadiet savu X lietotājvārdu';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Lūdzu, ievadiet derīgu X lietotājvārdu';
 
   @override
   String get nextButton => 'Tālāk';
@@ -7861,9 +7746,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get categoryConversationAnalysis => 'Sarunu analīze';
 
   @override
-  String get categoryPersonalityClone => 'Personības klons';
-
-  @override
   String get categoryHealth => 'Veselība';
 
   @override
@@ -7964,9 +7846,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrācijas';
-
-  @override
-  String get categoryPersonalityClones => 'Personības kloni';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitāte un dzīvesveids';
@@ -9027,4 +8906,18 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Turpināt';
+
+  @override
+  String get tasksClearCompleted => 'Notīrīt paveiktos';
+
+  @override
+  String get tasksSelectAll => 'Atlasīt visu';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Dzēst $count uzdevumu(s)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Atzīmēts kā pabeigts';
 }

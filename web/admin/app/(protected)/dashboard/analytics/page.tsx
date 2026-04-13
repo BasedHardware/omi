@@ -184,6 +184,11 @@ interface DauTrendsData {
   days: number;
 }
 
+interface CrashRateData {
+  data: { date: string; crashes: number; users: number; crashFreeRate: number }[];
+  days: number;
+}
+
 interface ViralMetrics {
   growthAccounting: {
     week: string;
@@ -358,6 +363,9 @@ export default function AnalyticsPage() {
 
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
     useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
+
+  const { data: crashRate, isLoading: crashRateLoading } =
+    useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", token] : null, authFetcher, swrOpts);
 
   const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
 
@@ -1340,6 +1348,58 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Crash Rate */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">App Stability</h2>
+          {crashRate?.data && (() => {
+            const recent = crashRate.data.slice(-7);
+            const totalCrashes = recent.reduce((s, d) => s + d.crashes, 0);
+            const totalUsers = recent.reduce((s, d) => s + d.users, 0);
+            const rate = totalUsers > 0 ? ((1 - totalCrashes / totalUsers) * 100).toFixed(1) : "100.0";
+            return (
+              <span className="text-sm text-muted-foreground">
+                {rate}% crash-free (7d) · {totalCrashes} crashes
+              </span>
+            );
+          })()}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">Daily crashes vs active users (last 30 days)</p>
+        <div className="h-[300px]">
+          {crashRateLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (crashRate?.data?.length ?? 0) > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={crashRate!.data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[90, 100]} />
+                <Tooltip
+                  formatter={(value: number, name: string) => {
+                    if (name === "crashFreeRate") return [`${value}%`, "Crash-Free Rate"];
+                    if (name === "crashes") return [value.toLocaleString(), "Crashes"];
+                    return [value.toLocaleString(), "Active Users"];
+                  }}
+                  labelFormatter={fullDate}
+                  contentStyle={tooltipStyle}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="crashes" name="Crashes" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="left" dataKey="users" name="Active Users" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.3} />
+                <Line yAxisId="right" type="monotone" dataKey="crashFreeRate" name="Crash-Free Rate" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              No crash data yet — events will appear after v0.11.277+
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Daily New Users + Rolling Avg */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">
@@ -1628,6 +1688,129 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       )}
+      {/* Chat Ratings by Week */}
+      <ChatRatingsChart token={token} />
     </div>
+  );
+}
+
+// --- Chat Ratings Chart (Firebase analytics collection) ---
+
+interface RatingWeek { week: string; thumbs_up: number; thumbs_down: number }
+interface RatingVersion { version: string; thumbs_up: number; thumbs_down: number }
+interface ChatRatingsWeekData { weeks: RatingWeek[]; total_up: number; total_down: number }
+interface ChatRatingsVersionData { versions: RatingVersion[]; total_up: number; total_down: number }
+
+function ChatRatingsChart({ token }: { token: string | null }) {
+  const [platform, setPlatform] = useState<"all" | "desktop" | "mobile">("desktop");
+  const [groupBy, setGroupBy] = useState<"week" | "version">("week");
+
+  const { data: weekData, isLoading: weekLoading } = useSWR<ChatRatingsWeekData>(
+    token && groupBy === "week" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=week`, token] : null,
+    authenticatedFetcher
+  );
+  const { data: versionData, isLoading: versionLoading } = useSWR<ChatRatingsVersionData>(
+    token && groupBy === "version" ? [`/api/omi/chat-lab/ratings?platform=${platform}&group_by=version`, token] : null,
+    authenticatedFetcher
+  );
+
+  const isLoading = groupBy === "week" ? weekLoading : versionLoading;
+
+  const stats = useMemo(() => {
+    const d = groupBy === "week" ? weekData : versionData;
+    if (!d) return { total: 0, up: 0, down: 0, pct: 0 };
+    const { total_up: up, total_down: down } = d;
+    const total = up + down;
+    return { total, up, down, pct: total > 0 ? Math.round((up / total) * 100) : 0 };
+  }, [weekData, versionData, groupBy]);
+
+  const chartData = useMemo(() => {
+    if (groupBy === "version") {
+      if (!versionData?.versions) return [];
+      return versionData.versions
+        .filter((v) => v.version !== "unknown")
+        .map((v) => ({
+          ...v, label: v.version.replace("0.11.", "v"),
+          satisfaction: v.thumbs_up + v.thumbs_down > 0 ? Math.round((v.thumbs_up / (v.thumbs_up + v.thumbs_down)) * 100) : 0,
+        }));
+    }
+    if (!weekData?.weeks) return [];
+    return weekData.weeks.map((w) => ({
+      ...w, label: w.week,
+      satisfaction: w.thumbs_up + w.thumbs_down > 0 ? Math.round((w.thumbs_up / (w.thumbs_up + w.thumbs_down)) * 100) : 0,
+    }));
+  }, [weekData, versionData, groupBy]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span>Chat Response Ratings</span>
+            <div className="flex rounded-md overflow-hidden border border-border text-xs font-medium">
+              {(["all", "desktop", "mobile"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPlatform(p)}
+                  className={`px-3 py-1 transition-colors ${
+                    platform === p
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {p === "all" ? "All" : p === "desktop" ? "Desktop" : "Mobile"}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded-md overflow-hidden border border-border text-xs font-medium">
+              {(["week", "version"] as const).map((g) => (
+                <button key={g} onClick={() => setGroupBy(g)}
+                  className={`px-3 py-1 transition-colors ${groupBy === g ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
+                >{g === "week" ? "By Week" : "By Version"}</button>
+              ))}
+            </div>
+          </div>
+          {stats.total > 0 && (
+            <div className="flex items-center gap-4 text-sm font-normal">
+              <span className="text-green-500">{stats.up} 👍</span>
+              <span className="text-red-500">{stats.down} 👎</span>
+              <span className={`font-bold ${stats.pct >= 60 ? "text-green-500" : stats.pct >= 40 ? "text-yellow-500" : "text-red-500"}`}>
+                {stats.pct}% positive
+              </span>
+            </div>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading ratings...
+          </div>
+        ) : !chartData.length ? (
+          <div className="text-center text-muted-foreground py-12">
+            {groupBy === "version"
+              ? "No version-tagged ratings yet. Ratings will be tagged with app version after the next desktop release."
+              : "No chat ratings data available"}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={250}>
+            <ComposedChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="count" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8 }}
+                labelStyle={{ color: "#ccc" }}
+              />
+              <Legend />
+              <Bar yAxisId="count" dataKey="thumbs_up" name="👍 Likes" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="count" dataKey="thumbs_down" name="👎 Dislikes" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 }

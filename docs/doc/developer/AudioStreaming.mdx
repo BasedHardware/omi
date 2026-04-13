@@ -1,54 +1,113 @@
 ---
-title: Real-Time Audio Streaming
+title: "Real-Time Audio Streaming"
 icon: "wave-square"
-description: ''
+description: "Stream audio bytes from your Omi device to any backend service in real time."
 ---
 
-# Streaming Real-Time Audio From Device to Anywhere
+## Overview
 
-Omi allows you to stream audio bytes from your DevKit1 or DevKit2 directly to your backend or any other service, enabling you to perform various analyses and store the data. You can also define how frequently you want to receive the audio bytes.
+Omi streams raw audio bytes from your device to any webhook endpoint you configure. Use this to build custom audio processing, live transcription, or recording workflows.
 
-## Step 1: Create an Endpoint
+<CardGroup cols={3}>
+  <Card title="Any Backend" icon="server">
+    Stream to your own server, cloud function, or local dev environment
+  </Card>
+  <Card title="Configurable Interval" icon="clock">
+    Choose how often you receive audio chunks (e.g. every 5, 10, or 30 seconds)
+  </Card>
+  <Card title="Raw Audio" icon="waveform">
+    Receive raw PCM bytes — add a WAV header to save as audio files
+  </Card>
+</CardGroup>
 
-Create an endpoint (webhook) that can receive and process the data sent by our backend. Our backend will make a POST request to your webhook with sample_rate and uid as query parameters. The request from our backend will look like this:
+---
 
-`POST /your-endpoint?sample_rate=16000&uid=user123`
+## Setup
 
-The data sent is of type octet-stream, which is essentially a stream of bytes. You can either create your own endpoint or use the example provided below. Once it's ready and deployed, proceed to the next step.
+<Steps>
+  <Step title="Create a Webhook Endpoint" icon="webhook">
+    Build an endpoint that accepts POST requests with raw audio bytes.
 
-Note: The sample rate refers to the audio samples captured per second. DevKit1 (v1.0.4 and above) and DevKit2 record audio at a sample rate of 16,000 Hz, while DevKit1 with v1.0.2 records at a sample rate of 8,000 Hz. The uid represents the unique ID assigned to the user in our system.
+    Omi sends requests in this format:
 
-## Step 2: Add the Endpoint to Developer Settings
-1. Open the Omi App on your device.
-2. Go to Settings and click on Developer Mode.
-3. Scroll down until you see Realtime audio bytes, and set your endpoint there.
-4. In the Every x seconds field, define how frequently you want to receive the bytes. For example, if you set it to 10 seconds, you will receive the audio bytes every 10 seconds.
+    ```
+    POST /your-endpoint?sample_rate=16000&uid=user123
+    Content-Type: application/octet-stream
 
-That's it! You should now see audio bytes arriving at your webhook. The audio bytes are raw, but you can save them as audio files by adding a WAV header to the accumulated bytes.
+    [raw audio bytes]
+    ```
 
-Check out the example below to see how you can save the audio bytes as audio files in Google Cloud Storage using the audio streaming feature.
+    | Parameter | Description |
+    |-----------|-------------|
+    | `sample_rate` | Audio samples per second (see table below) |
+    | `uid` | The user's unique ID in Omi |
+    | Body | Raw PCM audio bytes (`application/octet-stream`) |
 
-## Example: Saving Audio Bytes as Audio Files in Google Cloud Storage
-1. Create a Google Cloud Storage bucket and set the appropriate permissions. You can follow the steps mentioned [here](https://docs.omi.me/doc/developer/savingaudio) up to step 5.
-2. Fork the example repository from [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming).
-3. Clone the repository to your local machine.
-4. Deploy it to any of your preferred cloud providers like GCP, AWS, DigitalOcean, or run it locally (you can use Ngrok for local testing). The repository includes a Dockerfile for easy deployment.
-5. While deploying, ensure the following environment variables are set:
-- `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Your GCP credentials, encoded in base64.
-- `GCS_BUCKET_NAME`: The name of your GCP storage bucket.
-6. Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes. The endpoint should be the URL where you deployed the example + `/audio`.
-7. You should now see audio files being saved in your GCP bucket every x seconds, where x is the value you set in the `Every x seconds` field.
+    <Accordion title="Sample Rates by Device" icon="microchip">
+      | Device | Sample Rate |
+      |--------|-------------|
+      | Omi (consumer) | 16,000 Hz |
+      | DevKit 2 | 16,000 Hz |
+      | DevKit 1 (v1.0.4+) | 16,000 Hz |
+      | DevKit 1 (v1.0.2) | 8,000 Hz |
+    </Accordion>
+  </Step>
 
-## Contributing 🤝
+  <Step title="Configure in the Omi App" icon="mobile">
+    1. Open the Omi app
+    2. Go to **Settings → Developer Mode**
+    3. Scroll to **Realtime audio bytes**
+    4. Enter your webhook URL
+    5. Set the interval (e.g. `10` for every 10 seconds)
+  </Step>
 
-We welcome contributions from the open source community! Whether it's improving documentation, adding new features, or reporting bugs, your input is valuable. Check out our [Contribution Guide](https://docs.omi.me/developer/Contribution/) for more information.
+  <Step title="Verify" icon="check">
+    Audio bytes should start arriving at your endpoint. The data is raw PCM — to save as a playable audio file, prepend a WAV header to the accumulated bytes.
+  </Step>
+</Steps>
 
-## Support 🆘
+---
 
-If you're stuck, have questions, or just want to chat about Omi:
+## Example: Save to Google Cloud Storage
 
-- **GitHub Issues: 🐛** For bug reports and feature requests
-- **Community Forum: 💬** Join our [community forum](http://discord.omi.me) for discussions and questions
-- **Documentation: 📚** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
+A complete example that saves audio chunks as WAV files in GCS.
 
-Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.
+<Steps>
+  <Step title="Set Up GCS" icon="cloud">
+    Follow the [Cloud Audio Storage](/doc/developer/savingaudio) guide to create a bucket and get credentials.
+  </Step>
+  <Step title="Deploy the Example" icon="rocket">
+    1. Fork [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming)
+    2. Clone and deploy to any cloud provider (GCP, AWS, DigitalOcean) or run locally with [ngrok](https://ngrok.com/)
+    3. Set these environment variables:
+
+    | Variable | Value |
+    |----------|-------|
+    | `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Base64-encoded GCP key |
+    | `GCS_BUCKET_NAME` | Your bucket name |
+
+    The repo includes a Dockerfile for easy deployment.
+  </Step>
+  <Step title="Connect" icon="link">
+    Set the endpoint in the Omi app under **Realtime audio bytes** to:
+
+    ```
+    https://your-deployment.com/audio
+    ```
+
+    Audio files will appear in your GCS bucket at the configured interval.
+  </Step>
+</Steps>
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Cloud Audio Storage" icon="cloud-arrow-up" href="/doc/developer/savingaudio">
+    Set up GCS bucket and credentials
+  </Card>
+  <Card title="Build Apps" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+    Create Omi apps with audio capabilities
+  </Card>
+</CardGroup>

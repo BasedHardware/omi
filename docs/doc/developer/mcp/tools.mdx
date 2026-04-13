@@ -1,0 +1,180 @@
+---
+title: "Tools Reference"
+icon: "wrench"
+description: "Complete reference for all Omi MCP tools"
+---
+
+## Memory Tools
+
+<AccordionGroup>
+  <Accordion title="get_memories" icon="brain">
+    Retrieve a list of user memories with optional filtering.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `categories` | array | No | Categories to filter by |
+    | `limit` | number | No | Maximum number of memories (default: 100) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
+
+    **Returns:** `{ "memories": [...] }`
+
+    **Example:**
+    ```
+    "Search my memories" → get_memories with no filters
+    "What do you know about my hobbies?" → get_memories with categories: ["hobbies"]
+    ```
+
+    **Memory categories:** `interesting`, `core`, `hobbies`, `lifestyle`, `interests`, `habits`, `work`, `skills`, `learnings`, `other`
+  </Accordion>
+
+  <Accordion title="search_memories" icon="magnifying-glass">
+    Semantic search across memories. Returns results ranked by relevance using vector similarity.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `query` | string | Yes | Natural language search query |
+    | `limit` | number | No | Maximum number of results (default: 10) |
+
+    **Returns:** `{ "memories": [{ ..., "relevance_score": 0.92 }, ...] }`
+
+    Each result includes a `relevance_score` (0.0 to 1.0) indicating how well it matches the query.
+
+    **Example:**
+    ```
+    "What do I know about machine learning?" → search_memories with query: "machine learning"
+    "Find memories about my morning routine" → search_memories with query: "morning routine"
+    ```
+  </Accordion>
+
+  <Accordion title="create_memory" icon="plus">
+    Create a new memory. Category is auto-detected if not provided.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `content` | string | Yes | Content of the memory |
+    | `category` | string | No | Category (auto-detected if omitted) |
+
+    **Returns:** `{ "success": true, "memory": { ... } }`
+  </Accordion>
+
+  <Accordion title="edit_memory" icon="pen">
+    Edit an existing memory's content.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `memory_id` | string | Yes | ID of the memory to edit |
+    | `content` | string | Yes | New content for the memory |
+
+    **Returns:** `{ "success": true }`
+  </Accordion>
+
+  <Accordion title="delete_memory" icon="trash">
+    Delete a memory by ID.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `memory_id` | string | Yes | ID of the memory to delete |
+
+    **Returns:** `{ "success": true }`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Conversation Tools
+
+<AccordionGroup>
+  <Accordion title="get_conversations" icon="comments">
+    Retrieve a list of conversations with optional date and category filtering.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `start_date` | string | No | Filter after this date (YYYY-MM-DD) |
+    | `end_date` | string | No | Filter before this date (YYYY-MM-DD) |
+    | `categories` | array | No | Categories to filter by |
+    | `limit` | number | No | Maximum number of conversations (default: 20) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
+
+    **Returns:** `{ "conversations": [...] }` — metadata only. Use `get_conversation_by_id` for full transcripts.
+
+    **Example:**
+    ```
+    "What did I talk about last week?" → get_conversations with date range
+    "Show my work conversations" → get_conversations with categories: ["work"]
+    ```
+
+    **Conversation categories:** `personal`, `education`, `health`, `finance`, `technology`, `business`, `work`, `social`, `travel`, `entertainment`, `sports`, `family`, and more.
+  </Accordion>
+
+  <Accordion title="search_conversations" icon="magnifying-glass">
+    Semantic search across conversations. Returns results ranked by relevance using vector similarity.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `query` | string | Yes | Natural language search query |
+    | `start_date` | string | No | Filter after this date (YYYY-MM-DD) |
+    | `end_date` | string | No | Filter before this date (YYYY-MM-DD) |
+    | `limit` | number | No | Maximum number of results (default: 10) |
+
+    **Returns:** `{ "conversations": [...] }` — ranked by relevance to the query.
+
+    **Example:**
+    ```
+    "When did I discuss the product launch?" → search_conversations with query: "product launch"
+    "Find conversations about hiring from January" → search_conversations with query: "hiring", start_date: "2026-01-01", end_date: "2026-01-31"
+    ```
+  </Accordion>
+
+  <Accordion title="get_conversation_by_id" icon="file-lines">
+    Retrieve a single conversation by ID, including the full transcript with speaker segments.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `conversation_id` | string | Yes | The ID of the conversation |
+
+    **Returns:** Full conversation object with transcript segments, timestamps, structured summary, and metadata.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Error Handling
+
+All tools return JSON-RPC 2.0 errors when something goes wrong:
+
+| Code | Meaning |
+|------|---------|
+| `-32602` | Invalid parameters (bad date format, unknown category) |
+| `-32001` | Resource not found (memory or conversation doesn't exist) |
+| `-32002` | Locked content (paid plan required) |
+| `-32601` | Unknown tool name |
+
+**Example error response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32001,
+    "message": "Memory not found"
+  }
+}
+```
+
+---
+
+## Locked Content
+
+Memories and conversations behind the paid plan are handled gracefully:
+
+- **Memories:** Content is truncated to 70 characters with `...`
+- **Conversations:** Action items and events are hidden from the structured data
+- **Direct access:** Returns error `-32002` with a clear message

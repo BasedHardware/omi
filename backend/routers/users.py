@@ -57,6 +57,7 @@ from utils.subscription import (
     reconcile_basic_plan_with_stripe,
 )
 from utils import stripe as stripe_utils
+from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -798,7 +799,10 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                     )
                 )
             except Exception as e:
-                logger.error(f"Error retrieving monthly price from Stripe for {definition['plan_id']}: {e}")
+                logger.error(
+                    f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
+                    f"(price_id={monthly_price_id}): {sanitize(str(e))}"
+                )
 
         if annual_price_id:
             try:
@@ -817,7 +821,10 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                     )
                 )
             except Exception as e:
-                logger.error(f"Error retrieving annual price from Stripe for {definition['plan_id']}: {e}")
+                logger.error(
+                    f"Error retrieving annual price from Stripe for {definition['plan_id']} "
+                    f"(price_id={annual_price_id}): {sanitize(str(e))}"
+                )
 
         if plan_prices:
             available_plans.append(

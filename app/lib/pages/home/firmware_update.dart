@@ -424,8 +424,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     widget.isRollback
                         ? context.l10n.installStableFirmware
                         : otaUpdateSteps.isEmpty
-                            ? context.l10n.installUpdate
-                            : context.l10n.updateNow,
+                        ? context.l10n.installUpdate
+                        : context.l10n.updateNow,
                     style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -527,10 +527,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: isLoading
                 ? _buildLoadingSection()
                 : isDownloading || isInstalling
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : _buildUpdateSection(),
+                ? _buildProgressSection()
+                : isInstalled
+                ? _buildSuccessSection()
+                : _buildUpdateSection(),
           ),
         ),
       ),

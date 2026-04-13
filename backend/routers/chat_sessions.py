@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.chat as chat_db
+from database.users import set_chat_message_rating_score
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class SaveMessageRequest(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: int | None = Field(None, ge=-1, le=1)
+    app_version: str | None = None
 
 
 class InitialMessageRequest(BaseModel):
@@ -173,6 +175,10 @@ def rate_message(
         raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
     if not chat_db.update_message_rating(uid, message_id, request.rating):
         raise HTTPException(status_code=404, detail='Message not found')
+    # Also write to analytics collection (same as mobile endpoint) so ratings
+    # appear in the admin dashboard chat ratings chart.
+    value = request.rating if request.rating is not None else 0
+    set_chat_message_rating_score(uid, message_id, value, platform='desktop', app_version=request.app_version)
     return {'status': 'ok'}
 
 

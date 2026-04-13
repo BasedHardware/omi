@@ -64,6 +64,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Title that identifies screen capture reset notifications
     static let screenCaptureResetTitle = "Screen Recording Needs Reset"
 
+    /// UserDefaults key that records whether the screen capture reset notification
+    /// has already been shown in the current broken-capture episode. Cleared by
+    /// `AppState.checkScreenRecordingPermission()` as soon as capture recovers,
+    /// so a new breakage re-notifies exactly once.
+    static let screenCaptureResetShownKey = "screenCaptureResetNotificationShown"
+
     /// Stores metadata for sent notifications so we can retrieve it in delegate callbacks
     /// Key: notification identifier, Value: (title, assistantId)
     private var notificationMetadata: [String: (title: String, assistantId: String)] = [:]
@@ -200,12 +206,34 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
     }
 
-    func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {
+    func sendNotification(
+        title: String,
+        message: String,
+        assistantId: String = "default",
+        sound: NotificationSound = .default,
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
+    ) {
+        // Rate-limit the screen-capture reset notification to one per broken-capture
+        // episode. The recovery loop in ProactiveAssistantsPlugin.attemptAutoReset
+        // re-fires this on every session (soft-recovery + app restart), which buried
+        // users in duplicate banners when a stale TCC csreq from an auto-update made
+        // the capture path unrecoverable without a manual toggle in System Settings.
+        if title == Self.screenCaptureResetTitle {
+            if UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey) {
+                log("NotificationService: suppressing duplicate screen capture reset notification")
+                return
+            }
+            UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+        }
+
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
             assistantId: assistantId,
-            sound: sound
+            sound: sound,
+            context: context,
+            screenshotData: screenshotData
         )
 
         // Keep the floating-bar preview, but still deliver the real macOS

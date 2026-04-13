@@ -640,9 +640,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saving => 'Αποθήκευση...';
 
   @override
-  String get personaConfig => 'Διαμορφώστε την προσωπικότητα του AI σας';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -1721,12 +1718,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ΣΥΣΚΕΥΕΣ',
-      one: 'ΣΥΣΚΕΥΗ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -2444,12 +2436,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get createKeyToGetStarted => 'Δημιουργήστε ένα κλειδί για να ξεκινήσετε';
 
   @override
-  String get persona => 'Περσόνα';
-
-  @override
-  String get configureYourAiPersona => 'Διαμορφώστε την AI περσόνα σας';
-
-  @override
   String get configureSttProvider => 'Διαμόρφωση παρόχου STT';
 
   @override
@@ -2967,9 +2953,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Σχετικά με την εφαρμογή';
-
-  @override
-  String get aboutThePersona => 'Σχετικά με την περσόνα';
 
   @override
   String get chatPersonality => 'Προσωπικότητα συνομιλίας';
@@ -3511,9 +3494,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get changeYourName => 'Αλλάξτε το όνομά σας';
 
   @override
-  String get manageYourOmiPersona => 'Διαχειριστείτε την Omi persona σας';
-
-  @override
   String get voiceAndPeople => 'Φωνή & Άνθρωποι';
 
   @override
@@ -3925,9 +3905,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Κάντε κλικ σε μια συντόμευση για να την αλλάξετε. Πατήστε Escape για ακύρωση.';
 
   @override
-  String get configurePersonaDescription => 'Διαμορφώστε την προσωπικότητα AI σας';
-
-  @override
   String get configureSTTProvider => 'Διαμόρφωση παρόχου STT';
 
   @override
@@ -4284,16 +4261,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get createAndShareYourApp => 'Δημιουργήστε και μοιραστείτε την εφαρμογή σας';
 
   @override
-  String get createMyClone => 'Δημιουργία του κλώνου μου';
-
-  @override
-  String get createYourDigitalClone => 'Δημιουργήστε τον ψηφιακό σας κλώνο';
-
-  @override
   String get itemApp => 'Εφαρμογή';
-
-  @override
-  String get itemPersona => 'Περσόνα';
 
   @override
   String keepItemPublic(String item) {
@@ -4322,9 +4290,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get manageApp => 'Διαχείριση εφαρμογής';
-
-  @override
-  String get updatePersonaDetails => 'Ενημέρωση στοιχείων περσόνας';
 
   @override
   String deleteItemTitle(String item) {
@@ -5861,9 +5826,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chooseFile => 'Επιλογή αρχείου';
 
   @override
-  String get configureAiPersona => 'Διαμορφώστε την AI περσόνα σας';
-
-  @override
   String get connectAiAssistantsToYourData => 'Συνδέστε βοηθούς AI με τα δεδομένα σας';
 
   @override
@@ -6576,29 +6538,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get sharePublicLink => 'Κοινοποίηση δημόσιου συνδέσμου';
 
   @override
-  String get makePersonaPublic => 'Δημοσίευση περσόνας';
-
-  @override
   String get connectedKnowledgeData => 'Συνδεδεμένα δεδομένα γνώσης';
 
   @override
   String get enterName => 'Εισαγωγή ονόματος';
-
-  @override
-  String get disconnectTwitter => 'Αποσύνδεση Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Είστε βέβαιοι ότι θέλετε να αποσυνδέσετε τον λογαριασμό σας στο Twitter; Η περσόνα σας δεν θα χρησιμοποιεί πλέον τα δεδομένα του X.';
-
-  @override
-  String get getOmiDeviceDescription => 'Δημιουργήστε έναν πιο ακριβή κλώνο με τις προσωπικές σας συνομιλίες';
-
-  @override
-  String get getOmi => 'Αποκτήστε Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Έχω συσκευή Omi';
 
   @override
   String get goal => 'ΣΤΟΧΟΣ';
@@ -7151,49 +7094,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Η Persona δεν μπορεί να επιλεγεί με άλλες δυνατότητες';
 
   @override
-  String get personaTwitterHandleNotFound => 'Ο λογαριασμός Twitter δεν βρέθηκε';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Ο λογαριασμός Twitter έχει ανασταλεί';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Αποτυχία επαλήθευσης λογαριασμού Twitter';
-
-  @override
-  String get personaFailedToFetch => 'Αποτυχία ανάκτησης της persona σας';
-
-  @override
-  String get personaFailedToCreate => 'Αποτυχία δημιουργίας persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Συνδέστε τουλάχιστον μία πηγή δεδομένων (Omi ή Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Η persona ενημερώθηκε επιτυχώς';
-
-  @override
-  String get personaFailedToUpdate => 'Αποτυχία ενημέρωσης persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Επιλέξτε μια εικόνα';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Αποτυχία δημιουργίας persona. Δοκιμάστε ξανά αργότερα.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Αποτυχία δημιουργίας persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Αποτυχία ενεργοποίησης persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Σφάλμα κατά την ενεργοποίηση persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Αποτυχία ανάκτησης υποστηριζόμενων χωρών. Δοκιμάστε ξανά αργότερα.';
 
   @override
@@ -7266,22 +7166,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Παρακαλώ δημιουργήστε πρώτα μια εφαρμογή';
-
-  @override
-  String get xHandleTitle => 'Ποιο είναι το X handle σας;';
-
-  @override
-  String get xHandleDescription =>
-      'Θα προεκπαιδεύσουμε τον κλώνο Omi σας\nβάσει της δραστηριότητας του λογαριασμού σας';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Παρακαλώ εισάγετε το X handle σας';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Παρακαλώ εισάγετε ένα έγκυρο X handle';
 
   @override
   String get nextButton => 'Επόμενο';
@@ -7900,9 +7784,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
 
   @override
-  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
-
-  @override
   String get categoryHealth => 'Υγεία';
 
   @override
@@ -8003,9 +7884,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Ενσωματώσεις';
-
-  @override
-  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
 
   @override
   String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';
@@ -9073,4 +8951,18 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Συνέχεια';
+
+  @override
+  String get tasksClearCompleted => 'Εκκαθάριση ολοκληρωμένων';
+
+  @override
+  String get tasksSelectAll => 'Επιλογή όλων';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Διαγραφή $count εργασίας(ών)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Επισημάνθηκε ως ολοκληρωμένο';
 }

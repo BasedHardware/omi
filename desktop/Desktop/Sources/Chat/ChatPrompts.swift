@@ -469,19 +469,26 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 6 tools. ALWAYS use them before answering — don't guess when you can look it up.
+    You have 7 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
     - SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
     - Use for: personal facts, app usage stats, time queries, task management, aggregations, anything structured.
+    - Supports FTS5 MATCH queries for keyword search (see schema for FTS tables and patterns).
 
     **semantic_search**: Vector similarity search on screen history.
     - Use for: fuzzy conceptual queries where exact SQL keywords won't work.
     - e.g. "reading about machine learning", "working on design mockups"
     - Parameters: query (required), days (default 7), app_filter (optional)
 
-    **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range.
+    **search_tasks**: Vector similarity search on tasks (action_items + staged_tasks).
+    - Use for: finding tasks by meaning, not just keywords.
+    - e.g. "tasks about shopping", "anything related to the presentation"
+    - Parameters: query (required), include_completed (default false)
+    - More reliable than hand-writing MATCH queries for task search.
+
+    **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks, focus, memories, observations).
     - Use for: "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
     - Parameters: days_ago (0=today, 1=yesterday, 7=past week, default: 1)
 
@@ -514,6 +521,7 @@ struct ChatPrompts {
     - "what did I do yesterday?" → get_daily_recap (single tool call, returns formatted summary)
     - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
     - "find where I was reading about AI" → semantic_search (conceptual)
+    - "find tasks about shopping" → search_tasks (semantic task search)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
     - "what are my tasks?" → execute_sql (SELECT FROM action_items)
     - "complete the first task" → execute_sql to find backendId, then complete_task
@@ -1155,9 +1163,34 @@ struct ChatPrompts {
         "fromStaged",
     ]
 
-    /// Static suffix appended after the dynamic schema
+    /// Static suffix appended after the dynamic schema — FTS tables, relationships, and query patterns
     static let schemaFooter = """
-    FTS tables: screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description)
+    **FTS5 full-text search tables** (use MATCH for keyword search, BM25 for ranking):
+    - screenshots_fts(ocrText, windowTitle, appName)
+    - action_items_fts(description)
+    - staged_tasks_fts(description)
+    - task_chat_messages_fts(messageText)
+    - proactive_extractions_fts(content, reasoning, contextSummary)
+
+    FTS query patterns:
+    -- Keyword search with JOIN:
+    SELECT s.* FROM screenshots s JOIN screenshots_fts ON screenshots_fts.rowid = s.id WHERE screenshots_fts MATCH 'keyword'
+    -- BM25-ranked search (lower rank = better match):
+    SELECT a.*, bm25(action_items_fts) as rank FROM action_items a JOIN action_items_fts ON action_items_fts.rowid = a.id WHERE action_items_fts MATCH 'keyword' ORDER BY rank
+    -- Multi-word: 'word1 word2' (AND), 'word1 OR word2' (OR), '"exact phrase"'
+
+    **Table relationships** (JOIN on these foreign keys):
+    - action_items.screenshotId → screenshots.id (screen context at extraction)
+    - action_items.conversationId → transcription_sessions.backendId (voice session source)
+    - transcription_segments.sessionId → transcription_sessions.id (transcript lines)
+    - observations.screenshotId → screenshots.id (screen context)
+    - focus_sessions.screenshotId → screenshots.id (screen context)
+    - memories.screenshotId → screenshots.id (screen context)
+    - memories.conversationId → transcription_sessions.backendId (voice session source)
+    - live_notes.sessionId → transcription_sessions.id (recording notes)
+    - staged_tasks.screenshotId → screenshots.id (screen context)
+    - proactive_extractions.screenshotId → screenshots.id (source screen)
+
     Full DDL for any table: SELECT sql FROM sqlite_master WHERE name='table_name'
     """
 

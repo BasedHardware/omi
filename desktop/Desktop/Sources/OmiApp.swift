@@ -309,8 +309,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // (e.g. proactive assistants cancelling in-flight Gemini requests on context switch)
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "NSURLErrorDomain" && exc.value.contains("Code=-999")
-              || exc.type == "NSURLErrorDomain" && exc.value.contains("Code: -999")
+            let value = exc.value ?? ""
+            return exc.type == "NSURLErrorDomain" && (
+              value.contains("Code=-999") || value.contains("Code: -999")
+            )
           })
         {
           return nil
@@ -320,7 +322,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
+            exc.type == "Omi_Computer.AuthError" && (exc.value ?? "").contains("notSignedIn")
           })
         {
           return nil
@@ -342,6 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Initialize analytics (MixPanel + PostHog)
     AnalyticsManager.shared.initialize()
+    AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.appLaunched()
     AnalyticsManager.shared.trackDisplayInfo()
 
@@ -1057,6 +1060,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    // Mark clean exit so crash detection works on next launch
+    UserDefaults.standard.set(true, forKey: "lastSessionCleanExit")
+
     // Remove window observers
     for observer in windowObservers {
       NotificationCenter.default.removeObserver(observer)

@@ -139,8 +139,9 @@ Don't use when (if those tools are available):
 - If backend tools are not available, fall back to execute_sql on the local transcription_sessions table
 
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
+Supports FTS5 MATCH queries for keyword search (e.g., WHERE screenshots_fts MATCH 'keyword').
 
-Key tables: screenshots (appName, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), action_items (description, completed, priority, dueAt).`,
+Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).`,
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -188,7 +189,7 @@ Parameter guidance:
   },
   {
     name: "get_daily_recap",
-    description: `Get a pre-formatted daily activity recap combining app usage, conversations, and tasks.
+    description: `Get a pre-formatted daily activity recap combining app usage, conversations, tasks, focus sessions, memories, and observations.
 
 Use when:
 - User asks "what did I do today/yesterday/this week?"
@@ -200,7 +201,7 @@ Don't use when:
 - User needs detailed transcript content (prefer get_conversations if available)
 - User wants structured data or counts (use execute_sql)
 
-This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
+This tool runs six queries in one call (apps, conversations, tasks, focus, memories, observations) — much faster than multiple execute_sql calls.
 
 Parameter guidance:
 - days_ago=0: today's activity so far
@@ -215,6 +216,35 @@ Parameter guidance:
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "search_tasks",
+    description: `Vector similarity search on tasks (action_items + staged_tasks).
+
+Use when:
+- User asks to find tasks by meaning or topic, not exact keywords
+- e.g. "tasks about shopping", "anything related to the presentation"
+- More reliable than hand-writing FTS MATCH queries for task search
+
+Don't use when:
+- User wants exact keyword match (use execute_sql with action_items_fts MATCH)
+- User wants structured task listing or counts (use execute_sql)
+
+Results are ranked by semantic similarity — top 10 returned.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string" as const,
+          description: "Natural language description of the tasks to find",
+        },
+        include_completed: {
+          type: "boolean" as const,
+          description: "Include completed tasks in results. Default false",
+        },
+      },
+      required: ["query"],
     },
   },
   {
@@ -693,6 +723,17 @@ async function handleJsonRpc(
       } else if (toolName === "get_daily_recap") {
         const daysAgo = (args.days_ago as number) ?? 1;
         const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "search_tasks") {
+        const input: Record<string, unknown> = { query: args.query };
+        if (args.include_completed) input.include_completed = args.include_completed;
+        const result = await requestSwiftTool("search_tasks", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",

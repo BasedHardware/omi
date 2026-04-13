@@ -44,20 +44,65 @@ private struct BrowserConfig {
   let keychainService: String
   let cookiePath: String
 
+  private struct BrowserFamily {
+    let name: String
+    let keychainService: String
+    let userDataPath: String
+  }
+
+  private static func cookiePaths(in userDataPath: String) -> [String] {
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(atPath: userDataPath) else { return [] }
+
+    return
+      entries
+      .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
+      .sorted { lhs, rhs in
+        if lhs == "Default" { return true }
+        if rhs == "Default" { return false }
+        return lhs.localizedStandardCompare(rhs) == .orderedAscending
+      }
+      .map { "\(userDataPath)/\($0)/Cookies" }
+      .filter { fm.fileExists(atPath: $0) }
+  }
+
   static func allBrowsers() -> [BrowserConfig] {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    return [
-      BrowserConfig(
+    let families = [
+      BrowserFamily(
         name: "Arc",
         keychainService: "Arc Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
+        userDataPath: "\(home)/Library/Application Support/Arc/User Data"
       ),
-      BrowserConfig(
+      BrowserFamily(
         name: "Chrome",
         keychainService: "Chrome Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Google/Chrome/Default/Cookies"
+        userDataPath: "\(home)/Library/Application Support/Google/Chrome"
+      ),
+      BrowserFamily(
+        name: "Brave",
+        keychainService: "Brave Safe Storage",
+        userDataPath: "\(home)/Library/Application Support/BraveSoftware/Brave-Browser"
+      ),
+      BrowserFamily(
+        name: "Edge",
+        keychainService: "Microsoft Edge Safe Storage",
+        userDataPath: "\(home)/Library/Application Support/Microsoft Edge"
       ),
     ]
+
+    return families.flatMap { family in
+      cookiePaths(in: family.userDataPath).map { cookiePath in
+        let profileName = URL(fileURLWithPath: cookiePath).deletingLastPathComponent()
+          .lastPathComponent
+        let browserName = profileName == "Default" ? family.name : "\(family.name) (\(profileName))"
+        return BrowserConfig(
+          name: browserName,
+          keychainService: family.keychainService,
+          cookiePath: cookiePath
+        )
+      }
+    }
   }
 }
 
@@ -348,25 +393,20 @@ actor GmailReaderService {
   ) throws
     -> [GmailEmail]
   {
-    let shouldUseBootstrapPage = allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
+    let shouldUseBootstrapPage =
+      allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    // Build browser configs as JSON for Python
+    // Build browser configs as JSON for Python.
+    // Pass the original cookie DB path and open it read-only in Python so we do not miss
+    // live Chromium cookie rows from WAL/journal state while the browser is running.
     var browserConfigs: [[String: String]] = []
     for browser in BrowserConfig.allBrowsers() {
       guard FileManager.default.fileExists(atPath: browser.cookiePath) else { continue }
       guard let password = getKeychainPassword(service: browser.keychainService) else { continue }
 
-      let tmpPath = "/tmp/omi_cookies_\(browser.name)_\(Int(Date().timeIntervalSince1970)).db"
-      do {
-        try FileManager.default.copyItem(atPath: browser.cookiePath, toPath: tmpPath)
-      } catch {
-        log("GmailReaderService: Failed to copy \(browser.name) cookies: \(error)")
-        continue
-      }
-
       browserConfigs.append([
         "name": browser.name,
-        "db_path": tmpPath,
+        "db_path": browser.cookiePath,
         "password": password,
       ])
     }
@@ -381,15 +421,6 @@ actor GmailReaderService {
       configJSON = String(data: data, encoding: .utf8) ?? "[]"
     } catch {
       throw GmailReaderError.networkError("Failed to serialize browser configs")
-    }
-
-    defer {
-      // Clean up temp DB files
-      for config in browserConfigs {
-        if let path = config["db_path"] {
-          try? FileManager.default.removeItem(atPath: path)
-        }
-      }
     }
 
     let pythonScript = """
@@ -426,7 +457,7 @@ actor GmailReaderService {
           key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
           iv = b' ' * 16
           try:
-              conn = sqlite3.connect(db_path)
+              conn = sqlite3.connect(f'file:{db_path}?mode=ro&immutable=1', uri=True, timeout=5)
               c = conn.cursor()
               c.execute('SELECT value FROM meta WHERE key="version"')
               row = c.fetchone()
@@ -835,7 +866,8 @@ actor GmailReaderService {
     guard
       let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
     else {
-      return try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: "newer_than:\(daysBack)d")
+      return try fetchGmailViaAtomFeedSingle(
+        maxResults: maxResults, query: "newer_than:\(daysBack)d")
     }
 
     var collected: [String: GmailEmail] = [:]

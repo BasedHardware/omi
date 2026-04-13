@@ -652,6 +652,7 @@ struct DesktopHomeView: View {
             onDismiss: {
               showTryAskingPopup = false
               PostOnboardingPromptSuggestions.shouldShowPopup = false
+              PostOnboardingPromptSuggestions.isDismissed = true
             }
           )
         }

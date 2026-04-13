@@ -113,6 +113,7 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
         case "Edit": return "Editing file"
@@ -163,6 +164,8 @@ enum ChatContentBlock: Identifiable {
                 summary = nil
             }
         case "semantic_search":
+            summary = input["query"] as? String
+        case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
             summary = input["type"] as? String
@@ -280,6 +283,67 @@ struct MessageMetadata {
 
         return sections
     }
+
+    // Backward-compatible summary counts used by the floating-bar metadata popover.
+    // These intentionally keep the older semantics instead of exposing every raw XML section.
+    var memoriesCount: Int {
+        guard let prompt = systemPrompt,
+              let factsStart = prompt.range(of: "<user_facts>"),
+              let factsEnd = prompt.range(of: "</user_facts>") else { return 0 }
+        let factsSection = String(prompt[factsStart.upperBound..<factsEnd.lowerBound])
+        return factsSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
+    }
+
+    var conversationTurns: Int {
+        guard let prompt = systemPrompt,
+              let histStart = prompt.range(of: "<conversation_history>"),
+              let histEnd = prompt.range(of: "</conversation_history>") else { return 0 }
+        let histSection = String(prompt[histStart.upperBound..<histEnd.lowerBound])
+        return histSection
+            .components(separatedBy: "\n")
+            .filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }
+            .count
+    }
+
+    var tasksCount: Int {
+        guard let prompt = systemPrompt,
+              let tasksStart = prompt.range(of: "<user_tasks>"),
+              let tasksEnd = prompt.range(of: "</user_tasks>") else { return 0 }
+        let tasksSection = String(prompt[tasksStart.upperBound..<tasksEnd.lowerBound])
+        return tasksSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
+    }
+
+    var goalsCount: Int {
+        guard let prompt = systemPrompt,
+              let goalsStart = prompt.range(of: "<user_goals>"),
+              let goalsEnd = prompt.range(of: "</user_goals>") else { return 0 }
+        let goalsSection = String(prompt[goalsStart.upperBound..<goalsEnd.lowerBound])
+        return goalsSection
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
+            .count
+    }
+
+    var availableToolsCount: Int {
+        guard let prompt = systemPrompt else { return 0 }
+        return [
+            "execute_sql",
+            "semantic_search",
+            "search_tasks",
+            "get_daily_recap",
+            "complete_task",
+            "delete_task",
+            "save_knowledge_graph"
+        ]
+        .filter { prompt.contains("**\($0)**") }
+        .count
+    }
 }
 
 /// A single chat message
@@ -299,8 +363,12 @@ struct ChatMessage: Identifiable {
     var contentBlocks: [ChatContentBlock]
     /// Metadata about context used to generate this response (AI messages only)
     var metadata: MessageMetadata?
+    /// Context text for proactive notification messages (not shown to user, sent to Claude)
+    var notificationContext: String?
+    /// Screenshot JPEG data captured when a proactive notification was generated
+    var notificationScreenshot: Data?
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -311,6 +379,8 @@ struct ChatMessage: Identifiable {
         self.citations = citations
         self.contentBlocks = contentBlocks
         self.metadata = metadata
+        self.notificationContext = notificationContext
+        self.notificationScreenshot = notificationScreenshot
     }
 }
 
@@ -625,7 +695,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
+        await preparePromptContextIfNeeded()
         _ = await ensureBridgeStarted()
+    }
+
+    /// Drop a cached ACP session so the next query recreates it with fresh prompt context.
+    func invalidateAgentSession(sessionKey: String) async {
+        guard acpBridgeStarted else { return }
+        await acpBridge.invalidateSession(sessionKey: sessionKey)
     }
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -666,6 +743,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             await APIKeyService.shared.waitForKeys()
         }
         do {
+            await preparePromptContextIfNeeded()
             try await acpBridge.start()
             acpBridgeStarted = true
             log("ChatProvider: ACP bridge started successfully")
@@ -705,6 +783,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
+    }
+
+    /// Ensures all prompt-backed local context is loaded before we build and cache the ACP session prompt.
+    private func preparePromptContextIfNeeded() async {
+        await loadMemoriesIfNeeded()
+        await loadGoalsIfNeeded()
+        await loadTasksIfNeeded()
+        await loadAIProfileIfNeeded()
+        await loadSchemaIfNeeded()
     }
 
     /// Switch between bridge modes (Omi AI vs user's Claude account)
@@ -1256,10 +1343,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         var lines: [String] = ["**Database schema (omi.db):**", ""]
 
         for (name, sql) in tables {
-            // Skip internal/FTS tables
+            // Skip internal tables
             if ChatPrompts.excludedTables.contains(name) { continue }
             if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
-            if name.contains("_fts") { continue } // catches all FTS virtual + internal tables
+            // Skip FTS virtual and shadow tables — documented in schemaFooter with MATCH patterns instead
+            if name.contains("_fts") { continue }
 
             // Extract column names only, stripping types, constraints, and infrastructure columns
             let columnNames = extractColumns(from: sql).compactMap { col -> String? in
@@ -1274,12 +1362,23 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
             lines.append(header)
 
-            // Column names as compact one-liner
-            lines.append("  \(columnNames.joined(separator: ", "))")
+            // Columns with annotations (key columns get descriptions, others are just names)
+            let tableAnnotations = ChatPrompts.columnAnnotations[name] ?? [:]
+            if tableAnnotations.isEmpty {
+                lines.append("  \(columnNames.joined(separator: ", "))")
+            } else {
+                let annotated = columnNames.map { col in
+                    if let desc = tableAnnotations[col] {
+                        return "\(col) — \(desc)"
+                    }
+                    return col
+                }
+                lines.append("  \(annotated.joined(separator: ", "))")
+            }
             lines.append("")
         }
 
-        // Append FTS table note
+        // Append FTS documentation, relationships, and footer
         lines.append(ChatPrompts.schemaFooter)
 
         return lines.joined(separator: "\n")
@@ -1470,6 +1569,69 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         )
     }
 
+
+    // MARK: - Chat Lab Helpers
+
+    /// Build a system prompt for the Chat Lab using a custom template but real user context.
+    func labBuildSystemPrompt(floatingPrefix: String, mainTemplate: String) -> String {
+        let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.givenName
+
+        var prompt = floatingPrefix + "\n\n" + mainTemplate
+        prompt = prompt.replacingOccurrences(of: "{user_name}", with: userName)
+        prompt = prompt.replacingOccurrences(of: "{tz}", with: TimeZone.current.identifier)
+
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_str}", with: df.string(from: Date()))
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone.current
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_iso}", with: isoFormatter.string(from: Date()))
+
+        let utcFormatter = DateFormatter()
+        utcFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        utcFormatter.timeZone = TimeZone(identifier: "UTC")
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_utc}", with: utcFormatter.string(from: Date()))
+
+        prompt = prompt.replacingOccurrences(of: "{memories_section}", with: formatMemoriesSection())
+        prompt = prompt.replacingOccurrences(of: "{goal_section}", with: formatGoalSection())
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: formatTasksSection())
+        prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: formatAIProfileSection())
+        prompt = prompt.replacingOccurrences(of: "{database_schema}", with: cachedDatabaseSchema)
+
+        return prompt
+    }
+
+    /// Run a single question through the ACP bridge for Chat Lab evaluation.
+    /// Uses a unique session key so it doesn't interfere with the real chat.
+    func labRunQuestion(question: String, systemPrompt: String, sessionKey: String) async -> String {
+        // Ensure bridge is running
+        guard await ensureBridgeStarted() else {
+            return "[Bridge not available]"
+        }
+
+        do {
+            let result = try await acpBridge.query(
+                prompt: question,
+                systemPrompt: systemPrompt,
+                sessionKey: sessionKey,
+                model: "claude-sonnet-4-20250514",
+                onTextDelta: { _ in },
+                onToolCall: { callId, name, input in
+                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                    let result = await ChatToolExecutor.execute(toolCall)
+                    log("ChatLab: tool \(name) executed")
+                    return result
+                },
+                onToolActivity: { _, _, _, _ in },
+                onThinkingDelta: { _ in }
+            )
+            return result.text
+        } catch {
+            log("ChatLab: query error: \(error)")
+            return "[Error: \(error.localizedDescription)]"
+        }
+    }
 
     /// Formats the last 10 non-empty messages in the current session as a conversation history string.
     /// Used to seed new ACP sessions with context from the existing chat UI history.
@@ -1907,11 +2069,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
     @discardableResult
-    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+    func appendAssistantMessage(_ text: String, notificationContext: String? = nil, notificationScreenshot: Data? = nil) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
 
-        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai, notificationContext: notificationContext, notificationScreenshot: notificationScreenshot)
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -2083,6 +2245,22 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 systemPrompt += "\n\n" + suffix
             }
 
+            // Auto-inject notification context: if the most recent AI message before
+            // the user's new message is a proactive notification, tell Claude about it
+            // so it can answer follow-up questions about the notification.
+            var effectiveImageData = imageData
+            if systemPromptSuffix == nil {
+                // Find the last AI message before the user's current message
+                let aiMessages = messages.filter { $0.sender == .ai && !$0.isStreaming }
+                if let lastAI = aiMessages.last, let ctx = lastAI.notificationContext {
+                    systemPrompt += "\n\n" + ctx
+                    // Attach the notification screenshot if no other image is provided
+                    if effectiveImageData == nil, let screenshotData = lastAI.notificationScreenshot {
+                        effectiveImageData = screenshotData
+                    }
+                }
+            }
+
             // Query the active bridge with streaming
             // Callbacks for ACP bridge
             let textDeltaHandler: ACPBridge.TextDeltaHandler = { [weak self] delta in
@@ -2166,7 +2344,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
                 resume: resume,
-                imageData: imageData,
+                imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,

@@ -9,12 +9,46 @@ struct FloatingChatExchange: Identifiable {
     let aiMessage: ChatMessage
 }
 
+/// Hidden provenance carried with a floating-bar notification so follow-up
+/// questions can explain where the notification came from without guessing.
+struct FloatingBarNotificationContext: Equatable {
+    let sourceTitle: String
+    let assistantId: String
+    let sourceApp: String?
+    let windowTitle: String?
+    let contextSummary: String?
+    let currentActivity: String?
+    let reasoning: String?
+    let detail: String?
+}
+
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String
     let assistantId: String
+    let context: FloatingBarNotificationContext?
+    /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
+    let screenshotData: Data?
+
+    init(
+        title: String,
+        message: String,
+        assistantId: String,
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.assistantId = assistantId
+        self.context = context
+        self.screenshotData = screenshotData
+    }
+
+    static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 /// Observable object holding the state for the floating control bar.
