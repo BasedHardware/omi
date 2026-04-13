@@ -193,7 +193,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     /// Attempt a single gRPC connection. On failure, schedule a retry with exponential backoff.
+    /// Bails out if monitoring has been stopped (prevents reconnect after intentional shutdown).
     private func attemptGRPCConnect(host: String, port: Int, taskAssistant: TaskAssistant, attempt: Int) async {
+        guard isMonitoring else {
+            log("ProactiveGRPC: Skipping connect — monitoring stopped")
+            return
+        }
         let maxAttempts = 5
         guard attempt <= maxAttempts else {
             log("ProactiveGRPC: Max reconnect attempts (\(maxAttempts)) reached — task extraction disabled")
