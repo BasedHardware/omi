@@ -636,6 +636,9 @@ actor TaskAssistant: ProactiveAssistant {
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }
             }
+        } catch let error as ProactiveGRPCError where error.isRetryable {
+            logError("Task extraction retryable error — will retry on next frame", error: error)
+            // Don't clear grpcClient: the transport is still alive
         } catch {
             logError("Task extraction stream error — clearing gRPC client", error: error)
             self.grpcClient = nil
