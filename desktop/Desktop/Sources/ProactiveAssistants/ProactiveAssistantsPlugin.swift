@@ -221,6 +221,24 @@ public class ProactiveAssistantsPlugin: NSObject {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 
         let client = ProactiveGRPCClient(host: host, port: port)
+
+        // Wire onDisconnect BEFORE connect so there's no window where
+        // transport death goes unnoticed. Client identity check prevents
+        // stale callbacks from clobbering a newer session.
+        let capturedClient = client
+        await client.setOnDisconnect { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                guard self.grpcClient === capturedClient else {
+                    log("ProactiveGRPC: Ignoring stale disconnect callback")
+                    return
+                }
+                log("ProactiveGRPC: Transport disconnected — scheduling reconnect")
+                self.grpcClient = nil
+                await self.connectGRPCClient(for: taskAssistant)
+            }
+        }
+
         do {
             let ready = try await client.connect(
                 authToken: authToken,
@@ -244,23 +262,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             // Wire client to TaskAssistant so it uses server-side analysis
             await taskAssistant.setGRPCClient(client)
-
-            // Wire transport-level disconnect so the plugin reconnects even when idle.
-            // Capture `client` to verify it's still current — prevents stale callbacks
-            // from clobbering a newer session after stop/restart.
-            let capturedClient = client
-            await client.setOnDisconnect { [weak self] in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    guard self.grpcClient === capturedClient else {
-                        log("ProactiveGRPC: Ignoring stale disconnect callback")
-                        return
-                    }
-                    log("ProactiveGRPC: Transport disconnected — scheduling reconnect")
-                    self.grpcClient = nil
-                    await self.connectGRPCClient(for: taskAssistant)
-                }
-            }
         } catch {
             // Exponential backoff: 2s, 4s, 8s, 16s, 32s
             let delaySec = UInt64(pow(2.0, Double(attempt)))
