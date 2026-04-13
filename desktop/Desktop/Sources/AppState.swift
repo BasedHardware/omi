@@ -833,6 +833,7 @@ class AppState: ObservableObject {
         isScreenCaptureKitBroken = false
         isScreenRecordingStale = false
         screenRecordingGrantAttempts = 0
+        UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
         return
       }
 
@@ -877,6 +878,7 @@ class AppState: ObservableObject {
         // Permission recovered (user toggled off/on in System Settings)
         isScreenRecordingStale = false
         screenRecordingGrantAttempts = 0
+        UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
       }
 
       if isScreenCaptureKitBroken {
@@ -888,6 +890,7 @@ class AppState: ObservableObject {
               log("AppState: ScreenCaptureKit recovered — clearing broken flag")
               self.isScreenCaptureKitBroken = false
               self.hasScreenRecordingPermission = true
+              UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
             }
           }
         }
