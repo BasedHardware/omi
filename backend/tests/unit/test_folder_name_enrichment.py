@@ -98,12 +98,8 @@ _stub_module("utils.scopes")
 sys.modules["utils.scopes"].AVAILABLE_SCOPES = {}
 sys.modules["utils.scopes"].validate_scopes = MagicMock()
 
-_stub_module("utils.conversations")
-_stub_module("utils.conversations.process_conversation")
-sys.modules["utils.conversations.process_conversation"].process_conversation = MagicMock()
-
-_stub_module("utils.conversations.location")
-sys.modules["utils.conversations.location"].get_google_maps_location = MagicMock()
+# utils.conversations.enrich imports database.folders and database.users
+# which are already stubbed above — no additional stubs needed.
 
 _stub_module("utils.llm")
 _stub_module("utils.llm.memories")
@@ -124,8 +120,7 @@ sys.modules["dependencies"].get_uid_with_goals_write = MagicMock()
 # ---------------------------------------------------------------------------
 # Now import the actual functions under test
 # ---------------------------------------------------------------------------
-from routers.developer import _add_folder_names_to_conversations
-from utils.webhooks import _add_folder_name_to_payload
+from utils.conversations.enrich import add_folder_names
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -133,7 +128,7 @@ from utils.webhooks import _add_folder_name_to_payload
 
 
 class TestAddFolderNamesToConversations:
-    """Tests for _add_folder_names_to_conversations in developer API."""
+    """Tests for add_folder_names in developer API."""
 
     def setup_method(self):
         _mock_get_folders.reset_mock()
@@ -147,7 +142,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv1', 'folder_id': 'folder1'},
             {'id': 'conv2', 'folder_id': 'folder2'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] == 'Work'
         assert conversations[1]['folder_name'] == 'Personal'
@@ -158,7 +153,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv1', 'folder_id': None},
             {'id': 'conv2'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] is None
         assert conversations[1]['folder_name'] is None
@@ -171,7 +166,7 @@ class TestAddFolderNamesToConversations:
         conversations = [
             {'id': 'conv1', 'folder_id': 'deleted_folder'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] is None
 
@@ -184,7 +179,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv2', 'folder_id': None},
             {'id': 'conv3'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] == 'Work'
         assert conversations[1]['folder_name'] is None
@@ -192,7 +187,7 @@ class TestAddFolderNamesToConversations:
 
     def test_empty_conversations_list(self):
         conversations = []
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert conversations == []
         _mock_get_folders.assert_not_called()
@@ -208,46 +203,46 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv2', 'folder_id': 'f2'},
             {'id': 'conv3', 'folder_id': 'f1'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        add_folder_names('uid1', conversations)
 
         assert _mock_get_folders.call_count == 1
 
 
-class TestAddFolderNameToPayload:
-    """Tests for _add_folder_name_to_payload in webhook."""
+class TestAddFolderNamesWebhookPayload:
+    """Tests for add_folder_names with single-item webhook payloads."""
 
     def setup_method(self):
-        _mock_get_folder.reset_mock()
+        _mock_get_folders.reset_mock()
 
     def test_payload_with_folder_id_gets_folder_name(self):
-        _mock_get_folder.return_value = {'id': 'folder1', 'name': 'Work'}
+        _mock_get_folders.return_value = [{'id': 'folder1', 'name': 'Work'}]
         payload = {'folder_id': 'folder1'}
 
-        _add_folder_name_to_payload('uid1', payload)
+        add_folder_names('uid1', [payload])
 
         assert payload['folder_name'] == 'Work'
-        _mock_get_folder.assert_called_once_with('uid1', 'folder1')
+        _mock_get_folders.assert_called_once_with('uid1')
 
     def test_payload_without_folder_id_gets_none(self):
         payload = {'folder_id': None}
 
-        _add_folder_name_to_payload('uid1', payload)
+        add_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folder.assert_not_called()
+        _mock_get_folders.assert_not_called()
 
     def test_payload_missing_folder_id_key_gets_none(self):
         payload = {}
 
-        _add_folder_name_to_payload('uid1', payload)
+        add_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folder.assert_not_called()
+        _mock_get_folders.assert_not_called()
 
     def test_folder_not_found_in_db_returns_none(self):
-        _mock_get_folder.return_value = None
+        _mock_get_folders.return_value = []
         payload = {'folder_id': 'deleted_folder'}
 
-        _add_folder_name_to_payload('uid1', payload)
+        add_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None

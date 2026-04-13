@@ -13,7 +13,6 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
-import database.folders as folders_db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.memories import MemoryCategory, Memory, MemoryDB
