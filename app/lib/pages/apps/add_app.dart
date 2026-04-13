@@ -744,8 +744,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                           if (appId != null) {
                                             app = await context.read<AppProvider>().getAppFromId(appId);
                                           }
-                                          var paymentProvider = context.read<PaymentMethodProvider>();
-                                          paymentProvider.getPaymentMethodsStatus();
+                                          var paymentProvider = PaymentMethodProvider();
+                                          await paymentProvider.getPaymentMethodsStatus();
 
                                           if (app != null && mounted && context.mounted) {
                                             if (app.isPaid && paymentProvider.activeMethod == null) {
