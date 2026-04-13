@@ -467,6 +467,11 @@ class AuthService {
             // Fetch conversations after successful sign-in
             fetchConversations()
 
+        } catch AuthError.cancelled {
+            // User-initiated cancel: clear any stale error and stay silent.
+            NSLog("OMI AUTH: %@ web OAuth sign-in cancelled by user", provider)
+            self.error = nil
+            throw AuthError.cancelled
         } catch {
             let nsError = error as NSError
             NSLog("OMI AUTH: Error during sign in: %@", error.localizedDescription)
@@ -550,6 +555,24 @@ class AuthService {
 
         NSLog("OMI AUTH: Successfully extracted code and state from callback")
         oauthContinuation?.resume(returning: (code: code, state: state))
+        oauthContinuation = nil
+    }
+
+    /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean
+    /// state. The recovery path we care about: the user fails on the web side
+    /// (closed the tab, denied, or just walked away) and comes back to a
+    /// desktop app whose sign-in buttons are still disabled waiting on a
+    /// callback that will never arrive.
+    @MainActor
+    func cancelSignIn() {
+        guard oauthContinuation != nil else {
+            // No in-flight web OAuth; still reset loading so the UI unblocks.
+            isLoading = false
+            return
+        }
+        NSLog("OMI AUTH: User cancelled in-flight web OAuth sign-in")
+        pendingOAuthState = nil
+        oauthContinuation?.resume(throwing: AuthError.cancelled)
         oauthContinuation = nil
     }
 
@@ -1279,6 +1302,7 @@ enum AuthError: LocalizedError {
     case invalidResponse
     case tokenExchangeFailed(Int)
     case missingCustomToken
+    case cancelled
 
     var errorDescription: String? {
         switch self {
@@ -1308,6 +1332,8 @@ enum AuthError: LocalizedError {
             return "Token exchange failed with status \(code)"
         case .missingCustomToken:
             return "Server did not return authentication token"
+        case .cancelled:
+            return "Sign in cancelled"
         }
     }
 }
