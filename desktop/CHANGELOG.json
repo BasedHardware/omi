@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Task, memory, and focus notifications now open the floating bar with full provenance and sync into home chat history, so follow-up questions can reference the source app, window, and context"
+  ],
   "releases": [
     {
       "version": "0.11.299",
