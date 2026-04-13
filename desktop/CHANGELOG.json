@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Minimized pauses when Omi reads long voice responses out loud"
+    "Minimized pauses when Omi reads long voice responses out loud",
+    "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update"
   ],
   "releases": [
     {
