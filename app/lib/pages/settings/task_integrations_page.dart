@@ -170,8 +170,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings =
-        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -215,6 +214,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           // Save connected status to backend so auto-sync works
           await provider.saveConnectionDetails(app.key, {'connected': true});
           await provider.setSelectedApp(app);
+          MixpanelManager().taskIntegrationEnabled(appName: app.key, success: true);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
           if (mounted) {
