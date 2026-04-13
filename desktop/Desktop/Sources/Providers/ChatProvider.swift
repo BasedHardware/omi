@@ -689,6 +689,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         _ = await ensureBridgeStarted()
     }
 
+    /// Drop a cached ACP session so the next query recreates it with fresh prompt context.
+    func invalidateAgentSession(sessionKey: String) async {
+        guard acpBridgeStarted else { return }
+        await acpBridge.invalidateSession(sessionKey: sessionKey)
+    }
+
     /// Test that the Playwright Chrome extension is connected and working.
     /// Ensures the bridge is started (restarting if needed to pick up new token),
     /// then sends a lightweight test query that triggers a browser_snapshot tool call.

@@ -951,8 +951,15 @@ public class ProactiveAssistantsPlugin: NSObject {
             name: NSNotification.Name("com.omi.test.focus"),
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleNotificationTestNotification(_:)),
+            name: NSNotification.Name("com.omi.test.notification"),
+            object: nil
+        )
         log("InsightTestCLI: Notification observer registered")
         log("FocusTestCLI: Notification observer registered")
+        log("NotificationTestCLI: Notification observer registered")
     }
 
     @objc private func handleInsightTestNotification(_ notification: Notification) {
@@ -970,6 +977,37 @@ public class ProactiveAssistantsPlugin: NSObject {
             let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
             log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
             await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+        }
+    }
+
+    @objc private func handleNotificationTestNotification(_ notification: Notification) {
+        Task { @MainActor in
+            let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let resolvedTitle = title?.isEmpty == false ? title! : "Insight"
+            let resolvedMessage = message?.isEmpty == false ? message! : "Test notification from Omi"
+            let resolvedAssistantId = assistantId?.isEmpty == false ? assistantId! : "insight"
+
+            let context = FloatingBarNotificationContext(
+                sourceTitle: resolvedTitle,
+                assistantId: resolvedAssistantId,
+                sourceApp: notification.userInfo?["sourceApp"] as? String,
+                windowTitle: notification.userInfo?["windowTitle"] as? String,
+                contextSummary: notification.userInfo?["contextSummary"] as? String,
+                currentActivity: notification.userInfo?["currentActivity"] as? String,
+                reasoning: notification.userInfo?["reasoning"] as? String,
+                detail: notification.userInfo?["detail"] as? String
+            )
+
+            log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
+            NotificationService.shared.sendNotification(
+                title: resolvedTitle,
+                message: resolvedMessage,
+                assistantId: resolvedAssistantId,
+                context: context
+            )
         }
     }
 

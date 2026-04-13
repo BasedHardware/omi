@@ -301,6 +301,20 @@ actor ACPBridge {
     }
   }
 
+  /// Invalidate a cached session key so the next query creates a fresh ACP session.
+  func invalidateSession(sessionKey: String) {
+    guard isRunning else { return }
+    let msg: [String: Any] = [
+      "type": "invalidate_session",
+      "sessionKey": sessionKey,
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: msg),
+      let str = String(data: data, encoding: .utf8)
+    {
+      sendLine(str)
+    }
+  }
+
   // MARK: - Query
 
   /// Send a query to the ACP agent and stream results back.
