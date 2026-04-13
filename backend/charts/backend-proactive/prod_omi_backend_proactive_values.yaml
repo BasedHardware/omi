@@ -1,0 +1,180 @@
+# Default values for backend-proactive (prod).
+# Uses the same Docker image as backend-listen.
+
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware/backend
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"8080":{"name": "prod-backend-proactive-neg"}}}'
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+env:
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GOOGLE_APPLICATION_CREDENTIALS
+  - name: ADMIN_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ADMIN_KEY
+  - name: REDIS_DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PORT
+    value: "13151"
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: DD_SERVICE
+    value: "backend-proactive"
+  - name: DD_ENV
+    value: "prod"
+  - name: DD_TRACE_ENABLED
+    value: "true"
+  - name: DD_TRACE_PROPAGATION_STYLE
+    value: "datadog"
+  - name: DD_TRACE_SAMPLE_RATE
+    value: "1"
+  - name: DD_SITE
+    value: "us5.datadoghq.com"
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DD_API_KEY
+
+resources:
+  requests:
+    cpu: 0.5
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /v1/health
+    port: 8080
+  failureThreshold: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /v1/health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /v1/health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 300
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      selectPolicy: Max
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: "50%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 5"]
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - backend-proactive
+            - key: env
+              operator: In
+              values:
+                - prod

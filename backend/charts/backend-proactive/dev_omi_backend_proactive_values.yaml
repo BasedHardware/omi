@@ -1,0 +1,163 @@
+# Default values for backend-proactive (dev).
+# Uses the same Docker image as backend-listen.
+
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/backend
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"8080":{"name": "dev-backend-proactive-neg"}}}'
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+env:
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GOOGLE_APPLICATION_CREDENTIALS
+  - name: ADMIN_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ADMIN_KEY
+  - name: REDIS_DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PORT
+    value: "13151"
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: DD_SERVICE
+    value: "backend-proactive"
+  - name: DD_ENV
+    value: "dev"
+  - name: DD_TRACE_ENABLED
+    value: "false"
+
+resources:
+  requests:
+    cpu: 0.25
+    memory: 512Mi
+  limits:
+    cpu: 0.5
+    memory: 1Gi
+
+livenessProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+readinessProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+startupProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      selectPolicy: Max
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: "50%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 1
+
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 5"]
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - backend-proactive
+            - key: env
+              operator: In
+              values:
+                - dev
