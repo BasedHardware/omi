@@ -135,6 +135,42 @@ class TestRedactForIntegration:
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
 
+    def test_locked_non_dict_structured_coerced(self):
+        """Integration redaction also handles non-dict structured (e.g. Pydantic)."""
+
+        class FakeStructured:
+            def __init__(self):
+                self.title = "Title"
+                self.overview = "Overview"
+                self.action_items = [{"desc": "x"}]
+                self.events = [{"title": "y"}]
+
+            def __iter__(self):
+                return iter(
+                    {
+                        "title": self.title,
+                        "overview": self.overview,
+                        "action_items": self.action_items,
+                        "events": self.events,
+                    }.items()
+                )
+
+        conv = {
+            "id": "x",
+            "is_locked": True,
+            "structured": FakeStructured(),
+            "apps_results": [{"a": 1}],
+            "plugins_results": [{"p": 1}],
+            "suggested_summarization_apps": ["app1"],
+            "transcript_segments": [{"text": "hi"}],
+        }
+        result = redact_conversation_for_integration(conv)
+        assert isinstance(result['structured'], dict)
+        assert result['structured']['title'] == ''
+        assert result['structured']['overview'] == ''
+        assert result['structured']['action_items'] == []
+        assert result['structured']['events'] == []
+
     def test_batch_redact(self):
         convs = [_make_conv_dict(is_locked=True), _make_conv_dict(is_locked=False)]
         results = redact_conversations_for_integration(convs)
@@ -217,6 +253,7 @@ class TestCallSitesMigrated:
         'routers/mcp.py',
         'routers/mcp_sse.py',
         'routers/integration.py',
+        'routers/folders.py',
     ]
 
     ENRICH_CONSUMERS = [
