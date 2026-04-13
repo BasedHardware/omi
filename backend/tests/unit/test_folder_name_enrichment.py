@@ -120,7 +120,7 @@ sys.modules["dependencies"].get_uid_with_goals_write = MagicMock()
 # ---------------------------------------------------------------------------
 # Now import the actual functions under test
 # ---------------------------------------------------------------------------
-from utils.conversations.enrich import add_folder_names
+from utils.conversations.enrich import add_folder_names, add_speaker_names
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -246,3 +246,91 @@ class TestAddFolderNamesWebhookPayload:
         add_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
+
+
+# ---------------------------------------------------------------------------
+# Speaker name enrichment tests
+# ---------------------------------------------------------------------------
+_mock_get_user_profile = users_mod.get_user_profile
+_mock_get_people_by_ids = users_mod.get_people_by_ids
+
+
+class TestAddSpeakerNames:
+    """Tests for add_speaker_names enrichment."""
+
+    def setup_method(self):
+        _mock_get_user_profile.reset_mock()
+        _mock_get_people_by_ids.reset_mock()
+        _mock_get_user_profile.return_value = {"name": "TestUser"}
+        _mock_get_people_by_ids.return_value = []
+
+    def test_user_segments_get_user_name(self):
+        conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'TestUser'
+
+    def test_known_person_id_gets_person_name(self):
+        _mock_get_people_by_ids.return_value = [{'id': 'p1', 'name': 'Alice'}]
+        conversations = [
+            {'transcript_segments': [{'text': 'hi', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1}]}
+        ]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Alice'
+
+    def test_unknown_person_id_falls_back_to_speaker_id(self):
+        _mock_get_people_by_ids.return_value = []
+        conversations = [
+            {'transcript_segments': [{'text': 'hi', 'is_user': False, 'person_id': 'unknown_p', 'speaker_id': 3}]}
+        ]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 3'
+
+    def test_no_person_id_no_is_user_falls_back_to_speaker_id(self):
+        conversations = [{'transcript_segments': [{'text': 'hi', 'speaker_id': 2}]}]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 2'
+
+    def test_missing_speaker_id_defaults_to_zero(self):
+        conversations = [{'transcript_segments': [{'text': 'hi'}]}]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 0'
+
+    def test_user_profile_missing_name_falls_back_to_user(self):
+        _mock_get_user_profile.return_value = {"name": None}
+        conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]
+        add_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'User'
+
+    def test_empty_conversations_list(self):
+        add_speaker_names('uid1', [])
+        _mock_get_user_profile.assert_called_once_with('uid1')
+        _mock_get_people_by_ids.assert_not_called()
+
+    def test_no_transcript_segments_key(self):
+        conversations = [{'id': 'conv1'}]
+        add_speaker_names('uid1', conversations)
+        # Should not crash — no segments to enrich
+
+    def test_batch_loads_people_once(self):
+        _mock_get_people_by_ids.return_value = [
+            {'id': 'p1', 'name': 'Alice'},
+            {'id': 'p2', 'name': 'Bob'},
+        ]
+        conversations = [
+            {
+                'transcript_segments': [
+                    {'text': 'hi', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1},
+                ]
+            },
+            {
+                'transcript_segments': [
+                    {'text': 'hey', 'is_user': False, 'person_id': 'p2', 'speaker_id': 2},
+                    {'text': 'yo', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1},
+                ]
+            },
+        ]
+        add_speaker_names('uid1', conversations)
+        assert _mock_get_people_by_ids.call_count == 1
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Alice'
+        assert conversations[1]['transcript_segments'][0]['speaker_name'] == 'Bob'
+        assert conversations[1]['transcript_segments'][1]['speaker_name'] == 'Alice'
