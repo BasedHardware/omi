@@ -159,6 +159,99 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
+    _startAudioInterruptionListener();
+  }
+
+  // iOS-only: subscribe to AVAudioSession interruption events surfaced by the
+  // native side (see app/ios/Runner/AudioInterruptionManager.swift). We use
+  // these to (a) reflect the interruption immediately in recordingState, and
+  // (b) proactively restart the phone mic once iOS signals .ended, since
+  // flutter_sound does not auto-resume on its own.
+  StreamSubscription? _audioInterruptionSubscription;
+  static const EventChannel _audioInterruptionChannel = EventChannel('com.omi.ios/audioInterruption');
+
+  void _startAudioInterruptionListener() {
+    if (!Platform.isIOS) return;
+    _audioInterruptionSubscription?.cancel();
+    _audioInterruptionSubscription = _audioInterruptionChannel.receiveBroadcastStream().listen(
+      (dynamic event) {
+        if (event is! Map) return;
+        final type = event['type'];
+        if (type == 'began') {
+          _onAudioInterruptionBegan();
+        } else if (type == 'ended') {
+          _onAudioInterruptionEnded();
+        }
+      },
+      onError: (Object err) {
+        Logger.error('[CaptureProvider] audioInterruption channel error: $err');
+      },
+    );
+  }
+
+  void _onAudioInterruptionBegan() {
+    Logger.debug('[CaptureProvider] iOS audio session interruption began');
+    // Include `initialising`: if a call arrives while the recorder is still
+    // coming up (permission prompt, session setup), the state was otherwise
+    // stuck at initialising with no signal of the broken pipeline and the
+    // .ended path could not recover it.
+    if (recordingState == RecordingState.record || recordingState == RecordingState.initialising) {
+      updateRecordingState(RecordingState.interrupted);
+    }
+  }
+
+  void _onAudioInterruptionEnded() {
+    Logger.debug('[CaptureProvider] iOS audio session interruption ended');
+    // Only attempt a restart if we are mid-session on the phone mic. Device
+    // recording is unaffected by phone-side audio session interruption.
+    if (_activeSource is! PhoneMicSource) return;
+    if (recordingState != RecordingState.interrupted &&
+        recordingState != RecordingState.record &&
+        recordingState != RecordingState.initialising) {
+      return;
+    }
+    _restartPhoneMicRecording();
+  }
+
+  bool _phoneMicRestartInFlight = false;
+
+  Future<void> _restartPhoneMicRecording() async {
+    if (_phoneMicRestartInFlight) return;
+    _phoneMicRestartInFlight = true;
+    try {
+      ServiceManager.instance().mic.stop();
+      // Let iOS fully release the session before we re-activate it.
+      await Future.delayed(const Duration(milliseconds: 250));
+      // Re-check state after the await: the user may have tapped stop during
+      // the delay window. Without this guard we would restart recording
+      // against the user's intent.
+      if (recordingState != RecordingState.interrupted &&
+          recordingState != RecordingState.record &&
+          recordingState != RecordingState.initialising) {
+        return;
+      }
+      await streamRecording();
+    } catch (e, st) {
+      Logger.error('[CaptureProvider] failed to restart phone mic: $e\n$st');
+    } finally {
+      _phoneMicRestartInFlight = false;
+    }
+  }
+
+  void _onMicStalled() {
+    // The byte stream from the native recorder has gone silent for longer than
+    // the stall threshold. On iOS this is the fingerprint of an AVAudioSession
+    // interruption that the .ended observer did not fire for (e.g., the user
+    // was already in a call when recording started). Reflect it in UI state.
+    Logger.debug('[CaptureProvider] phone mic byte stream stalled');
+    if (_activeSource is! PhoneMicSource) return;
+    // Covers `initialising` as well: the heartbeat timer starts inside
+    // MicRecorderService.start once the recorder's stream is wired up, so a
+    // stall can fire before the onRecording callback has flipped us to
+    // `record`.
+    if (recordingState == RecordingState.record || recordingState == RecordingState.initialising) {
+      updateRecordingState(RecordingState.interrupted);
+    }
   }
 
   void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
@@ -292,10 +385,14 @@ class CaptureProvider extends ChangeNotifier
 
   bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
 
-  // having a connected device or using the phone's mic for recording
+  // having a connected device or using the phone's mic for recording.
+  // Includes `interrupted` so the keep-alive/reconnect path keeps running
+  // while the phone mic is in a transiently-broken state (e.g., iOS audio
+  // session interruption after an incoming call).
   bool get recordingDeviceServiceReady =>
       _recordingDevice != null ||
       recordingState == RecordingState.record ||
+      recordingState == RecordingState.interrupted ||
       recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
@@ -399,9 +496,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -415,13 +511,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -514,24 +610,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -619,8 +711,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -723,9 +815,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -896,6 +987,7 @@ class CaptureProvider extends ChangeNotifier
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _connectionStateListener?.cancel();
+    _audioInterruptionSubscription?.cancel();
     _metricsTimer?.cancel();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
@@ -956,29 +1048,30 @@ class CaptureProvider extends ChangeNotifier
 
     // record
     await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        // Process through AudioSource for frame splitting and sync key generation
-        final frames = _activeSource?.processBytes(bytes) ?? [];
+          onByteReceived: (bytes) {
+            // Process through AudioSource for frame splitting and sync key generation
+            final frames = _activeSource?.processBytes(bytes) ?? [];
 
-        for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
+            for (final frame in frames) {
+              _wal.getSyncs().phone.onFrameCaptured(frame);
 
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
-            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-          }
-        }
-      },
-      onRecording: () {
-        updateRecordingState(RecordingState.record);
-      },
-      onStop: () {
-        updateRecordingState(RecordingState.stop);
-      },
-      onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      },
-    );
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(frame.payload);
+                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              }
+            }
+          },
+          onRecording: () {
+            updateRecordingState(RecordingState.record);
+          },
+          onStop: () {
+            updateRecordingState(RecordingState.stop);
+          },
+          onInitializing: () {
+            updateRecordingState(RecordingState.initialising);
+          },
+          onStalled: _onMicStalled,
+        );
   }
 
   stopStreamRecording() async {
@@ -1035,8 +1128,13 @@ class CaptureProvider extends ChangeNotifier
       usageProvider?.markAsOutOfCreditsAndRefresh();
     }
 
-    // Show brief warning when transcription drops during phone mic recording
+    // Reflect the transcription pipeline break in recordingState. Before this
+    // change the UI kept reading "record" while the socket was dead, which
+    // looked like active capture to the user (issue #6499). Only flip when we
+    // were actively phone-mic recording — device/system-audio flows have their
+    // own state lanes.
     if (recordingState == RecordingState.record) {
+      updateRecordingState(RecordingState.interrupted);
       final ctx = globalNavigatorKey.currentContext;
       if (ctx != null) {
         AppSnackbar.showSnackbar(ctx.l10n.transcriptionPausedReconnecting, duration: const Duration(seconds: 3));
@@ -1075,7 +1173,7 @@ class CaptureProvider extends ChangeNotifier
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
-      if (recordingState == RecordingState.record) {
+      if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
         await _initiateWebsocket(
           audioCodec: BleAudioCodec.pcm16,
           sampleRate: 16000,
@@ -1098,6 +1196,14 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
+    // Socket is back up. If we had flipped to `interrupted` solely because the
+    // transcription socket dropped, restore the optimistic `record` state. If
+    // the mic is still actually silent, the stall heartbeat will re-flag it.
+    // `interrupted` is only set from phone-mic code paths (onClosed/onMicStalled
+    // /interruption observer) so no source-type guard is needed here.
+    if (recordingState == RecordingState.interrupted) {
+      updateRecordingState(RecordingState.record);
+    }
     notifyListeners();
   }
 

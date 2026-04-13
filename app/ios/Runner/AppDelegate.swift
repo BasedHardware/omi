@@ -16,6 +16,7 @@ extension FlutterError: Error {}
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private let audioInterruptionManager = AudioInterruptionManager()
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -99,6 +100,12 @@ extension FlutterError: Error {}
             result(FlutterMethodNotImplemented)
         }
     }
+
+    // AVAudioSession interruption bridge (issue #6499). Surfaces .began/.ended
+    // events to Dart so phone-mic recording can reflect the interruption in
+    // UI state and restart capture once iOS signals the interruption has
+    // ended — flutter_sound does not auto-resume on its own.
+    audioInterruptionManager.register(with: controller!.binaryMessenger)
 
     // Audio session configuration for Bluetooth microphone support
     let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
