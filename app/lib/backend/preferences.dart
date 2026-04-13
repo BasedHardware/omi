@@ -574,6 +574,10 @@ class SharedPreferencesUtil {
 
   //--------------------------------- Auth ------------------------------------//
 
+  String get customBackendUrl => getString('customBackendUrl');
+
+  set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
   String get authToken => getString('authToken');
 
   set authToken(String value) => saveString('authToken', value);

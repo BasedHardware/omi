@@ -40,12 +40,21 @@ class DeveloperSettingsPage extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+  final _backendUrlController = TextEditingController();
+
   @override
   void initState() {
+    _backendUrlController.text = SharedPreferencesUtil().customBackendUrl;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<McpProvider>().fetchKeys();
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _backendUrlController.dispose();
+    super.dispose();
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -599,6 +608,119 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Self-Hosted Backend Section
+                  _buildSectionHeader(
+                    'Self-Hosted Backend',
+                    subtitle: 'Override the API URL to use your own backend instead of api.omi.me. '
+                        'Leave empty to use the default. Requires app restart to take effect.',
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Backend URL',
+                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    Env.apiBaseUrl ?? 'https://api.omi.me',
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _backendUrlController,
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: 'https://your-backend.example.com',
+                            hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                            filled: true,
+                            fillColor: const Color(0xFF2A2A2E),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            suffixIcon: _backendUrlController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(Icons.clear, color: Colors.grey.shade500, size: 18),
+                                    onPressed: () {
+                                      _backendUrlController.clear();
+                                      SharedPreferencesUtil().customBackendUrl = '';
+                                      Env.overrideApiBaseUrl('');
+                                      setState(() {});
+                                      AppSnackbar.showSnackbar('Backend URL cleared — restart app to apply');
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final url = _backendUrlController.text.trim().replaceAll(RegExp(r'/+$'), '');
+                              if (url.isNotEmpty && !url.startsWith('http')) {
+                                AppSnackbar.showSnackbar('URL must start with http:// or https://');
+                                return;
+                              }
+                              SharedPreferencesUtil().customBackendUrl = url;
+                              Env.overrideApiBaseUrl(url.isNotEmpty ? url : Env.apiBaseUrl ?? '');
+                              setState(() {});
+                              AppSnackbar.showSnackbar(
+                                url.isEmpty ? 'Restored default backend — restart app to apply' : 'Backend URL saved — restart app to apply',
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2A2A2E),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
+                            child: const Text('Save Backend URL', style: TextStyle(fontWeight: FontWeight.w500)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Note: your backend must have LOCAL_DEVELOPMENT=true to accept tokens from the Omi app.',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 32),
