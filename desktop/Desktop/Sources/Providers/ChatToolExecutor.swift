@@ -594,7 +594,15 @@ class ChatToolExecutor {
         await EmbeddingService.shared.loadIndex()
       }
 
+      // Verify index actually has entries (loadIndex swallows errors)
+      if !(await EmbeddingService.shared.indexLoaded) {
+        return "Error: embedding index failed to load. Task vector search is unavailable."
+      }
+
       // Embed the query text
+      // Note: EmbeddingService uses a shared Int64-keyed index for both action_items and
+      // staged_tasks. If IDs overlap, the staged_task embedding overwrites the action_item one.
+      // The lookup below tries action_items first then staged_tasks, matching TaskAssistant behavior.
       let queryEmbedding = try await EmbeddingService.shared.embed(
         text: query, taskType: "RETRIEVAL_QUERY")
 
