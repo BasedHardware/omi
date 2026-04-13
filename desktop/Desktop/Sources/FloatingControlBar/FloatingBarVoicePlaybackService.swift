@@ -10,9 +10,17 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   nonisolated private static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"  // Sloane
   nonisolated private static let defaultModelID = "eleven_turbo_v2_5"
-  nonisolated private static let minimumChunkLength = 40
-  nonisolated private static let preferredChunkLength = 120
-  nonisolated private static let emergencyChunkLength = 200
+  // First chunk stays small so playback starts fast.
+  nonisolated private static let firstChunkMinimumLength = 40
+  nonisolated private static let firstChunkPreferredLength = 120
+  nonisolated private static let firstChunkEmergencyLength = 200
+  // Follow-up chunks are much larger so the response is stitched from fewer
+  // ElevenLabs MP3s. Each chunk boundary carries leading/trailing silence, so
+  // fewer chunks means far less perceived pausing between sentences and
+  // paragraphs of a long answer.
+  nonisolated private static let followupChunkMinimumLength = 320
+  nonisolated private static let followupChunkPreferredLength = 520
+  nonisolated private static let followupChunkEmergencyLength = 800
   private var playbackRate: Float { ShortcutSettings.shared.voicePlaybackSpeed }
 
   nonisolated private static let fillerPhrases: [String] = [
@@ -38,6 +46,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private var audioQueue: [Data] = []
   private var isSynthesizing = false
   private var hasStartedRealPlayback = false
+  private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
   private let speechSynthesizer = AVSpeechSynthesizer()
 
@@ -147,12 +156,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
-    while let boundary = Self.nextChunkBoundary(in: bufferedText, isFinal: isFinal) {
+    while let boundary = Self.nextChunkBoundary(
+      in: bufferedText, isFinal: isFinal, isFirstChunk: !hasEmittedFirstChunk)
+    {
       let chunk = String(bufferedText[..<boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
       bufferedText = String(bufferedText[boundary...]).trimmingCharacters(
         in: .whitespacesAndNewlines)
 
       guard !chunk.isEmpty, Self.shouldSpeak(chunk) else { continue }
+      hasEmittedFirstChunk = true
       enqueueChunk(chunk, mode: mode)
     }
   }
@@ -286,6 +298,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     audioQueue.removeAll()
     isSynthesizing = false
     hasStartedRealPlayback = false
+    hasEmittedFirstChunk = false
     audioPlayer?.stop()
     audioPlayer = nil
     speechSynthesizer.stopSpeaking(at: .immediate)
@@ -374,8 +387,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     return true
   }
 
-  private nonisolated static func nextChunkBoundary(in text: String, isFinal: Bool) -> String.Index?
-  {
+  private nonisolated static func nextChunkBoundary(
+    in text: String, isFinal: Bool, isFirstChunk: Bool
+  ) -> String.Index? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
@@ -383,27 +397,33 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       return text.endIndex
     }
 
-    guard text.count >= minimumChunkLength else { return nil }
+    let minLength = isFirstChunk ? firstChunkMinimumLength : followupChunkMinimumLength
+    let preferredLength =
+      isFirstChunk ? firstChunkPreferredLength : followupChunkPreferredLength
+    let emergencyLength =
+      isFirstChunk ? firstChunkEmergencyLength : followupChunkEmergencyLength
+
+    guard text.count >= minLength else { return nil }
 
     let preferredLimit = text.index(
-      text.startIndex, offsetBy: min(text.count, preferredChunkLength))
+      text.startIndex, offsetBy: min(text.count, preferredLength))
     let preferredSlice = text[..<preferredLimit]
 
     if let punctuationIndex = preferredSlice.lastIndex(where: { ".!?\n".contains($0) }) {
       return text.index(after: punctuationIndex)
     }
 
-    guard text.count >= preferredChunkLength else { return nil }
+    guard text.count >= preferredLength else { return nil }
 
     let emergencyLimit = text.index(
-      text.startIndex, offsetBy: min(text.count, emergencyChunkLength))
+      text.startIndex, offsetBy: min(text.count, emergencyLength))
     let emergencySlice = text[..<emergencyLimit]
 
     if let punctuationIndex = emergencySlice.lastIndex(where: { ".!?\n".contains($0) }) {
       return text.index(after: punctuationIndex)
     }
 
-    guard text.count >= emergencyChunkLength else { return nil }
+    guard text.count >= emergencyLength else { return nil }
 
     if let clauseIndex = emergencySlice.lastIndex(where: { ",;:\n".contains($0) }) {
       return text.index(after: clauseIndex)
