@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Minimized pauses when Omi reads long voice responses out loud",
-    "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update"
+    "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update",
+    "Improved chat tool discoverability: richer database schema with column descriptions, table relationships, FTS search patterns, new search_tasks tool, and enriched daily recap with focus sessions, memories, and observations"
   ],
   "releases": [
     {
