@@ -14,6 +14,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 import database.folders as folders_db
+from database.vector_db import upsert_memory_vectors_batch
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
@@ -270,6 +271,21 @@ def create_memories_batch(
 
     # Save all memories to database
     memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])
+
+    # Upsert vectors in a single Pinecone call so these memories show up in
+    # semantic search. Previously the dev batch endpoint skipped this step and
+    # batch-created memories were invisible to RAG retrieval.
+    upsert_memory_vectors_batch(
+        uid,
+        [
+            {
+                "memory_id": mem.id,
+                "content": mem.content,
+                "category": mem.category.value,
+            }
+            for mem in memory_dbs
+        ],
+    )
 
     # Update personas if any memory is public
     if has_public:
