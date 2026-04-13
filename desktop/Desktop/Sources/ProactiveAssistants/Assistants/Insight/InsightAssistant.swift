@@ -256,7 +256,12 @@ actor InsightAssistant: ProactiveAssistant {
             InsightAssistantSettings.shared.notificationsEnabled
         }
         if notificationsEnabled {
-            await sendInsightNotification(insight: extractedInsight, screenshotData: screenshotData)
+            await sendInsightNotification(
+                insight: extractedInsight,
+                result: adviceResult,
+                windowTitle: windowTitle,
+                screenshotData: screenshotData
+            )
         }
 
         // Send event to Flutter
@@ -345,14 +350,30 @@ actor InsightAssistant: ProactiveAssistant {
     }
 
     /// Send a notification for the insight (uses short headline for notification body)
-    private func sendInsightNotification(insight: ExtractedInsight, screenshotData: Data? = nil) async {
+    private func sendInsightNotification(
+        insight: ExtractedInsight,
+        result: InsightExtractionResult,
+        windowTitle: String?,
+        screenshotData: Data? = nil
+    ) async {
         let message = insight.headline ?? insight.insight
+        let context = FloatingBarNotificationContext(
+            sourceTitle: "Insight",
+            assistantId: identifier,
+            sourceApp: insight.sourceApp.isEmpty ? nil : insight.sourceApp,
+            windowTitle: windowTitle,
+            contextSummary: result.contextSummary,
+            currentActivity: result.currentActivity,
+            reasoning: insight.reasoning,
+            detail: insight.insight
+        )
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
                 title: "Insight",
                 message: message,
                 assistantId: identifier,
+                context: context,
                 screenshotData: screenshotData
             )
         }

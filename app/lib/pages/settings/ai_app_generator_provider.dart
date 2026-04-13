@@ -297,8 +297,9 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         return _createdAppId;
       } else {
         _state = GenerationState.error;
-        _errorMessage =
-            result.$2.isNotEmpty ? result.$2 : globalNavigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
+        _errorMessage = result.$2.isNotEmpty
+            ? result.$2
+            : globalNavigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
         notifyListeners();
         return null;
       }

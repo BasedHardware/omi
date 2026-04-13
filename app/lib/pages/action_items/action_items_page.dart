@@ -390,8 +390,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F22),
-        title: Text(context.l10n.tasksClearCompleted,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.tasksClearCompleted,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         content: Text(context.l10n.tasksCleanTodayMessage, style: TextStyle(color: Colors.grey[300], fontSize: 14)),
         actions: [
           TextButton(
@@ -525,8 +527,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               _buildFab(),
@@ -655,8 +657,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           child: Container(
                             width: 32,
                             height: 32,
-                            decoration:
-                                BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
                             child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
                           ),
                         ),
@@ -1038,7 +1042,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               color: const Color(0xFF2C2C2E),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))
+                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             child: Row(
@@ -1197,8 +1201,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   width: 44,
                   height: 44,
                   child: Center(
-                    child:
-                        provider.isSelectionMode ? _buildSelectionCheckbox(isSelected) : _buildCheckbox(item.completed),
+                    child: provider.isSelectionMode
+                        ? _buildSelectionCheckbox(isSelected)
+                        : _buildCheckbox(item.completed),
                   ),
                 ),
               ),

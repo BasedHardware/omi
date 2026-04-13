@@ -24,9 +24,9 @@ class CreateOptionsSheet extends StatelessWidget {
           Text(
             context.l10n.whatWouldYouLikeToCreate,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w400,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              fontWeight: FontWeight.w400,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 24),
           Card(

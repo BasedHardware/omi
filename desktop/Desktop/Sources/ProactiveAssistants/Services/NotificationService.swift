@@ -200,12 +200,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
     }
 
-    func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default, screenshotData: Data? = nil) {
+    func sendNotification(
+        title: String,
+        message: String,
+        assistantId: String = "default",
+        sound: NotificationSound = .default,
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
+    ) {
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
             assistantId: assistantId,
             sound: sound,
+            context: context,
             screenshotData: screenshotData
         )
 

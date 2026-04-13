@@ -368,8 +368,9 @@ class App {
       image: json['image'],
       chatPrompt: json['chat_prompt'],
       conversationPrompt: json['memory_prompt'],
-      externalIntegration:
-          json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
+      externalIntegration: json['external_integration'] != null
+          ? ExternalIntegration.fromJson(json['external_integration'])
+          : null,
       reviews: AppReview.fromJsonList(json['reviews'] ?? []),
       userReview: json['user_review'] != null ? AppReview.fromJson(json['user_review']) : null,
       ratingAvg: json['rating_avg'],
