@@ -1,23 +1,23 @@
 # Omi Backend — One-Click Deployment
 
-Self-host the omi backend on your own hardware with a single command.
+Self-host the omi backend with a single command using Docker Compose.
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) 20.10+
-- [Docker Compose](https://docs.docker.com/compose/install/) v2 (plugin) or v1 (standalone)
-- The following API credentials (see table below)
+- Docker Compose v2 (plugin) or v1 (standalone)
+- API credentials listed below
 
 ## Required API Keys
 
-| Service | Used for | Get it at |
-|---------|----------|-----------|
-| Firebase / GCP | Auth, Firestore, Storage | [console.firebase.google.com](https://console.firebase.google.com) |
-| OpenAI | AI features, chat | [platform.openai.com](https://platform.openai.com) |
+| Service | Purpose | Sign up |
+|---------|---------|---------|
+| Firebase / GCP | Auth, Firestore DB, Storage | [console.firebase.google.com](https://console.firebase.google.com) |
+| OpenAI | AI chat and processing | [platform.openai.com](https://platform.openai.com) |
 | Deepgram | Audio transcription | [console.deepgram.com](https://console.deepgram.com) |
 | Pinecone | Vector memory search | [app.pinecone.io](https://app.pinecone.io) |
 
-Redis and Typesense run locally in Docker — no external accounts needed.
+**Redis** and **Typesense** run locally inside Docker — no external accounts needed.
 
 ## Quick Start
 
@@ -26,60 +26,58 @@ Redis and Typesense run locally in Docker — no external accounts needed.
 git clone https://github.com/BasedHardware/omi.git
 cd omi/backend
 
-# 2. Fill in your API keys
-cp .env.docker .env.docker.local
-# Edit .env.docker.local — at minimum set:
-#   SERVICE_ACCOUNT_JSON, OPENAI_API_KEY, DEEPGRAM_API_KEY, PINECONE_API_KEY
+# 2. Configure your API keys
+cp .env.docker .env.docker
+# Edit .env.docker — fill in SERVICE_ACCOUNT_JSON, OPENAI_API_KEY,
+# DEEPGRAM_API_KEY, PINECONE_API_KEY, and GCP bucket names
 
-# 3. Run
+# 3. Deploy
 bash scripts/install.sh
 ```
 
-## Manual Start (without install script)
+## Manual Start
 
 ```bash
 cd omi/backend
-cp .env.docker .env.docker.local
-# Edit .env.docker.local with your keys
-
 docker compose -f docker-compose.yaml up -d --build
 
-# Verify it's running
+# Verify
 curl http://localhost:8080/v1/health
 # Expected: {"status":"ok"}
 ```
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
+| Service | Port | Notes |
+|---------|------|-------|
 | Backend API | 8080 | FastAPI application |
-| Redis | 6379 | Session cache (persistent) |
-| Typesense | 8108 | Full-text search |
+| Redis | 6379 | Persistent session cache |
+| Typesense | 8108 | Full-text search index |
 
 ## Architecture
 
 ```
-docker compose up
+docker compose up (run from omi/backend/)
       │
-      ├── backend:8080    ← FastAPI (built from repo root Dockerfile)
-      │     ├── reads .env.docker for all credentials
-      │     ├── connects to redis:6379 (REDIS_DB_HOST/PORT/PASSWORD)
-      │     └── connects to typesense:8108
-      ├── redis:6379       ← Persistent (appendonly)
-      └── typesense:8108   ← Search index
+      ├── backend:8080   ← FastAPI
+      │     ├── build context = repo root (../), dockerfile = backend/Dockerfile
+      │     ├── env loaded from .env.docker
+      │     ├── REDIS_DB_HOST=redis, REDIS_DB_PORT=6379
+      │     └── TYPESENSE_HOST=typesense, TYPESENSE_HOST_PORT=8108
+      ├── redis:6379      ← Persistent (appendonly yes)
+      └── typesense:8108  ← Search (local_typesense_key)
 ```
 
 ## Common Commands
 
 ```bash
-# View logs
+# View backend logs
 docker compose -f docker-compose.yaml logs -f backend
 
 # Stop all services
 docker compose -f docker-compose.yaml down
 
-# Stop and remove volumes (full reset)
+# Full reset (removes volumes)
 docker compose -f docker-compose.yaml down -v
 
 # Rebuild after code changes
@@ -88,18 +86,17 @@ docker compose -f docker-compose.yaml up -d --build
 
 ## Troubleshooting
 
-**Build fails with "COPY backend/ ." error**  
-Make sure you're running `docker compose` from inside the `backend/` directory. The build context is set to the repo root (`..`).
-
-**Backend exits immediately**  
-Check logs: `docker compose -f docker-compose.yaml logs backend`  
-Usually means a required env var is missing. Verify `.env.docker` has `SERVICE_ACCOUNT_JSON` and `OPENAI_API_KEY` set.
-
-**Health check fails**  
-The correct endpoint is `/v1/health` (not `/health`):
+**Health check:** The correct endpoint is `/v1/health` (not `/health`):
 ```bash
 curl http://localhost:8080/v1/health
+# → {"status":"ok"}
 ```
 
-**Redis connection refused**  
-Confirm `REDIS_DB_HOST=redis` and `REDIS_DB_PORT=6379` in `.env.docker` (not `REDIS_URL`).
+**Build fails:** Run `docker compose` from inside `omi/backend/` — the build context
+is set to `..` (repo root) which is required by `backend/Dockerfile`.
+
+**Backend exits on startup:** Check logs with `docker compose -f docker-compose.yaml logs backend`.
+Usually a missing env var. Confirm `SERVICE_ACCOUNT_JSON` and `OPENAI_API_KEY` are set in `.env.docker`.
+
+**Redis not connecting:** Ensure `.env.docker` has `REDIS_DB_HOST=redis` and `REDIS_DB_PORT=6379`
+(not `REDIS_URL` — that variable is not read by the omi backend).
