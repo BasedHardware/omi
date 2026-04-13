@@ -151,8 +151,16 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
+  // Self-hosted backend URL — must be after SharedPreferencesUtil.init()
+  final customBackend = SharedPreferencesUtil().customBackendUrl;
+  if (customBackend.isNotEmpty) {
+    Env.overrideApiBaseUrl(customBackend);
+    debugPrint('Self-hosted backend: using $customBackend');
+  }
+
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
-  if (F.env == Environment.prod) {
+  // Skip when a custom backend URL is already set — user intent takes priority.
+  if (F.env == Environment.prod && customBackend.isEmpty) {
     final isTestFlight = await EnvironmentDetector.isTestFlight();
     if (isTestFlight) {
       Env.isTestFlight = true;

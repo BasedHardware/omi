@@ -40,12 +40,21 @@ class DeveloperSettingsPage extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+  final _backendUrlController = TextEditingController();
+
   @override
   void initState() {
+    _backendUrlController.text = SharedPreferencesUtil().customBackendUrl;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<McpProvider>().fetchKeys();
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _backendUrlController.dispose();
+    super.dispose();
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -599,6 +608,118 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Self-Hosted Backend Section
+                  _buildSectionHeader(
+                    context.l10n.selfHostedBackendSectionTitle,
+                    subtitle: context.l10n.selfHostedBackendSubtitle,
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    context.l10n.backendUrlLabel,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    Env.apiBaseUrl ?? 'https://api.omi.me',
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _backendUrlController,
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: context.l10n.selfHostedBackendUrlHint,
+                            hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                            filled: true,
+                            fillColor: const Color(0xFF2A2A2E),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            suffixIcon: _backendUrlController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(Icons.clear, color: Colors.grey.shade500, size: 18),
+                                    onPressed: () {
+                                      _backendUrlController.clear();
+                                      SharedPreferencesUtil().customBackendUrl = '';
+                                      setState(() {});
+                                      AppSnackbar.showSnackbar(context.l10n.selfHostedBackendClearedRestart);
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final url = _backendUrlController.text.trim().replaceAll(RegExp(r'/+$'), '');
+                              if (url.isNotEmpty && !url.startsWith('http')) {
+                                AppSnackbar.showSnackbar(context.l10n.selfHostedBackendHttpError);
+                                return;
+                              }
+                              SharedPreferencesUtil().customBackendUrl = url;
+                              setState(() {});
+                              AppSnackbar.showSnackbar(
+                                url.isEmpty
+                                    ? context.l10n.selfHostedBackendRestoredRestart
+                                    : context.l10n.selfHostedBackendSavedRestart,
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2A2A2E),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
+                            child: Text(context.l10n.selfHostedBackendSaveButton, style: const TextStyle(fontWeight: FontWeight.w500)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          context.l10n.selfHostedBackendNote,
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 32),
