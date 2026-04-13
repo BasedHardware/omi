@@ -24,7 +24,20 @@ actor TaskAssistant: ProactiveAssistant {
     private(set) var grpcClient: ProactiveGRPCClient?
 
     /// Called when the gRPC stream disconnects mid-session so the plugin can reconnect.
-    var onGRPCDisconnect: (() -> Void)?
+    private(set) var onGRPCDisconnect: (() -> Void)?
+
+    /// Set the disconnect handler (called from ProactiveAssistantsPlugin).
+    func setGRPCDisconnectHandler(_ handler: @escaping () -> Void) {
+        onGRPCDisconnect = handler
+    }
+
+    /// Provides refreshed session context for each gRPC frame analysis.
+    private(set) var contextProvider: (() async -> Proactive_V1_SessionContext)?
+
+    /// Set the context provider (called from ProactiveAssistantsPlugin).
+    func setContextProvider(_ provider: @escaping () async -> Proactive_V1_SessionContext) {
+        contextProvider = provider
+    }
 
     /// Set the gRPC client for server-side analysis (called from ProactiveAssistantsPlugin)
     func setGRPCClient(_ client: ProactiveGRPCClient?) {
@@ -640,6 +653,9 @@ actor TaskAssistant: ProactiveAssistant {
     ) async throws -> (TaskExtractionResult?, Int) {
         var searchCount = 0
 
+        // Refresh session context so the server has current tasks/goals
+        let updatedContext = await contextProvider?()
+
         let analysisResult = try await client.analyzeFrame(
             jpegData: frame.jpegData,
             appName: frame.appName,
@@ -647,6 +663,7 @@ actor TaskAssistant: ProactiveAssistant {
             ocrText: "",  // OCR extracted server-side from screenshot
             frameNumber: Int64(frame.frameNumber),
             screenshotId: frame.screenshotId.map { String($0) } ?? String(frame.frameNumber),
+            updatedContext: updatedContext,
             toolExecutor: { [weak self] toolKind, query in
                 guard let self = self else { return [] }
                 searchCount += 1
