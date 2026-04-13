@@ -344,3 +344,153 @@ async def test_generator_error_surfaces_as_server_error():
     assert 'ValueError' in events[0].server_error.message
     assert events[0].server_error.retryable is True
     assert events[1] is None
+
+
+# ---------------------------------------------------------------------------
+# Boundary: request_id mismatch in receive_tool_result
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tool_result_request_id_mismatch_discarded():
+    """receive_tool_result should discard mismatched request_ids and wait for correct one."""
+    received_result = None
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        nonlocal received_result
+        yield pb2.ServerEvent(
+            tool_call_request=pb2.ToolCallRequest(
+                request_id='correct-id',
+                tool_kind=pb2.SEARCH_SIMILAR,
+                arguments=pb2.ToolCallArguments(query='test'),
+                deadline_ms=10000,
+                frame_id=frame_id,
+            )
+        )
+        received_result = await receive_tool_result('correct-id', 5000)
+        yield pb2.ServerEvent(
+            analysis_outcome=pb2.AnalysisOutcome(
+                outcome_kind=pb2.NO_TASK_FOUND,
+                context_summary='done',
+                current_activity='test',
+                frame_id=frame_id,
+            )
+        )
+
+    hello = pb2.ClientEvent(
+        client_hello=pb2.ClientHello(protocol_version='1.0', context_version='v1', session_context=pb2.SessionContext())
+    )
+    frame = pb2.ClientEvent(frame_event=pb2.FrameEvent(app_name='Test', frame_number=1, screenshot_id='f1'))
+    wrong_result = pb2.ClientEvent(tool_result=pb2.ToolResult(request_id='wrong-id', result=pb2.SearchResults(items=[])))
+    correct_result = pb2.ClientEvent(
+        tool_result=pb2.ToolResult(request_id='correct-id', result=pb2.SearchResults(items=[]))
+    )
+
+    servicer = ProactiveAIServicer()
+
+    async def request_iter():
+        yield hello
+        yield frame
+        await asyncio.sleep(0.1)
+        yield wrong_result
+        await asyncio.sleep(0.05)
+        yield correct_result
+        await asyncio.sleep(0.5)
+
+    context = MagicMock()
+    context.invocation_metadata.return_value = [('authorization', 'Bearer fake')]
+    context.abort = AsyncMock()
+
+    with patch('proactive.service.extract_uid_from_metadata', return_value='test-uid'):
+        with patch('proactive.service.ServerTaskAssistant') as MockTA:
+            MockTA.return_value.analyze_frame = mock_analyze_frame
+            results = []
+            async for ev in servicer.Session(request_iter(), context):
+                results.append(ev)
+
+    assert received_result is not None
+    assert received_result.request_id == 'correct-id'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: standalone tool_result queue overflow
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_standalone_tool_result_queue_overflow():
+    """Standalone tool_results beyond queue capacity (4) should be silently dropped."""
+    hello = pb2.ClientEvent(
+        client_hello=pb2.ClientHello(protocol_version='1.0', context_version='v1', session_context=pb2.SessionContext())
+    )
+    # Send 6 standalone tool_results (queue maxsize=4)
+    tool_results = [
+        pb2.ClientEvent(tool_result=pb2.ToolResult(request_id=f'standalone-{i}', result=pb2.SearchResults(items=[])))
+        for i in range(6)
+    ]
+
+    results = await _run_session([hello] + tool_results)
+    # Should get SessionReady and NOT crash — overflow is silently dropped
+    assert len(results) >= 1
+    assert results[0].WhichOneof('event') == 'session_ready'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: tool_result timeout
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tool_result_timeout_in_receive():
+    """receive_tool_result should raise TimeoutError when no result arrives in time."""
+    timed_out = False
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        nonlocal timed_out
+        yield pb2.ServerEvent(
+            tool_call_request=pb2.ToolCallRequest(
+                request_id='timeout-test',
+                tool_kind=pb2.SEARCH_SIMILAR,
+                arguments=pb2.ToolCallArguments(query='test'),
+                deadline_ms=100,
+                frame_id=frame_id,
+            )
+        )
+        try:
+            await receive_tool_result('timeout-test', 100)
+        except TimeoutError:
+            timed_out = True
+        yield pb2.ServerEvent(
+            analysis_outcome=pb2.AnalysisOutcome(
+                outcome_kind=pb2.NO_TASK_FOUND,
+                context_summary='timed out',
+                current_activity='test',
+                frame_id=frame_id,
+            )
+        )
+
+    hello = pb2.ClientEvent(
+        client_hello=pb2.ClientHello(protocol_version='1.0', context_version='v1', session_context=pb2.SessionContext())
+    )
+    frame = pb2.ClientEvent(frame_event=pb2.FrameEvent(app_name='Test', frame_number=1, screenshot_id='f1'))
+
+    servicer = ProactiveAIServicer()
+
+    async def request_iter():
+        yield hello
+        yield frame
+        # Don't send any tool result — let it timeout
+        await asyncio.sleep(0.5)
+
+    context = MagicMock()
+    context.invocation_metadata.return_value = [('authorization', 'Bearer fake')]
+    context.abort = AsyncMock()
+
+    with patch('proactive.service.extract_uid_from_metadata', return_value='test-uid'):
+        with patch('proactive.service.ServerTaskAssistant') as MockTA:
+            MockTA.return_value.analyze_frame = mock_analyze_frame
+            results = []
+            async for ev in servicer.Session(request_iter(), context):
+                results.append(ev)
+
+    assert timed_out
