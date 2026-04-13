@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a Cancel link on the sign-in screen so a failed web OAuth attempt no longer leaves the sign-in buttons permanently disabled"
+  ],
   "releases": [
     {
       "version": "0.11.299",
