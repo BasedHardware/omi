@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Minimized pauses when Omi reads long voice responses out loud",
-    "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.297",
+      "date": "2026-04-13",
+      "changes": [
+        "Minimized pauses when Omi reads long voice responses out loud",
+        "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update"
+      ]
+    },
     {
       "version": "0.11.295",
       "date": "2026-04-13",
