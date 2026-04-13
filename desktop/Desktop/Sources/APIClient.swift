@@ -1360,6 +1360,28 @@ extension APIClient {
     return try await post("v3/memories", body: body)
   }
 
+  /// Max memories per POST /v3/memories/batch call. Must match the
+  /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
+  static let memoriesBatchMaxSize = 100
+
+  /// Creates many memories in a single HTTP call. Used by the onboarding
+  /// local-file import flow to avoid fanning out N requests and tripping
+  /// Cloud Armor's per-Authorization 120/min throttle.
+  ///
+  /// Caller is responsible for chunking input into groups of at most
+  /// `memoriesBatchMaxSize`. Returns the created count from the server.
+  func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+    precondition(
+      memories.count <= Self.memoriesBatchMaxSize,
+      "createMemoriesBatch received \(memories.count) memories, max is \(Self.memoriesBatchMaxSize)"
+    )
+    struct BatchRequest: Encodable {
+      let memories: [MemoryBatchItem]
+    }
+    let body = BatchRequest(memories: memories)
+    return try await post("v3/memories/batch", body: body)
+  }
+
   /// Deletes a memory by ID
   func deleteMemory(id: String) async throws {
     try await delete("v3/memories/\(id)")
@@ -1468,6 +1490,42 @@ extension APIClient {
 struct CreateMemoryResponse: Codable {
   let id: String
   let message: String?
+}
+
+/// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
+/// in `backend/models/memories.py` (the server hardcodes category=manual on
+/// batch creation, so we intentionally don't send it).
+struct MemoryBatchItem: Encodable {
+  let content: String
+  let visibility: String
+  let tags: [String]
+  let headline: String?
+
+  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
+  {
+    self.content = content
+    self.visibility = visibility
+    self.tags = tags
+    self.headline = headline
+  }
+}
+
+/// Response from POST /v3/memories/batch. The server returns the full
+/// created memories list; we only care about `createdCount` for onboarding
+/// telemetry, but keep `memories` available for future callers.
+struct BatchMemoriesResponse: Decodable {
+  let memories: [BatchMemory]
+  let createdCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case memories
+    case createdCount = "created_count"
+  }
+
+  struct BatchMemory: Decodable {
+    let id: String
+    let content: String
+  }
 }
 
 struct MemoryStatusResponse: Codable {
