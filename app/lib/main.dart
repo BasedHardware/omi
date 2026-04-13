@@ -159,7 +159,8 @@ Future _init() async {
   }
 
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
-  if (F.env == Environment.prod) {
+  // Skip when a custom backend URL is already set — user intent takes priority.
+  if (F.env == Environment.prod && customBackend.isEmpty) {
     final isTestFlight = await EnvironmentDetector.isTestFlight();
     if (isTestFlight) {
       Env.isTestFlight = true;

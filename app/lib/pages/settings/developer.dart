@@ -677,7 +677,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     onPressed: () {
                                       _backendUrlController.clear();
                                       SharedPreferencesUtil().customBackendUrl = '';
-                                      Env.overrideApiBaseUrl('');
                                       setState(() {});
                                       AppSnackbar.showSnackbar('Backend URL cleared — restart app to apply');
                                     },
@@ -699,7 +698,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 return;
                               }
                               SharedPreferencesUtil().customBackendUrl = url;
-                              Env.overrideApiBaseUrl(url.isNotEmpty ? url : Env.apiBaseUrl ?? '');
                               setState(() {});
                               AppSnackbar.showSnackbar(
                                 url.isEmpty ? 'Restored default backend — restart app to apply' : 'Backend URL saved — restart app to apply',
