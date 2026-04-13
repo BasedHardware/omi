@@ -92,6 +92,15 @@ public actor ProactiveGRPCClient {
 
     public private(set) var isConnected = false
 
+    /// Called when the gRPC transport disconnects (idle or mid-analysis).
+    /// Fires from `handleCallEnded` so the plugin can reconnect even if no frame is in-flight.
+    private var onDisconnect: (@Sendable () -> Void)?
+
+    /// Set the disconnect callback (called from ProactiveAssistantsPlugin).
+    public func setOnDisconnect(_ handler: @escaping @Sendable () -> Void) {
+        onDisconnect = handler
+    }
+
     /// How long to wait for SessionReady after sending ClientHello.
     private let connectTimeout: TimeInterval = 15
     /// How long to wait for a terminal AnalysisOutcome per frame.
@@ -362,6 +371,7 @@ public actor ProactiveGRPCClient {
         logger.info("gRPC call ended: \(reason)")
         isConnected = false
         serverEventsContinuation?.finish()
+        onDisconnect?()
     }
 
     private func convertOutcome(_ outcome: Proactive_V1_AnalysisOutcome) -> ProactiveAnalysisResult {
