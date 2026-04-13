@@ -519,6 +519,17 @@ actor FocusAssistant: ProactiveAssistant {
                         FocusAssistantSettings.shared.notificationsEnabled
                     }
 
+                    let context = FloatingBarNotificationContext(
+                        sourceTitle: "Focus",
+                        assistantId: identifier,
+                        sourceApp: analysis.appOrSite.isEmpty ? nil : analysis.appOrSite,
+                        windowTitle: frame.windowTitle,
+                        contextSummary: nil,
+                        currentActivity: analysis.description.isEmpty ? nil : analysis.description,
+                        reasoning: "Distraction detected: user switched from focused work to \(analysis.appOrSite).",
+                        detail: message
+                    )
+
                     await MainActor.run {
                         // Track focus alert shown
                         AnalyticsManager.shared.focusAlertShown(app: analysis.appOrSite)
@@ -528,7 +539,8 @@ actor FocusAssistant: ProactiveAssistant {
                                 title: "Focus",
                                 message: fullMessage,
                                 assistantId: identifier,
-                                sound: .none
+                                sound: .none,
+                                context: context
                             )
                         }
                     }
@@ -564,13 +576,24 @@ actor FocusAssistant: ProactiveAssistant {
                         let notificationsEnabled = await MainActor.run {
                             FocusAssistantSettings.shared.notificationsEnabled
                         }
+                        let context = FloatingBarNotificationContext(
+                            sourceTitle: "Focus",
+                            assistantId: identifier,
+                            sourceApp: analysis.appOrSite.isEmpty ? nil : analysis.appOrSite,
+                            windowTitle: frame.windowTitle,
+                            contextSummary: nil,
+                            currentActivity: analysis.description.isEmpty ? nil : analysis.description,
+                            reasoning: "Focus restored: user returned to focused work after a distraction.",
+                            detail: message
+                        )
                         if notificationsEnabled {
                             await MainActor.run {
                                 NotificationService.shared.sendNotification(
                                     title: "Focus",
                                     message: message,
                                     assistantId: identifier,
-                                    sound: .none
+                                    sound: .none,
+                                    context: context
                                 )
                             }
                         }
