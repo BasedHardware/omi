@@ -531,6 +531,18 @@ if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
     substep "Set OMI_AUTH_URL=$AUTH_URL"
 fi
+# Bootstrap OMI_GRPC_HOST / OMI_GRPC_PORT — ProactiveAI gRPC service
+# Defaults to localhost:50051 for local dev; override via env or .env for remote
+if ! grep -q "^OMI_GRPC_HOST=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    GRPC_HOST="${OMI_GRPC_HOST:-localhost}"
+    echo "OMI_GRPC_HOST=$GRPC_HOST" >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Set OMI_GRPC_HOST=$GRPC_HOST"
+fi
+if ! grep -q "^OMI_GRPC_PORT=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    GRPC_PORT="${OMI_GRPC_PORT:-50051}"
+    echo "OMI_GRPC_PORT=$GRPC_PORT" >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Set OMI_GRPC_PORT=$GRPC_PORT"
+fi
 # Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
 # Do NOT fall back to OMI_API_URL — that's the Rust desktop-backend which doesn't serve these routes
 if ! grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
