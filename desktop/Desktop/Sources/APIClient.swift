@@ -3814,11 +3814,28 @@ enum SubscriptionPlanType: String, Codable {
   case basic
   case unlimited
   case pro
+  /// Fallback for unknown plan types returned by the API (#6506).
+  /// Prevents a decoding crash when new plan types are added server-side.
+  case unknown
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let raw = try container.decode(String.self)
+    self = SubscriptionPlanType(rawValue: raw) ?? .unknown
+  }
 }
 
 enum SubscriptionStatusType: String, Codable {
   case active
   case inactive
+  /// Fallback for unknown statuses returned by the API (#6506).
+  case unknown
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let raw = try container.decode(String.self)
+    self = SubscriptionStatusType(rawValue: raw) ?? .unknown
+  }
 }
 
 struct SubscriptionLimitsResponse: Codable {
