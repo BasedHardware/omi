@@ -34,11 +34,14 @@ struct FloatingBackgroundModifier: ViewModifier {
                     if settings.solidBackground {
                         Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
                     } else {
-                        VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
+                        ZStack {
+                            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, alphaValue: 0.95)
+                            Color.black.opacity(0.18)
+                        }
                     }
                 }
             )
-            .cornerRadius(cornerRadius)
+            .clipShape(.rect(cornerRadius: cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
