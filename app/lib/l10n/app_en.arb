@@ -10632,5 +10632,41 @@
             }
         }
     },
-    "tasksMarkComplete": "Marked as complete"
+    "tasksMarkComplete": "Marked as complete",
+    "selfHostedBackendSectionTitle": "Self-Hosted Backend",
+    "@selfHostedBackendSectionTitle": {
+        "description": "Section header for self-hosted backend URL setting in Developer Settings"
+    },
+    "selfHostedBackendSubtitle": "Override the API URL to use your own backend instead of api.omi.me. Leave empty to use the default. Requires app restart to take effect.",
+    "@selfHostedBackendSubtitle": {
+        "description": "Description shown under the Self-Hosted Backend section header"
+    },
+    "selfHostedBackendUrlHint": "https://your-backend.example.com",
+    "@selfHostedBackendUrlHint": {
+        "description": "Placeholder hint text for the backend URL input field"
+    },
+    "selfHostedBackendSaveButton": "Save Backend URL",
+    "@selfHostedBackendSaveButton": {
+        "description": "Button label to save the custom backend URL"
+    },
+    "selfHostedBackendSavedRestart": "Backend URL saved — restart app to apply",
+    "@selfHostedBackendSavedRestart": {
+        "description": "Snackbar shown after saving a custom backend URL"
+    },
+    "selfHostedBackendClearedRestart": "Backend URL cleared — restart app to apply",
+    "@selfHostedBackendClearedRestart": {
+        "description": "Snackbar shown after clearing the custom backend URL"
+    },
+    "selfHostedBackendRestoredRestart": "Restored default backend — restart app to apply",
+    "@selfHostedBackendRestoredRestart": {
+        "description": "Snackbar shown after clearing URL via save with empty field"
+    },
+    "selfHostedBackendHttpError": "URL must start with http:// or https://",
+    "@selfHostedBackendHttpError": {
+        "description": "Validation error when backend URL does not start with http"
+    },
+    "selfHostedBackendNote": "Note: your backend must have LOCAL_DEVELOPMENT=true to accept tokens from the Omi app.",
+    "@selfHostedBackendNote": {
+        "description": "Informational note shown below the backend URL save button"
+    }
 }

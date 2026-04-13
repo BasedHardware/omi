@@ -614,9 +614,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   // Self-Hosted Backend Section
                   _buildSectionHeader(
-                    'Self-Hosted Backend',
-                    subtitle: 'Override the API URL to use your own backend instead of api.omi.me. '
-                        'Leave empty to use the default. Requires app restart to take effect.',
+                    context.l10n.selfHostedBackendSectionTitle,
+                    subtitle: context.l10n.selfHostedBackendSubtitle,
                   ),
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -642,9 +641,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Backend URL',
-                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                                  Text(
+                                    context.l10n.backendUrlLabel,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -662,7 +661,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           controller: _backendUrlController,
                           style: const TextStyle(color: Colors.white, fontSize: 14),
                           decoration: InputDecoration(
-                            hintText: 'https://your-backend.example.com',
+                            hintText: context.l10n.selfHostedBackendUrlHint,
                             hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                             filled: true,
                             fillColor: const Color(0xFF2A2A2E),
@@ -678,7 +677,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                       _backendUrlController.clear();
                                       SharedPreferencesUtil().customBackendUrl = '';
                                       setState(() {});
-                                      AppSnackbar.showSnackbar('Backend URL cleared — restart app to apply');
+                                      AppSnackbar.showSnackbar(context.l10n.selfHostedBackendClearedRestart);
                                     },
                                   )
                                 : null,
@@ -694,13 +693,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             onPressed: () {
                               final url = _backendUrlController.text.trim().replaceAll(RegExp(r'/+$'), '');
                               if (url.isNotEmpty && !url.startsWith('http')) {
-                                AppSnackbar.showSnackbar('URL must start with http:// or https://');
+                                AppSnackbar.showSnackbar(context.l10n.selfHostedBackendHttpError);
                                 return;
                               }
                               SharedPreferencesUtil().customBackendUrl = url;
                               setState(() {});
                               AppSnackbar.showSnackbar(
-                                url.isEmpty ? 'Restored default backend — restart app to apply' : 'Backend URL saved — restart app to apply',
+                                url.isEmpty
+                                    ? context.l10n.selfHostedBackendRestoredRestart
+                                    : context.l10n.selfHostedBackendSavedRestart,
                               );
                             },
                             style: ElevatedButton.styleFrom(
@@ -710,12 +711,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               elevation: 0,
                             ),
-                            child: const Text('Save Backend URL', style: TextStyle(fontWeight: FontWeight.w500)),
+                            child: Text(context.l10n.selfHostedBackendSaveButton, style: const TextStyle(fontWeight: FontWeight.w500)),
                           ),
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Note: your backend must have LOCAL_DEVELOPMENT=true to accept tokens from the Omi app.',
+                          context.l10n.selfHostedBackendNote,
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                         ),
                       ],

@@ -303,6 +303,10 @@ class SharedPreferencesUtil {
 
   set devLogsToFileEnabled(bool value) => saveBool('devLogsToFileEnabled', value);
 
+  String get customBackendUrl => getString('customBackendUrl');
+
+  set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
   bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled');
 
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
@@ -573,10 +577,6 @@ class SharedPreferencesUtil {
   List<String> get enabledCalendarIds => getStringList('enabledCalendarIds');
 
   //--------------------------------- Auth ------------------------------------//
-
-  String get customBackendUrl => getString('customBackendUrl');
-
-  set customBackendUrl(String value) => saveString('customBackendUrl', value);
 
   String get authToken => getString('authToken');
 
