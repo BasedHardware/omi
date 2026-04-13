@@ -2,6 +2,12 @@ import Cocoa
 import Combine
 import SwiftUI
 
+private final class FloatingBarHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 /// NSPanel subclass for the floating control bar.
 ///
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
@@ -135,7 +141,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
-        hostingView = NSHostingView(rootView: AnyView(
+        hostingView = FloatingBarHostingView(rootView: AnyView(
             swiftUIView
                 .withFontScaling()
                 .preferredColorScheme(.dark)
