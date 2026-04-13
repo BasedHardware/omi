@@ -600,9 +600,10 @@ class ChatToolExecutor {
       }
 
       // Embed the query text
-      // Note: EmbeddingService uses a shared Int64-keyed index for both action_items and
-      // staged_tasks. If IDs overlap, the staged_task embedding overwrites the action_item one.
-      // The lookup below tries action_items first then staged_tasks, matching TaskAssistant behavior.
+      // EmbeddingService uses a shared Int64-keyed index for both action_items and staged_tasks.
+      // loadIndex() loads action_items first, then staged_tasks — so for colliding IDs, the
+      // staged_task embedding overwrites the action_item one. We check staged_tasks first to
+      // match the actual embedding owner, then fall back to action_items for non-colliding IDs.
       let queryEmbedding = try await EmbeddingService.shared.embed(
         text: query, taskType: "RETRIEVAL_QUERY")
 
@@ -614,8 +615,18 @@ class ChatToolExecutor {
       var count = 0
 
       for result in vectorResults where result.similarity > 0.3 {
-        // Try action_items first, then staged_tasks (shared index, IDs may overlap)
-        if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
+        // Try staged_tasks first (their embeddings overwrite action_items on ID collision),
+        // then fall back to action_items
+        if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+          if staged.deleted { continue }
+          if !includeCompleted && staged.completed { continue }
+          count += 1
+          let check = staged.completed ? "[x]" : "[ ]"
+          let sim = String(format: "%.2f", result.similarity)
+          lines.append(
+            "\(count). \(check) \(staged.description) (similarity: \(sim), id: \(result.id), source: staged_tasks)"
+          )
+        } else if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
           if record.deleted { continue }
           if !includeCompleted && record.completed { continue }
           count += 1
@@ -624,15 +635,6 @@ class ChatToolExecutor {
           let sim = String(format: "%.2f", result.similarity)
           lines.append(
             "\(count). \(check) \(record.description)\(pri) (similarity: \(sim), id: \(result.id), source: action_items)"
-          )
-        } else if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
-          if staged.deleted { continue }
-          if !includeCompleted && staged.completed { continue }
-          count += 1
-          let check = staged.completed ? "[x]" : "[ ]"
-          let sim = String(format: "%.2f", result.similarity)
-          lines.append(
-            "\(count). \(check) \(staged.description) (similarity: \(sim), id: \(result.id), source: staged_tasks)"
           )
         }
 
