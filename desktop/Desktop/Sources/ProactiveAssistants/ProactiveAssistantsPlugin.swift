@@ -509,18 +509,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
             // Connect gRPC client for server-side proactive AI (non-blocking)
-            // Also wire up disconnect callback and context provider for mid-session reconnect.
+            // Reconnection is handled by the client-level onDisconnect callback (wired in connectGRPCClient).
             if let task = taskAssistant {
                 let capturedTask = task
                 Task {
-                    await task.setGRPCDisconnectHandler { [weak self] in
-                        guard let self = self else { return }
-                        Task { @MainActor in
-                            log("ProactiveGRPC: Stream disconnected — scheduling reconnect")
-                            self.grpcClient = nil
-                            await self.connectGRPCClient(for: capturedTask)
-                        }
-                    }
                     await task.setContextProvider { [weak self] in
                         guard let self = self else { return Proactive_V1_SessionContext() }
                         return await self.buildSessionContext()
@@ -608,6 +600,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     public func stopMonitoring() {
         guard isMonitoring else { return }
 
+        // Set false early to prevent reconnect callbacks from re-triggering connect
+        isMonitoring = false
+
         captureTimer?.invalidate()
         captureTimer = nil
         analysisDelayTimer?.invalidate()
@@ -635,8 +630,12 @@ public class ProactiveAssistantsPlugin: NSObject {
                 await task.stop()
             }
         }
+        // Clear onDisconnect before disconnecting to prevent reconnect during shutdown
         if let client = grpcClient {
-            Task { await client.disconnect() }
+            Task {
+                await client.setOnDisconnect {}
+                await client.disconnect()
+            }
             grpcClient = nil
         }
         Task { await TaskDeduplicationService.shared.stop() }
@@ -658,7 +657,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         memoryAssistant = nil
         screenCaptureService = nil
 
-        isMonitoring = false
         isStartingMonitoring = false  // Reset in case stop was called during startup
         isProcessingRewindFrame = false
         if droppedFrameCount > 0 {
