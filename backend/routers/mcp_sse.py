@@ -337,11 +337,11 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not matches:
             return {"memories": []}
 
-        memory_ids = [m['id'] for m in matches]
+        memory_ids = [m['memory_id'] for m in matches]
         memories = memories_db.get_memories_by_ids(user_id, memory_ids)
 
         # Build score lookup and filter locked
-        score_map = {m['id']: m.get('score', 0) for m in matches}
+        score_map = {m['memory_id']: m.get('score', 0) for m in matches}
         results = []
         for mem in memories:
             if mem.get('is_locked', False):
