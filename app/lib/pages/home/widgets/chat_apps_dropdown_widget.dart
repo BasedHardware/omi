@@ -13,13 +13,10 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
-enum ChatMode { chat, chat_clone }
-
 class ChatAppsDropdownWidget extends StatelessWidget {
   final PageController? controller;
-  final ChatMode mode;
 
-  ChatAppsDropdownWidget({super.key, this.controller, this.mode = ChatMode.chat});
+  ChatAppsDropdownWidget({super.key, this.controller});
 
   final FocusNode focusNode = FocusNode();
 
@@ -28,7 +25,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     return Selector<HomeProvider, bool>(
       selector: (context, state) => state.selectedIndex == 1,
       builder: (context, isChatPage, child) {
-        if (mode == ChatMode.chat && !isChatPage) {
+        if (!isChatPage) {
           return const SizedBox(width: 16);
         }
         return child!;
@@ -111,7 +108,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   }
                 },
                 itemBuilder: (BuildContext context) {
-                  return _getAppsDropdownItems(context, messageProvider, appProvider);
+                  return _getChatDropdownItems(context, messageProvider, appProvider);
                 },
                 color: const Color(0xFF1F1F25),
               ),
@@ -155,101 +152,6 @@ class ChatAppsDropdownWidget extends StatelessWidget {
         children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
       ),
     );
-  }
-
-  List<PopupMenuItem<String>> _getAppsDropdownItems(
-    BuildContext context,
-    MessageProvider messageProvider,
-    AppProvider appProvider,
-  ) {
-    return mode == ChatMode.chat_clone
-        ? _getCloneChatDropdownItems(context, messageProvider, appProvider)
-        : _getChatDropdownItems(context, messageProvider, appProvider);
-  }
-
-  List<PopupMenuItem<String>> _getCloneChatDropdownItems(
-    BuildContext context,
-    MessageProvider messageProvider,
-    AppProvider appProvider,
-  ) {
-    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
-    return [
-      PopupMenuItem<String>(
-        height: 40,
-        value: 'clear_chat',
-        child: Padding(
-          padding: const EdgeInsets.only(left: 32),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(context.l10n.clearChatAction, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-              const SizedBox(width: 24, child: Icon(Icons.delete, color: Colors.redAccent, size: 16)),
-            ],
-          ),
-        ),
-      ),
-      const PopupMenuItem<String>(height: 1, child: Divider(height: 1)),
-      // Add Omi option to the dropdown
-      PopupMenuItem<String>(
-        height: 40,
-        value: 'no_selected',
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _getOmiAvatar(),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      context.l10n.omiAppName,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                    ),
-                    selectedApp == null
-                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
-                        : const SizedBox.shrink(),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      ...messageProvider.chatApps.map<PopupMenuItem<String>>((App app) {
-        return PopupMenuItem<String>(
-          height: 40,
-          value: app.id,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              _getAppAvatar(app),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        overflow: TextOverflow.fade,
-                        app.getName(),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                      ),
-                    ),
-                    selectedApp?.id == app.id
-                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
-                        : const SizedBox.shrink(),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    ];
   }
 
   List<PopupMenuItem<String>> _getChatDropdownItems(

@@ -70,7 +70,9 @@ struct FloatingControlBarView: View {
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
-                .padding(6)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .padding(2)
                 .transition(.opacity)
             }
         }

@@ -39,6 +39,7 @@ from fastapi.responses import HTMLResponse
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
+from utils.log_sanitizer import sanitize
 import os
 import logging
 
@@ -206,10 +207,10 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                                                 scheduled_price_id = phase_dict['items'][0]['price']
                                                 break
                         except Exception as e:
-                            logger.error(f"Error checking subscription schedules: {e}")
+                            logger.error(f"Error checking subscription schedules: {sanitize(str(e))}")
 
             except Exception as e:
-                logger.error(f"Error retrieving current subscription: {e}")
+                logger.error(f"Error retrieving current subscription: {sanitize(str(e))}")
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
@@ -218,31 +219,43 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
-                monthly_price = stripe.Price.retrieve(monthly_price_id)
-                pricing_options.append(
-                    PricingOption(
-                        id=monthly_price.id,
-                        title=f'{definition["title"]} Monthly',
-                        price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                        description=None,
-                        interval=monthly_price.recurring.interval,
-                        unit_amount=monthly_price.unit_amount,
-                        is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                try:
+                    monthly_price = stripe.Price.retrieve(monthly_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=monthly_price.id,
+                            title=f'{definition["title"]} Monthly',
+                            price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                            description=None,
+                            interval=monthly_price.recurring.interval,
+                            unit_amount=monthly_price.unit_amount,
+                            is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
+                        f"(price_id={monthly_price_id}): {sanitize(str(e))}"
+                    )
             if annual_price_id:
-                annual_price = stripe.Price.retrieve(annual_price_id)
-                pricing_options.append(
-                    PricingOption(
-                        id=annual_price.id,
-                        title=f'{definition["title"]} Annual',
-                        price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                        description=definition["annual_description"],
-                        interval=annual_price.recurring.interval,
-                        unit_amount=annual_price.unit_amount,
-                        is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                try:
+                    annual_price = stripe.Price.retrieve(annual_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=annual_price.id,
+                            title=f'{definition["title"]} Annual',
+                            price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                            description=definition["annual_description"],
+                            interval=annual_price.recurring.interval,
+                            unit_amount=annual_price.unit_amount,
+                            is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving annual price from Stripe for {definition['plan_id']} "
+                        f"(price_id={annual_price_id}): {sanitize(str(e))}"
+                    )
 
         if not pricing_options:
             raise HTTPException(status_code=500, detail="Price configuration not found")
@@ -250,7 +263,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         return AvailablePlansResponse(plans=pricing_options)
 
     except Exception as e:
-        logger.error(f"Error fetching available plans: {e}")
+        logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
 
 

@@ -62,9 +62,13 @@ from routers import (
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
+from utils.subscription import validate_stripe_price_ids
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
+
+# Validate Stripe price IDs so misconfigured plans fail loud
+validate_stripe_price_ids()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])

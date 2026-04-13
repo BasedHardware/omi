@@ -6,6 +6,7 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,22 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
         if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
             return definition["plan_type"]
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
+
+
+def validate_stripe_price_ids():
+    """Validate all configured Stripe price IDs on startup. Logs errors for invalid/unreachable prices."""
+    for definition in get_paid_plan_definitions():
+        for interval in ('monthly', 'annual'):
+            price_id = definition[f'{interval}_price_id']
+            if not price_id:
+                continue
+            try:
+                stripe.Price.retrieve(price_id)
+            except Exception as e:
+                logger.error(
+                    f"STARTUP: Stripe price validation failed for {definition['plan_id']} {interval} "
+                    f"(price_id={price_id}): {sanitize(str(e))} — this plan will be invisible to users"
+                )
 
 
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))

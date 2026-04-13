@@ -359,8 +359,12 @@ struct ChatMessage: Identifiable {
     var contentBlocks: [ChatContentBlock]
     /// Metadata about context used to generate this response (AI messages only)
     var metadata: MessageMetadata?
+    /// Context text for proactive notification messages (not shown to user, sent to Claude)
+    var notificationContext: String?
+    /// Screenshot JPEG data captured when a proactive notification was generated
+    var notificationScreenshot: Data?
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -371,6 +375,8 @@ struct ChatMessage: Identifiable {
         self.citations = citations
         self.contentBlocks = contentBlocks
         self.metadata = metadata
+        self.notificationContext = notificationContext
+        self.notificationScreenshot = notificationScreenshot
     }
 }
 
@@ -1548,6 +1554,69 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
 
+    // MARK: - Chat Lab Helpers
+
+    /// Build a system prompt for the Chat Lab using a custom template but real user context.
+    func labBuildSystemPrompt(floatingPrefix: String, mainTemplate: String) -> String {
+        let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.givenName
+
+        var prompt = floatingPrefix + "\n\n" + mainTemplate
+        prompt = prompt.replacingOccurrences(of: "{user_name}", with: userName)
+        prompt = prompt.replacingOccurrences(of: "{tz}", with: TimeZone.current.identifier)
+
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_str}", with: df.string(from: Date()))
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone.current
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_iso}", with: isoFormatter.string(from: Date()))
+
+        let utcFormatter = DateFormatter()
+        utcFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        utcFormatter.timeZone = TimeZone(identifier: "UTC")
+        prompt = prompt.replacingOccurrences(of: "{current_datetime_utc}", with: utcFormatter.string(from: Date()))
+
+        prompt = prompt.replacingOccurrences(of: "{memories_section}", with: formatMemoriesSection())
+        prompt = prompt.replacingOccurrences(of: "{goal_section}", with: formatGoalSection())
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: formatTasksSection())
+        prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: formatAIProfileSection())
+        prompt = prompt.replacingOccurrences(of: "{database_schema}", with: cachedDatabaseSchema)
+
+        return prompt
+    }
+
+    /// Run a single question through the ACP bridge for Chat Lab evaluation.
+    /// Uses a unique session key so it doesn't interfere with the real chat.
+    func labRunQuestion(question: String, systemPrompt: String, sessionKey: String) async -> String {
+        // Ensure bridge is running
+        guard await ensureBridgeStarted() else {
+            return "[Bridge not available]"
+        }
+
+        do {
+            let result = try await acpBridge.query(
+                prompt: question,
+                systemPrompt: systemPrompt,
+                sessionKey: sessionKey,
+                model: "claude-sonnet-4-20250514",
+                onTextDelta: { _ in },
+                onToolCall: { callId, name, input in
+                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                    let result = await ChatToolExecutor.execute(toolCall)
+                    log("ChatLab: tool \(name) executed")
+                    return result
+                },
+                onToolActivity: { _, _, _, _ in },
+                onThinkingDelta: { _ in }
+            )
+            return result.text
+        } catch {
+            log("ChatLab: query error: \(error)")
+            return "[Error: \(error.localizedDescription)]"
+        }
+    }
+
     /// Formats the last 10 non-empty messages in the current session as a conversation history string.
     /// Used to seed new ACP sessions with context from the existing chat UI history.
     private func buildConversationHistory() -> String {
@@ -1984,11 +2053,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
     @discardableResult
-    func appendAssistantMessage(_ text: String) -> ChatMessage? {
+    func appendAssistantMessage(_ text: String, notificationContext: String? = nil, notificationScreenshot: Data? = nil) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
 
-        let aiMessage = ChatMessage(text: trimmedText, sender: .ai)
+        let aiMessage = ChatMessage(text: trimmedText, sender: .ai, notificationContext: notificationContext, notificationScreenshot: notificationScreenshot)
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -2160,6 +2229,22 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 systemPrompt += "\n\n" + suffix
             }
 
+            // Auto-inject notification context: if the most recent AI message before
+            // the user's new message is a proactive notification, tell Claude about it
+            // so it can answer follow-up questions about the notification.
+            var effectiveImageData = imageData
+            if systemPromptSuffix == nil {
+                // Find the last AI message before the user's current message
+                let aiMessages = messages.filter { $0.sender == .ai && !$0.isStreaming }
+                if let lastAI = aiMessages.last, let ctx = lastAI.notificationContext {
+                    systemPrompt += "\n\n" + ctx
+                    // Attach the notification screenshot if no other image is provided
+                    if effectiveImageData == nil, let screenshotData = lastAI.notificationScreenshot {
+                        effectiveImageData = screenshotData
+                    }
+                }
+            }
+
             // Query the active bridge with streaming
             // Callbacks for ACP bridge
             let textDeltaHandler: ACPBridge.TextDeltaHandler = { [weak self] delta in
@@ -2243,7 +2328,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
                 resume: resume,
-                imageData: imageData,
+                imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,

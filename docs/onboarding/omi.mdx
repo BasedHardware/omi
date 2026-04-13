@@ -12,8 +12,8 @@ sidebarTitle: "Omi Setup"
   <Step title="Charge Your Device" icon="battery-full">
     Make sure your Omi device is charged. When you switch it on, there should be a light indicator.
 
-    - Turn on the device using the button in the center
-    - Look for the LED light to confirm it's powered on
+    - Press the button once to turn on the device
+    - Look for the LED light to confirm it's powered on (blue if connected, red if not yet paired)
   </Step>
   <Step title="Download the Omi App" icon="mobile">
     Download the official Omi app from your device's app store:
@@ -53,19 +53,24 @@ sidebarTitle: "Omi Setup"
 
 ## Button Controls
 
-<CardGroup cols={2}>
-  <Card title="Single Press" icon="hand-pointer">
-    **Turn On/Off**
+<CardGroup cols={3}>
+  <Card title="Single Tap" icon="microphone">
+    **Ask a Question**
 
-    Single press to power the device on or off
+    Tap once to start recording a voice question. Tap again when you're done speaking (or wait 15 seconds). Your answer will appear in Omi chat.
   </Card>
-  <Card title="Long Press" icon="hand">
-    **Voice Questions**
+  <Card title="Double Tap" icon="hand-peace">
+    **Quick Action (Configurable)**
 
-    1. Press and hold until you feel a vibration
-    2. Keep pressed and ask your question
-    3. Release when you're done speaking
-    4. Get your answer in Omi chat or as a notification
+    Double tap to trigger a quick action. You can choose what it does in **Settings → Device Settings → Double Tap Action**:
+    - End & save conversation (default)
+    - Pause / resume recording
+    - Star the current conversation
+  </Card>
+  <Card title="Long Press (3s)" icon="power-off">
+    **Power Off**
+
+    Press and hold for 3 seconds to turn the device off. Press the button once to turn it back on.
   </Card>
 </CardGroup>
 
@@ -77,10 +82,11 @@ Understanding your Omi's status through LED colors:
 
 | Color | Status |
 |-------|--------|
-| 🔴 **Red** | Device is on but disconnected from your phone |
-| 🔵 **Blue** | Device is on and connected to your phone |
-| 🟠 **Orange** | Device is charging and disconnected |
-| 🔵 **Teal** | Device is charging and connected |
+| 🔴 **Solid Red** | Device is on but disconnected from your phone |
+| 🔵 **Solid Blue** | Device is on and connected to your phone |
+| 🟢 **Blinking Green + Red** | Charging while disconnected |
+| 🟢 **Blinking Green + Blue** | Charging while connected |
+| 🟢 **Solid Green** | Fully charged (battery ≥ 98%) |
 
 ---
 

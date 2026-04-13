@@ -6,7 +6,6 @@ from typing import List
 
 from pinecone import Pinecone
 
-from models.conversation import Conversation
 from utils.llm.clients import embeddings
 import logging
 
@@ -31,13 +30,13 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
     }
 
 
-def upsert_vector(uid: str, conversation: Conversation, vector: List[float]):
-    res = index.upsert(vectors=[_get_data(uid, conversation.id, vector)], namespace="ns1")
+def upsert_vector(uid: str, conversation_id: str, vector: List[float]):
+    res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
 
-def upsert_vector2(uid: str, conversation: Conversation, vector: List[float], metadata: dict):
-    data = _get_data(uid, conversation.id, vector)
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: dict):
+    data = _get_data(uid, conversation_id, vector)
     data['metadata'].update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
     logger.info(f'upsert_vector {res}')
@@ -49,8 +48,8 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
     return index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
 
 
-def upsert_vectors(uid: str, vectors: List[List[float]], conversations: List[Conversation]):
-    data = [_get_data(uid, conversation.id, vector) for conversation, vector in zip(conversations, vectors)]
+def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]):
+    data = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     logger.info(f'upsert_vectors {res}')
 

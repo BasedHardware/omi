@@ -1026,13 +1026,15 @@ class FloatingControlBarManager {
         message: String,
         assistantId: String,
         sound: NotificationSound,
-        context: FloatingBarNotificationContext? = nil
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
     ) {
         let notification = FloatingBarNotification(
             title: title,
             message: message,
             assistantId: assistantId,
-            context: context
+            context: context,
+            screenshotData: screenshotData
         )
         guard let window else {
             log("FloatingControlBarManager: dropping notification because window is not set up")

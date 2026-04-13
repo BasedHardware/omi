@@ -639,9 +639,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get saving => 'சேமிக்கிறது...';
 
   @override
-  String get personaConfig => 'உங்கள் AI ஆளை கட்டமைக்கவும்';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2440,12 +2437,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get createKeyToGetStarted => 'தொடங்க விசை உருவாக்கவும்';
 
   @override
-  String get persona => 'நபர்';
-
-  @override
-  String get configureYourAiPersona => 'உங்கள் AI நபரைக் கட்டமைக்கவும்';
-
-  @override
   String get configureSttProvider => 'STT வழங்குநரைக் கட்டமைக்கவும்';
 
   @override
@@ -2963,9 +2954,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'பயன்பாட்டைப் பற்றி';
-
-  @override
-  String get aboutThePersona => 'நபரைப் பற்றி';
 
   @override
   String get chatPersonality => 'சட்டப்பூர்வ ஆளுமை';
@@ -3503,9 +3491,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get changeYourName => 'உங்கள் பெயரை மாற்றவும்';
 
   @override
-  String get manageYourOmiPersona => 'உங்கள் Omi நபர்த்துவத்தை நிர்வகிக்கவும்';
-
-  @override
   String get voiceAndPeople => 'குரல் மற்றும் மக்கள்';
 
   @override
@@ -3917,9 +3902,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get shortcutChangeInstruction => 'மாற்ற குறுக்குவழியைக் கிளிக் செய்யவும். ரத்து செய்ய Escape ஐ அழுத்தவும்.';
 
   @override
-  String get configurePersonaDescription => 'உங்கள் AI நபர்த்துவத்தை கட்டமைக்கவும்';
-
-  @override
   String get configureSTTProvider => 'STT வழங்குநரை கட்டமைக்கவும்';
 
   @override
@@ -4276,16 +4258,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get createAndShareYourApp => 'உங்கள் பயன்பாட்டை உருவாக்கி பகிரவும்';
 
   @override
-  String get createMyClone => 'என் நகலை உருவாக்கவும்';
-
-  @override
-  String get createYourDigitalClone => 'உங்கள் டிஜிட்டல் நகலை உருவாக்கவும்';
-
-  @override
   String get itemApp => 'பயன்பாடு';
-
-  @override
-  String get itemPersona => 'நபர்த்துவம்';
 
   @override
   String keepItemPublic(String item) {
@@ -4314,9 +4287,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get manageApp => 'பயன்பாட்டை நிர்வகிக்கவும்';
-
-  @override
-  String get updatePersonaDetails => 'நபர்த்துவ விவரங்களைப் புதுப்பிக்கவும்';
 
   @override
   String deleteItemTitle(String item) {
@@ -5852,9 +5822,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get chooseFile => 'கோப்பைத் தேர்ந்தெடுக்கவும்';
 
   @override
-  String get configureAiPersona => 'உங்கள் AI ஆளுமையை கட்டமைக்கவும்';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI உதவியாளர்களை உங்கள் தரவுக்கு இணைக்கவும்';
 
   @override
@@ -6569,29 +6536,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get sharePublicLink => 'பொதுவான இணைப்பைப் பகிர்ந்து கொள்ளுங்கள்';
 
   @override
-  String get makePersonaPublic => 'பொது தகவல் பகிர்ந்து கொள்ளுங்கள்';
-
-  @override
   String get connectedKnowledgeData => 'இணைக்கப்பட்ட ஞ்ஞான தரவு';
 
   @override
   String get enterName => 'பெயரை உள்ளிடவும்';
-
-  @override
-  String get disconnectTwitter => 'Twitter ஐ இணைப்பு கழிக்கவும்';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'உங்கள் Twitter ખાता இணைப்பு கழிக்க உறுதியாக உள்ளீரா? உங்கள் தகவல் உங்கள் Twitter தரவுக்கு அணுக வேண்டாம்।';
-
-  @override
-  String get getOmiDeviceDescription => 'உங்கள் தனிப்பட்ட உரையாடல்களுடன் மிகவும் துல்லியமான நகல் உருவாக்கவும்';
-
-  @override
-  String get getOmi => 'Omi பெறவும்';
-
-  @override
-  String get iHaveOmiDevice => 'என்னிடம் Omi சாதனம் உள்ளது';
 
   @override
   String get goal => 'லக்ష्य';
@@ -7152,49 +7100,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona மற்ற திறன்களுடன் தேர்ந்தெடுக்க முடியாது';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter கைப்பிடி கண்டறியப்படவில்லை';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter கைப்பிடி இடைநிறுத்தப்பட்டுள்ளது';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter கைப்பிடிப்பை சரிசெய்ய தோல்வியுற்றது';
-
-  @override
-  String get personaFailedToFetch => 'உங்கள் Persona கொண்டு வர தோல்வியுற்றது';
-
-  @override
-  String get personaFailedToCreate => 'உங்கள் Persona உருவாக்க தோல்வியுற்றது';
-
-  @override
-  String get personaConnectKnowledgeSource => 'குறைந்தபட்சம் ஒரு அறிவு தரவு மூலமாக இணைக்கவும் (Omi அல்லது Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona வெற்றிகரமாக புதுப்பிக்கப்பட்டது';
-
-  @override
-  String get personaFailedToUpdate => 'Persona புதுப்பிக்க தோல்வியுற்றது';
-
-  @override
-  String get personaPleaseSelectImage => 'ஒரு படத்தைத் தேர்ந்தெடுக்கவும்';
-
-  @override
-  String get personaFailedToCreateTryLater => 'உங்கள் Persona உருவாக்க தோல்வியுற்றது. பின்னர் மீண்டும் முயற்சிக்கவும்.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona உருவாக்க தோல்வியுற்றது: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona செயல்படுத்த தோல்வியுற்றது';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Persona செயல்படுத்தும் போது பிழை: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries =>
       'ஆதரிக்கப்படும் நாடுகளை கொண்டு வர தோல்வியுற்றது. பின்னர் மீண்டும் முயற்சிக்கவும்.';
 
@@ -7269,21 +7174,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'முதலில் பயன்பாட்டை உருவாக்கவும்';
-
-  @override
-  String get xHandleTitle => 'உங்கள் X கைப்பிடி என்ன?';
-
-  @override
-  String get xHandleDescription => 'உங்கள் Omi க்ளோனைப் பயிற்சி செய்வோம்\nஉங்கள் கணக்கின் செயல்பாடுகளை அடிப்படையாக';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'உங்கள் X கைப்பிடி உள்ளிடவும்';
-
-  @override
-  String get xHandlePleaseEnterValid => 'ஒரு செல்லுபடியான X கைப்பிடி உள்ளிடவும்';
 
   @override
   String get nextButton => 'அடுத்தது';
@@ -7897,9 +7787,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get categoryConversationAnalysis => 'உரையாடல் பகுப்பாய்வு';
 
   @override
-  String get categoryPersonalityClone => 'ஆளுமை க்ளோன்';
-
-  @override
   String get categoryHealth => 'ஆரோக்கியம்';
 
   @override
@@ -8000,9 +7887,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'ஒருங்கிணைப்புகள்';
-
-  @override
-  String get categoryPersonalityClones => 'ஆளுமை க்ளோன்கள்';
 
   @override
   String get categoryProductivityLifestyle => 'உற்பादகத்வம் & வாழ்க்கைப் பாணி';
@@ -9065,4 +8949,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get continueAnyway => 'தொடரவும்';
+
+  @override
+  String get tasksClearCompleted => 'முடிந்தவற்றை அழி';
+
+  @override
+  String get tasksSelectAll => 'அனைத்தையும் தேர்ந்தெடு';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count பணி(களை) நீக்கு';
+  }
+
+  @override
+  String get tasksMarkComplete => 'முடிந்தது என குறிக்கப்பட்டது';
 }

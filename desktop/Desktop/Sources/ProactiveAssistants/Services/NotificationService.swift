@@ -205,14 +205,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: String,
         assistantId: String = "default",
         sound: NotificationSound = .default,
-        context: FloatingBarNotificationContext? = nil
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
     ) {
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
             assistantId: assistantId,
             sound: sound,
-            context: context
+            context: context,
+            screenshotData: screenshotData
         )
 
         // Keep the floating-bar preview, but still deliver the real macOS

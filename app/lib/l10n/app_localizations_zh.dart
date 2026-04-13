@@ -623,9 +623,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saving => '正在保存...';
 
   @override
-  String get personaConfig => '配置您的 AI 人格';
-
-  @override
   String get beta => '测试版';
 
   @override
@@ -2379,12 +2376,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createKeyToGetStarted => '创建密钥以开始';
 
   @override
-  String get persona => '人格';
-
-  @override
-  String get configureYourAiPersona => '配置您的 AI 角色';
-
-  @override
   String get configureSttProvider => '配置 STT 提供商';
 
   @override
@@ -2887,9 +2878,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aboutTheApp => '关于应用';
-
-  @override
-  String get aboutThePersona => '关于人格';
 
   @override
   String get chatPersonality => '聊天个性';
@@ -3419,9 +3407,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get changeYourName => '更改您的姓名';
 
   @override
-  String get manageYourOmiPersona => '管理您的 Omi 人格';
-
-  @override
   String get voiceAndPeople => '语音与人物';
 
   @override
@@ -3826,9 +3811,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shortcutChangeInstruction => '点击快捷键进行更改。按 Escape 取消。';
 
   @override
-  String get configurePersonaDescription => '配置您的 AI 人设';
-
-  @override
   String get configureSTTProvider => '配置 STT 提供商';
 
   @override
@@ -4172,16 +4154,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createAndShareYourApp => '创建并分享您的应用';
 
   @override
-  String get createMyClone => '创建我的克隆';
-
-  @override
-  String get createYourDigitalClone => '创建您的数字克隆';
-
-  @override
   String get itemApp => '应用';
-
-  @override
-  String get itemPersona => '角色';
 
   @override
   String keepItemPublic(String item) {
@@ -4210,9 +4183,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get manageApp => '管理应用';
-
-  @override
-  String get updatePersonaDetails => '更新角色详情';
 
   @override
   String deleteItemTitle(String item) {
@@ -5700,9 +5670,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseFile => '选择文件';
 
   @override
-  String get configureAiPersona => '配置您的 AI 角色';
-
-  @override
   String get connectAiAssistantsToYourData => '将 AI 助手连接到您的数据';
 
   @override
@@ -6404,28 +6371,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sharePublicLink => '分享公开链接';
 
   @override
-  String get makePersonaPublic => '公开角色';
-
-  @override
   String get connectedKnowledgeData => '已连接的知识数据';
 
   @override
   String get enterName => '输入姓名';
-
-  @override
-  String get disconnectTwitter => '断开 Twitter 连接';
-
-  @override
-  String get disconnectTwitterConfirmation => '您确定要断开 Twitter 账户连接吗？您的角色将无法再访问您的 Twitter 数据。';
-
-  @override
-  String get getOmiDeviceDescription => '通过您的个人对话创建更准确的克隆';
-
-  @override
-  String get getOmi => '获取 Omi';
-
-  @override
-  String get iHaveOmiDevice => '我有 Omi 设备';
 
   @override
   String get goal => '目标';
@@ -6968,49 +6917,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => '角色无法与其他功能一起选择';
 
   @override
-  String get personaTwitterHandleNotFound => '未找到Twitter用户名';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter用户名已被暂停';
-
-  @override
-  String get personaFailedToVerifyTwitter => '验证Twitter用户名失败';
-
-  @override
-  String get personaFailedToFetch => '获取角色失败';
-
-  @override
-  String get personaFailedToCreate => '创建角色失败';
-
-  @override
-  String get personaConnectKnowledgeSource => '请至少连接一个数据源（Omi或Twitter）';
-
-  @override
-  String get personaUpdatedSuccessfully => '角色更新成功';
-
-  @override
-  String get personaFailedToUpdate => '角色更新失败';
-
-  @override
-  String get personaPleaseSelectImage => '请选择一张图片';
-
-  @override
-  String get personaFailedToCreateTryLater => '创建角色失败，请稍后重试。';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return '创建角色失败：$error';
-  }
-
-  @override
-  String get personaFailedToEnable => '启用角色失败';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return '启用角色时出错：$error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => '获取支持的国家失败，请稍后重试。';
 
   @override
@@ -7083,21 +6989,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '请先生成一个应用';
-
-  @override
-  String get xHandleTitle => '您的 X 用户名是什么？';
-
-  @override
-  String get xHandleDescription => '我们将根据您账户的活动\n预训练您的 Omi 克隆';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => '请输入您的 X 用户名';
-
-  @override
-  String get xHandlePleaseEnterValid => '请输入有效的 X 用户名';
 
   @override
   String get nextButton => '下一步';
@@ -7699,9 +7590,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get categoryConversationAnalysis => '对话分析';
 
   @override
-  String get categoryPersonalityClone => '人格克隆';
-
-  @override
   String get categoryHealth => '健康';
 
   @override
@@ -7802,9 +7690,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '集成';
-
-  @override
-  String get categoryPersonalityClones => '人格克隆';
 
   @override
   String get categoryProductivityLifestyle => '生产力与生活方式';
@@ -8842,4 +8727,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get continueAnyway => '继续';
+
+  @override
+  String get tasksClearCompleted => '清除已完成';
+
+  @override
+  String get tasksSelectAll => '全选';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '删除 $count 个任务';
+  }
+
+  @override
+  String get tasksMarkComplete => '已标记为完成';
 }

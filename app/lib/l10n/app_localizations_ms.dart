@@ -636,9 +636,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get saving => 'Menyimpan...';
 
   @override
-  String get personaConfig => 'Konfigurasikan persona AI anda';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2429,12 +2426,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get createKeyToGetStarted => 'Cipta kunci untuk bermula';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurasikan persona AI anda';
-
-  @override
   String get configureSttProvider => 'Konfigurasikan pembekal STT';
 
   @override
@@ -2950,9 +2941,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Tentang Aplikasi';
-
-  @override
-  String get aboutThePersona => 'Tentang Persona';
 
   @override
   String get chatPersonality => 'Personaliti Sembang';
@@ -3490,9 +3478,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get changeYourName => 'Tukar Nama Anda';
 
   @override
-  String get manageYourOmiPersona => 'Urus persona Omi anda';
-
-  @override
   String get voiceAndPeople => 'Suara & Orang';
 
   @override
@@ -3903,9 +3888,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klik pada pintasan untuk mengubahnya. Tekan Escape untuk membatalkan.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurasikan persona AI anda';
-
-  @override
   String get configureSTTProvider => 'Konfigurasikan pembekal STT';
 
   @override
@@ -4260,16 +4242,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get createAndShareYourApp => 'Cipta dan kongsi aplikasi anda';
 
   @override
-  String get createMyClone => 'Cipta Klon Saya';
-
-  @override
-  String get createYourDigitalClone => 'Cipta klon digital anda';
-
-  @override
   String get itemApp => 'Aplikasi';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4298,9 +4271,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get manageApp => 'Urus Aplikasi';
-
-  @override
-  String get updatePersonaDetails => 'Kemas Kini Butiran Persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5832,9 +5802,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chooseFile => 'Pilih Fail';
 
   @override
-  String get configureAiPersona => 'Konfigurasikan persona AI anda';
-
-  @override
   String get connectAiAssistantsToYourData => 'Sambungkan pembantu AI ke data anda';
 
   @override
@@ -6546,29 +6513,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get sharePublicLink => 'Kongsi Pautan Awam';
 
   @override
-  String get makePersonaPublic => 'Jadikan Persona Awam';
-
-  @override
   String get connectedKnowledgeData => 'Data Pengetahuan Tersambung';
 
   @override
   String get enterName => 'Masukkan nama';
-
-  @override
-  String get disconnectTwitter => 'Putuskan Sambungan Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Adakah anda pasti mahu memutuskan sambungan akaun Twitter anda? Persona anda tidak lagi dikemas kini berdasarkan aktiviti anda.';
-
-  @override
-  String get getOmiDeviceDescription => 'Cipta klon yang lebih tepat dengan perbualan peribadi anda';
-
-  @override
-  String get getOmi => 'Dapatkan Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Saya mempunyai peranti Omi';
 
   @override
   String get goal => 'MATLAMAT';
@@ -7120,49 +7068,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona tidak boleh dipilih dengan keupayaan lain';
 
   @override
-  String get personaTwitterHandleNotFound => 'Akaun Twitter tidak dijumpai';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Akaun Twitter digantung';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Gagal mengesahkan akaun Twitter';
-
-  @override
-  String get personaFailedToFetch => 'Gagal mendapatkan persona anda';
-
-  @override
-  String get personaFailedToCreate => 'Gagal mencipta persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Sila sambungkan sekurang-kurangnya satu sumber data (Omi atau Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona berjaya dikemas kini';
-
-  @override
-  String get personaFailedToUpdate => 'Gagal mengemas kini persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Sila pilih imej';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Gagal mencipta persona. Sila cuba lagi nanti.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Gagal mencipta persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Gagal mengaktifkan persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Ralat mengaktifkan persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Gagal mendapatkan negara yang disokong. Sila cuba lagi nanti.';
 
   @override
@@ -7235,21 +7140,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Sila jana aplikasi terlebih dahulu';
-
-  @override
-  String get xHandleTitle => 'Apakah nama pengguna X anda?';
-
-  @override
-  String get xHandleDescription => 'Kami akan melatih klon Omi anda terlebih dahulu\nberdasarkan aktiviti akaun anda';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Sila masukkan nama pengguna X anda';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Sila masukkan nama pengguna X yang sah';
 
   @override
   String get nextButton => 'Seterusnya';
@@ -7861,9 +7751,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analisis Perbualan';
 
   @override
-  String get categoryPersonalityClone => 'Klon Personaliti';
-
-  @override
   String get categoryHealth => 'Kesihatan';
 
   @override
@@ -7964,9 +7851,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrasi';
-
-  @override
-  String get categoryPersonalityClones => 'Klon Personaliti';
 
   @override
   String get categoryProductivityLifestyle => 'Produktiviti & Gaya Hidup';
@@ -9028,4 +8912,18 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Teruskan';
+
+  @override
+  String get tasksClearCompleted => 'Kosongkan yang selesai';
+
+  @override
+  String get tasksSelectAll => 'Pilih semua';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Padam $count tugas';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Ditandai selesai';
 }

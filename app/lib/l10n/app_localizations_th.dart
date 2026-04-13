@@ -633,9 +633,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get saving => 'กำลังบันทึก...';
 
   @override
-  String get personaConfig => 'กำหนดค่าบุคลิก AI ของคุณ';
-
-  @override
   String get beta => 'เบต้า';
 
   @override
@@ -2408,12 +2405,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get createKeyToGetStarted => 'สร้างคีย์เพื่อเริ่มต้น';
 
   @override
-  String get persona => 'บุคลิกภาพ';
-
-  @override
-  String get configureYourAiPersona => 'กำหนดค่าบุคลิก AI ของคุณ';
-
-  @override
   String get configureSttProvider => 'กำหนดค่าผู้ให้บริการ STT';
 
   @override
@@ -2923,9 +2914,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'เกี่ยวกับแอป';
-
-  @override
-  String get aboutThePersona => 'เกี่ยวกับเพอร์โซน่า';
 
   @override
   String get chatPersonality => 'บุคลิกแชท';
@@ -3461,9 +3449,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get changeYourName => 'เปลี่ยนชื่อของคุณ';
 
   @override
-  String get manageYourOmiPersona => 'จัดการบุคลิกภาพ Omi ของคุณ';
-
-  @override
   String get voiceAndPeople => 'เสียงและบุคคล';
 
   @override
@@ -3870,9 +3855,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get shortcutChangeInstruction => 'คลิกที่ทางลัดเพื่อเปลี่ยน กด Escape เพื่อยกเลิก';
 
   @override
-  String get configurePersonaDescription => 'กำหนดค่าบุคลิกภาพ AI ของคุณ';
-
-  @override
   String get configureSTTProvider => 'กำหนดค่าผู้ให้บริการ STT';
 
   @override
@@ -4224,16 +4206,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get createAndShareYourApp => 'สร้างและแชร์แอปของคุณ';
 
   @override
-  String get createMyClone => 'สร้างโคลนของฉัน';
-
-  @override
-  String get createYourDigitalClone => 'สร้างโคลนดิจิทัลของคุณ';
-
-  @override
   String get itemApp => 'แอป';
-
-  @override
-  String get itemPersona => 'เพอร์โซน่า';
 
   @override
   String keepItemPublic(String item) {
@@ -4262,9 +4235,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get manageApp => 'จัดการแอป';
-
-  @override
-  String get updatePersonaDetails => 'อัปเดตรายละเอียดเพอร์โซน่า';
 
   @override
   String deleteItemTitle(String item) {
@@ -5781,9 +5751,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chooseFile => 'เลือกไฟล์';
 
   @override
-  String get configureAiPersona => 'ตั้งค่าบุคลิก AI ของคุณ';
-
-  @override
   String get connectAiAssistantsToYourData => 'เชื่อมต่อผู้ช่วย AI กับข้อมูลของคุณ';
 
   @override
@@ -6491,29 +6458,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get sharePublicLink => 'แชร์ลิงก์สาธารณะ';
 
   @override
-  String get makePersonaPublic => 'ทำให้บุคลิกเป็นสาธารณะ';
-
-  @override
   String get connectedKnowledgeData => 'ข้อมูลความรู้ที่เชื่อมต่อแล้ว';
 
   @override
   String get enterName => 'ป้อนชื่อ';
-
-  @override
-  String get disconnectTwitter => 'ยกเลิกการเชื่อมต่อ Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการเชื่อมต่อบัญชี Twitter? บุคลิกของคุณจะไม่สามารถเข้าถึงข้อมูล Twitter ของคุณได้อีกต่อไป';
-
-  @override
-  String get getOmiDeviceDescription => 'สร้างโคลนที่แม่นยำยิ่งขึ้นด้วยบทสนทนาส่วนตัวของคุณ';
-
-  @override
-  String get getOmi => 'รับ Omi';
-
-  @override
-  String get iHaveOmiDevice => 'ฉันมีอุปกรณ์ Omi';
 
   @override
   String get goal => 'เป้าหมาย';
@@ -7062,49 +7010,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'ไม่สามารถเลือก Persona พร้อมกับความสามารถอื่นได้';
 
   @override
-  String get personaTwitterHandleNotFound => 'ไม่พบบัญชี Twitter';
-
-  @override
-  String get personaTwitterHandleSuspended => 'บัญชี Twitter ถูกระงับ';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'ไม่สามารถยืนยันบัญชี Twitter ได้';
-
-  @override
-  String get personaFailedToFetch => 'ไม่สามารถดึงข้อมูล Persona ของคุณได้';
-
-  @override
-  String get personaFailedToCreate => 'ไม่สามารถสร้าง Persona ของคุณได้';
-
-  @override
-  String get personaConnectKnowledgeSource => 'โปรดเชื่อมต่อแหล่งข้อมูลอย่างน้อยหนึ่งแหล่ง (Omi หรือ Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'อัปเดต Persona สำเร็จ';
-
-  @override
-  String get personaFailedToUpdate => 'อัปเดต Persona ล้มเหลว';
-
-  @override
-  String get personaPleaseSelectImage => 'โปรดเลือกรูปภาพ';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ไม่สามารถสร้าง Persona ได้ โปรดลองอีกครั้งภายหลัง';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'สร้าง Persona ล้มเหลว: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'ไม่สามารถเปิดใช้งาน Persona ได้';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'เกิดข้อผิดพลาดในการเปิดใช้งาน Persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'ไม่สามารถดึงรายชื่อประเทศที่รองรับได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
@@ -7177,21 +7082,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'กรุณาสร้างแอปก่อน';
-
-  @override
-  String get xHandleTitle => 'บัญชี X ของคุณคืออะไร?';
-
-  @override
-  String get xHandleDescription => 'เราจะฝึกโคลน Omi ของคุณล่วงหน้า\nตามกิจกรรมของบัญชีคุณ';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'กรุณาป้อนบัญชี X ของคุณ';
-
-  @override
-  String get xHandlePleaseEnterValid => 'กรุณาป้อนบัญชี X ที่ถูกต้อง';
 
   @override
   String get nextButton => 'ถัดไป';
@@ -7801,9 +7691,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
 
   @override
-  String get categoryPersonalityClone => 'โคลนบุคลิกภาพ';
-
-  @override
   String get categoryHealth => 'สุขภาพ';
 
   @override
@@ -7904,9 +7791,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'การเชื่อมต่อ';
-
-  @override
-  String get categoryPersonalityClones => 'โคลนบุคลิกภาพ';
 
   @override
   String get categoryProductivityLifestyle => 'ประสิทธิภาพและไลฟ์สไตล์';
@@ -8958,4 +8842,18 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get continueAnyway => 'ดำเนินการต่อ';
+
+  @override
+  String get tasksClearCompleted => 'ล้างรายการที่เสร็จแล้ว';
+
+  @override
+  String get tasksSelectAll => 'เลือกทั้งหมด';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'ลบ $count งาน';
+  }
+
+  @override
+  String get tasksMarkComplete => 'ทำเครื่องหมายว่าเสร็จสิ้น';
 }

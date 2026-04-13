@@ -25,9 +25,9 @@ from models.chat import (
     MessageConversation,
     FileChat,
 )
-from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
+from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
@@ -148,16 +148,7 @@ def send_message(
             response = re.sub(r'\[\d+\]', '', response)
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
-        memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    converted_memories.append(Conversation(**m))
-                else:
-                    converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
+        memories_id = extract_memory_ids(memories) if memories else []
 
         ai_message = Message(
             id=str(uuid.uuid4()),
@@ -901,7 +892,7 @@ def rate_message(
 
     # Also store in analytics collection
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value)
+    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
 
     # Try to submit feedback to LangSmith
     try:

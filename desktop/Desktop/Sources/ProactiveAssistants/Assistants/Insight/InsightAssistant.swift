@@ -194,6 +194,7 @@ actor InsightAssistant: ProactiveAssistant {
         _ adviceResult: InsightExtractionResult,
         screenshotId: Int64?,
         windowTitle: String? = nil,
+        screenshotData: Data? = nil,
         sendEvent: @escaping (String, [String: Any]) -> Void
     ) async {
         // Check if AI has new insight (should almost always be true now - only false for duplicates)
@@ -258,7 +259,8 @@ actor InsightAssistant: ProactiveAssistant {
             await sendInsightNotification(
                 insight: extractedInsight,
                 result: adviceResult,
-                windowTitle: windowTitle
+                windowTitle: windowTitle,
+                screenshotData: screenshotData
             )
         }
 
@@ -351,7 +353,8 @@ actor InsightAssistant: ProactiveAssistant {
     private func sendInsightNotification(
         insight: ExtractedInsight,
         result: InsightExtractionResult,
-        windowTitle: String?
+        windowTitle: String?,
+        screenshotData: Data? = nil
     ) async {
         let message = insight.headline ?? insight.insight
         let context = FloatingBarNotificationContext(
@@ -370,7 +373,8 @@ actor InsightAssistant: ProactiveAssistant {
                 title: "Insight",
                 message: message,
                 assistantId: identifier,
-                context: context
+                context: context,
+                screenshotData: screenshotData
             )
         }
     }
@@ -463,7 +467,7 @@ actor InsightAssistant: ProactiveAssistant {
             }
 
             // Handle the result with screenshot ID for SQLite storage
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle) { type, data in
+            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle, screenshotData: frame.jpegData) { type, data in
                 Task { @MainActor in
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }

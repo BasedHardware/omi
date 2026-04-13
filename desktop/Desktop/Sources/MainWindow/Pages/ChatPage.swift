@@ -601,6 +601,8 @@ struct ChatBubble: View {
   @State private var isHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
+  @State private var showRatingFeedback = false
+  @State private var lastSubmittedRating: Int?
   /// Cached grouped content blocks — pre-computed on init to avoid recreating
   /// `[ContentBlockGroup]` on every SwiftUI layout pass.
   @State private var cachedGroupedBlocks: [ContentBlockGroup]
@@ -807,9 +809,11 @@ struct ChatBubble: View {
     HStack(spacing: 4) {
       // Thumbs up
       Button(action: {
-        // Toggle: if already thumbs up, clear rating; otherwise set thumbs up
         let newRating = message.rating == 1 ? nil : 1
+        guard newRating != lastSubmittedRating else { return }
+        lastSubmittedRating = newRating
         onRate(newRating)
+        if newRating != nil { showRatingFeedbackBriefly() }
       }) {
         Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
           .scaledFont(size: 11)
@@ -820,9 +824,11 @@ struct ChatBubble: View {
 
       // Thumbs down
       Button(action: {
-        // Toggle: if already thumbs down, clear rating; otherwise set thumbs down
         let newRating = message.rating == -1 ? nil : -1
+        guard newRating != lastSubmittedRating else { return }
+        lastSubmittedRating = newRating
         onRate(newRating)
+        if newRating != nil { showRatingFeedbackBriefly() }
       }) {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: 11)
@@ -830,6 +836,21 @@ struct ChatBubble: View {
       }
       .buttonStyle(.plain)
       .help("Not helpful")
+
+      if showRatingFeedback {
+        Text("Thank you!")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textTertiary)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+  }
+
+  private func showRatingFeedbackBriefly() {
+    showRatingFeedback = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+      showRatingFeedback = false
     }
   }
 

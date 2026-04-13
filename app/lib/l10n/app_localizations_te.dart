@@ -638,9 +638,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get saving => 'సేవ్ చేస్తోంది...';
 
   @override
-  String get personaConfig => 'మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి';
-
-  @override
   String get beta => 'బీటా';
 
   @override
@@ -2437,12 +2434,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get createKeyToGetStarted => 'ప్రారంభించడానికి కీ సృష్టించండి';
 
   @override
-  String get persona => 'వ్యక్తిత్వం';
-
-  @override
-  String get configureYourAiPersona => 'మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి';
-
-  @override
   String get configureSttProvider => 'STT ప్రదాతను కాన్ఫిగర్ చేయండి';
 
   @override
@@ -2959,9 +2950,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'అ్యాప్ గురించి';
-
-  @override
-  String get aboutThePersona => 'వ్యక్తిత్వం గురించి';
 
   @override
   String get chatPersonality => 'చాట్ వ్యక్తిత్వం';
@@ -3498,9 +3486,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get changeYourName => 'మీ పేరు మార్చండి';
 
   @override
-  String get manageYourOmiPersona => 'మీ Omi వ్యక్తిత్వాన్ని నిర్వహించండి';
-
-  @override
   String get voiceAndPeople => 'వాయిస్ & ప్రజలు';
 
   @override
@@ -3914,9 +3899,6 @@ class AppLocalizationsTe extends AppLocalizations {
       'షార్టకట్‌ను మార్చడానికి దానిపై క్లిక్ చేయండి. రద్దు చేయడానికి Escape నొక్కండి.';
 
   @override
-  String get configurePersonaDescription => 'మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి';
-
-  @override
   String get configureSTTProvider => 'STT ప్రొవైడర్ కాన్ఫిగర్ చేయండి';
 
   @override
@@ -4272,16 +4254,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get createAndShareYourApp => 'మీ అ్యాప్‌ను సృష్టించండి మరియు భాగస్వామ్యం చేయండి';
 
   @override
-  String get createMyClone => 'నా క్లోన్ సృష్టించండి';
-
-  @override
-  String get createYourDigitalClone => 'మీ డిజిటల్ క్లోన్ సృష్టించండి';
-
-  @override
   String get itemApp => 'అ్యాప్';
-
-  @override
-  String get itemPersona => 'వ్యక్తిత్వం';
 
   @override
   String keepItemPublic(String item) {
@@ -4310,9 +4283,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get manageApp => 'అ్యాప్ నిర్వహించండి';
-
-  @override
-  String get updatePersonaDetails => 'వ్యక్తిత్వ వివరాలను నవీకరించండి';
 
   @override
   String deleteItemTitle(String item) {
@@ -5847,9 +5817,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get chooseFile => 'ఫైల్ ఎంచుకోండి';
 
   @override
-  String get configureAiPersona => 'మీ AI వ్యక్తిత్వాన్ని కాన్ఫిగర్ చేయండి';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI సహాయకులను మీ డేటాకు కనెక్ట్ చేయండి';
 
   @override
@@ -6565,29 +6532,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get sharePublicLink => 'పబ్లిక్ లింక్ షేర్ చేయండి';
 
   @override
-  String get makePersonaPublic => 'పర్సోనాను పబ్లిక్ చేయండి';
-
-  @override
   String get connectedKnowledgeData => 'కనెక్ట్ చేసిన జ్ఞాన డేటా';
 
   @override
   String get enterName => 'పేరు నమోదు చేయండి';
-
-  @override
-  String get disconnectTwitter => 'ట్విట్టర్ డిస్‌కనెక్ట్ చేయండి';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'మీ ట్విట్టర్ ఖాతాను డిస్‌కనెక్ట్ చేయటానికి మీరు నిశ్చితమైనారా? మీ పర్సోనా మీ ట్విట్టర్ డేటాకు ఇకపై యాక్సెస్ కలిగి ఉండదు.';
-
-  @override
-  String get getOmiDeviceDescription => 'మీ వ్యక్తిగత సంభాషణలతో మరింత ఖచ్చితమైన క్లోన్ సృష్టించండి';
-
-  @override
-  String get getOmi => 'Omi పొందండి';
-
-  @override
-  String get iHaveOmiDevice => 'నా వద్ద Omi పరికరం ఉంది';
 
   @override
   String get goal => 'లక్ష్యం';
@@ -7142,49 +7090,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'పర్సోనా ఇతర సామర్థ్యాలతో ఎంచుకోవలేము';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter హ్యాండిల్ కనుగొనబడలేదు';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter హ్యాండిల్ సస్పెండ్ చేయబడింది';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter హ్యాండిల్‌ను ధృవీకరించడానికి విఫలమైంది';
-
-  @override
-  String get personaFailedToFetch => 'మీ పర్సోనాను పొందడానికి విఫలమైంది';
-
-  @override
-  String get personaFailedToCreate => 'మీ పర్సోనాను సృష్టించడానికి విఫలమైంది';
-
-  @override
-  String get personaConnectKnowledgeSource => 'దయచేసి కనీసం ఒక జ్ఞానం డేటా మూలం (Omi లేదా Twitter) సংయోగం చేయండి';
-
-  @override
-  String get personaUpdatedSuccessfully => 'పర్సోనా విజయవంతంగా నవీకరించబడింది';
-
-  @override
-  String get personaFailedToUpdate => 'పర్సోనాను నవీకరించడానికి విఫలమైంది';
-
-  @override
-  String get personaPleaseSelectImage => 'దయచేసి చిత్రం ఎంచుకోండి';
-
-  @override
-  String get personaFailedToCreateTryLater => 'మీ పర్సోనాను సృష్టించడానికి విఫలమైంది. దయచేసి తరువాత ప్రయత్నించండి.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'పర్సోనాను సృష్టించడానికి విఫలమైంది: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'పర్సోనాను సక్రియం చేయడానికి విఫలమైంది';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'పర్సోనాను సక్రియం చేసేటప్పుడు లోపం: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'సమర్థిత దేశాలను పొందడానికి విఫలమైంది. దయచేసి తరువాత ప్రయత్నించండి.';
 
   @override
@@ -7258,21 +7163,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'దయచేసి మొదటిసారి యాప్‌ను జన్మిస్తోండి';
-
-  @override
-  String get xHandleTitle => 'మీ X హ్యాండిల్ ఎంటి?';
-
-  @override
-  String get xHandleDescription => 'మేము మీ ఖాతా కార్యకలాపం ఆధారంగా\nమీ Omi క్లోన్‌ను ముందుగా సిద్ధం చేస్తాము';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'దయచేసి మీ X హ్యాండిల్‌ను నమోదు చేయండి';
-
-  @override
-  String get xHandlePleaseEnterValid => 'దయచేసి చెల్లుబాటు అయిన X హ్యాండిల్‌ను నమోదు చేయండి';
 
   @override
   String get nextButton => 'తరువాత';
@@ -7885,9 +7775,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get categoryConversationAnalysis => 'సంభాషణ విశ్లేషణ';
 
   @override
-  String get categoryPersonalityClone => 'వ్యక్తిత్వ క్లోన్';
-
-  @override
   String get categoryHealth => 'ఆరోగ్యం';
 
   @override
@@ -7988,9 +7875,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'ఇంటిగ్రేషన్‌లు';
-
-  @override
-  String get categoryPersonalityClones => 'వ్యక్తిత్వ క్లోన్‌లు';
 
   @override
   String get categoryProductivityLifestyle => 'ఉత్పాదకత & జీవనశైలి';
@@ -9050,4 +8934,18 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get continueAnyway => 'కొనసాగించు';
+
+  @override
+  String get tasksClearCompleted => 'పూర్తయినవి తీసివేయి';
+
+  @override
+  String get tasksSelectAll => 'అన్నీ ఎంచుకో';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count పని(లు) తొలగించు';
+  }
+
+  @override
+  String get tasksMarkComplete => 'పూర్తయినట్లు గుర్తించబడింది';
 }

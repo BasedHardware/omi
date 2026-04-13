@@ -636,9 +636,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get saving => 'محفوظ ہو رہا ہے...';
 
   @override
-  String get personaConfig => 'اپنے AI شخصیت کو ترتیب دیں';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2427,12 +2424,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get createKeyToGetStarted => 'شروع کرنے کے لیے کلید بنائیں';
 
   @override
-  String get persona => 'شخصیت';
-
-  @override
-  String get configureYourAiPersona => 'اپنی AI شخصیت کنفیگر کریں';
-
-  @override
   String get configureSttProvider => 'STT فراہم کنندہ کنفیگر کریں';
 
   @override
@@ -2948,9 +2939,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'ایپ کے بارے میں';
-
-  @override
-  String get aboutThePersona => 'شخصیت کے بارے میں';
 
   @override
   String get chatPersonality => 'چیٹ کی شخصیت';
@@ -3487,9 +3475,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get changeYourName => 'اپنا نام تبدیل کریں';
 
   @override
-  String get manageYourOmiPersona => 'اپنے Omi شخصیت کا انتظام کریں';
-
-  @override
   String get voiceAndPeople => 'آواز اور لوگ';
 
   @override
@@ -3899,9 +3884,6 @@ class AppLocalizationsUr extends AppLocalizations {
       'شارٹ کٹ کو تبدیل کرنے کے لیے اس پر کلک کریں۔ منسوخ کرنے کے لیے Escape دبائیں۔';
 
   @override
-  String get configurePersonaDescription => 'اپنی AI شخصیت کو ترتیب دیں';
-
-  @override
   String get configureSTTProvider => 'STT فراہم کنندہ کو ترتیب دیں';
 
   @override
@@ -4256,16 +4238,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get createAndShareYourApp => 'اپنی ایپ بنائیں اور شیئر کریں';
 
   @override
-  String get createMyClone => 'اپنا ڈپلیکیٹ بنائیں';
-
-  @override
-  String get createYourDigitalClone => 'اپنا ڈیجیٹل ڈپلیکیٹ بنائیں';
-
-  @override
   String get itemApp => 'ایپ';
-
-  @override
-  String get itemPersona => 'شخصیت';
 
   @override
   String keepItemPublic(String item) {
@@ -4294,9 +4267,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get manageApp => 'ایپ کا انتظام کریں';
-
-  @override
-  String get updatePersonaDetails => 'شخصیت کی تفصیلات اپ ڈیٹ کریں';
 
   @override
   String deleteItemTitle(String item) {
@@ -5819,9 +5789,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get chooseFile => 'فائل منتخب کریں';
 
   @override
-  String get configureAiPersona => 'اپنے AI پرسونا کو ترتیب دیں';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI معاونین کو اپنے ڈیٹا سے منسلک کریں';
 
   @override
@@ -6534,29 +6501,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get sharePublicLink => 'عوامی لنک شیئر کریں';
 
   @override
-  String get makePersonaPublic => 'پرسونا کو عوامی بنائیں';
-
-  @override
   String get connectedKnowledgeData => 'منسلک Knowledge ڈیٹا';
 
   @override
   String get enterName => 'نام درج کریں';
-
-  @override
-  String get disconnectTwitter => 'Twitter سے سوکھائیں';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'کیا آپ اپنے Twitter اکاؤنٹ کو سوکھانا چاہتے ہیں؟ آپ کا پرسونا اب آپ کے Twitter ڈیٹا تک رسائی حاصل نہیں کر سکے گا۔';
-
-  @override
-  String get getOmiDeviceDescription => 'اپنی ذاتی بات چیت کے ساتھ زیادہ درست کلون بنائیں';
-
-  @override
-  String get getOmi => 'Omi حاصل کریں';
-
-  @override
-  String get iHaveOmiDevice => 'میرے پاس Omi ڈیوائس ہے';
 
   @override
   String get goal => 'مقصد';
@@ -7110,49 +7058,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona کو دوسری صلاحیتوں کے ساتھ منتخب نہیں کیا جا سکتا';
 
   @override
-  String get personaTwitterHandleNotFound => 'X ہینڈل نہیں ملا';
-
-  @override
-  String get personaTwitterHandleSuspended => 'X ہینڈل معطل ہے';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'X ہینڈل کی تصدیق میں ناکام';
-
-  @override
-  String get personaFailedToFetch => 'آپ کے persona کو حاصل کرنے میں ناکام';
-
-  @override
-  String get personaFailedToCreate => 'Persona بنانے میں ناکام';
-
-  @override
-  String get personaConnectKnowledgeSource => 'براہ کرم کم از کم ایک علم کے ڈیٹا کے ذریعہ سے منسلک کریں (Omi یا X)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona کامیابی سے اپڈیٹ کیا گیا';
-
-  @override
-  String get personaFailedToUpdate => 'Persona اپڈیٹ کرنے میں ناکام';
-
-  @override
-  String get personaPleaseSelectImage => 'براہ کرم ایک تصویر منتخب کریں';
-
-  @override
-  String get personaFailedToCreateTryLater => 'آپ کا Persona بنانے میں ناکام۔ براہ کرم بعد میں دوبارہ کوشش کریں۔';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona بنانے میں ناکام: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona فعال کرنے میں ناکام';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Persona فعال کرنے میں خرابی: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'معاون ممالک حاصل کرنے میں ناکام۔ براہ کرم بعد میں دوبارہ کوشش کریں۔';
 
   @override
@@ -7226,21 +7131,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'براہ کرم پہلے ایک ایپ تیار کریں';
-
-  @override
-  String get xHandleTitle => 'آپ کا X ہینڈل کیا ہے؟';
-
-  @override
-  String get xHandleDescription => 'ہم آپ کے اکاؤنٹ کی سرگرمی کی بنیاد پر آپ کے Omi کلون کو پہلے سے تربیت دیں گے';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'براہ کرم اپنا X ہینڈل درج کریں';
-
-  @override
-  String get xHandlePleaseEnterValid => 'براہ کرم ایک درست X ہینڈل درج کریں';
 
   @override
   String get nextButton => 'اگلا';
@@ -7853,9 +7743,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get categoryConversationAnalysis => 'بات چیت کا تجزیہ';
 
   @override
-  String get categoryPersonalityClone => 'شخصیت کا کلون';
-
-  @override
   String get categoryHealth => 'صحت';
 
   @override
@@ -7956,9 +7843,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'انضمامات';
-
-  @override
-  String get categoryPersonalityClones => 'شخصیت کے کلون';
 
   @override
   String get categoryProductivityLifestyle => 'پروڈکٹیویٹی اور طرز زندگی';
@@ -9014,4 +8898,18 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'جاری رکھیں';
+
+  @override
+  String get tasksClearCompleted => 'مکمل کو صاف کریں';
+
+  @override
+  String get tasksSelectAll => 'سب منتخب کریں';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count کام حذف کریں';
+  }
+
+  @override
+  String get tasksMarkComplete => 'مکمل کے طور پر نشان زد';
 }

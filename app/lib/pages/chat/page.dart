@@ -278,9 +278,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   });
                                                   textFieldFocusNode.requestFocus();
                                                 },
-                                                displayOptions:
-                                                    provider.messages.length <= 1 &&
-                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
+                                                displayOptions: provider.messages.length <= 1,
                                                 appSender: provider.messageSenderApp(message.appId),
                                                 updateConversation: (ServerConversation conversation) {
                                                   context.read<ConversationProvider>().updateConversation(conversation);

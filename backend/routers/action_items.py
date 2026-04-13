@@ -122,9 +122,11 @@ def get_pending_sync_items(
 ):
     """Get action items that need sync: pending export + already synced items for bidirectional sync."""
     result = action_items_db.get_pending_apple_reminders_sync(uid)
+    pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
+    synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
     return {
-        "pending_export": [ActionItemResponse(**item) for item in result["pending_export"]],
-        "synced_items": [ActionItemResponse(**item) for item in result["synced_items"]],
+        "pending_export": [ActionItemResponse(**item) for item in pending_export],
+        "synced_items": [ActionItemResponse(**item) for item in synced_items],
     }
 
 
@@ -134,8 +136,17 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
+    # Pre-fetch items to skip locked ones
+    locked_ids = set()
+    for item in request.items:
+        existing = action_items_db.get_action_item(uid, item.id)
+        if existing and existing.get('is_locked', False):
+            locked_ids.add(item.id)
+
     updates = []
     for item in request.items:
+        if item.id in locked_ids:
+            continue
         update_data = {}
         if item.description is not None:
             update_data['description'] = item.description
@@ -455,11 +466,13 @@ class AcceptSharedTasksRequest(BaseModel):
 @router.post("/v1/action-items/share", tags=['action-items'])
 def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a shareable link for selected action items."""
-    # Validate all task_ids belong to user
+    # Validate all task_ids belong to user and are not locked
     for task_id in request.task_ids:
         item = action_items_db.get_action_item(uid, task_id)
         if not item:
             raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
+        if item.get('is_locked', False):
+            raise HTTPException(status_code=402, detail="Cannot share locked action items.")
 
     # Get sender display name
     display_name = get_user_display_name(uid)
@@ -483,11 +496,11 @@ def get_shared_action_items(token: str):
     sender_uid = share_data['uid']
     task_ids = share_data['task_ids']
 
-    # Fetch tasks — only expose description + due_at
+    # Fetch tasks — only expose description + due_at, skip locked items
     tasks = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item:
+        if item and not item.get('is_locked', False):
             tasks.append(
                 {
                     "description": item.get('description', ''),
@@ -513,6 +526,19 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     if share_data['uid'] == uid:
         raise HTTPException(status_code=400, detail="Cannot accept your own shared tasks")
 
+    sender_uid = share_data['uid']
+    task_ids = share_data['task_ids']
+
+    # Pre-validate: check which items are eligible (exist and not locked)
+    eligible_ids = []
+    for task_id in task_ids:
+        item = action_items_db.get_action_item(sender_uid, task_id)
+        if item and not item.get('is_locked', False):
+            eligible_ids.append(task_id)
+
+    if not eligible_ids:
+        raise HTTPException(status_code=402, detail="All shared tasks are locked. A paid plan is required.")
+
     # Atomically check and mark acceptance to prevent duplicates
     accepted = redis_db.try_accept_task_share(request.token, uid)
     if accepted is None:
@@ -520,14 +546,11 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     if not accepted:
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
-    sender_uid = share_data['uid']
-    task_ids = share_data['task_ids']
-
-    # Copy each task to recipient's list
+    # Copy each eligible task to recipient's list
     created_ids = []
-    for task_id in task_ids:
+    for task_id in eligible_ids:
         original = action_items_db.get_action_item(sender_uid, task_id)
-        if not original:
+        if not original or original.get('is_locked', False):
             continue
 
         new_item = {
@@ -543,5 +566,10 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         }
         new_id = action_items_db.create_action_item(uid, new_item)
         created_ids.append(new_id)
+
+    # If race condition caused all items to become locked after pre-check, rollback token
+    if not created_ids:
+        redis_db.undo_accept_task_share(request.token, uid)
+        raise HTTPException(status_code=402, detail="Shared tasks are no longer available.")
 
     return {"created": created_ids, "count": len(created_ids)}
