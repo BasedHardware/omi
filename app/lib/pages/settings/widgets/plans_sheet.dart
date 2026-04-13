@@ -508,9 +508,8 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
 
-      // If user already has an active paid plan (not canceled), use upgrade endpoint
-      // to schedule the plan change at end of billing period (works for any plan change)
-      if (currentSub.plan != PlanType.basic &&
+      // If user already has unlimited monthly plan and it's not canceled
+      if (currentSub.plan == PlanType.unlimited &&
           currentSub.status == SubscriptionStatus.active &&
           !currentSub.cancelAtPeriodEnd) {
         result = await provider.upgradeUserSubscription(priceId: priceId);
