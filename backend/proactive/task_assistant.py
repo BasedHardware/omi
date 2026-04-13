@@ -1,4 +1,8 @@
-"""Server-side TaskAssistant: drives Gemini tool loop, delegates search to desktop."""
+"""Server-side TaskAssistant: drives Gemini tool loop, delegates search to desktop.
+
+All messages are plain dicts — no protobuf dependency. The WebSocket router
+serializes these dicts to JSON for the wire.
+"""
 
 import base64
 import logging
@@ -7,8 +11,6 @@ import uuid
 from typing import AsyncIterator, Callable, Awaitable
 
 import httpx
-
-from proactive.v1 import proactive_pb2 as pb2
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,7 @@ TOOL_DECLARATIONS = [
 ]
 
 
-def _build_prompt(session_context: pb2.SessionContext, app_name: str) -> str:
+def _build_prompt(session_context: dict, app_name: str) -> str:
     """Build the Gemini prompt with injected task context, mirroring desktop TaskAssistant."""
     parts = []
     parts.append(
@@ -117,26 +119,30 @@ def _build_prompt(session_context: pb2.SessionContext, app_name: str) -> str:
     )
     parts.append(f'\nCurrent app: {app_name}')
 
-    if session_context.active_tasks:
+    active_tasks = session_context.get('active_tasks', [])
+    if active_tasks:
         parts.append('\nACTIVE TASKS (do not re-extract these):')
-        for i, task in enumerate(session_context.active_tasks):
-            score = f' [score={task.relevance_score}]' if task.relevance_score else ''
-            parts.append(f'{i + 1}. {task.description}{score}')
+        for i, task in enumerate(active_tasks):
+            score = f' [score={task.get("relevance_score", "")}]' if task.get('relevance_score') else ''
+            parts.append(f'{i + 1}. {task.get("description", "")}{score}')
 
-    if session_context.completed_tasks:
+    completed_tasks = session_context.get('completed_tasks', [])
+    if completed_tasks:
         parts.append('\nRECENTLY COMPLETED TASKS (user engaged with these):')
-        for i, task in enumerate(session_context.completed_tasks):
-            parts.append(f'{i + 1}. {task.description}')
+        for i, task in enumerate(completed_tasks):
+            parts.append(f'{i + 1}. {task.get("description", "")}')
 
-    if session_context.deleted_tasks:
+    deleted_tasks = session_context.get('deleted_tasks', [])
+    if deleted_tasks:
         parts.append('\nUSER-DELETED TASKS (do not re-extract similar):')
-        for i, task in enumerate(session_context.deleted_tasks):
-            parts.append(f'{i + 1}. {task.description}')
+        for i, task in enumerate(deleted_tasks):
+            parts.append(f'{i + 1}. {task.get("description", "")}')
 
-    if session_context.goals:
+    goals = session_context.get('goals', [])
+    if goals:
         parts.append('\nACTIVE GOALS:')
-        for i, goal in enumerate(session_context.goals):
-            parts.append(f'{i + 1}. {goal.title}: {goal.description}')
+        for i, goal in enumerate(goals):
+            parts.append(f'{i + 1}. {goal.get("title", "")}: {goal.get("description", "")}')
 
     parts.append(
         '\nAnalyze this screenshot. If you see a potential request, search for duplicates first. '
@@ -177,16 +183,19 @@ def _parse_function_call(response: dict) -> tuple:
     return None, None
 
 
-def _format_search_results(tool_result: pb2.ToolResult) -> str:
-    """Format ToolResult search results for Gemini context injection."""
-    if tool_result.error:
-        return f'Search error: {tool_result.error}'
-    if not tool_result.result or not tool_result.result.items:
+def _format_search_results(tool_result: dict) -> str:
+    """Format search results dict for Gemini context injection."""
+    error = tool_result.get('error')
+    if error:
+        return f'Search error: {error}'
+    results = tool_result.get('results', [])
+    if not results:
         return 'No matching tasks found.'
     lines = []
-    for item in tool_result.result.items:
-        status = pb2.TaskStatus.Name(item.status) if item.status else 'unknown'
-        lines.append(f'- [{status}] (sim={item.similarity:.2f}) {item.description}')
+    for item in results:
+        status = item.get('status', 'unknown')
+        sim = item.get('similarity', 0.0)
+        lines.append(f'- [{status}] (sim={sim:.2f}) {item.get("description", "")}')
     return '\n'.join(lines)
 
 
@@ -195,24 +204,25 @@ class ServerTaskAssistant:
 
     async def analyze_frame(
         self,
-        frame: pb2.FrameEvent,
-        session_context: pb2.SessionContext,
+        frame: dict,
+        session_context: dict,
         frame_id: str,
         uid: str,
-        receive_tool_result: Callable[[str, int], Awaitable[pb2.ToolResult]],
-    ) -> AsyncIterator[pb2.ServerEvent]:
+        receive_tool_result: Callable[[str, int], Awaitable[dict]],
+    ) -> AsyncIterator[dict]:
         """Run the Gemini tool loop for one frame.
 
-        Yields ServerEvent messages (ToolCallRequest or AnalysisOutcome).
-        When a search tool is needed, yields a ToolCallRequest, then awaits
+        Yields dict messages (tool_call_request or analysis_outcome).
+        When a search tool is needed, yields a tool_call_request, then awaits
         receive_tool_result() to get the desktop's response. The result is
         injected back into the Gemini conversation and the loop continues.
         """
         safe_uid = _sanitize_uid(uid)
-        prompt = _build_prompt(session_context, frame.app_name)
+        app_name = frame.get('app_name', '')
+        prompt = _build_prompt(session_context, app_name)
 
         # Build initial Gemini contents with image
-        image_b64 = base64.b64encode(frame.jpeg_bytes).decode('ascii') if frame.jpeg_bytes else ''
+        jpeg_b64 = frame.get('jpeg_base64', '')
         contents = [
             {
                 'role': 'user',
@@ -221,8 +231,8 @@ class ServerTaskAssistant:
                 ],
             }
         ]
-        if image_b64:
-            contents[0]['parts'].append({'inline_data': {'mime_type': 'image/jpeg', 'data': image_b64}})
+        if jpeg_b64:
+            contents[0]['parts'].append({'inline_data': {'mime_type': 'image/jpeg', 'data': jpeg_b64}})
 
         for iteration in range(MAX_ITERATIONS):
             try:
@@ -237,92 +247,84 @@ class ServerTaskAssistant:
                     iteration,
                     error_type,
                 )
-                yield pb2.ServerEvent(
-                    server_error=pb2.ServerError(
-                        code='GEMINI_ERROR',
-                        message=f'Gemini API error ({error_type})',
-                        retryable=True,
-                        frame_id=frame_id,
-                    )
-                )
+                yield {
+                    'type': 'server_error',
+                    'code': 'GEMINI_ERROR',
+                    'message': f'Gemini API error ({error_type})',
+                    'retryable': True,
+                    'frame_id': frame_id,
+                }
                 return
 
             func_name, func_args = _parse_function_call(response)
             if not func_name:
                 logger.warning('No function call in Gemini response: uid=%s frame=%s', safe_uid, frame_id)
-                yield pb2.ServerEvent(
-                    analysis_outcome=pb2.AnalysisOutcome(
-                        outcome_kind=pb2.NO_TASK_FOUND,
-                        context_summary='Model returned no function call',
-                        current_activity=frame.app_name,
-                        frame_id=frame_id,
-                    )
-                )
+                yield {
+                    'type': 'analysis_outcome',
+                    'outcome_kind': 'no_task_found',
+                    'context_summary': 'Model returned no function call',
+                    'current_activity': app_name,
+                    'frame_id': frame_id,
+                }
                 return
 
             # Terminal decisions (server-side only, no desktop round-trip)
             if func_name == 'no_task_found':
-                yield pb2.ServerEvent(
-                    analysis_outcome=pb2.AnalysisOutcome(
-                        outcome_kind=pb2.NO_TASK_FOUND,
-                        context_summary=func_args.get('context_summary', ''),
-                        current_activity=func_args.get('current_activity', ''),
-                        frame_id=frame_id,
-                    )
-                )
+                yield {
+                    'type': 'analysis_outcome',
+                    'outcome_kind': 'no_task_found',
+                    'context_summary': func_args.get('context_summary', ''),
+                    'current_activity': func_args.get('current_activity', ''),
+                    'frame_id': frame_id,
+                }
                 return
 
             if func_name == 'reject_task':
-                yield pb2.ServerEvent(
-                    analysis_outcome=pb2.AnalysisOutcome(
-                        outcome_kind=pb2.REJECT_TASK,
-                        reason=func_args.get('reason', ''),
-                        context_summary=func_args.get('context_summary', ''),
-                        current_activity=func_args.get('current_activity', ''),
-                        frame_id=frame_id,
-                    )
-                )
+                yield {
+                    'type': 'analysis_outcome',
+                    'outcome_kind': 'reject_task',
+                    'reason': func_args.get('reason', ''),
+                    'context_summary': func_args.get('context_summary', ''),
+                    'current_activity': func_args.get('current_activity', ''),
+                    'frame_id': frame_id,
+                }
                 return
 
             if func_name == 'extract_task':
-                task = pb2.ExtractedTask(
-                    title=func_args.get('title', ''),
-                    description=func_args.get('description', ''),
-                    priority=_parse_priority(func_args.get('priority', 'medium')),
-                    tags=func_args.get('tags', []),
-                    source_app=func_args.get('source_app', frame.app_name),
-                    inferred_deadline=func_args.get('inferred_deadline', ''),
-                    confidence=func_args.get('confidence', 0.0),
-                    source_category=func_args.get('source_category', ''),
-                    source_subcategory=func_args.get('source_subcategory', ''),
-                    relevance_score=_safe_int(func_args.get('relevance_score', 0)),
-                )
-                yield pb2.ServerEvent(
-                    analysis_outcome=pb2.AnalysisOutcome(
-                        outcome_kind=pb2.EXTRACT_TASK,
-                        task=task,
-                        context_summary=func_args.get('context_summary', ''),
-                        current_activity=func_args.get('current_activity', ''),
-                        frame_id=frame_id,
-                    )
-                )
+                yield {
+                    'type': 'analysis_outcome',
+                    'outcome_kind': 'extract_task',
+                    'task': {
+                        'title': func_args.get('title', ''),
+                        'description': func_args.get('description', ''),
+                        'priority': func_args.get('priority', 'medium'),
+                        'tags': func_args.get('tags', []),
+                        'source_app': func_args.get('source_app', app_name),
+                        'inferred_deadline': func_args.get('inferred_deadline', ''),
+                        'confidence': func_args.get('confidence', 0.0),
+                        'source_category': func_args.get('source_category', ''),
+                        'source_subcategory': func_args.get('source_subcategory', ''),
+                        'relevance_score': _safe_int(func_args.get('relevance_score', 0)),
+                    },
+                    'context_summary': func_args.get('context_summary', ''),
+                    'current_activity': func_args.get('current_activity', ''),
+                    'frame_id': frame_id,
+                }
                 return
 
-            # Search tools: delegate to desktop via gRPC stream, then resume model loop
+            # Search tools: delegate to desktop via WebSocket, then resume model loop
             if func_name in ('search_similar', 'search_keywords'):
                 request_id = str(uuid.uuid4())
-                tool_kind = pb2.SEARCH_SIMILAR if func_name == 'search_similar' else pb2.SEARCH_KEYWORDS
 
-                # Yield ToolCallRequest to client
-                yield pb2.ServerEvent(
-                    tool_call_request=pb2.ToolCallRequest(
-                        request_id=request_id,
-                        tool_kind=tool_kind,
-                        arguments=pb2.ToolCallArguments(query=func_args.get('query', '')),
-                        deadline_ms=10000,
-                        frame_id=frame_id,
-                    )
-                )
+                # Yield tool_call_request to client
+                yield {
+                    'type': 'tool_call_request',
+                    'request_id': request_id,
+                    'tool_kind': func_name,
+                    'query': func_args.get('query', ''),
+                    'deadline_ms': 10000,
+                    'frame_id': frame_id,
+                }
 
                 # Wait for desktop to respond with search results
                 try:
@@ -334,14 +336,13 @@ class ServerTaskAssistant:
                         request_id,
                         type(e).__name__,
                     )
-                    yield pb2.ServerEvent(
-                        analysis_outcome=pb2.AnalysisOutcome(
-                            outcome_kind=pb2.NO_TASK_FOUND,
-                            context_summary=f'Search tool timed out ({func_name})',
-                            current_activity=frame.app_name,
-                            frame_id=frame_id,
-                        )
-                    )
+                    yield {
+                        'type': 'analysis_outcome',
+                        'outcome_kind': 'no_task_found',
+                        'context_summary': f'Search tool timed out ({func_name})',
+                        'current_activity': app_name,
+                        'frame_id': frame_id,
+                    }
                     return
 
                 # Inject the tool result into Gemini conversation and continue the loop
@@ -364,36 +365,24 @@ class ServerTaskAssistant:
 
             # Unknown function
             logger.warning('Unknown function call: %s uid=%s', func_name, safe_uid)
-            yield pb2.ServerEvent(
-                analysis_outcome=pb2.AnalysisOutcome(
-                    outcome_kind=pb2.NO_TASK_FOUND,
-                    context_summary=f'Unknown function: {func_name}',
-                    current_activity=frame.app_name,
-                    frame_id=frame_id,
-                )
-            )
+            yield {
+                'type': 'analysis_outcome',
+                'outcome_kind': 'no_task_found',
+                'context_summary': f'Unknown function: {func_name}',
+                'current_activity': app_name,
+                'frame_id': frame_id,
+            }
             return
 
         # Max iterations reached
         logger.warning('Max iterations reached: uid=%s frame=%s', safe_uid, frame_id)
-        yield pb2.ServerEvent(
-            analysis_outcome=pb2.AnalysisOutcome(
-                outcome_kind=pb2.NO_TASK_FOUND,
-                context_summary='Max model iterations reached',
-                current_activity=frame.app_name,
-                frame_id=frame_id,
-            )
-        )
-
-
-def _parse_priority(priority_str: str) -> int:
-    """Convert priority string to proto enum value."""
-    mapping = {
-        'high': pb2.PRIORITY_HIGH,
-        'medium': pb2.PRIORITY_MEDIUM,
-        'low': pb2.PRIORITY_LOW,
-    }
-    return mapping.get(priority_str.lower(), pb2.PRIORITY_MEDIUM)
+        yield {
+            'type': 'analysis_outcome',
+            'outcome_kind': 'no_task_found',
+            'context_summary': 'Max model iterations reached',
+            'current_activity': app_name,
+            'frame_id': frame_id,
+        }
 
 
 def _safe_int(value, default: int = 0) -> int:
