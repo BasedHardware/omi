@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added a Cancel link on the sign-in screen so a failed web OAuth attempt no longer leaves the sign-in buttons permanently disabled"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.300",
+      "date": "2026-04-13",
+      "changes": [
+        "Added a Cancel link on the sign-in screen so a failed web OAuth attempt no longer leaves the sign-in buttons permanently disabled"
+      ]
+    },
     {
       "version": "0.11.299",
       "date": "2026-04-13",
