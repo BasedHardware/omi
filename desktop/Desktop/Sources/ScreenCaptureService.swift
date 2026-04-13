@@ -530,11 +530,20 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    guard let largest = appWindows.max(by: { $0.area < $1.area }) else {
+    guard !appWindows.isEmpty else {
       return (appName, nil, nil)
     }
 
-    return (appName, largest.title, largest.windowID)
+    // CGWindowListCopyWindowInfo returns windows in front-to-back z-order,
+    // so the first element for a given PID is the frontmost on screen.
+    // Among windows with the largest area, prefer the frontmost (first in the
+    // array) so we capture the window the user is looking at instead of the
+    // backmost equal-sized window (which is often the first one opened).
+    // Fixes: https://github.com/BasedHardware/omi/issues/6552
+    let maxArea = appWindows.map(\.area).max()!
+    let frontmost = appWindows.first(where: { $0.area == maxArea })!
+
+    return (appName, frontmost.title, frontmost.windowID)
   }
 
   /// Private API: get CGWindowID directly from an AXUIElement (avoids fragile position/size matching)
