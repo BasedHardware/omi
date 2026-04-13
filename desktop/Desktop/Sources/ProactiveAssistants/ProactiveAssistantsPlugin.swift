@@ -233,6 +233,16 @@ public class ProactiveAssistantsPlugin: NSObject {
             // Wire client to TaskAssistant so it uses server-side analysis
             await taskAssistant.setGRPCClient(client)
             self.grpcClient = client
+
+            // Wire transport-level disconnect so the plugin reconnects even when idle
+            await client.setOnDisconnect { [weak self] in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    log("ProactiveGRPC: Transport disconnected — scheduling reconnect")
+                    self.grpcClient = nil
+                    await self.connectGRPCClient(for: taskAssistant)
+                }
+            }
         } catch {
             // Exponential backoff: 2s, 4s, 8s, 16s, 32s
             let delaySec = UInt64(pow(2.0, Double(attempt)))
