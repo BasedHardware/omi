@@ -113,6 +113,7 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
         case "Edit": return "Editing file"
@@ -163,6 +164,8 @@ enum ChatContentBlock: Identifiable {
                 summary = nil
             }
         case "semantic_search":
+            summary = input["query"] as? String
+        case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
             summary = input["type"] as? String
@@ -332,6 +335,7 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
+            "search_tasks",
             "get_daily_recap",
             "complete_task",
             "delete_task",
@@ -1339,10 +1343,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         var lines: [String] = ["**Database schema (omi.db):**", ""]
 
         for (name, sql) in tables {
-            // Skip internal/FTS tables
+            // Skip internal tables
             if ChatPrompts.excludedTables.contains(name) { continue }
             if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
-            if name.contains("_fts") { continue } // catches all FTS virtual + internal tables
+            // Skip FTS virtual and shadow tables — documented in schemaFooter with MATCH patterns instead
+            if name.contains("_fts") { continue }
 
             // Extract column names only, stripping types, constraints, and infrastructure columns
             let columnNames = extractColumns(from: sql).compactMap { col -> String? in
@@ -1357,12 +1362,23 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
             lines.append(header)
 
-            // Column names as compact one-liner
-            lines.append("  \(columnNames.joined(separator: ", "))")
+            // Columns with annotations (key columns get descriptions, others are just names)
+            let tableAnnotations = ChatPrompts.columnAnnotations[name] ?? [:]
+            if tableAnnotations.isEmpty {
+                lines.append("  \(columnNames.joined(separator: ", "))")
+            } else {
+                let annotated = columnNames.map { col in
+                    if let desc = tableAnnotations[col] {
+                        return "\(col) — \(desc)"
+                    }
+                    return col
+                }
+                lines.append("  \(annotated.joined(separator: ", "))")
+            }
             lines.append("")
         }
 
-        // Append FTS table note
+        // Append FTS documentation, relationships, and footer
         lines.append(ChatPrompts.schemaFooter)
 
         return lines.joined(separator: "\n")
