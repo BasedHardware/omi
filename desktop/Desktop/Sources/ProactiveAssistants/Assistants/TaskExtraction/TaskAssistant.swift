@@ -1,5 +1,4 @@
 import Foundation
-import GRPC
 
 /// Task extraction assistant that identifies tasks and action items from screen content
 /// Uses single-stage Gemini tool calling with vector + FTS5 search for deduplication
@@ -20,28 +19,28 @@ actor TaskAssistant: ProactiveAssistant {
     // MARK: - Properties
 
     private let geminiClient: GeminiClient
-    /// gRPC client for server-side Gemini tool loop (nil = use local Gemini via proxy)
-    private(set) var grpcClient: ProactiveGRPCClient?
+    /// WebSocket client for server-side Gemini tool loop (nil = use local Gemini via proxy)
+    private(set) var wsClient: ProactiveWebSocketClient?
 
-    /// Called when the gRPC stream disconnects mid-session so the plugin can reconnect.
-    private(set) var onGRPCDisconnect: (() -> Void)?
+    /// Called when the WebSocket stream disconnects mid-session so the plugin can reconnect.
+    private(set) var onWSDisconnect: (() -> Void)?
 
     /// Set the disconnect handler (called from ProactiveAssistantsPlugin).
-    func setGRPCDisconnectHandler(_ handler: @escaping () -> Void) {
-        onGRPCDisconnect = handler
+    func setWSDisconnectHandler(_ handler: @escaping () -> Void) {
+        onWSDisconnect = handler
     }
 
-    /// Provides refreshed session context for each gRPC frame analysis.
-    private(set) var contextProvider: (() async -> Proactive_V1_SessionContext)?
+    /// Provides refreshed session context for each WebSocket frame analysis.
+    private(set) var contextProvider: (() async -> ProactiveSessionContext)?
 
     /// Set the context provider (called from ProactiveAssistantsPlugin).
-    func setContextProvider(_ provider: @escaping () async -> Proactive_V1_SessionContext) {
+    func setContextProvider(_ provider: @escaping () async -> ProactiveSessionContext) {
         contextProvider = provider
     }
 
-    /// Set the gRPC client for server-side analysis (called from ProactiveAssistantsPlugin)
-    func setGRPCClient(_ client: ProactiveGRPCClient?) {
-        grpcClient = client
+    /// Set the WebSocket client for server-side analysis (called from ProactiveAssistantsPlugin)
+    func setWSClient(_ client: ProactiveWebSocketClient?) {
+        wsClient = client
     }
     private var isRunning = false
     private var previousTasks: [ExtractedTask] = [] // Last 10 extracted tasks for context
@@ -614,13 +613,13 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Analyzing frame from \(frame.appName)...")
 
-        guard let client = grpcClient, await client.isConnected else {
-            log("Task: Skipping analysis (gRPC not connected)")
+        guard let client = wsClient, await client.isConnected else {
+            log("Task: Skipping analysis (WS not connected)")
             return
         }
 
         do {
-            let (result, searchCount) = try await extractTaskViaGRPC(
+            let (result, searchCount) = try await extractTaskViaWS(
                 client: client, frame: frame
             )
 
@@ -636,22 +635,22 @@ actor TaskAssistant: ProactiveAssistant {
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }
             }
-        } catch let error as ProactiveGRPCError where error.isRetryable {
+        } catch let error as ProactiveWSError where error.isRetryable {
             logError("Task extraction retryable error — will retry on next frame", error: error)
-            // Don't clear grpcClient: the transport is still alive
+            // Don't clear wsClient: the transport is still alive
         } catch {
-            logError("Task extraction stream error — clearing gRPC client", error: error)
-            self.grpcClient = nil
-            // Reconnection is handled by ProactiveGRPCClient.onDisconnect (transport-level callback)
+            logError("Task extraction stream error — clearing WS client", error: error)
+            self.wsClient = nil
+            // Reconnection is handled by ProactiveWebSocketClient.onDisconnect (transport-level callback)
         }
     }
 
-    // MARK: - Server-Side Analysis (gRPC)
+    // MARK: - Server-Side Analysis (WebSocket)
 
-    /// Send a frame to the ProactiveAI gRPC server and handle the bidi tool loop.
+    /// Send a frame to the ProactiveAI WebSocket server and handle the bidi tool loop.
     /// Local searches are executed on-device via the toolExecutor callback.
-    private func extractTaskViaGRPC(
-        client: ProactiveGRPCClient,
+    private func extractTaskViaWS(
+        client: ProactiveWebSocketClient,
         frame: CapturedFrame
     ) async throws -> (TaskExtractionResult?, Int) {
         var searchCount = 0
@@ -673,34 +672,27 @@ actor TaskAssistant: ProactiveAssistant {
 
                 let results: [TaskSearchResult]
                 switch toolKind {
-                case .searchSimilar:
+                case "search_similar":
                     results = await self.executeVectorSearch(query: query)
-                case .searchKeywords:
+                case "search_keywords":
                     results = await self.executeKeywordSearch(query: query)
                 default:
                     results = []
                 }
 
                 return results.map { r in
-                    let status: Proactive_V1_TaskStatus
+                    let status: String
                     switch r.status {
-                    case "completed": status = .completed
-                    case "deleted": status = .deleted
-                    default: status = .active
-                    }
-                    let matchType: Proactive_V1_MatchType
-                    switch r.matchType {
-                    case "vector": matchType = .vector
-                    case "fts": matchType = .fts
-                    case "both": matchType = .both
-                    default: matchType = .unspecified
+                    case "completed": status = "completed"
+                    case "deleted": status = "deleted"
+                    default: status = "active"
                     }
                     return SearchResultEntry(
                         taskId: r.id,
                         description: r.description,
                         status: status,
                         similarity: r.similarity ?? 0,
-                        matchType: matchType,
+                        matchType: r.matchType ?? "unspecified",
                         relevanceScore: Int32(r.relevanceScore ?? 0)
                     )
                 }
