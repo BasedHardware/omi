@@ -92,6 +92,11 @@ public actor ProactiveGRPCClient {
 
     public private(set) var isConnected = false
 
+    /// How long to wait for SessionReady after sending ClientHello.
+    private let connectTimeout: TimeInterval = 15
+    /// How long to wait for a terminal AnalysisOutcome per frame.
+    private let analyzeTimeout: TimeInterval = 60
+
     public init(host: String = "localhost", port: Int = 50051) {
         self.host = host
         self.port = port
@@ -137,6 +142,13 @@ public actor ProactiveGRPCClient {
         }
         self.sessionCall = call
 
+        // Monitor gRPC call status — finish the AsyncStream when transport dies
+        call.status.whenComplete { [weak self] result in
+            Task { [weak self] in
+                await self?.handleCallEnded(result: result)
+            }
+        }
+
         // Send ClientHello
         let hello = Proactive_V1_ClientEvent.with {
             $0.clientHello = Proactive_V1_ClientHello.with {
@@ -150,10 +162,18 @@ public actor ProactiveGRPCClient {
         call.sendMessage(hello, promise: nil)
         self.contextVersion = hello.clientHello.contextVersion
 
-        // Wait for SessionReady
+        // Wait for SessionReady with timeout
         guard let events = serverEvents else {
             throw ProactiveGRPCError.notConnected
         }
+
+        // Schedule a timeout that finishes the stream if connect takes too long
+        let timeoutTask = Task { [weak self] in
+            try await Task.sleep(nanoseconds: UInt64(connectTimeout * 1_000_000_000))
+            await self?.handleConnectTimeout()
+        }
+
+        defer { timeoutTask.cancel() }
 
         for await event in events {
             if case .sessionReady(let ready) = event.event {
@@ -230,10 +250,18 @@ public actor ProactiveGRPCClient {
         }
         call.sendMessage(event, promise: nil)
 
-        // Process server events until we get a terminal outcome
+        // Process server events until we get a terminal outcome (with timeout)
         guard let events = serverEvents else {
             throw ProactiveGRPCError.notConnected
         }
+
+        // Schedule a timeout that finishes the stream if analysis takes too long
+        let timeoutTask = Task { [weak self] in
+            try await Task.sleep(nanoseconds: UInt64(analyzeTimeout * 1_000_000_000))
+            await self?.handleAnalyzeTimeout()
+        }
+
+        defer { timeoutTask.cancel() }
 
         for await serverEvent in events {
             guard let eventKind = serverEvent.event else { continue }
@@ -305,6 +333,35 @@ public actor ProactiveGRPCClient {
 
     private func handleServerEvent(_ event: Proactive_V1_ServerEvent) {
         serverEventsContinuation?.yield(event)
+    }
+
+    /// Timeout handler for connect — finishes the event stream so the `for await` loop exits.
+    private func handleConnectTimeout() {
+        logger.error("Connect timed out after \(self.connectTimeout)s")
+        serverEventsContinuation?.finish()
+    }
+
+    /// Timeout handler for analyzeFrame — finishes the event stream so the `for await` loop exits.
+    private func handleAnalyzeTimeout() {
+        logger.error("Frame analysis timed out after \(self.analyzeTimeout)s")
+        serverEventsContinuation?.finish()
+    }
+
+    /// Called when the gRPC call terminates (server close, transport error, etc.)
+    /// Must be called on the actor (dispatched via Task in the whenComplete callback).
+    private func handleCallEnded(result: Result<GRPCStatus, Error>) {
+        let reason: String
+        switch result {
+        case .success(let status) where status.code == .ok:
+            reason = "server closed stream normally"
+        case .success(let status):
+            reason = "gRPC status \(status.code): \(status.message ?? "")"
+        case .failure(let error):
+            reason = "transport error: \(error.localizedDescription)"
+        }
+        logger.info("gRPC call ended: \(reason)")
+        isConnected = false
+        serverEventsContinuation?.finish()
     }
 
     private func convertOutcome(_ outcome: Proactive_V1_AnalysisOutcome) -> ProactiveAnalysisResult {
