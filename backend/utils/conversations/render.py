@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import timezone
-from typing import TYPE_CHECKING, List, Sequence
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Dict, List, Sequence
 
 from models.other import Person
 
@@ -80,3 +80,28 @@ def conversations_to_string(
         result.append(conversation_str.strip())
 
     return "\n\n---------------------\n\n".join(result).strip()
+
+
+def serialize_datetimes(obj: Any) -> Any:
+    """Recursively convert datetime objects to ISO format strings.
+
+    Replaces: models/conversation.py::as_dict_cleaned_dates (nested helper),
+              utils/webhooks.py::_json_serialize_datetime,
+              utils/app_integrations.py::_json_serialize_datetime.
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: serialize_datetimes(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_datetimes(item) for item in obj]
+    return obj
+
+
+def conversation_to_dict(conversation: Conversation) -> Dict:
+    """Convert a Conversation to a JSON-safe dict with ISO datetime strings.
+
+    Replaces Conversation.as_dict_cleaned_dates(). Serialization is a rendering
+    concern, not a model concern.
+    """
+    return serialize_datetimes(conversation.dict())

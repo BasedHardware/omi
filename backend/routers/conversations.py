@@ -25,6 +25,8 @@ from models.conversation import (
     UpdateSegmentTextRequest,
 )
 from utils.conversations.factory import hydrate_conversation
+from utils.conversations.redact import redact_conversations_for_list
+from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
@@ -148,15 +150,7 @@ def get_conversations(
         starred=starred,
     )
 
-    for conv in conversations:
-        if conv.get('is_locked', False):
-            if 'structured' in conv:
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-            conv['apps_results'] = []
-            conv['plugins_results'] = []
-            conv['suggested_summarization_apps'] = []
-            conv['transcript_segments'] = []
+    redact_conversations_for_list(conversations)
     return conversations
 
 
@@ -631,7 +625,7 @@ def get_shared_conversation_by_id(conversation_id: str):
         people = [Person(**p) for p in people_data]
 
     # Return conversation with people data
-    response_dict = conversation.as_dict_cleaned_dates()
+    response_dict = conversation_to_dict(conversation)
     response_dict['people'] = [p.dict() for p in people]
     return response_dict
 

@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import List, Any
+from typing import List
 
 import requests
 
@@ -15,58 +15,12 @@ from database.redis_db import (
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
-import database.users as users_db
-import database.folders as folders_db
+from utils.conversations.enrich import add_speaker_names, add_folder_names
+from utils.conversations.render import conversation_to_dict
 from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _json_serialize_datetime(obj: Any) -> Any:
-    """Helper function to recursively convert datetime objects to ISO format strings for JSON serialization"""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    elif isinstance(obj, dict):
-        return {key: _json_serialize_datetime(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [_json_serialize_datetime(item) for item in obj]
-    else:
-        return obj
-
-
-def _add_speaker_names_to_payload(uid, payload: dict):
-    """Add speaker_name to transcript segments in webhook payload."""
-    segments = payload.get('transcript_segments', [])
-    if not segments:
-        return
-
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
-
-    person_ids = [seg.get('person_id') for seg in segments if seg.get('person_id')]
-    people_map = {}
-    if person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people_map = {p['id']: p['name'] for p in people_data}
-
-    for seg in segments:
-        if seg.get('is_user'):
-            seg['speaker_name'] = user_name
-        elif seg.get('person_id') and seg['person_id'] in people_map:
-            seg['speaker_name'] = people_map[seg['person_id']]
-        else:
-            seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
-
-
-def _add_folder_name_to_payload(uid, payload: dict):
-    """Add folder_name to webhook payload based on folder_id."""
-    folder_id = payload.get('folder_id')
-    if folder_id:
-        folder = folders_db.get_folder(uid, folder_id)
-        payload['folder_name'] = folder['name'] if folder else None
-    else:
-        payload['folder_name'] = None
 
 
 def conversation_created_webhook(uid, memory: Conversation):
@@ -81,10 +35,9 @@ def conversation_created_webhook(uid, memory: Conversation):
             return
         webhook_url += f'?uid={uid}'
         try:
-            payload = memory.as_dict_cleaned_dates()
-            _add_speaker_names_to_payload(uid, payload)
-            _add_folder_name_to_payload(uid, payload)
-            payload = _json_serialize_datetime(payload)
+            payload = conversation_to_dict(memory)
+            add_speaker_names(uid, [payload])
+            add_folder_names(uid, [payload])
             response = requests.post(
                 webhook_url,
                 json=payload,

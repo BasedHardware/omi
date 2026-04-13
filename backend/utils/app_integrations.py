@@ -1,6 +1,6 @@
 import asyncio
 import threading
-from typing import List, Any
+from typing import List
 from datetime import datetime
 import os
 import requests
@@ -40,22 +40,11 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
+from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _json_serialize_datetime(obj: Any) -> Any:
-    """Helper function to recursively convert datetime objects to ISO format strings for JSON serialization"""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    elif isinstance(obj, dict):
-        return {key: _json_serialize_datetime(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [_json_serialize_datetime(item) for item in obj]
-    else:
-        return obj
 
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
@@ -127,7 +116,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
         if not app.external_integration.webhook_url:
             return
 
-        conversation_dict = conversation.as_dict_cleaned_dates()
+        conversation_dict = conversation_to_dict(conversation)
 
         # Ignore external data on workflow
         if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:
@@ -140,7 +129,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             url += '?uid=' + uid
 
         try:
-            payload = _json_serialize_datetime(conversation_dict)
+            payload = serialize_datetimes(conversation_dict)
             response = requests.post(
                 url,
                 json=payload,
