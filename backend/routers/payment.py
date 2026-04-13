@@ -334,7 +334,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             updated_sub = stripe.Subscription.modify(
                 stripe_sub['id'],
                 items=[{'id': current_item_id, 'price': request.price_id}],
-                proration_behavior='create_prorations',
+                proration_behavior='always_invoice',
                 metadata={'uid': uid, 'sub_type': target_plan.value},
             )
 
