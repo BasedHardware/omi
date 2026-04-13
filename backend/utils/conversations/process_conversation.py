@@ -85,6 +85,7 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
+        user_language = users_db.get_user_language_preference(uid) or language_code
 
         # Fetch existing action items from past 2 days for deduplication
         existing_action_items = None
@@ -113,6 +114,7 @@ def _get_structured(
                         language_code,
                         tz,
                         calendar_meeting_context=calendar_context,
+                        output_language_code=user_language,
                     )
                 with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                     structured.action_items = extract_action_items(
@@ -122,13 +124,19 @@ def _get_structured(
                         tz,
                         existing_action_items=existing_action_items,
                         calendar_meeting_context=calendar_context,
+                        output_language_code=user_language,
                     )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_message_structure(
-                        conversation.text, conversation.started_at, language_code, tz, conversation.text_source_spec
+                        conversation.text,
+                        conversation.started_at,
+                        language_code,
+                        tz,
+                        conversation.text_source_spec,
+                        output_language_code=user_language,
                     )
                 return structured, False
 
@@ -153,6 +161,7 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                    output_language_code=user_language,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
@@ -162,6 +171,7 @@ def _get_structured(
                     tz,
                     photos=conversation.photos,
                     existing_action_items=existing_action_items,
+                    output_language_code=user_language,
                 )
             return structured, False
 
@@ -185,6 +195,7 @@ def _get_structured(
                 tz,
                 photos=conversation.photos,
                 calendar_meeting_context=calendar_context,
+                output_language_code=user_language,
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
@@ -195,6 +206,7 @@ def _get_structured(
                 photos=conversation.photos,
                 existing_action_items=existing_action_items,
                 calendar_meeting_context=calendar_context,
+                output_language_code=user_language,
             )
         return structured, False
     except Exception as e:

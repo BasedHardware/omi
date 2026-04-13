@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_message_structure(
-    text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None
+    text: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    text_source_spec: str = None,
+    output_language_code: str = None,
 ) -> Structured:
+    response_language = output_language_code or language_code
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
-    The message language is {language_code}. Use the same language {language_code} for your response.
+    The message language is {language_code}. You MUST respond entirely in {response_language}.
 
     For the title, create a concise title that captures the main topic of the message.
     For the overview, summarize the message with the main points discussed, make sure to capture the key information and important details.
@@ -38,6 +44,7 @@ def get_message_structure(
     response = chain.invoke(
         {
             'language_code': language_code,
+            'response_language': response_language,
             'started_at': started_at.isoformat(),
             'tz': tz,
             'text': text,
