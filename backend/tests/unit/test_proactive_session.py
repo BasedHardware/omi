@@ -494,3 +494,68 @@ async def test_tool_result_timeout_in_receive():
                 results.append(ev)
 
     assert timed_out
+
+
+# ---------------------------------------------------------------------------
+# Boundary: client disconnect during tool wait
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_during_tool_wait_is_ignored():
+    """Heartbeat messages during tool wait should be silently consumed, not crash."""
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        yield pb2.ServerEvent(
+            tool_call_request=pb2.ToolCallRequest(
+                request_id='heartbeat-test',
+                tool_kind=pb2.SEARCH_SIMILAR,
+                arguments=pb2.ToolCallArguments(query='test'),
+                deadline_ms=5000,
+                frame_id=frame_id,
+            )
+        )
+        result = await receive_tool_result('heartbeat-test', 5000)
+        yield pb2.ServerEvent(
+            analysis_outcome=pb2.AnalysisOutcome(
+                outcome_kind=pb2.NO_TASK_FOUND,
+                context_summary=f'got {result.request_id}',
+                current_activity='test',
+                frame_id=frame_id,
+            )
+        )
+
+    hello = pb2.ClientEvent(
+        client_hello=pb2.ClientHello(protocol_version='1.0', context_version='v1', session_context=pb2.SessionContext())
+    )
+    frame = pb2.ClientEvent(frame_event=pb2.FrameEvent(app_name='Test', frame_number=1, screenshot_id='f1'))
+    heartbeat = pb2.ClientEvent(heartbeat=pb2.Heartbeat())
+    tool_result = pb2.ClientEvent(
+        tool_result=pb2.ToolResult(request_id='heartbeat-test', result=pb2.SearchResults(items=[]))
+    )
+
+    servicer = ProactiveAIServicer()
+
+    async def request_iter():
+        yield hello
+        yield frame
+        await asyncio.sleep(0.1)
+        yield heartbeat  # heartbeat during tool wait should be ignored
+        yield tool_result
+        await asyncio.sleep(0.5)
+
+    context = MagicMock()
+    context.invocation_metadata.return_value = [('authorization', 'Bearer fake')]
+    context.abort = AsyncMock()
+
+    with patch('proactive.service.extract_uid_from_metadata', return_value='test-uid'):
+        with patch('proactive.service.ServerTaskAssistant') as MockTA:
+            MockTA.return_value.analyze_frame = mock_analyze_frame
+            results = []
+            async for ev in servicer.Session(request_iter(), context):
+                results.append(ev)
+
+    assert len(results) == 3
+    assert results[0].WhichOneof('event') == 'session_ready'
+    assert results[1].WhichOneof('event') == 'tool_call_request'
+    assert results[2].WhichOneof('event') == 'analysis_outcome'
