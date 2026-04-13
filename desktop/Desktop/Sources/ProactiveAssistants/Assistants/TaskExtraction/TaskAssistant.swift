@@ -637,9 +637,9 @@ actor TaskAssistant: ProactiveAssistant {
                 }
             }
         } catch {
-            logError("Task extraction stream error — clearing gRPC client for reconnect", error: error)
+            logError("Task extraction stream error — clearing gRPC client", error: error)
             self.grpcClient = nil
-            onGRPCDisconnect?()
+            // Reconnection is handled by ProactiveGRPCClient.onDisconnect (transport-level callback)
         }
     }
 
