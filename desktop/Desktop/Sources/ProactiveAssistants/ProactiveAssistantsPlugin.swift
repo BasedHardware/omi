@@ -230,6 +230,13 @@ public class ProactiveAssistantsPlugin: NSObject {
             )
             log("ProactiveGRPC: Connected — session \(ready.sessionID)")
 
+            // If monitoring was stopped while we were connecting, tear down immediately
+            guard isMonitoring else {
+                log("ProactiveGRPC: Monitoring stopped during connect — disconnecting")
+                await client.disconnect()
+                return
+            }
+
             // Wire client to TaskAssistant so it uses server-side analysis
             await taskAssistant.setGRPCClient(client)
             self.grpcClient = client
