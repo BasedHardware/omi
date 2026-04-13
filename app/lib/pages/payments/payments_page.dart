@@ -12,14 +12,26 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'models/payment_method_config.dart';
 
-class PaymentsPage extends StatefulWidget {
+class PaymentsPage extends StatelessWidget {
   const PaymentsPage({super.key});
 
   @override
-  State<PaymentsPage> createState() => _PaymentsPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => PaymentMethodProvider(),
+      child: const _PaymentsPageView(),
+    );
+  }
 }
 
-class _PaymentsPageState extends State<PaymentsPage> {
+class _PaymentsPageView extends StatefulWidget {
+  const _PaymentsPageView();
+
+  @override
+  State<_PaymentsPageView> createState() => _PaymentsPageState();
+}
+
+class _PaymentsPageState extends State<_PaymentsPageView> {
   @override
   void initState() {
     super.initState();
