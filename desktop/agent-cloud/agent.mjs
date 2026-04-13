@@ -129,21 +129,21 @@ DATABASE SCHEMA:
 ${schema}
 
 TOOLS:
-- **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
+- **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Supports FTS5 MATCH for keyword search. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
 - **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range. Use for "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
 - **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
 GUIDELINES:
-- For "what did I do today/yesterday/this week" queries, use get_daily_recap — it's a single tool call that returns a formatted summary of apps, conversations, and tasks. Much faster than multiple execute_sql calls.
+- For "what did I do today/yesterday/this week" queries, use get_daily_recap — it's a single tool call that returns a formatted summary. Much faster than multiple execute_sql calls.
 - Only use get_conversations_tool when the user asks about specific conversation transcripts or content details. For activity summaries, get_daily_recap is faster.
 - For time-filtered queries on screenshots, prefer range comparisons: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime') AND timestamp < datetime('now', 'start of day', 'localtime'). Avoid wrapping the column in date() or strftime() in WHERE clauses — it's slower on large tables.
-- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding (600K+ rows — always filter by timestamp range)
-- Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
-- Transcription sessions have: title, overview, startedAt, finishedAt, source
-- For task queries, use action_items table
+- Key tables: screenshots (timestamp, appName, windowTitle, ocrText — 600K+ rows, always filter by timestamp), action_items (description, completed, priority, category, dueAt), memories (content, category, source), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), staged_tasks (description, priority), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text), ai_user_profiles (profileText, generatedAt)
+- FTS tables for keyword search: screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description), staged_tasks_fts(description), task_chat_messages_fts(messageText)
+- For task queries, use action_items table (or FTS: action_items_fts MATCH 'keyword')
 - For conversation queries, use transcription_sessions + transcription_segments
+- For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
 - Be concise and helpful. Format results clearly.`;
 
@@ -304,8 +304,9 @@ Don't use when (if those tools are available):
 - If backend tools are not available, fall back to execute_sql on the local transcription_sessions table
 
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
+Supports FTS5 MATCH queries for keyword search (e.g., WHERE screenshots_fts MATCH 'keyword').
 
-Key tables: screenshots (appName, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), action_items (description, completed, priority, dueAt).`,
+Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).`,
   { query: z.string().describe("SQL query to execute against omi.db") },
   async ({ query }) => {
     const result = executeSqlQuery(query);
