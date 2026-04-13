@@ -350,10 +350,12 @@ public actor ProactiveGRPCClient {
         serverEventsContinuation?.finish()
     }
 
-    /// Timeout handler for analyzeFrame — finishes the event stream so the `for await` loop exits.
+    /// Timeout handler for analyzeFrame — finishes the event stream and cancels the gRPC call.
+    /// Cancelling the call triggers handleCallEnded → onDisconnect for reconnection.
     private func handleAnalyzeTimeout() {
         logger.error("Frame analysis timed out after \(self.analyzeTimeout)s")
         serverEventsContinuation?.finish()
+        sessionCall?.cancel(promise: nil)
     }
 
     /// Called when the gRPC call terminates (server close, transport error, etc.)
@@ -424,6 +426,12 @@ public enum ProactiveGRPCError: Error, LocalizedError {
     case retryableError(code: String, message: String)
     case streamEnded
     case timeout
+
+    /// Whether this error is transient and the connection should be kept alive.
+    public var isRetryable: Bool {
+        if case .retryableError = self { return true }
+        return false
+    }
 
     public var errorDescription: String? {
         switch self {
