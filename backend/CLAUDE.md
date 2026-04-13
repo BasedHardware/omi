@@ -139,10 +139,84 @@ black --line-length 120 --skip-string-normalization <files>
 
 Never block the event loop — it freezes health checks, HPA scaling, and all concurrent connections.
 
-- **Lane 1 — Async HTTP** (`utils/http_client.py`): Use shared `httpx.AsyncClient` pools (`get_webhook_client()`, `get_maps_client()`, `get_auth_client()`, `get_stt_client()`). Never `requests.*` in async. Webhooks have per-URL circuit breakers and semaphore-bounded concurrency. Audio byte calls use latest-wins dropping.
-- **Lane 2 — Executors** (`utils/executors.py`): Use `critical_executor` (8 workers) or `storage_executor` (4 workers). Never ad-hoc `Thread`/`ThreadPoolExecutor`. Coordinators that fan out to `critical_executor` must run in default executor (`None`) to avoid deadlock.
-- **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
-- **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
+### Lane 1 — Async HTTP (`utils/http_client.py`)
+
+Shared `httpx.AsyncClient` pools for all outbound HTTP. Each client has tuned timeouts and connection limits:
+
+| Client | Get via | Timeout | Max conn | Semaphore | Use case |
+|--------|---------|---------|----------|-----------|----------|
+| webhook | `get_webhook_client()` | 30s (2s connect) | 64 | `get_webhook_semaphore()` (64) | Developer webhooks, integrations |
+| maps | `get_maps_client()` | 10s (2s connect) | 8 | `get_maps_semaphore()` (8) | Google Maps geocoding |
+| auth | `get_auth_client()` | 10s (2s connect) | 20 | `get_auth_semaphore()` (20) | OAuth token exchange |
+| stt | `get_stt_client()` | 300s (5s connect) | 8 | `get_stt_semaphore()` (8) | Pre-recorded STT, ML services |
+
+**Rules:**
+- Never `requests.*` in async — it blocks the event loop for the entire request duration.
+- Never `httpx.get()`/`httpx.post()` (sync httpx) in async — same problem. Always `await client.get()`.
+- Always wrap calls in the matching semaphore: `async with get_webhook_semaphore(): ...` — prevents unbounded fan-out.
+- Webhooks have per-URL circuit breakers (`get_webhook_circuit_breaker(url)`) — 5 failures → 30s open → half-open probe. Call `cb.record_success()` / `cb.record_failure()` after each request.
+- Audio byte webhooks use latest-wins dropping (`latest_wins_start(uid)` / `latest_wins_check(uid, version)`) — if a newer audio chunk arrives before the old one is sent, the old one is silently dropped.
+- Clients are lazy singletons — created on first use, closed at shutdown via `close_all_clients()`.
+
+**Adding a new outbound HTTP target:**
+1. Add a new `_foo_client` + `get_foo_client()` in `http_client.py` with appropriate timeouts and pool size.
+2. Add a `get_foo_semaphore()` with a concurrency limit matching the pool size.
+3. Add the client to `close_all_clients()`.
+4. Use it: `async with get_foo_semaphore(): client = get_foo_client(); response = await client.get(...)`.
+
+### Lane 2 — Executors (`utils/executors.py`)
+
+Two shared `ThreadPoolExecutor` instances for offloading blocking work from the event loop:
+
+| Executor | Workers | Use case |
+|----------|---------|----------|
+| `critical_executor` | 8 | process_conversation, memory extraction, action items, webhook delivery, vector ops |
+| `storage_executor` | 4 | Audio precaching, GCS uploads/downloads |
+
+**Rules:**
+- Never create ad-hoc `Thread()` or `ThreadPoolExecutor()` — use the shared executors.
+- Never `Thread().start()` + `.join()` — it blocks the calling thread (and the event loop if called from async).
+- Use `loop.run_in_executor(critical_executor, fn)` for CPU/blocking work from async code.
+- **Deadlock rule**: Functions submitted to `critical_executor` must NOT themselves submit to `critical_executor`. If a coordinator fans out to `critical_executor`, the coordinator must run in the default executor (`None`), not in `critical_executor`.
+- Shutdown: `shutdown_executors()` is registered via `atexit` and also wired in `main.py`.
+
+### Lane 3 — Lint (`scripts/lint_async_blockers.py`)
+
+AST-based linter that catches blocking patterns inside async functions:
+- `requests.get/post/...` → use `httpx.AsyncClient`
+- `httpx.get/post/...` (sync) → use `httpx.AsyncClient`
+- `time.sleep()` → use `asyncio.sleep()`
+- `Thread().start()` → use `run_in_executor()`
+
+```bash
+python scripts/lint_async_blockers.py           # scan all backend code
+python scripts/lint_async_blockers.py --strict   # non-zero exit on violations (CI mode)
+python scripts/lint_async_blockers.py utils/     # scan specific directory
+```
+
+Run before committing any async code changes. Skips test files and `__pycache__`.
+
+### Shutdown
+
+Both `close_all_clients()` (Lane 1) and `shutdown_executors()` (Lane 2) are wired to FastAPI `shutdown` event in `main.py` and `pusher/main.py`. This ensures HTTP connection pools are drained and executor threads are stopped on graceful shutdown.
+
+### Migration patterns (from sync to async)
+
+When converting sync code to use this architecture:
+
+1. **`requests.post(url, ...)` → `await client.post(url, ...)`**: Replace `import requests` with client getter. Wrap in semaphore. Add circuit breaker for external targets. The function must become `async def`.
+2. **`Thread(target=fn).start()` + `thread.join()` → `await loop.run_in_executor(critical_executor, fn)`**: The executor handles thread lifecycle. No more orphaned threads on exception.
+3. **`time.sleep(n)` → `await asyncio.sleep(n)`**: Or for blocking work that needs a real sleep: `await loop.run_in_executor(None, time.sleep, n)`.
+4. **`asyncio.run(coro)` in sync endpoint → just `await coro`**: If the caller is already async, don't nest event loops. If the caller is sync (rare), `asyncio.run()` creates a temporary loop — the semaphore cache handles this via loop-ID keying.
+
+### Learnings and pitfalls (from PR #6377)
+
+- **Back pressure is essential**: Without semaphores, async HTTP fans out to all concurrent WebSocket connections simultaneously. 1000 users × 1 webhook each = 1000 simultaneous outbound connections. Semaphores cap this.
+- **Circuit breakers prevent cascade failures**: A single slow/down webhook target can exhaust the connection pool. Per-URL circuit breakers isolate the damage — one broken webhook doesn't affect others.
+- **Sync `requests` inside async is silent poison**: It doesn't raise an error — it just blocks the entire event loop thread for the duration of the HTTP call. All other connections freeze. Health checks fail. HPA can't scale. This is the #1 pattern to eliminate.
+- **`asyncio.Semaphore` is event-loop-bound**: A semaphore created in one event loop can't be used in another. Sync FastAPI endpoints use `asyncio.run()` which creates a new loop each call. The semaphore cache in `http_client.py` handles this by keying on `(loop_id, name)`.
+- **Coordinator deadlock is subtle**: If function A runs in `critical_executor` and submits function B to `critical_executor`, and all 8 workers are busy running function A instances, function B never starts → deadlock. Fix: run coordinators in default executor.
+- **Webhook timeout must match previous behavior**: When migrating from `requests.post(timeout=30)` to httpx, the timeout must be preserved — partner integrations depend on the 30s window.
 
 ## Common Gotchas
 
@@ -155,3 +229,5 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 7. **Unbounded queues for user data** — `deque(maxlen=N)` silently drops audio; data-safety queues must stay unbounded
 8. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
 9. **Coordinator deadlock** — functions submitting to `critical_executor` must not themselves run in `critical_executor` — use default executor (`None`)
+10. **DG keepalive vs response timeout** — `SafeDeepgramSocket` sends `keep_alive()` every 5s idle to prevent DG's 10s connection timeout. But DG 1011 "did not provide a response" is a server-side *response* timeout, not connection idle — `keep_alive()` cannot prevent it after all audio is processed. Post-session 1011 is benign; mid-stream 1011 is a real failure.
+11. **Webhook timeout backward compatibility** — `httpx.Timeout(30.0, connect=2.0)` preserves the previous `requests.post(timeout=30)` behavior. Changing this will break partner integrations that rely on the 30s window.
