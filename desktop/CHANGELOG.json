@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Minimized pauses when Omi reads long voice responses out loud"
+  ],
   "releases": [
     {
       "version": "0.11.294",
