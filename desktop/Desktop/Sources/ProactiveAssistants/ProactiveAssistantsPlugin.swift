@@ -23,7 +23,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var taskAssistant: TaskAssistant?
     private var insightAssistant: InsightAssistant?
     private var grpcClient: ProactiveGRPCClient?
-    private var adviceAssistant: AdviceAssistant?
     private var memoryAssistant: MemoryAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
@@ -495,18 +494,24 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
             // Connect gRPC client for server-side proactive AI (non-blocking)
-            // Also wire up disconnect callback for mid-session reconnect.
+            // Also wire up disconnect callback and context provider for mid-session reconnect.
             if let task = taskAssistant {
                 let capturedTask = task
-                task.onGRPCDisconnect = { [weak self] in
-                    guard let self = self else { return }
-                    Task { @MainActor in
-                        self.log("ProactiveGRPC: Stream disconnected — scheduling reconnect")
-                        self.grpcClient = nil
-                        await self.connectGRPCClient(for: capturedTask)
+                Task {
+                    await task.setGRPCDisconnectHandler { [weak self] in
+                        guard let self = self else { return }
+                        Task { @MainActor in
+                            log("ProactiveGRPC: Stream disconnected — scheduling reconnect")
+                            self.grpcClient = nil
+                            await self.connectGRPCClient(for: capturedTask)
+                        }
                     }
+                    await task.setContextProvider { [weak self] in
+                        guard let self = self else { return Proactive_V1_SessionContext() }
+                        return await self.buildSessionContext()
+                    }
+                    await self.connectGRPCClient(for: capturedTask)
                 }
-                Task { await self.connectGRPCClient(for: capturedTask) }
             }
 
             Task { await TaskDeduplicationService.shared.start() }
