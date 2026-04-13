@@ -677,3 +677,95 @@ async def test_call_gemini_uses_header_not_query_param():
     assert f'{GEMINI_API_URL}/{GEMINI_MODEL}:generateContent' == req['url']
     # Header should contain the API key
     assert req['headers']['x-goog-api-key'] == 'test-key-abc'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: unknown function call
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unknown_function_yields_no_task():
+    """An unknown function name from Gemini should yield NO_TASK_FOUND."""
+    gemini_response = {
+        'candidates': [
+            {
+                'content': {
+                    'parts': [{'functionCall': {'name': 'unknown_function', 'args': {'query': 'test'}}}]
+                }
+            }
+        ]
+    }
+
+    ta = ServerTaskAssistant()
+    frame = pb2.FrameEvent(app_name='Safari', frame_number=1, screenshot_id='f1')
+    ctx = pb2.SessionContext()
+
+    with patch('proactive.task_assistant.GEMINI_API_KEY', 'test-key'):
+        with patch('proactive.task_assistant._call_gemini', new_callable=AsyncMock, return_value=gemini_response):
+            events = []
+            async for ev in ta.analyze_frame(
+                frame=frame,
+                session_context=ctx,
+                frame_id='f1',
+                uid='test-uid',
+                receive_tool_result=AsyncMock(),
+            ):
+                events.append(ev)
+
+    assert len(events) == 1
+    assert events[0].analysis_outcome.outcome_kind == pb2.NO_TASK_FOUND
+    assert 'Unknown function' in events[0].analysis_outcome.context_summary
+
+
+# ---------------------------------------------------------------------------
+# Boundary: max iterations exhaustion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_max_iterations_yields_no_task():
+    """When Gemini keeps requesting tools past MAX_ITERATIONS, should yield NO_TASK_FOUND."""
+    # Each Gemini response requests a search — will hit the max iteration cap
+    search_response = {
+        'candidates': [
+            {
+                'content': {
+                    'parts': [{'functionCall': {'name': 'search_similar_tasks', 'args': {'query': 'test'}}}]
+                }
+            }
+        ]
+    }
+
+    call_count = 0
+
+    async def fake_call_gemini(contents, tools):
+        nonlocal call_count
+        call_count += 1
+        return search_response
+
+    async def fake_receive_tool_result(request_id, timeout_ms=10000):
+        return pb2.ToolResult(request_id=request_id, result=pb2.SearchResults(items=[]))
+
+    ta = ServerTaskAssistant()
+    frame = pb2.FrameEvent(app_name='Safari', frame_number=1, screenshot_id='f1')
+    ctx = pb2.SessionContext()
+
+    with patch('proactive.task_assistant.GEMINI_API_KEY', 'test-key'):
+        with patch('proactive.task_assistant._call_gemini', side_effect=fake_call_gemini):
+            events = []
+            async for ev in ta.analyze_frame(
+                frame=frame,
+                session_context=ctx,
+                frame_id='f1',
+                uid='test-uid',
+                receive_tool_result=fake_receive_tool_result,
+            ):
+                events.append(ev)
+
+    # Should have tool_call_requests + final NO_TASK_FOUND
+    final = events[-1]
+    assert final.analysis_outcome.outcome_kind == pb2.NO_TASK_FOUND
+    assert 'Max model iterations' in final.analysis_outcome.context_summary
+    # Gemini was called MAX_ITERATIONS times (5)
+    assert call_count == 5
