@@ -1,5 +1,4 @@
 import Cocoa
-import GRPC
 @preconcurrency import FirebaseAuth
 import UserNotifications
 
@@ -22,7 +21,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
     private var insightAssistant: InsightAssistant?
-    private var grpcClient: ProactiveGRPCClient?
+    private var wsClient: ProactiveWebSocketClient?
     private var memoryAssistant: MemoryAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
@@ -169,39 +168,38 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
 
-    // MARK: - gRPC Lifecycle
+    // MARK: - WebSocket Lifecycle
 
-    /// Connect to the ProactiveAI gRPC server with reconnect on failure.
-    /// Runs asynchronously — monitoring starts regardless of whether gRPC connects.
-    private func connectGRPCClient(for taskAssistant: TaskAssistant) async {
-        // Read gRPC server config from environment (set via .env or run.sh)
+    /// Connect to the ProactiveAI WebSocket endpoint with reconnect on failure.
+    /// Runs asynchronously — monitoring starts regardless of whether WS connects.
+    private func connectWSClient(for taskAssistant: TaskAssistant) async {
+        // Read server config from environment (set via .env or run.sh)
         let host: String
         let port: Int
-        if let cString = getenv("OMI_GRPC_HOST"), let h = String(validatingUTF8: cString), !h.isEmpty {
+        if let cString = getenv("OMI_API_HOST"), let h = String(validatingUTF8: cString), !h.isEmpty {
             host = h
         } else {
-            // Default: same host as OMI_API_URL backend
             host = "localhost"
         }
-        if let cString = getenv("OMI_GRPC_PORT"), let p = String(validatingUTF8: cString), let pInt = Int(p) {
+        if let cString = getenv("OMI_API_PORT"), let p = String(validatingUTF8: cString), let pInt = Int(p) {
             port = pInt
         } else {
-            port = 50051
+            port = 8080
         }
 
-        await attemptGRPCConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: 1)
+        await attemptWSConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: 1)
     }
 
-    /// Attempt a single gRPC connection. On failure, schedule a retry with exponential backoff.
+    /// Attempt a single WebSocket connection. On failure, schedule a retry with exponential backoff.
     /// Bails out if monitoring has been stopped (prevents reconnect after intentional shutdown).
-    private func attemptGRPCConnect(host: String, port: Int, taskAssistant: TaskAssistant, attempt: Int) async {
+    private func attemptWSConnect(host: String, port: Int, taskAssistant: TaskAssistant, attempt: Int) async {
         guard isMonitoring else {
-            log("ProactiveGRPC: Skipping connect — monitoring stopped")
+            log("ProactiveWS: Skipping connect — monitoring stopped")
             return
         }
         let maxAttempts = 5
         guard attempt <= maxAttempts else {
-            log("ProactiveGRPC: Max reconnect attempts (\(maxAttempts)) reached — task extraction disabled")
+            log("ProactiveWS: Max reconnect attempts (\(maxAttempts)) reached — task extraction disabled")
             return
         }
 
@@ -210,7 +208,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         do {
             authToken = try await AuthService.shared.getIdToken(forceRefresh: attempt > 1)
         } catch {
-            log("ProactiveGRPC: Skipping — no auth token: \(error.localizedDescription)")
+            log("ProactiveWS: Skipping — no auth token: \(error.localizedDescription)")
             return
         }
 
@@ -220,7 +218,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 
-        let client = ProactiveGRPCClient(host: host, port: port)
+        let client = ProactiveWebSocketClient(host: host, port: port)
 
         // Wire onDisconnect BEFORE connect so there's no window where
         // transport death goes unnoticed. Client identity check prevents
@@ -229,51 +227,51 @@ public class ProactiveAssistantsPlugin: NSObject {
         await client.setOnDisconnect { [weak self] in
             guard let self = self else { return }
             Task { @MainActor in
-                guard self.grpcClient === capturedClient else {
-                    log("ProactiveGRPC: Ignoring stale disconnect callback")
+                guard self.wsClient === capturedClient else {
+                    log("ProactiveWS: Ignoring stale disconnect callback")
                     return
                 }
-                log("ProactiveGRPC: Transport disconnected — scheduling reconnect")
-                self.grpcClient = nil
-                await self.connectGRPCClient(for: taskAssistant)
+                log("ProactiveWS: Transport disconnected — scheduling reconnect")
+                self.wsClient = nil
+                await self.connectWSClient(for: taskAssistant)
             }
         }
 
         do {
-            let ready = try await client.connect(
+            let sessionId = try await client.connect(
                 authToken: authToken,
                 context: context,
                 appVersion: appVersion,
                 osVersion: osVersion
             )
-            log("ProactiveGRPC: Connected — session \(ready.sessionID)")
+            log("ProactiveWS: Connected — session \(sessionId)")
 
-            // Assign grpcClient early so stopMonitoring() can find and disconnect it
+            // Assign wsClient early so stopMonitoring() can find and disconnect it
             // if it runs during any of the subsequent actor-isolated await calls.
-            self.grpcClient = client
+            self.wsClient = client
 
             // If monitoring was stopped while we were connecting, tear down immediately
             guard isMonitoring else {
-                log("ProactiveGRPC: Monitoring stopped during connect — disconnecting")
-                self.grpcClient = nil
+                log("ProactiveWS: Monitoring stopped during connect — disconnecting")
+                self.wsClient = nil
                 await client.disconnect()
                 return
             }
 
             // Wire client to TaskAssistant so it uses server-side analysis
-            await taskAssistant.setGRPCClient(client)
+            await taskAssistant.setWSClient(client)
         } catch {
             // Exponential backoff: 2s, 4s, 8s, 16s, 32s
             let delaySec = UInt64(pow(2.0, Double(attempt)))
-            log("ProactiveGRPC: Connection failed (attempt \(attempt)/\(maxAttempts)), retrying in \(delaySec)s: \(error.localizedDescription)")
+            log("ProactiveWS: Connection failed (attempt \(attempt)/\(maxAttempts)), retrying in \(delaySec)s: \(error.localizedDescription)")
             try? await Task.sleep(nanoseconds: delaySec * 1_000_000_000)
-            await attemptGRPCConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: attempt + 1)
+            await attemptWSConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: attempt + 1)
         }
     }
 
-    /// Build a SessionContext proto from the local task store and goals.
-    private func buildSessionContext() async -> Proactive_V1_SessionContext {
-        var ctx = Proactive_V1_SessionContext()
+    /// Build a SessionContext from the local task store and goals.
+    private func buildSessionContext() async -> ProactiveSessionContext {
+        var ctx = ProactiveSessionContext()
 
         // Active tasks
         do {
@@ -282,55 +280,49 @@ public class ProactiveAssistantsPlugin: NSObject {
             let topIds = Set(topTasks.map { $0.id })
             let merged = topTasks + recentTasks.filter { !topIds.contains($0.id) }
             ctx.activeTasks = merged.map { t in
-                Proactive_V1_ActiveTask.with {
-                    $0.taskID = t.id
-                    $0.description_p = t.description
-                    $0.priority = t.priority ?? "medium"
-                    if let r = t.relevanceScore { $0.relevanceScore = Int32(r) }
-                }
+                ProactiveActiveTask(
+                    taskId: t.id,
+                    description: t.description,
+                    priority: t.priority ?? "medium",
+                    relevanceScore: t.relevanceScore.map { Int32($0) }
+                )
             }
         } catch {
-            log("ProactiveGRPC: Failed to load active tasks for context: \(error.localizedDescription)")
+            log("ProactiveWS: Failed to load active tasks for context: \(error.localizedDescription)")
         }
 
         // Completed tasks
         do {
             let completed = try await ActionItemStorage.shared.getRecentCompletedTasks(limit: 10)
             ctx.completedTasks = completed.map { t in
-                Proactive_V1_HistoricalTask.with {
-                    $0.taskID = t.id
-                    $0.description_p = t.description
-                }
+                ProactiveHistoricalTask(taskId: t.id, description: t.description)
             }
         } catch {
-            log("ProactiveGRPC: Failed to load completed tasks for context: \(error.localizedDescription)")
+            log("ProactiveWS: Failed to load completed tasks for context: \(error.localizedDescription)")
         }
 
         // Deleted tasks
         do {
             let deleted = try await ActionItemStorage.shared.getRecentDeletedTasks(limit: 10, deletedBy: "user")
             ctx.deletedTasks = deleted.map { t in
-                Proactive_V1_HistoricalTask.with {
-                    $0.taskID = t.id
-                    $0.description_p = t.description
-                }
+                ProactiveHistoricalTask(taskId: t.id, description: t.description)
             }
         } catch {
-            log("ProactiveGRPC: Failed to load deleted tasks for context: \(error.localizedDescription)")
+            log("ProactiveWS: Failed to load deleted tasks for context: \(error.localizedDescription)")
         }
 
         // Goals
         do {
             let goals = try await APIClient.shared.getGoals()
             ctx.goals = goals.map { g in
-                Proactive_V1_Goal.with {
-                    $0.goalID = g.id
-                    $0.title = g.title
-                    if let desc = g.description { $0.description_p = desc }
-                }
+                ProactiveGoal(
+                    goalId: g.id,
+                    title: g.title,
+                    description: g.description ?? ""
+                )
             }
         } catch {
-            log("ProactiveGRPC: Failed to load goals for context: \(error.localizedDescription)")
+            log("ProactiveWS: Failed to load goals for context: \(error.localizedDescription)")
         }
 
         return ctx
@@ -527,16 +519,16 @@ public class ProactiveAssistantsPlugin: NSObject {
                 AssistantCoordinator.shared.register(task)
             }
 
-            // Connect gRPC client for server-side proactive AI (non-blocking)
-            // Reconnection is handled by the client-level onDisconnect callback (wired in connectGRPCClient).
+            // Connect WebSocket client for server-side proactive AI (non-blocking)
+            // Reconnection is handled by the client-level onDisconnect callback (wired in connectWSClient).
             if let task = taskAssistant {
                 let capturedTask = task
                 Task {
                     await task.setContextProvider { [weak self] in
-                        guard let self = self else { return Proactive_V1_SessionContext() }
+                        guard let self = self else { return ProactiveSessionContext() }
                         return await self.buildSessionContext()
                     }
-                    await self.connectGRPCClient(for: capturedTask)
+                    await self.connectWSClient(for: capturedTask)
                 }
             }
 
@@ -650,12 +642,12 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
         }
         // Clear onDisconnect before disconnecting to prevent reconnect during shutdown
-        if let client = grpcClient {
+        if let client = wsClient {
             Task {
                 await client.setOnDisconnect {}
                 await client.disconnect()
             }
-            grpcClient = nil
+            wsClient = nil
         }
         Task { await TaskDeduplicationService.shared.stop() }
         Task { await TaskPromotionService.shared.stop() }
