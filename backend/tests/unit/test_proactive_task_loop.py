@@ -731,7 +731,7 @@ async def test_max_iterations_yields_no_task():
         'candidates': [
             {
                 'content': {
-                    'parts': [{'functionCall': {'name': 'search_similar_tasks', 'args': {'query': 'test'}}}]
+                    'parts': [{'functionCall': {'name': 'search_similar', 'args': {'query': 'test'}}}]
                 }
             }
         ]
