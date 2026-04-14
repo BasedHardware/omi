@@ -682,6 +682,10 @@ struct ChatBubble: View {
             case .text(_, let text):
               if !text.isEmpty {
                 SelectableMarkdown(text: text, sender: .ai)
+                  .padding(.horizontal, 14)
+                  .padding(.vertical, 10)
+                  .background(OmiColors.backgroundTertiary.opacity(0.92))
+                  .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                   .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
@@ -728,6 +732,13 @@ struct ChatBubble: View {
           // User messages or AI messages without content blocks (loaded from Firestore)
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
             SelectableMarkdown(text: displayText, sender: message.sender)
+              .padding(.horizontal, 14)
+              .padding(.vertical, 10)
+              .background(
+                message.sender == .user
+                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
+              )
+              .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
               .padding(.top, 2)
 
             // Show more / Show less toggle for long messages
