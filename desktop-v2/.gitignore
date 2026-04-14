@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+src-tauri/plugins/*/target/
+
+# Rust lockfiles in plugin subcrates (workspace manages the root one)
+# Cargo build artifacts
+**/*.rs.bk
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pnpm
+.pnpm-approved-builds.json
+
+# TypeScript build info
+tsconfig.tsbuildinfo

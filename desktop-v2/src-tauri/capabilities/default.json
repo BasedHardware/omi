@@ -1,0 +1,38 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for the Nooto desktop app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "opener:default",
+    "deep-link:default",
+    "store:default",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-request-permission",
+    "notification:allow-is-permission-granted",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "screen-capture:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://nooto-desktop-auth-1060764816205.us-central1.run.app/**" },
+        { "url": "http://127.0.0.1:10201/**" },
+        { "url": "http://localhost:10201/**" },
+        { "url": "https://identitytoolkit.googleapis.com/**" },
+        { "url": "https://console.anthropic.com/**" },
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" },
+        { "url": "https://nooto-dev.togodynamics.com/**" },
+        { "url": "https://nooto.togodynamics.com/**" }
+      ]
+    }
+  ]
+}

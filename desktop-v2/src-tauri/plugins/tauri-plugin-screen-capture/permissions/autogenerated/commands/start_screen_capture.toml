@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-start-screen-capture"
+description = "Enables the start_screen_capture command without any pre-configured scope."
+commands.allow = ["start_screen_capture"]
+
+[[permission]]
+identifier = "deny-start-screen-capture"
+description = "Denies the start_screen_capture command without any pre-configured scope."
+commands.deny = ["start_screen_capture"]

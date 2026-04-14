@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-search-screenshots"
+description = "Enables the search_screenshots command without any pre-configured scope."
+commands.allow = ["search_screenshots"]
+
+[[permission]]
+identifier = "deny-search-screenshots"
+description = "Denies the search_screenshots command without any pre-configured scope."
+commands.deny = ["search_screenshots"]

@@ -1,0 +1,558 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PermissionFile",
+  "description": "Permission file that can define a default permission, a set of permissions or a list of inlined permissions.",
+  "type": "object",
+  "properties": {
+    "default": {
+      "description": "The default permission set for the plugin",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DefaultPermission"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "set": {
+      "description": "A list of permissions sets defined",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PermissionSet"
+      }
+    },
+    "permission": {
+      "description": "A list of inlined permissions",
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Permission"
+      }
+    }
+  },
+  "definitions": {
+    "DefaultPermission": {
+      "description": "The default permission set of the plugin.\n\nWorks similarly to a permission with the \"default\" identifier.",
+      "type": "object",
+      "required": [
+        "permissions"
+      ],
+      "properties": {
+        "version": {
+          "description": "The version of the permission.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does. Tauri convention is to use `<h4>` headings in markdown content for Tauri documentation generation purposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "permissions": {
+          "description": "All permissions this set contains.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "PermissionSet": {
+      "description": "A set of direct permissions grouped together under a new name.",
+      "type": "object",
+      "required": [
+        "description",
+        "identifier",
+        "permissions"
+      ],
+      "properties": {
+        "identifier": {
+          "description": "A unique identifier for the permission.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does.",
+          "type": "string"
+        },
+        "permissions": {
+          "description": "All permissions this set contains.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PermissionKind"
+          }
+        }
+      }
+    },
+    "Permission": {
+      "description": "Descriptions of explicit privileges of commands.\n\nIt can enable commands to be accessible in the frontend of the application.\n\nIf the scope is defined it can be used to fine grain control the access of individual or multiple commands.",
+      "type": "object",
+      "required": [
+        "identifier"
+      ],
+      "properties": {
+        "version": {
+          "description": "The version of the permission.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "identifier": {
+          "description": "A unique identifier for the permission.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does. Tauri internal convention is to use `<h4>` headings in markdown content for Tauri documentation generation purposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commands": {
+          "description": "Allowed or denied commands when using this permission.",
+          "default": {
+            "allow": [],
+            "deny": []
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Commands"
+            }
+          ]
+        },
+        "scope": {
+          "description": "Allowed or denied scoped when using this permission.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Scopes"
+            }
+          ]
+        },
+        "platforms": {
+          "description": "Target platforms this permission applies. By default all platforms are affected by this permission.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Target"
+          }
+        }
+      }
+    },
+    "Commands": {
+      "description": "Allowed and denied commands inside a permission.\n\nIf two commands clash inside of `allow` and `deny`, it should be denied by default.",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "Allowed command.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "description": "Denied command, which takes priority.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Scopes": {
+      "description": "An argument for fine grained behavior control of Tauri commands.\n\nIt can be of any serde serializable type and is used to allow or prevent certain actions inside a Tauri command. The configured scope is passed to the command and will be enforced by the command implementation.\n\n## Example\n\n```json { \"allow\": [{ \"path\": \"$HOME/**\" }], \"deny\": [{ \"path\": \"$HOME/secret.txt\" }] } ```",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "Data that defines what is allowed by the scope.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        },
+        "deny": {
+          "description": "Data that defines what is denied by the scope. This should be prioritized by validation logic.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        }
+      }
+    },
+    "Value": {
+      "description": "All supported ACL values.",
+      "anyOf": [
+        {
+          "description": "Represents a null JSON value.",
+          "type": "null"
+        },
+        {
+          "description": "Represents a [`bool`].",
+          "type": "boolean"
+        },
+        {
+          "description": "Represents a valid ACL [`Number`].",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Number"
+            }
+          ]
+        },
+        {
+          "description": "Represents a [`String`].",
+          "type": "string"
+        },
+        {
+          "description": "Represents a list of other [`Value`]s.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        },
+        {
+          "description": "Represents a map of [`String`] keys to [`Value`]s.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Value"
+          }
+        }
+      ]
+    },
+    "Number": {
+      "description": "A valid ACL number.",
+      "anyOf": [
+        {
+          "description": "Represents an [`i64`].",
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "description": "Represents a [`f64`].",
+          "type": "number",
+          "format": "double"
+        }
+      ]
+    },
+    "Target": {
+      "description": "Platform target.",
+      "oneOf": [
+        {
+          "description": "MacOS.",
+          "type": "string",
+          "enum": [
+            "macOS"
+          ]
+        },
+        {
+          "description": "Windows.",
+          "type": "string",
+          "enum": [
+            "windows"
+          ]
+        },
+        {
+          "description": "Linux.",
+          "type": "string",
+          "enum": [
+            "linux"
+          ]
+        },
+        {
+          "description": "Android.",
+          "type": "string",
+          "enum": [
+            "android"
+          ]
+        },
+        {
+          "description": "iOS.",
+          "type": "string",
+          "enum": [
+            "iOS"
+          ]
+        }
+      ]
+    },
+    "PermissionKind": {
+      "type": "string",
+      "oneOf": [
+        {
+          "description": "Enables the delete_all_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-all-screenshots",
+          "markdownDescription": "Enables the delete_all_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_all_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-all-screenshots",
+          "markdownDescription": "Denies the delete_all_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_old_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-old-screenshots",
+          "markdownDescription": "Enables the delete_old_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_old_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-old-screenshots",
+          "markdownDescription": "Denies the delete_old_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_screenshot_by_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-screenshot-by-id",
+          "markdownDescription": "Enables the delete_screenshot_by_id command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_screenshot_by_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-screenshot-by-id",
+          "markdownDescription": "Denies the delete_screenshot_by_id command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_active_window_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-active-window-info",
+          "markdownDescription": "Enables the get_active_window_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_active_window_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-active-window-info",
+          "markdownDescription": "Denies the get_active_window_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_recent_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-recent-screenshots",
+          "markdownDescription": "Enables the get_recent_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_recent_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-recent-screenshots",
+          "markdownDescription": "Denies the get_recent_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_screen_capture_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-screen-capture-state",
+          "markdownDescription": "Enables the get_screen_capture_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_screen_capture_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-screen-capture-state",
+          "markdownDescription": "Denies the get_screen_capture_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_screenshot_by_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-screenshot-by-id",
+          "markdownDescription": "Enables the get_screenshot_by_id command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_screenshot_by_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-screenshot-by-id",
+          "markdownDescription": "Denies the get_screenshot_by_id command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_screenshot_image command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-screenshot-image",
+          "markdownDescription": "Enables the get_screenshot_image command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_screenshot_image command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-screenshot-image",
+          "markdownDescription": "Denies the get_screenshot_image command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_screenshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-screenshot",
+          "markdownDescription": "Enables the save_screenshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_screenshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-screenshot",
+          "markdownDescription": "Denies the save_screenshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the search_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-search-screenshots",
+          "markdownDescription": "Enables the search_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the search_screenshots command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-search-screenshots",
+          "markdownDescription": "Denies the search_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_screen_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-screen-capture",
+          "markdownDescription": "Enables the start_screen_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_screen_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-screen-capture",
+          "markdownDescription": "Denies the start_screen_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_screen_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-screen-capture",
+          "markdownDescription": "Enables the stop_screen_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_screen_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-screen-capture",
+          "markdownDescription": "Denies the stop_screen_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the take_screenshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-take-screenshot",
+          "markdownDescription": "Enables the take_screenshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_screenshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-take-screenshot",
+          "markdownDescription": "Denies the take_screenshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the take_screenshot_with_ocr command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-take-screenshot-with-ocr",
+          "markdownDescription": "Enables the take_screenshot_with_ocr command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_screenshot_with_ocr command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-take-screenshot-with-ocr",
+          "markdownDescription": "Denies the take_screenshot_with_ocr command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`"
+        },
+        {
+          "description": "Allows taking a single screenshot",
+          "type": "string",
+          "const": "allow-take-screenshot",
+          "markdownDescription": "Allows taking a single screenshot"
+        },
+        {
+          "description": "Allows taking a screenshot with OCR text extraction",
+          "type": "string",
+          "const": "allow-take-screenshot-with-ocr",
+          "markdownDescription": "Allows taking a screenshot with OCR text extraction"
+        },
+        {
+          "description": "Allows starting continuous screen capture",
+          "type": "string",
+          "const": "allow-start-screen-capture",
+          "markdownDescription": "Allows starting continuous screen capture"
+        },
+        {
+          "description": "Allows stopping screen capture",
+          "type": "string",
+          "const": "allow-stop-screen-capture",
+          "markdownDescription": "Allows stopping screen capture"
+        },
+        {
+          "description": "Allows getting active window information",
+          "type": "string",
+          "const": "allow-get-active-window-info",
+          "markdownDescription": "Allows getting active window information"
+        },
+        {
+          "description": "Allows getting the current capture state",
+          "type": "string",
+          "const": "allow-get-screen-capture-state",
+          "markdownDescription": "Allows getting the current capture state"
+        },
+        {
+          "description": "Allows saving a screenshot (with metadata) to the Rewind database",
+          "type": "string",
+          "const": "allow-save-screenshot",
+          "markdownDescription": "Allows saving a screenshot (with metadata) to the Rewind database"
+        },
+        {
+          "description": "Allows full-text search over persisted screenshots",
+          "type": "string",
+          "const": "allow-search-screenshots",
+          "markdownDescription": "Allows full-text search over persisted screenshots"
+        },
+        {
+          "description": "Allows retrieving a paginated list of recent screenshots",
+          "type": "string",
+          "const": "allow-get-recent-screenshots",
+          "markdownDescription": "Allows retrieving a paginated list of recent screenshots"
+        },
+        {
+          "description": "Allows retrieving the raw image data for a specific screenshot",
+          "type": "string",
+          "const": "allow-get-screenshot-image",
+          "markdownDescription": "Allows retrieving the raw image data for a specific screenshot"
+        },
+        {
+          "description": "Allows retrieving metadata for a specific screenshot by ID",
+          "type": "string",
+          "const": "allow-get-screenshot-by-id",
+          "markdownDescription": "Allows retrieving metadata for a specific screenshot by ID"
+        },
+        {
+          "description": "Allows deleting screenshots older than a given timestamp",
+          "type": "string",
+          "const": "allow-delete-old-screenshots",
+          "markdownDescription": "Allows deleting screenshots older than a given timestamp"
+        },
+        {
+          "description": "Allows deleting a single screenshot by its database ID",
+          "type": "string",
+          "const": "allow-delete-screenshot-by-id",
+          "markdownDescription": "Allows deleting a single screenshot by its database ID"
+        },
+        {
+          "description": "Allows deleting all screenshots from the database",
+          "type": "string",
+          "const": "allow-delete-all-screenshots",
+          "markdownDescription": "Allows deleting all screenshots from the database"
+        }
+      ]
+    }
+  }
+}

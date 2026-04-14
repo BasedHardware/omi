@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-delete-screenshot-by-id"
+description = "Enables the delete_screenshot_by_id command without any pre-configured scope."
+commands.allow = ["delete_screenshot_by_id"]
+
+[[permission]]
+identifier = "deny-delete-screenshot-by-id"
+description = "Denies the delete_screenshot_by_id command without any pre-configured scope."
+commands.deny = ["delete_screenshot_by_id"]

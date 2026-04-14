@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-screenshot-with-ocr"
+description = "Enables the take_screenshot_with_ocr command without any pre-configured scope."
+commands.allow = ["take_screenshot_with_ocr"]
+
+[[permission]]
+identifier = "deny-take-screenshot-with-ocr"
+description = "Denies the take_screenshot_with_ocr command without any pre-configured scope."
+commands.deny = ["take_screenshot_with_ocr"]

@@ -1,0 +1,88 @@
+[default]
+description = "Default permissions for the screen capture plugin"
+permissions = [
+    "allow-take-screenshot",
+    "allow-take-screenshot-with-ocr",
+    "allow-start-screen-capture",
+    "allow-stop-screen-capture",
+    "allow-get-active-window-info",
+    "allow-get-screen-capture-state",
+    "allow-save-screenshot",
+    "allow-search-screenshots",
+    "allow-get-recent-screenshots",
+    "allow-get-screenshot-image",
+    "allow-get-screenshot-by-id",
+    "allow-delete-old-screenshots",
+    "allow-delete-screenshot-by-id",
+    "allow-delete-all-screenshots",
+]
+
+[[permission]]
+identifier = "allow-take-screenshot"
+description = "Allows taking a single screenshot"
+commands.allow = ["take_screenshot"]
+
+[[permission]]
+identifier = "allow-take-screenshot-with-ocr"
+description = "Allows taking a screenshot with OCR text extraction"
+commands.allow = ["take_screenshot_with_ocr"]
+
+[[permission]]
+identifier = "allow-start-screen-capture"
+description = "Allows starting continuous screen capture"
+commands.allow = ["start_screen_capture"]
+
+[[permission]]
+identifier = "allow-stop-screen-capture"
+description = "Allows stopping screen capture"
+commands.allow = ["stop_screen_capture"]
+
+[[permission]]
+identifier = "allow-get-active-window-info"
+description = "Allows getting active window information"
+commands.allow = ["get_active_window_info"]
+
+[[permission]]
+identifier = "allow-get-screen-capture-state"
+description = "Allows getting the current capture state"
+commands.allow = ["get_screen_capture_state"]
+
+[[permission]]
+identifier = "allow-save-screenshot"
+description = "Allows saving a screenshot (with metadata) to the Rewind database"
+commands.allow = ["save_screenshot"]
+
+[[permission]]
+identifier = "allow-search-screenshots"
+description = "Allows full-text search over persisted screenshots"
+commands.allow = ["search_screenshots"]
+
+[[permission]]
+identifier = "allow-get-recent-screenshots"
+description = "Allows retrieving a paginated list of recent screenshots"
+commands.allow = ["get_recent_screenshots"]
+
+[[permission]]
+identifier = "allow-get-screenshot-image"
+description = "Allows retrieving the raw image data for a specific screenshot"
+commands.allow = ["get_screenshot_image"]
+
+[[permission]]
+identifier = "allow-get-screenshot-by-id"
+description = "Allows retrieving metadata for a specific screenshot by ID"
+commands.allow = ["get_screenshot_by_id"]
+
+[[permission]]
+identifier = "allow-delete-old-screenshots"
+description = "Allows deleting screenshots older than a given timestamp"
+commands.allow = ["delete_old_screenshots"]
+
+[[permission]]
+identifier = "allow-delete-screenshot-by-id"
+description = "Allows deleting a single screenshot by its database ID"
+commands.allow = ["delete_screenshot_by_id"]
+
+[[permission]]
+identifier = "allow-delete-all-screenshots"
+description = "Allows deleting all screenshots from the database"
+commands.allow = ["delete_all_screenshots"]

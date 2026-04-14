@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-screenshot"
+description = "Enables the take_screenshot command without any pre-configured scope."
+commands.allow = ["take_screenshot"]
+
+[[permission]]
+identifier = "deny-take-screenshot"
+description = "Denies the take_screenshot command without any pre-configured scope."
+commands.deny = ["take_screenshot"]

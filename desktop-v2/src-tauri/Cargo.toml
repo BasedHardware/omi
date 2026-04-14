@@ -1,0 +1,45 @@
+[package]
+name = "nooto-desktop-v2"
+version = "0.1.0"
+edition = "2021"
+description = "Nooto — cross-platform desktop companion"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+uuid = { version = "1", features = ["v4"] }
+urlencoding = "2"
+base64 = "0.22"
+sha2 = "0.10"
+url = "2"
+dotenvy = "0.15"
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+
+# Embedded backend — the existing Rust backend as a library crate
+nooto-desktop-backend = { path = "../../desktop/Backend-Rust" }
+
+# Plugins
+tauri-plugin-audio-capture = { path = "plugins/tauri-plugin-audio-capture" }
+tauri-plugin-screen-capture = { path = "plugins/tauri-plugin-screen-capture" }
+tauri-plugin-http = "2.5.8"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
