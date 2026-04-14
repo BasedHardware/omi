@@ -71,9 +71,17 @@ log_langsmith_status()
 validate_stripe_price_ids()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
+    # Full service account credentials — standard cloud deployment
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(credentials)
+elif os.environ.get('FIREBASE_PROJECT_ID'):
+    # Self-hosted mode: verify tokens using Firebase's public signing keys only.
+    # No service account required. The SDK fetches public keys from:
+    #   https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com
+    # Set FIREBASE_PROJECT_ID to the project ID used by your app build.
+    # For the stock Omi iOS/Android app: FIREBASE_PROJECT_ID=based-hardware-dev
+    firebase_admin.initialize_app(options={'projectId': os.environ['FIREBASE_PROJECT_ID']})
 else:
     firebase_admin.initialize_app()
 
