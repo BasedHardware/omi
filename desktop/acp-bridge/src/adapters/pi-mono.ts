@@ -335,6 +335,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.delete(sessionKey);
   }
 
+  /** Re-send the system prompt to pi-mono RPC (global state, not per-session) */
+  restoreSystemPrompt(systemPrompt: string): void {
+    this.sendCommand({
+      type: "set_system_prompt",
+      systemPrompt,
+    });
+  }
+
   supportsFeature(feature: HarnessFeature): boolean {
     switch (feature) {
       case HarnessFeature.BIDIRECTIONAL_RPC:
