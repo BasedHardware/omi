@@ -15,11 +15,17 @@ class CompositeTranscriptionSocket implements IPureSocket {
   final String? suggestedTranscriptType;
   final String? sttProvider;
 
-  /// When true, raw audio bytes are sent only to [primarySocket].
-  /// [secondarySocket] receives only forwarded transcript JSON, not audio.
+  /// When true, calls to [send] route messages only to [primarySocket].
+  /// [secondarySocket] still receives forwarded transcript JSON via
+  /// [_forwardAsSuggestedTranscript] — only the raw [send] path is skipped.
+  ///
   /// Use this when a custom STT provider handles transcription so the Omi
-  /// backend never processes audio — preventing listening-minute consumption.
-  final bool skipAudioToSecondary;
+  /// backend never processes raw audio — preventing listening-minute consumption.
+  ///
+  /// Note: [PureSocket] sets pingInterval=20s at connect time, so the secondary
+  /// WebSocket connection stays alive during silence without application-level
+  /// keep-alive messages.
+  final bool skipSendToSecondary;
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
@@ -32,7 +38,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     required this.secondarySocket,
     this.suggestedTranscriptType = 'suggested_transcript',
     this.sttProvider,
-    this.skipAudioToSecondary = false,
+    this.skipSendToSecondary = false,
   }) {
     _primaryListener = _PrimarySocketListener(this);
     _secondaryListener = _SecondarySocketListener(this);
@@ -150,11 +156,13 @@ class CompositeTranscriptionSocket implements IPureSocket {
       return;
     }
     primarySocket.send(message);
-    // When skipAudioToSecondary is set, the secondary socket only receives
-    // forwarded transcript JSON (via _forwardAsSuggestedTranscript), never
-    // raw audio bytes. This prevents the Omi backend from transcribing the
-    // audio and counting listening minutes when a custom STT provider is used.
-    if (!skipAudioToSecondary) {
+    // When skipSendToSecondary is set, messages passed to send() go only to
+    // the primary socket. The secondary socket still receives forwarded
+    // transcript JSON via _forwardAsSuggestedTranscript (which calls
+    // secondarySocket.send directly), so conversation processing continues.
+    // WebSocket-level keepalives (pingInterval=20s in PureSocket) keep the
+    // secondary connection alive during silence without audio data.
+    if (!skipSendToSecondary) {
       secondarySocket.send(message);
     }
   }
