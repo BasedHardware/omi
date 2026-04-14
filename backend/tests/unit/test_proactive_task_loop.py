@@ -403,6 +403,17 @@ async def test_search_then_extract_full_loop():
     # Verify Gemini was called twice (search + extract)
     assert mock_gemini.call_count == 2
 
+    # Verify second call includes function call + function response continuation
+    second_call_contents = mock_gemini.await_args_list[1][0][0]  # positional arg 0 = contents
+    # Should have 3 entries: original user prompt, model functionCall, user functionResponse
+    assert len(second_call_contents) == 3
+    assert second_call_contents[1]['role'] == 'model'
+    assert 'functionCall' in second_call_contents[1]['parts'][0]
+    assert second_call_contents[1]['parts'][0]['functionCall']['name'] == 'search_similar'
+    assert second_call_contents[2]['role'] == 'user'
+    assert 'functionResponse' in second_call_contents[2]['parts'][0]
+    assert second_call_contents[2]['parts'][0]['functionResponse']['name'] == 'search_similar'
+
 
 @pytest.mark.asyncio
 async def test_search_then_reject_full_loop():
@@ -755,3 +766,93 @@ async def test_max_iterations_yields_no_task():
     assert 'Max model iterations' in final['context_summary']
     # Gemini was called MAX_ITERATIONS times (5)
     assert call_count == 5
+
+
+# ---------------------------------------------------------------------------
+# Screenshot bytes forwarded to Gemini
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_jpeg_base64_forwarded_to_gemini():
+    """When frame includes jpeg_base64, Gemini should receive inline_data with image/jpeg."""
+    gemini_response = {
+        'candidates': [
+            {
+                'content': {
+                    'parts': [
+                        {
+                            'functionCall': {
+                                'name': 'no_task_found',
+                                'args': {
+                                    'context_summary': 'Test image',
+                                    'current_activity': 'Safari',
+                                },
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    mock_gemini = AsyncMock(return_value=gemini_response)
+    assistant = ServerTaskAssistant()
+    frame = {
+        'type': 'frame_event',
+        'app_name': 'Safari',
+        'frame_number': 1,
+        'jpeg_base64': '/9j/4AAQSkZJRgABAQ==',  # truncated but valid-looking base64
+    }
+    ctx = {}
+
+    with patch('proactive.task_assistant._call_gemini', mock_gemini):
+        events = await _collect_events(assistant, frame, ctx)
+
+    assert len(events) == 1
+    assert events[0]['outcome_kind'] == 'no_task_found'
+
+    # Check the contents sent to Gemini include the image
+    call_contents = mock_gemini.await_args_list[0][0][0]  # positional arg 0 = contents
+    user_parts = call_contents[0]['parts']
+    assert len(user_parts) == 2  # text prompt + inline_data
+    image_part = user_parts[1]
+    assert image_part['inline_data']['mime_type'] == 'image/jpeg'
+    assert image_part['inline_data']['data'] == '/9j/4AAQSkZJRgABAQ=='
+
+
+@pytest.mark.asyncio
+async def test_no_jpeg_means_no_inline_data():
+    """When frame has no jpeg_base64, Gemini contents should only have text."""
+    gemini_response = {
+        'candidates': [
+            {
+                'content': {
+                    'parts': [
+                        {
+                            'functionCall': {
+                                'name': 'no_task_found',
+                                'args': {
+                                    'context_summary': 'No image',
+                                    'current_activity': 'Terminal',
+                                },
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    mock_gemini = AsyncMock(return_value=gemini_response)
+    assistant = ServerTaskAssistant()
+    frame = {'type': 'frame_event', 'app_name': 'Terminal', 'frame_number': 1}
+    ctx = {}
+
+    with patch('proactive.task_assistant._call_gemini', mock_gemini):
+        events = await _collect_events(assistant, frame, ctx)
+
+    call_contents = mock_gemini.await_args_list[0][0][0]
+    user_parts = call_contents[0]['parts']
+    assert len(user_parts) == 1  # text prompt only, no inline_data
+    assert 'text' in user_parts[0]
