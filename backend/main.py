@@ -58,6 +58,7 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    proactive,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -130,6 +131,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(proactive.router)
 
 
 methods_timeout = {

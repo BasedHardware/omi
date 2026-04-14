@@ -19,6 +19,29 @@ actor TaskAssistant: ProactiveAssistant {
     // MARK: - Properties
 
     private let geminiClient: GeminiClient
+    /// WebSocket client for server-side Gemini tool loop (nil = use local Gemini via proxy)
+    private(set) var wsClient: ProactiveWebSocketClient?
+
+    /// Called when the WebSocket stream disconnects mid-session so the plugin can reconnect.
+    private(set) var onWSDisconnect: (() -> Void)?
+
+    /// Set the disconnect handler (called from ProactiveAssistantsPlugin).
+    func setWSDisconnectHandler(_ handler: @escaping () -> Void) {
+        onWSDisconnect = handler
+    }
+
+    /// Provides refreshed session context for each WebSocket frame analysis.
+    private(set) var contextProvider: (() async -> ProactiveSessionContext)?
+
+    /// Set the context provider (called from ProactiveAssistantsPlugin).
+    func setContextProvider(_ provider: @escaping () async -> ProactiveSessionContext) {
+        contextProvider = provider
+    }
+
+    /// Set the WebSocket client for server-side analysis (called from ProactiveAssistantsPlugin)
+    func setWSClient(_ client: ProactiveWebSocketClient?) {
+        wsClient = client
+    }
     private var isRunning = false
     private var previousTasks: [ExtractedTask] = [] // Last 10 extracted tasks for context
     private let maxPreviousTasks = 10
@@ -577,8 +600,17 @@ actor TaskAssistant: ProactiveAssistant {
         }
 
         log("Task: Analyzing frame from \(frame.appName)...")
+
+        guard let client = wsClient, await client.isConnected else {
+            log("Task: Skipping analysis (WS not connected)")
+            return
+        }
+
         do {
-            let (result, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+            let (result, searchCount) = try await extractTaskViaWS(
+                client: client, frame: frame
+            )
+
             guard let result = result else {
                 log("Task: Analysis returned no result")
                 return
@@ -591,8 +623,109 @@ actor TaskAssistant: ProactiveAssistant {
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }
             }
+        } catch let error as ProactiveWSError where error.isRetryable {
+            logError("Task extraction retryable error — will retry on next frame", error: error)
+            // Don't clear wsClient: the transport is still alive
         } catch {
-            logError("Task extraction error", error: error)
+            logError("Task extraction stream error — clearing WS client", error: error)
+            self.wsClient = nil
+            // Reconnection is handled by ProactiveWebSocketClient.onDisconnect (transport-level callback)
+        }
+    }
+
+    // MARK: - Server-Side Analysis (WebSocket)
+
+    /// Send a frame to the ProactiveAI WebSocket server and handle the bidi tool loop.
+    /// Local searches are executed on-device via the toolExecutor callback.
+    private func extractTaskViaWS(
+        client: ProactiveWebSocketClient,
+        frame: CapturedFrame
+    ) async throws -> (TaskExtractionResult?, Int) {
+        var searchCount = 0
+
+        // Refresh session context so the server has current tasks/goals
+        let updatedContext = await contextProvider?()
+
+        let analysisResult = try await client.analyzeFrame(
+            jpegData: frame.jpegData,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle ?? "",
+            ocrText: "",  // OCR extracted server-side from screenshot
+            frameNumber: Int64(frame.frameNumber),
+            screenshotId: frame.screenshotId.map { String($0) } ?? String(frame.frameNumber),
+            updatedContext: updatedContext,
+            toolExecutor: { [weak self] toolKind, query in
+                guard let self = self else { return [] }
+                searchCount += 1
+
+                let results: [TaskSearchResult]
+                switch toolKind {
+                case "search_similar":
+                    results = await self.executeVectorSearch(query: query)
+                case "search_keywords":
+                    results = await self.executeKeywordSearch(query: query)
+                default:
+                    results = []
+                }
+
+                return results.map { r in
+                    let status: String
+                    switch r.status {
+                    case "completed": status = "completed"
+                    case "deleted": status = "deleted"
+                    default: status = "active"
+                    }
+                    return SearchResultEntry(
+                        taskId: r.id,
+                        description: r.description,
+                        status: status,
+                        similarity: r.similarity ?? 0,
+                        matchType: r.matchType ?? "unspecified",
+                        relevanceScore: Int32(r.relevanceScore ?? 0)
+                    )
+                }
+            }
+        )
+
+        // Convert ProactiveAnalysisResult → TaskExtractionResult
+        switch analysisResult.outcome {
+        case .extractTask(let extracted):
+            let priority = TaskPriority(rawValue: extracted.priority) ?? .medium
+            let task = ExtractedTask(
+                title: extracted.title,
+                description: extracted.description.isEmpty ? nil : extracted.description,
+                priority: priority,
+                sourceApp: extracted.sourceApp.isEmpty ? frame.appName : extracted.sourceApp,
+                inferredDeadline: extracted.inferredDeadline.isEmpty ? nil : extracted.inferredDeadline,
+                confidence: extracted.confidence,
+                tags: extracted.tags,
+                sourceCategory: extracted.sourceCategory,
+                sourceSubcategory: extracted.sourceSubcategory,
+                relevanceScore: extracted.relevanceScore == 0 ? nil : extracted.relevanceScore
+            )
+            return (TaskExtractionResult(
+                hasNewTask: true,
+                task: task,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
+
+        case .rejectTask(let reason):
+            log("Task: Server rejected — \(reason)")
+            return (TaskExtractionResult(
+                hasNewTask: false,
+                task: nil,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
+
+        case .noTaskFound:
+            return (TaskExtractionResult(
+                hasNewTask: false,
+                task: nil,
+                contextSummary: analysisResult.contextSummary,
+                currentActivity: analysisResult.currentActivity
+            ), searchCount)
         }
     }
 

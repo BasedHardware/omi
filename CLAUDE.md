@@ -110,10 +110,13 @@ pusher
 agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
+proactive (routers/proactive.py)
+  └── ws ──► Gemini API (generativelanguage.googleapis.com)
+
 notifications-job (modal/job.py)  [cron]
 ```
 
-Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
+Helm charts: `backend/charts/{backend-listen,backend-proactive,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
 
 See service descriptions in AGENTS.md. Update both files when service boundaries change.
 

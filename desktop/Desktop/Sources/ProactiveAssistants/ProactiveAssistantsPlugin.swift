@@ -1,4 +1,5 @@
 import Cocoa
+@preconcurrency import FirebaseAuth
 import UserNotifications
 
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
@@ -20,6 +21,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
     private var insightAssistant: InsightAssistant?
+    private var wsClient: ProactiveWebSocketClient?
     private var memoryAssistant: MemoryAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
@@ -165,6 +167,166 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
     }
 
+
+    // MARK: - WebSocket Lifecycle
+
+    /// Connect to the ProactiveAI WebSocket endpoint with reconnect on failure.
+    /// Runs asynchronously — monitoring starts regardless of whether WS connects.
+    private func connectWSClient(for taskAssistant: TaskAssistant) async {
+        // Read server config from environment (set via .env or run.sh)
+        let host: String
+        let port: Int
+        if let cString = getenv("OMI_API_HOST"), let h = String(validatingUTF8: cString), !h.isEmpty {
+            host = h
+        } else {
+            host = "localhost"
+        }
+        if let cString = getenv("OMI_API_PORT"), let p = String(validatingUTF8: cString), let pInt = Int(p) {
+            port = pInt
+        } else {
+            port = 8080
+        }
+
+        await attemptWSConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: 1)
+    }
+
+    /// Attempt a single WebSocket connection. On failure, schedule a retry with exponential backoff.
+    /// Bails out if monitoring has been stopped (prevents reconnect after intentional shutdown).
+    private func attemptWSConnect(host: String, port: Int, taskAssistant: TaskAssistant, attempt: Int) async {
+        guard isMonitoring else {
+            log("ProactiveWS: Skipping connect — monitoring stopped")
+            return
+        }
+        let maxAttempts = 5
+        guard attempt <= maxAttempts else {
+            log("ProactiveWS: Max reconnect attempts (\(maxAttempts)) reached — task extraction disabled")
+            return
+        }
+
+        // Get Firebase auth token
+        let authToken: String
+        do {
+            authToken = try await AuthService.shared.getIdToken(forceRefresh: attempt > 1)
+        } catch {
+            log("ProactiveWS: Skipping — no auth token: \(error.localizedDescription)")
+            return
+        }
+
+        // Build SessionContext from local task store
+        let context = await buildSessionContext()
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+
+        let client = ProactiveWebSocketClient(host: host, port: port)
+
+        // Wire onDisconnect BEFORE connect so there's no window where
+        // transport death goes unnoticed. Client identity check prevents
+        // stale callbacks from clobbering a newer session.
+        let capturedClient = client
+        await client.setOnDisconnect { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                guard self.wsClient === capturedClient else {
+                    log("ProactiveWS: Ignoring stale disconnect callback")
+                    return
+                }
+                log("ProactiveWS: Transport disconnected — scheduling reconnect")
+                self.wsClient = nil
+                await self.connectWSClient(for: taskAssistant)
+            }
+        }
+
+        do {
+            let sessionId = try await client.connect(
+                authToken: authToken,
+                context: context,
+                appVersion: appVersion,
+                osVersion: osVersion
+            )
+            log("ProactiveWS: Connected — session \(sessionId)")
+
+            // Assign wsClient early so stopMonitoring() can find and disconnect it
+            // if it runs during any of the subsequent actor-isolated await calls.
+            self.wsClient = client
+
+            // If monitoring was stopped while we were connecting, tear down immediately
+            guard isMonitoring else {
+                log("ProactiveWS: Monitoring stopped during connect — disconnecting")
+                self.wsClient = nil
+                await client.disconnect()
+                return
+            }
+
+            // Wire client to TaskAssistant so it uses server-side analysis
+            await taskAssistant.setWSClient(client)
+        } catch {
+            // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+            let delaySec = UInt64(pow(2.0, Double(attempt)))
+            log("ProactiveWS: Connection failed (attempt \(attempt)/\(maxAttempts)), retrying in \(delaySec)s: \(error.localizedDescription)")
+            try? await Task.sleep(nanoseconds: delaySec * 1_000_000_000)
+            await attemptWSConnect(host: host, port: port, taskAssistant: taskAssistant, attempt: attempt + 1)
+        }
+    }
+
+    /// Build a SessionContext from the local task store and goals.
+    private func buildSessionContext() async -> ProactiveSessionContext {
+        var ctx = ProactiveSessionContext()
+
+        // Active tasks
+        do {
+            let topTasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 30)
+            let recentTasks = try await ActionItemStorage.shared.getRecentActiveTasks(limit: 30)
+            let topIds = Set(topTasks.map { $0.id })
+            let merged = topTasks + recentTasks.filter { !topIds.contains($0.id) }
+            ctx.activeTasks = merged.map { t in
+                ProactiveActiveTask(
+                    taskId: t.id,
+                    description: t.description,
+                    priority: t.priority ?? "medium",
+                    relevanceScore: t.relevanceScore.map { Int32($0) }
+                )
+            }
+        } catch {
+            log("ProactiveWS: Failed to load active tasks for context: \(error.localizedDescription)")
+        }
+
+        // Completed tasks
+        do {
+            let completed = try await ActionItemStorage.shared.getRecentCompletedTasks(limit: 10)
+            ctx.completedTasks = completed.map { t in
+                ProactiveHistoricalTask(taskId: t.id, description: t.description)
+            }
+        } catch {
+            log("ProactiveWS: Failed to load completed tasks for context: \(error.localizedDescription)")
+        }
+
+        // Deleted tasks
+        do {
+            let deleted = try await ActionItemStorage.shared.getRecentDeletedTasks(limit: 10, deletedBy: "user")
+            ctx.deletedTasks = deleted.map { t in
+                ProactiveHistoricalTask(taskId: t.id, description: t.description)
+            }
+        } catch {
+            log("ProactiveWS: Failed to load deleted tasks for context: \(error.localizedDescription)")
+        }
+
+        // Goals
+        do {
+            let goals = try await APIClient.shared.getGoals()
+            ctx.goals = goals.map { g in
+                ProactiveGoal(
+                    goalId: g.id,
+                    title: g.title,
+                    description: g.description ?? ""
+                )
+            }
+        } catch {
+            log("ProactiveWS: Failed to load goals for context: \(error.localizedDescription)")
+        }
+
+        return ctx
+    }
 
     // MARK: - Assistant Management
 
@@ -357,6 +519,19 @@ public class ProactiveAssistantsPlugin: NSObject {
                 AssistantCoordinator.shared.register(task)
             }
 
+            // Connect WebSocket client for server-side proactive AI (non-blocking)
+            // Reconnection is handled by the client-level onDisconnect callback (wired in connectWSClient).
+            if let task = taskAssistant {
+                let capturedTask = task
+                Task {
+                    await task.setContextProvider { [weak self] in
+                        guard let self = self else { return ProactiveSessionContext() }
+                        return await self.buildSessionContext()
+                    }
+                    await self.connectWSClient(for: capturedTask)
+                }
+            }
+
             Task { await TaskDeduplicationService.shared.start() }
             Task { await TaskPrioritizationService.shared.start() }
             Task { await TaskPromotionService.shared.start() }
@@ -436,6 +611,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     public func stopMonitoring() {
         guard isMonitoring else { return }
 
+        // Set false early to prevent reconnect callbacks from re-triggering connect
+        isMonitoring = false
+
         captureTimer?.invalidate()
         captureTimer = nil
         analysisDelayTimer?.invalidate()
@@ -463,6 +641,14 @@ public class ProactiveAssistantsPlugin: NSObject {
                 await task.stop()
             }
         }
+        // Clear onDisconnect before disconnecting to prevent reconnect during shutdown
+        if let client = wsClient {
+            Task {
+                await client.setOnDisconnect {}
+                await client.disconnect()
+            }
+            wsClient = nil
+        }
         Task { await TaskDeduplicationService.shared.stop() }
         Task { await TaskPromotionService.shared.stop() }
         if let insight = insightAssistant {
@@ -482,7 +668,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         memoryAssistant = nil
         screenCaptureService = nil
 
-        isMonitoring = false
         isStartingMonitoring = false  // Reset in case stop was called during startup
         isProcessingRewindFrame = false
         if droppedFrameCount > 0 {
