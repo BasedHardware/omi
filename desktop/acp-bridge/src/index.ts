@@ -1123,7 +1123,11 @@ async function runPiMonoMode(): Promise<void> {
   send({ type: "init", sessionId: "" });
   logErr("Pi-mono Bridge started, waiting for queries...");
 
-  // Multi-session support: keyed sessions matching ACP mode's contract
+  // Multi-session support: keyed sessions matching ACP mode's contract.
+  // NOTE: Pi-mono RPC is a single-process with global state — true session
+  // isolation isn't possible. We compensate by switching model/system-prompt
+  // on context switch (restoreSystemPrompt), but the underlying conversation
+  // history is shared. This is a known limitation of pi-mono's architecture.
   const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string; systemPrompt?: string }>();
   let piActiveAbort: AbortController | null = null;
   let piActiveSessionId = "";
@@ -1214,6 +1218,25 @@ async function runPiMonoMode(): Promise<void> {
             },
             abortController.signal
           );
+
+          // After prompt completes, check for deferred token restart
+          if (adapter.hasPendingRestart) {
+            logErr("Pi-mono: executing deferred token refresh after prompt completed");
+            await adapter.executePendingRestart();
+            // Re-create sessions from stored state
+            const oldSessions = new Map(piSessions);
+            piSessions.clear();
+            piActiveSessionId = "";
+            for (const [key, entry] of oldSessions) {
+              const newId = await adapter.createSession({
+                cwd: entry.cwd,
+                model: entry.model,
+                systemPrompt: entry.systemPrompt,
+              });
+              piSessions.set(key, { ...entry, sessionId: newId });
+            }
+            logErr("Pi-mono: sessions re-warmed after deferred token refresh");
+          }
         } catch (err) {
           logErr(`Pi-mono query error: ${err}`);
           send({ type: "error", message: String(err) });
@@ -1259,12 +1282,12 @@ async function runPiMonoMode(): Promise<void> {
       case "refresh_token": {
         // Swift pushes a refreshed Firebase ID token. Restart the subprocess
         // (only when idle) so the extension picks up the fresh credential.
-        // Re-warm stored sessions with their system prompts afterwards.
+        // If busy, deferred restart happens after the current prompt completes.
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
         try {
-          await adapter.updateAuthToken(rtm.token);
-          if (adapter.isIdle) {
+          const restarted = await adapter.updateAuthToken(rtm.token);
+          if (restarted) {
             // Subprocess restarted — re-create sessions from stored state
             const oldSessions = new Map(piSessions);
             piSessions.clear();
@@ -1276,9 +1299,10 @@ async function runPiMonoMode(): Promise<void> {
                 systemPrompt: entry.systemPrompt,
               });
               piSessions.set(key, { ...entry, sessionId: newId });
-              logErr(`Pi-mono re-warmed session after token refresh: ${key}`);
             }
+            logErr("Pi-mono: sessions re-warmed after immediate token refresh");
           }
+          // If not restarted (busy), the query handler will do it after prompt completes
         } catch (err) {
           logErr(`Pi-mono token refresh error: ${err}`);
         }
