@@ -1,16 +1,24 @@
 import Foundation
 
-/// Tracks weekly floating bar query usage and enforces limits for free users.
+/// Tracks AI chat/query usage and enforces a shared monthly limit for free users.
+///
+/// Shared between the floating bar (Ask omi / PTT queries) and the main chat page
+/// (ChatProvider.sendMessage). A single 30-message monthly pool is counted against
+/// both surfaces so the free tier can't be stretched by bouncing between the two.
 @MainActor
 final class FloatingBarUsageLimiter: ObservableObject {
     static let shared = FloatingBarUsageLimiter()
 
-    static let weeklyFreeLimit = 50
+    /// Monthly free cap, shared across floating bar + main chat.
+    static let monthlyFreeLimit = 30
+
+    /// Rolling window in seconds (30 days).
+    static let windowSeconds: Double = 30 * 24 * 3600
 
     private static let queryTimestampsKey = "floatingBar_queryTimestamps"
     private static let cachedPlanKey = "floatingBar_cachedPlan"
 
-    @Published private(set) var weeklyQueriesUsed: Int = 0
+    @Published private(set) var monthlyQueriesUsed: Int = 0
     @Published private(set) var hasPaidPlan: Bool = false
     private var planFetched = false
 
@@ -37,14 +45,15 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
 
     var isLimitReached: Bool {
-        !hasPaidPlan && weeklyQueriesUsed >= Self.weeklyFreeLimit
+        !hasPaidPlan && monthlyQueriesUsed >= Self.monthlyFreeLimit
     }
 
     var remainingQueries: Int {
-        hasPaidPlan ? .max : max(0, Self.weeklyFreeLimit - weeklyQueriesUsed)
+        hasPaidPlan ? .max : max(0, Self.monthlyFreeLimit - monthlyQueriesUsed)
     }
 
-    /// Record a query. Call after successfully sending a floating bar query.
+    /// Record a query. Call after successfully sending a query from the floating bar
+    /// OR the main chat page — both surfaces share this pool.
     func recordQuery() {
         var timestamps = loadTimestamps()
         timestamps.append(Date().timeIntervalSince1970)
@@ -53,11 +62,11 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
 
     private func pruneAndCount() {
-        let cutoff = Date().timeIntervalSince1970 - 7 * 24 * 3600
+        let cutoff = Date().timeIntervalSince1970 - Self.windowSeconds
         var timestamps = loadTimestamps()
         timestamps.removeAll { $0 < cutoff }
         UserDefaults.standard.set(timestamps, forKey: Self.queryTimestampsKey)
-        weeklyQueriesUsed = timestamps.count
+        monthlyQueriesUsed = timestamps.count
     }
 
     private func loadTimestamps() -> [Double] {

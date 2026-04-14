@@ -2122,6 +2122,21 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return
         }
 
+        // Monthly free-tier limit shared with the floating bar (30 messages/month).
+        // Block the send, surface the popup, and let the user upgrade.
+        let usageLimiter = FloatingBarUsageLimiter.shared
+        if usageLimiter.isLimitReached {
+            log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
+            errorMessage = "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting."
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "chat"]
+            )
+            return
+        }
+        usageLimiter.recordQuery()
+
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {
             errorMessage = "AI not available"

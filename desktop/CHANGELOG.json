@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added usage-limit popup when free-tier transcription or chat quota is hit, with one-click upgrade to Plan & Usage",
+    "Lowered free-tier chat limit to 30 messages/month shared between main chat and the floating bar"
+  ],
   "releases": [
     {
       "version": "0.11.310",
