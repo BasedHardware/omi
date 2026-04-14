@@ -620,7 +620,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
-        // Get current window info (use real app name, not cached)
+        // Get current window info. Normally this is the current frontmost app, but if
+        // the frontmost is a helper with no captureable window (LogiPluginService, Dock,
+        // UserNotificationCenter, etc.) the resolver falls back to the last known good
+        // captureable window for up to ~2s — see ScreenCaptureService.getActiveWindowInfoAsync.
         let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
 
         // Check if the current app is excluded from Rewind capture

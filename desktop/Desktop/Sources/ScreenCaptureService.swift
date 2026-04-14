@@ -25,9 +25,14 @@ final class ScreenCaptureService: Sendable {
   /// Must be accessed only while holding axStateLock.
   nonisolated(unsafe) private static var axSystemwideDisabled = false
 
-  /// Cache the last successfully resolved active window to avoid losing capture
-  /// when the resolver times out or transiently fails.
-  private struct ActiveWindowSnapshot {
+  /// Cache the last successfully resolved active window (with a non-nil windowID).
+  /// Used as a "last captureable context" fallback for up to activeWindowCacheTTL when
+  /// the resolver times out, transiently fails, or returns a nil-windowID result because
+  /// the frontmost app is a helper with no captureable window (LogiPluginService, Dock,
+  /// UserNotificationCenter, etc.) or CGWindowListCopyWindowInfo returns nothing.
+  /// Holding the cache prevents capture from dropping during brief transitions through
+  /// such apps, at the cost of reporting the previous app's name/title for up to TTL.
+  internal struct ActiveWindowSnapshot: Equatable {
     let appName: String?
     let windowTitle: String?
     let windowID: CGWindowID?
@@ -35,6 +40,16 @@ final class ScreenCaptureService: Sendable {
   }
   nonisolated(unsafe) private static var lastActiveWindowSnapshot: ActiveWindowSnapshot?
   nonisolated(unsafe) private static var isActiveWindowResolutionInFlight = false
+  /// Tracks whether we are currently inside a streak of nil-window fallbacks so the
+  /// fallback log fires once per streak instead of once per capture frame. Reset on
+  /// any successful non-nil resolution.
+  nonisolated(unsafe) private static var isInNilWindowFallbackStreak = false
+
+  /// Test-only seam: when set, replaces `resolveActiveWindowInfoWithTimeout()` so that
+  /// unit tests can drive `getActiveWindowInfoAsync()` with deterministic results
+  /// without touching NSWorkspace or CGWindowListCopyWindowInfo.
+  nonisolated(unsafe) internal static var _resolverOverrideForTests:
+    (@Sendable () async -> (appName: String?, windowTitle: String?, windowID: CGWindowID?)?)?
 
   init() {}
 
@@ -422,8 +437,19 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    let resolved = await resolveActiveWindowInfoWithTimeout()
-    if let resolved {
+    let resolved: (appName: String?, windowTitle: String?, windowID: CGWindowID?)?
+    if let override = _resolverOverrideForTests {
+      resolved = await override()
+    } else {
+      resolved = await resolveActiveWindowInfoWithTimeout()
+    }
+
+    // Only cache snapshots with a non-nil windowID. A (appName, nil, nil) result means
+    // the current frontmost app is a helper with no captureable window (LogiPluginService,
+    // Dock, UserNotificationCenter, etc.) or window enumeration transiently returned
+    // nothing; overwriting the cache with that would poison it for the full TTL and
+    // silently break capture until the user focused a new "real" window.
+    if let resolved, resolved.windowID != nil {
       let snapshot = ActiveWindowSnapshot(
         appName: resolved.appName,
         windowTitle: resolved.windowTitle,
@@ -432,17 +458,80 @@ final class ScreenCaptureService: Sendable {
       )
       axStateLock.withLock {
         lastActiveWindowSnapshot = snapshot
+        isInNilWindowFallbackStreak = false
       }
       return resolved
     }
 
+    // Resolver returned nil or a nil-windowID result. Prefer the last known good
+    // captureable context for up to activeWindowCacheTTL to preserve recording across
+    // brief helper-app transitions and window enumeration hiccups.
     if let cached = getCachedActiveWindowSnapshot() {
-      log("ScreenCaptureService: Active window lookup timed out, using cached window info")
+      let shouldLog = axStateLock.withLock { () -> Bool in
+        if isInNilWindowFallbackStreak {
+          return false
+        }
+        isInNilWindowFallbackStreak = true
+        return true
+      }
+      if shouldLog {
+        if resolved == nil {
+          log(
+            "ScreenCaptureService: Active window lookup timed out, using cached window info"
+          )
+        } else {
+          log(
+            "ScreenCaptureService: Frontmost app has no captureable window; "
+              + "using last known good window (\(cached.appName ?? "?"))"
+          )
+        }
+      }
       return (cached.appName, cached.windowTitle, cached.windowID)
+    }
+
+    if let resolved {
+      // Nil-windowID resolution with no usable cache — return the raw result so
+      // callers can apply their own exclusion/metadata handling.
+      return resolved
     }
 
     log("ScreenCaptureService: Active window lookup timed out with no cached fallback")
     return (nil, nil, nil)
+  }
+
+  // MARK: - Test-only helpers
+
+  /// Clears `lastActiveWindowSnapshot`, the in-flight guard, and the fallback-log streak
+  /// flag under the cache lock. Test-only.
+  internal static func _resetActiveWindowCacheForTests() {
+    axStateLock.withLock {
+      lastActiveWindowSnapshot = nil
+      isActiveWindowResolutionInFlight = false
+      isInNilWindowFallbackStreak = false
+    }
+  }
+
+  /// Seeds `lastActiveWindowSnapshot` with a custom `resolvedAt` so tests can
+  /// exercise fresh, expired, or missing cache cases deterministically. Test-only.
+  internal static func _seedActiveWindowCacheForTests(
+    appName: String?,
+    windowTitle: String?,
+    windowID: CGWindowID?,
+    resolvedAt: Date
+  ) {
+    axStateLock.withLock {
+      lastActiveWindowSnapshot = ActiveWindowSnapshot(
+        appName: appName,
+        windowTitle: windowTitle,
+        windowID: windowID,
+        resolvedAt: resolvedAt
+      )
+    }
+  }
+
+  /// Returns a copy of the current cached snapshot (ignoring TTL) for test assertions.
+  internal static func _peekActiveWindowCacheForTests() -> ActiveWindowSnapshot? {
+    axStateLock.withLock { lastActiveWindowSnapshot }
   }
 
   private static func resolveActiveWindowInfoWithTimeout() async -> (

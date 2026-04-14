@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup"
+    "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup",
+    "Fixed screen recording silently dropping when the frontmost app is a helper with no captureable window (LogiPluginService, Dock, etc.) \u2014 resolver now falls back to the last known good captureable window"
   ],
   "releases": [
     {
