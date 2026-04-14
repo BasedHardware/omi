@@ -490,9 +490,15 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     // Generation-specific validation (not for embed actions)
     let is_embed = action == "embedContent" || action == "batchEmbedContents";
     if !is_embed {
+        // Helper: parse a JSON value as u64 from either a number or a string
+        // (ProtoJSON allows integer fields to be encoded as quoted strings)
+        let parse_as_u64 = |v: &serde_json::Value| -> Option<u64> {
+            v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
+        };
+
         // Reject top-level candidate_count > 1
         if let Some(cc) = obj.get("candidate_count").or_else(|| obj.get("candidateCount")) {
-            if let Some(n) = cc.as_u64() {
+            if let Some(n) = parse_as_u64(cc) {
                 if n > 1 {
                     return Err(format!("candidate_count must be 1 or absent, got {}", n));
                 }
@@ -506,17 +512,19 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
             if let Some(gc) = obj.get_mut(*gc_key).and_then(|v| v.as_object_mut()) {
                 // Reject candidate_count > 1
                 for cc_key in &["candidate_count", "candidateCount"] {
-                    if let Some(n) = gc.get(*cc_key).and_then(|v| v.as_u64()) {
-                        if n > 1 {
-                            return Err(format!("candidate_count must be 1 or absent, got {}", n));
+                    if let Some(v) = gc.get(*cc_key) {
+                        if let Some(n) = parse_as_u64(v) {
+                            if n > 1 {
+                                return Err(format!("candidate_count must be 1 or absent, got {}", n));
+                            }
                         }
                     }
                 }
 
-                // Cap max_output_tokens
+                // Cap max_output_tokens (handles both numeric and string-encoded values)
                 for mot_key in &["max_output_tokens", "maxOutputTokens"] {
                     if let Some(mot) = gc.get_mut(*mot_key) {
-                        if let Some(n) = mot.as_u64() {
+                        if let Some(n) = mot.as_u64().or_else(|| mot.as_str().and_then(|s| s.parse::<u64>().ok())) {
                             if n > MAX_OUTPUT_TOKENS_CAP {
                                 *mot = serde_json::Value::Number(MAX_OUTPUT_TOKENS_CAP.into());
                             }
@@ -872,6 +880,54 @@ mod tests {
             parsed["generationConfig"]["maxOutputTokens"],
             serde_json::json!(MAX_OUTPUT_TOKENS_CAP)
         );
+    }
+
+    #[test]
+    fn sanitize_rejects_string_encoded_candidate_count() {
+        // ProtoJSON allows integer fields as quoted strings — must still be caught
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"candidateCount": "8"}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("candidate_count"));
+    }
+
+    #[test]
+    fn sanitize_caps_string_encoded_max_output_tokens() {
+        // String-encoded maxOutputTokens must still be capped
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"maxOutputTokens": "999999"}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(
+            parsed["generationConfig"]["maxOutputTokens"],
+            serde_json::json!(MAX_OUTPUT_TOKENS_CAP)
+        );
+    }
+
+    #[test]
+    fn sanitize_rejects_string_encoded_top_level_candidate_count() {
+        // Top-level candidate_count as string must also be caught
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "candidateCount": "5"
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("candidate_count"));
     }
 
     #[test]
