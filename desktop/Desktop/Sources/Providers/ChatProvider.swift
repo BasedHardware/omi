@@ -539,10 +539,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var sessionGroupingObserver: AnyCancellable?
     private var activationObserver: AnyCancellable?
 
-    // MARK: - Cross-Platform Message Polling
-    /// Polls for new messages from other platforms (mobile) every 120 seconds.
-    private var messagePollTimer: AnyCancellable?
-    private static let messagePollInterval: TimeInterval = PollingConfig.chatPollInterval
+    private var refreshAllObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -638,17 +635,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 }
             }
 
-        // Poll for new messages from other platforms (mobile) every 120 seconds
-        messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
-            .autoconnect()
+        // Refresh messages when app becomes active
+        activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await self?.pollForNewMessages()
                 }
             }
 
-        // Refresh messages when app becomes active (compensates for longer poll interval)
-        activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        // Cmd+R: refresh messages on demand
+        refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await self?.pollForNewMessages()
