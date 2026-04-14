@@ -1710,7 +1710,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'APPARATEN',
+      one: 'APPARAAT',
+    );
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -8930,4 +8935,42 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Gemarkeerd als voltooid';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi heeft toegang tot Apple Health via Apple\'s HealthKit-framework. Je kunt de toegang op elk moment intrekken in de iOS-instellingen.';
+
+  @override
+  String get appleHealthConnectCta => 'Verbinden met Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health loskoppelen';
+
+  @override
+  String get appleHealthConnectedBadge => 'Verbonden';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat over je gezondheid';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Vraag Omi over je stappen, slaap, hartslag en workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Alleen-lezen toegang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi schrijft nooit naar Apple Health en wijzigt je gegevens niet.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Veilige synchronisatie';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Je Apple Health-gegevens synchroniseren privé naar je Omi-account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-toegang geweigerd';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi.';
 }

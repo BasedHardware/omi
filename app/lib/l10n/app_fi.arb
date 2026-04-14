@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Tyhjennä valmiit",
     "tasksSelectAll": "Valitse kaikki",
     "tasksDeleteSelected": "Poista {count} tehtävä(ä)",
-    "tasksMarkComplete": "Merkitty valmiiksi"
+    "tasksMarkComplete": "Merkitty valmiiksi",
+    "appleHealthManageNote": "Omi käyttää Apple Healthia Applen HealthKit-kehyksen kautta. Voit perua käyttöoikeuden milloin tahansa iOS-asetuksista.",
+    "appleHealthConnectCta": "Yhdistä Apple Healthiin",
+    "appleHealthDisconnectCta": "Katkaise yhteys Apple Healthiin",
+    "appleHealthConnectedBadge": "Yhdistetty",
+    "appleHealthFeatureChatTitle": "Keskustele terveydestäsi",
+    "appleHealthFeatureChatDesc": "Kysy Omilta askelista, unesta, sykkeestä ja harjoituksista.",
+    "appleHealthFeatureReadOnlyTitle": "Vain lukuoikeus",
+    "appleHealthFeatureReadOnlyDesc": "Omi ei koskaan kirjoita Apple Healthiin tai muuta tietojasi.",
+    "appleHealthFeatureSecureTitle": "Turvallinen synkronointi",
+    "appleHealthFeatureSecureDesc": "Apple Health -tietosi synkronoidaan yksityisesti Omi-tilillesi.",
+    "appleHealthDeniedTitle": "Apple Health -käyttöoikeus evätty",
+    "appleHealthDeniedBody": "Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi."
 }

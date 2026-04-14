@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Șterge finalizate",
     "tasksSelectAll": "Selectează tot",
     "tasksDeleteSelected": "Șterge {count} sarcină(i)",
-    "tasksMarkComplete": "Marcat ca finalizat"
+    "tasksMarkComplete": "Marcat ca finalizat",
+    "appleHealthManageNote": "Omi accesează Apple Health prin framework-ul HealthKit de la Apple. Poți revoca accesul oricând din Setările iOS.",
+    "appleHealthConnectCta": "Conectează-te la Apple Health",
+    "appleHealthDisconnectCta": "Deconectează Apple Health",
+    "appleHealthConnectedBadge": "Conectat",
+    "appleHealthFeatureChatTitle": "Discută despre sănătatea ta",
+    "appleHealthFeatureChatDesc": "Întreabă Omi despre pașii, somnul, ritmul cardiac și antrenamentele tale.",
+    "appleHealthFeatureReadOnlyTitle": "Acces doar pentru citire",
+    "appleHealthFeatureReadOnlyDesc": "Omi nu scrie niciodată în Apple Health și nu modifică datele tale.",
+    "appleHealthFeatureSecureTitle": "Sincronizare sigură",
+    "appleHealthFeatureSecureDesc": "Datele tale Apple Health se sincronizează privat cu contul tău Omi.",
+    "appleHealthDeniedTitle": "Acces la Apple Health refuzat",
+    "appleHealthDeniedBody": "Omi nu are permisiunea de a citi datele tale Apple Health. Activează din Setări iOS → Confidențialitate și securitate → Health → Omi."
 }

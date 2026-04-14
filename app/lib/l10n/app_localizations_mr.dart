@@ -1707,7 +1707,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8569,7 +8574,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count संभाषण$_temp0 तयार केले गेले';
   }
 
@@ -8908,4 +8918,42 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'पूर्ण म्हणून चिन्हांकित';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi Apple च्या HealthKit फ्रेमवर्कद्वारे Apple Health ला प्रवेश करतो. आपण कोणत्याही वेळी iOS सेटिंग्जमधून प्रवेश रद्द करू शकता.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health शी कनेक्ट करा';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health डिस्कनेक्ट करा';
+
+  @override
+  String get appleHealthConnectedBadge => 'कनेक्ट केले';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'आपल्या आरोग्याबद्दल गप्पा मारा';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Omi ला आपल्या पावले, झोप, हृदय गती आणि वर्कआउट्सबद्दल विचारा.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'फक्त वाचन प्रवेश';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi कधीही Apple Health मध्ये लिहित नाही किंवा आपला डेटा बदलत नाही.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'सुरक्षित सिंक';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'आपला Apple Health डेटा खासगीरित्या आपल्या Omi खात्याशी सिंक होतो.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health प्रवेश नाकारला';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi कडे आपला Apple Health डेटा वाचण्याची परवानगी नाही. iOS सेटिंग्ज → गोपनीयता आणि सुरक्षा → Health → Omi मध्ये ते सक्षम करा.';
 }

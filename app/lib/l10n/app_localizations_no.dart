@@ -1706,7 +1706,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 FUNNET I NÆRHETEN';
   }
 
@@ -8898,4 +8903,42 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Merket som fullført';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi får tilgang til Apple Health gjennom Apples HealthKit-rammeverk. Du kan når som helst trekke tilbake tilgangen i iOS-innstillingene.';
+
+  @override
+  String get appleHealthConnectCta => 'Koble til Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Koble fra Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Tilkoblet';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat om helsen din';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Spør Omi om skritt, søvn, puls og treningsøkter.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Kun lesetilgang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi skriver aldri til Apple Health eller endrer dataene dine.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sikker synkronisering';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health-dataene dine synkroniseres privat til Omi-kontoen din.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-tilgang avvist';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi.';
 }

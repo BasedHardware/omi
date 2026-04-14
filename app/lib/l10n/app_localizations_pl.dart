@@ -8926,4 +8926,43 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Oznaczono jako ukończone';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi uzyskuje dostęp do Apple Health za pośrednictwem frameworka HealthKit firmy Apple. Dostęp możesz cofnąć w dowolnym momencie w Ustawieniach iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Połącz z Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Odłącz Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Połączono';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Rozmawiaj o swoim zdrowiu';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Zapytaj Omi o Twoje kroki, sen, tętno i treningi.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Dostęp tylko do odczytu';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Omi nigdy nie zapisuje w Apple Health ani nie modyfikuje Twoich danych.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Bezpieczna synchronizacja';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Twoje dane z Apple Health prywatnie synchronizują się z kontem Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Odmowa dostępu do Apple Health';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nie ma uprawnień do odczytu Twoich danych z Apple Health. Włącz to w Ustawienia iOS → Prywatność i bezpieczeństwo → Health → Omi.';
 }

@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Išvalyti atliktus",
     "tasksSelectAll": "Pasirinkti viską",
     "tasksDeleteSelected": "Ištrinti {count} užduotį(is)",
-    "tasksMarkComplete": "Pažymėta kaip atlikta"
+    "tasksMarkComplete": "Pažymėta kaip atlikta",
+    "appleHealthManageNote": "Omi pasiekia Apple Health per Apple HealthKit sistemą. Prieigą galite bet kada atšaukti iOS nustatymuose.",
+    "appleHealthConnectCta": "Prijungti Apple Health",
+    "appleHealthDisconnectCta": "Atjungti Apple Health",
+    "appleHealthConnectedBadge": "Prijungta",
+    "appleHealthFeatureChatTitle": "Kalbėkitės apie savo sveikatą",
+    "appleHealthFeatureChatDesc": "Klauskite Omi apie žingsnius, miegą, pulsą ir treniruotes.",
+    "appleHealthFeatureReadOnlyTitle": "Prieiga tik skaitymui",
+    "appleHealthFeatureReadOnlyDesc": "Omi niekada nerašo į Apple Health ir nekeičia jūsų duomenų.",
+    "appleHealthFeatureSecureTitle": "Saugus sinchronizavimas",
+    "appleHealthFeatureSecureDesc": "Jūsų Apple Health duomenys privačiai sinchronizuojami su Omi paskyra.",
+    "appleHealthDeniedTitle": "Prieiga prie Apple Health atmesta",
+    "appleHealthDeniedBody": "Omi neturi leidimo skaityti jūsų Apple Health duomenis. Įjunkite: iOS Nustatymai → Privatumas ir sauga → Health → Omi."
 }

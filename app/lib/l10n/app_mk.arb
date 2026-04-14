@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "Исчисти завршени",
     "tasksSelectAll": "Избери сè",
     "tasksDeleteSelected": "Избриши {count} задача(и)",
-    "tasksMarkComplete": "Означено како завршено"
+    "tasksMarkComplete": "Означено како завршено",
+    "appleHealthManageNote": "Omi пристапува до Apple Health преку HealthKit рамката на Apple. Пристапот можете да го повлечете во секое време во поставките на iOS.",
+    "appleHealthConnectCta": "Поврзи со Apple Health",
+    "appleHealthDisconnectCta": "Прекини врска со Apple Health",
+    "appleHealthConnectedBadge": "Поврзано",
+    "appleHealthFeatureChatTitle": "Разговарајте за своето здравје",
+    "appleHealthFeatureChatDesc": "Прашајте го Omi за вашите чекори, сон, срцев ритам и тренинзи.",
+    "appleHealthFeatureReadOnlyTitle": "Пристап само за читање",
+    "appleHealthFeatureReadOnlyDesc": "Omi никогаш не запишува во Apple Health и не ги менува вашите податоци.",
+    "appleHealthFeatureSecureTitle": "Безбедна синхронизација",
+    "appleHealthFeatureSecureDesc": "Вашите Apple Health податоци приватно се синхронизираат со Omi сметката.",
+    "appleHealthDeniedTitle": "Пристапот до Apple Health е одбиен",
+    "appleHealthDeniedBody": "Omi нема дозвола да ги чита вашите Apple Health податоци. Овозможете го во iOS Поставки → Приватност и безбедност → Health → Omi."
 }

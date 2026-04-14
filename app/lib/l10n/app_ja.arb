@@ -2903,5 +2903,17 @@
     "tasksClearCompleted": "完了済みをクリア",
     "tasksSelectAll": "すべて選択",
     "tasksDeleteSelected": "{count}件のタスクを削除",
-    "tasksMarkComplete": "完了としてマーク"
+    "tasksMarkComplete": "完了としてマーク",
+    "appleHealthManageNote": "Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。",
+    "appleHealthConnectCta": "Apple Health に接続",
+    "appleHealthDisconnectCta": "Apple Health の接続を解除",
+    "appleHealthConnectedBadge": "接続済み",
+    "appleHealthFeatureChatTitle": "健康についてチャット",
+    "appleHealthFeatureChatDesc": "歩数、睡眠、心拍数、ワークアウトについて Omi に質問できます。",
+    "appleHealthFeatureReadOnlyTitle": "読み取り専用アクセス",
+    "appleHealthFeatureReadOnlyDesc": "Omi は Apple Health に書き込みや変更を行いません。",
+    "appleHealthFeatureSecureTitle": "安全な同期",
+    "appleHealthFeatureSecureDesc": "Apple Health のデータは Omi アカウントに安全に同期されます。",
+    "appleHealthDeniedTitle": "Apple Health へのアクセスが拒否されました",
+    "appleHealthDeniedBody": "Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。"
 }

@@ -8421,7 +8421,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
     return '$_temp0';
   }
 
@@ -8755,4 +8760,41 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => '완료로 표시됨';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi는 Apple의 HealthKit 프레임워크를 통해 Apple Health에 접근합니다. iOS 설정에서 언제든지 접근 권한을 철회할 수 있습니다.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health에 연결';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health 연결 해제';
+
+  @override
+  String get appleHealthConnectedBadge => '연결됨';
+
+  @override
+  String get appleHealthFeatureChatTitle => '건강에 대해 대화하기';
+
+  @override
+  String get appleHealthFeatureChatDesc => '걸음 수, 수면, 심박수, 운동에 대해 Omi에게 물어보세요.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '읽기 전용 접근';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi는 Apple Health에 쓰거나 데이터를 수정하지 않습니다.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '보안 동기화';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health 데이터는 비공개로 Omi 계정과 동기화됩니다.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health 접근이 거부됨';
+
+  @override
+  String get appleHealthDeniedBody => 'Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요.';
 }

@@ -1707,7 +1707,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8560,7 +8565,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8899,4 +8909,42 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'به عنوان تکمیل‌شده علامت‌گذاری شد';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi از طریق چارچوب HealthKit اپل به Apple Health دسترسی دارد. در هر زمان می‌توانید دسترسی را از تنظیمات iOS لغو کنید.';
+
+  @override
+  String get appleHealthConnectCta => 'اتصال به Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'قطع اتصال از Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'متصل';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'درباره سلامتی خود گفتگو کنید';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'از Omi درباره قدم‌ها، خواب، ضربان قلب و تمرین‌های خود بپرسید.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'دسترسی فقط خواندنی';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi هرگز در Apple Health نمی‌نویسد و داده‌های شما را تغییر نمی‌دهد.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'همگام‌سازی امن';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'داده‌های Apple Health شما به‌صورت خصوصی با حساب Omi همگام می‌شوند.';
+
+  @override
+  String get appleHealthDeniedTitle => 'دسترسی به Apple Health رد شد';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi مجوز خواندن داده‌های Apple Health شما را ندارد. آن را در تنظیمات iOS ← حریم خصوصی و امنیت ← Health ← Omi فعال کنید.';
 }

@@ -1711,7 +1711,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -8912,4 +8917,42 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Ditandai selesai';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi mengakses Apple Health melalui framework HealthKit dari Apple. Anda dapat mencabut akses kapan saja di Pengaturan iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Hubungkan ke Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Putuskan Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Terhubung';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Bicarakan kesehatan Anda';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Tanyakan pada Omi tentang langkah, tidur, detak jantung, dan latihan Anda.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Akses hanya-baca';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi tidak pernah menulis ke Apple Health atau mengubah data Anda.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sinkronisasi aman';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Akses Apple Health ditolak';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.';
 }

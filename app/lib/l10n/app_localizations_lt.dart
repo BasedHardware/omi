@@ -1704,7 +1704,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -8910,4 +8915,42 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Pažymėta kaip atlikta';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pasiekia Apple Health per Apple HealthKit sistemą. Prieigą galite bet kada atšaukti iOS nustatymuose.';
+
+  @override
+  String get appleHealthConnectCta => 'Prijungti Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Atjungti Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Prijungta';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Kalbėkitės apie savo sveikatą';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Klauskite Omi apie žingsnius, miegą, pulsą ir treniruotes.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Prieiga tik skaitymui';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi niekada nerašo į Apple Health ir nekeičia jūsų duomenų.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Saugus sinchronizavimas';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Jūsų Apple Health duomenys privačiai sinchronizuojami su Omi paskyra.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Prieiga prie Apple Health atmesta';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi neturi leidimo skaityti jūsų Apple Health duomenis. Įjunkite: iOS Nustatymai → Privatumas ir sauga → Health → Omi.';
 }

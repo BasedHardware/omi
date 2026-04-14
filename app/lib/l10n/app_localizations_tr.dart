@@ -1711,7 +1711,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'CİHAZ',
+      one: 'CİHAZ',
+    );
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -8915,4 +8920,42 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Tamamlandı olarak işaretlendi';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi, Apple Health\'e Apple\'ın HealthKit çerçevesi üzerinden erişir. Erişimi istediğiniz zaman iOS Ayarlar\'dan iptal edebilirsiniz.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health\'e Bağlan';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health Bağlantısını Kes';
+
+  @override
+  String get appleHealthConnectedBadge => 'Bağlandı';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Sağlığın hakkında sohbet et';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Adımların, uykun, kalp atışın ve antrenmanların hakkında Omi\'ye sor.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Yalnızca okuma erişimi';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi, Apple Health\'e asla yazmaz ve verilerini değiştirmez.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Güvenli senkronizasyon';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health verilerin Omi hesabına gizli şekilde senkronize edilir.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health erişimi reddedildi';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi\'nin Apple Health verilerinizi okuma izni yok. Bunu iOS Ayarlar → Gizlilik ve Güvenlik → Sağlık → Omi yolundan etkinleştirin.';
 }

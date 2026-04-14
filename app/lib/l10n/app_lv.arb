@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Notīrīt paveiktos",
     "tasksSelectAll": "Atlasīt visu",
     "tasksDeleteSelected": "Dzēst {count} uzdevumu(s)",
-    "tasksMarkComplete": "Atzīmēts kā pabeigts"
+    "tasksMarkComplete": "Atzīmēts kā pabeigts",
+    "appleHealthManageNote": "Omi piekļūst Apple Health, izmantojot Apple HealthKit ietvaru. Piekļuvi varat atsaukt jebkurā laikā iOS iestatījumos.",
+    "appleHealthConnectCta": "Pievienot Apple Health",
+    "appleHealthDisconnectCta": "Atvienot Apple Health",
+    "appleHealthConnectedBadge": "Pievienots",
+    "appleHealthFeatureChatTitle": "Runājiet par savu veselību",
+    "appleHealthFeatureChatDesc": "Jautājiet Omi par saviem soļiem, miegu, sirdsdarbību un treniņiem.",
+    "appleHealthFeatureReadOnlyTitle": "Tikai lasīšanas piekļuve",
+    "appleHealthFeatureReadOnlyDesc": "Omi nekad neraksta Apple Health un nemaina jūsu datus.",
+    "appleHealthFeatureSecureTitle": "Droša sinhronizācija",
+    "appleHealthFeatureSecureDesc": "Jūsu Apple Health dati privāti sinhronizējas ar Omi kontu.",
+    "appleHealthDeniedTitle": "Piekļuve Apple Health liegta",
+    "appleHealthDeniedBody": "Omi nav atļaujas lasīt jūsu Apple Health datus. Iespējojiet: iOS Iestatījumi → Privātums un drošība → Health → Omi."
 }

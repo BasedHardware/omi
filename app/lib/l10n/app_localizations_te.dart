@@ -1711,7 +1711,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8608,7 +8613,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8948,4 +8958,42 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'పూర్తయినట్లు గుర్తించబడింది';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi Apple యొక్క HealthKit ఫ్రేమ్‌వర్క్ ద్వారా Apple Health ను యాక్సెస్ చేస్తుంది. మీరు ఎప్పుడైనా iOS సెట్టింగ్‌ల నుండి యాక్సెస్‌ను ఉపసంహరించుకోవచ్చు.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health కి కనెక్ట్ చేయండి';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health డిస్కనెక్ట్ చేయండి';
+
+  @override
+  String get appleHealthConnectedBadge => 'కనెక్ట్ అయింది';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'మీ ఆరోగ్యం గురించి చాట్ చేయండి';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Omi ను మీ అడుగులు, నిద్ర, గుండె రేటు మరియు వర్కవుట్‌ల గురించి అడగండి.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'చదవడానికి మాత్రమే యాక్సెస్';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi Apple Health కు ఎప్పుడూ వ్రాయదు లేదా మీ డేటాను మార్చదు.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'సురక్షిత సమకాలీకరణ';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'మీ Apple Health డేటా ప్రైవేట్‌గా మీ Omi ఖాతాకు సమకాలీకరించబడుతుంది.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health యాక్సెస్ తిరస్కరించబడింది';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi కి మీ Apple Health డేటాను చదవడానికి అనుమతి లేదు. iOS సెట్టింగ్‌లు → గోప్యత & భద్రత → Health → Omi లో దీన్ని ప్రారంభించండి.';
 }

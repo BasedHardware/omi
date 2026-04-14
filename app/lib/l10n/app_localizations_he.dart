@@ -1696,7 +1696,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -8488,7 +8493,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8825,4 +8835,42 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'סומן כהושלם';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi ניגש ל-Apple Health דרך מסגרת העבודה HealthKit של Apple. ניתן לבטל את הגישה בכל עת בהגדרות iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'התחבר ל-Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'נתק את Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'מחובר';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'צ\'אט על הבריאות שלך';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'גישת קריאה בלבד';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'סנכרון מאובטח';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'הגישה ל-Apple Health נדחתה';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi.';
 }

@@ -1718,7 +1718,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ΣΥΣΚΕΥΕΣ',
+      one: 'ΣΥΣΚΕΥΗ',
+    );
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -8965,4 +8970,44 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Επισημάνθηκε ως ολοκληρωμένο';
+
+  @override
+  String get appleHealthManageNote =>
+      'Το Omi αποκτά πρόσβαση στο Apple Health μέσω του πλαισίου HealthKit της Apple. Μπορείτε να ανακαλέσετε την πρόσβαση ανά πάσα στιγμή από τις Ρυθμίσεις iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Σύνδεση με το Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Αποσύνδεση από το Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Συνδέθηκε';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Μιλήστε για την υγεία σας';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Ρωτήστε το Omi για τα βήματα, τον ύπνο, τον καρδιακό ρυθμό και τις προπονήσεις σας.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Πρόσβαση μόνο για ανάγνωση';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Το Omi δεν γράφει ποτέ στο Apple Health και δεν τροποποιεί τα δεδομένα σας.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Ασφαλής συγχρονισμός';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Τα δεδομένα Apple Health συγχρονίζονται ιδιωτικά στον λογαριασμό Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Απορρίφθηκε η πρόσβαση στο Apple Health';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Το Omi δεν έχει άδεια να διαβάσει τα δεδομένα σας Apple Health. Ενεργοποιήστε το στο Ρυθμίσεις iOS → Απόρρητο και ασφάλεια → Health → Omi.';
 }

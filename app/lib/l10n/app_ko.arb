@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "완료된 항목 지우기",
     "tasksSelectAll": "모두 선택",
     "tasksDeleteSelected": "{count}개 작업 삭제",
-    "tasksMarkComplete": "완료로 표시됨"
+    "tasksMarkComplete": "완료로 표시됨",
+    "appleHealthManageNote": "Omi는 Apple의 HealthKit 프레임워크를 통해 Apple Health에 접근합니다. iOS 설정에서 언제든지 접근 권한을 철회할 수 있습니다.",
+    "appleHealthConnectCta": "Apple Health에 연결",
+    "appleHealthDisconnectCta": "Apple Health 연결 해제",
+    "appleHealthConnectedBadge": "연결됨",
+    "appleHealthFeatureChatTitle": "건강에 대해 대화하기",
+    "appleHealthFeatureChatDesc": "걸음 수, 수면, 심박수, 운동에 대해 Omi에게 물어보세요.",
+    "appleHealthFeatureReadOnlyTitle": "읽기 전용 접근",
+    "appleHealthFeatureReadOnlyDesc": "Omi는 Apple Health에 쓰거나 데이터를 수정하지 않습니다.",
+    "appleHealthFeatureSecureTitle": "보안 동기화",
+    "appleHealthFeatureSecureDesc": "Apple Health 데이터는 비공개로 Omi 계정과 동기화됩니다.",
+    "appleHealthDeniedTitle": "Apple Health 접근이 거부됨",
+    "appleHealthDeniedBody": "Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요."
 }

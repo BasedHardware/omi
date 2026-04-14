@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "ล้างรายการที่เสร็จแล้ว",
     "tasksSelectAll": "เลือกทั้งหมด",
     "tasksDeleteSelected": "ลบ {count} งาน",
-    "tasksMarkComplete": "ทำเครื่องหมายว่าเสร็จสิ้น"
+    "tasksMarkComplete": "ทำเครื่องหมายว่าเสร็จสิ้น",
+    "appleHealthManageNote": "Omi เข้าถึง Apple Health ผ่านเฟรมเวิร์ก HealthKit ของ Apple คุณสามารถเพิกถอนการเข้าถึงได้ทุกเมื่อในการตั้งค่า iOS",
+    "appleHealthConnectCta": "เชื่อมต่อ Apple Health",
+    "appleHealthDisconnectCta": "ยกเลิกการเชื่อมต่อ Apple Health",
+    "appleHealthConnectedBadge": "เชื่อมต่อแล้ว",
+    "appleHealthFeatureChatTitle": "สนทนาเกี่ยวกับสุขภาพของคุณ",
+    "appleHealthFeatureChatDesc": "ถาม Omi เกี่ยวกับก้าว การนอน อัตราการเต้นของหัวใจ และการออกกำลังกายของคุณ",
+    "appleHealthFeatureReadOnlyTitle": "สิทธิ์เข้าถึงแบบอ่านอย่างเดียว",
+    "appleHealthFeatureReadOnlyDesc": "Omi ไม่เคยเขียนไปยัง Apple Health หรือแก้ไขข้อมูลของคุณ",
+    "appleHealthFeatureSecureTitle": "ซิงค์อย่างปลอดภัย",
+    "appleHealthFeatureSecureDesc": "ข้อมูล Apple Health ของคุณซิงค์อย่างเป็นส่วนตัวกับบัญชี Omi",
+    "appleHealthDeniedTitle": "การเข้าถึง Apple Health ถูกปฏิเสธ",
+    "appleHealthDeniedBody": "Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi"
 }

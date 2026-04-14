@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "Počisti dokončane",
     "tasksSelectAll": "Izberi vse",
     "tasksDeleteSelected": "Izbriši {count} nalogo(e)",
-    "tasksMarkComplete": "Označeno kot dokončano"
+    "tasksMarkComplete": "Označeno kot dokončano",
+    "appleHealthManageNote": "Omi dostopa do Apple Health prek Applovega ogrodja HealthKit. Dostop lahko kadar koli prekličete v nastavitvah iOS.",
+    "appleHealthConnectCta": "Poveži z Apple Health",
+    "appleHealthDisconnectCta": "Prekini povezavo z Apple Health",
+    "appleHealthConnectedBadge": "Povezano",
+    "appleHealthFeatureChatTitle": "Pogovarjajte se o svojem zdravju",
+    "appleHealthFeatureChatDesc": "Vprašajte Omi o vaših korakih, spanju, srčnem utripu in treningih.",
+    "appleHealthFeatureReadOnlyTitle": "Dostop samo za branje",
+    "appleHealthFeatureReadOnlyDesc": "Omi nikoli ne piše v Apple Health in ne spreminja vaših podatkov.",
+    "appleHealthFeatureSecureTitle": "Varna sinhronizacija",
+    "appleHealthFeatureSecureDesc": "Vaši podatki Apple Health se zasebno sinhronizirajo z računom Omi.",
+    "appleHealthDeniedTitle": "Dostop do Apple Health zavrnjen",
+    "appleHealthDeniedBody": "Omi nima dovoljenja za branje vaših podatkov Apple Health. Omogočite ga v Nastavitvah iOS → Zasebnost in varnost → Health → Omi."
 }

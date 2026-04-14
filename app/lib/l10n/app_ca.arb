@@ -2871,5 +2871,17 @@
     "tasksClearCompleted": "Esborra els completats",
     "tasksSelectAll": "Selecciona-ho tot",
     "tasksDeleteSelected": "Elimina {count} tasca(ques)",
-    "tasksMarkComplete": "Marcat com a completat"
+    "tasksMarkComplete": "Marcat com a completat",
+    "appleHealthManageNote": "Omi accedeix a Apple Health a través del framework HealthKit d'Apple. Pots revocar l'accés en qualsevol moment a la configuració d'iOS.",
+    "appleHealthConnectCta": "Connectar a Apple Health",
+    "appleHealthDisconnectCta": "Desconnectar Apple Health",
+    "appleHealthConnectedBadge": "Connectat",
+    "appleHealthFeatureChatTitle": "Parla de la teva salut",
+    "appleHealthFeatureChatDesc": "Pregunta a Omi sobre els teus passos, son, freqüència cardíaca i entrenaments.",
+    "appleHealthFeatureReadOnlyTitle": "Accés només de lectura",
+    "appleHealthFeatureReadOnlyDesc": "Omi mai escriu a Apple Health ni modifica les teves dades.",
+    "appleHealthFeatureSecureTitle": "Sincronització segura",
+    "appleHealthFeatureSecureDesc": "Les teves dades d'Apple Health se sincronitzen de forma privada amb el teu compte d'Omi.",
+    "appleHealthDeniedTitle": "Accés a Apple Health denegat",
+    "appleHealthDeniedBody": "Omi no té permís per llegir les teves dades d'Apple Health. Activa-ho a Configuració d'iOS → Privadesa i seguretat → Health → Omi."
 }

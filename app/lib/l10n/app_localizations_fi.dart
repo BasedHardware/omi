@@ -1705,7 +1705,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'LAITETTA',
+      one: 'LAITE',
+    );
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -8901,4 +8906,42 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Merkitty valmiiksi';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi käyttää Apple Healthia Applen HealthKit-kehyksen kautta. Voit perua käyttöoikeuden milloin tahansa iOS-asetuksista.';
+
+  @override
+  String get appleHealthConnectCta => 'Yhdistä Apple Healthiin';
+
+  @override
+  String get appleHealthDisconnectCta => 'Katkaise yhteys Apple Healthiin';
+
+  @override
+  String get appleHealthConnectedBadge => 'Yhdistetty';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Keskustele terveydestäsi';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Kysy Omilta askelista, unesta, sykkeestä ja harjoituksista.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Vain lukuoikeus';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ei koskaan kirjoita Apple Healthiin tai muuta tietojasi.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Turvallinen synkronointi';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health -tietosi synkronoidaan yksityisesti Omi-tilillesi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health -käyttöoikeus evätty';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
 }

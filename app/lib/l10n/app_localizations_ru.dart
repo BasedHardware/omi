@@ -8936,4 +8936,42 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Отмечено как выполненное';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi получает доступ к Apple Health через фреймворк HealthKit от Apple. Вы можете отозвать доступ в любой момент в Настройках iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Подключить Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Отключить Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Подключено';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Говорите о своём здоровье';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Спрашивайте Omi о ваших шагах, сне, пульсе и тренировках.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Доступ только для чтения';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi никогда не записывает в Apple Health и не изменяет ваши данные.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Безопасная синхронизация';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Данные Apple Health приватно синхронизируются с вашим аккаунтом Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Доступ к Apple Health запрещён';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'У Omi нет разрешения на чтение данных Apple Health. Включите его в Настройках iOS → Конфиденциальность и безопасность → Здоровье → Omi.';
 }

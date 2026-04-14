@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Очистити виконані",
     "tasksSelectAll": "Вибрати все",
     "tasksDeleteSelected": "Видалити {count} завдання(нь)",
-    "tasksMarkComplete": "Позначено як виконане"
+    "tasksMarkComplete": "Позначено як виконане",
+    "appleHealthManageNote": "Omi отримує доступ до Apple Health через фреймворк HealthKit від Apple. Ви можете відкликати доступ у будь-який час у Налаштуваннях iOS.",
+    "appleHealthConnectCta": "Підключити Apple Health",
+    "appleHealthDisconnectCta": "Відключити Apple Health",
+    "appleHealthConnectedBadge": "Підключено",
+    "appleHealthFeatureChatTitle": "Говоріть про своє здоров'я",
+    "appleHealthFeatureChatDesc": "Запитайте Omi про кроки, сон, пульс і тренування.",
+    "appleHealthFeatureReadOnlyTitle": "Доступ лише для читання",
+    "appleHealthFeatureReadOnlyDesc": "Omi ніколи не записує в Apple Health і не змінює ваші дані.",
+    "appleHealthFeatureSecureTitle": "Безпечна синхронізація",
+    "appleHealthFeatureSecureDesc": "Ваші дані Apple Health приватно синхронізуються з обліковим записом Omi.",
+    "appleHealthDeniedTitle": "Доступ до Apple Health заборонено",
+    "appleHealthDeniedBody": "Omi не має дозволу на читання даних Apple Health. Увімкніть це в Налаштування iOS → Конфіденційність і безпека → Здоров'я → Omi."
 }

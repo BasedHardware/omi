@@ -2903,5 +2903,17 @@
     "tasksClearCompleted": "Borrar completadas",
     "tasksSelectAll": "Seleccionar todo",
     "tasksDeleteSelected": "Eliminar {count} tarea(s)",
-    "tasksMarkComplete": "Marcado como completado"
+    "tasksMarkComplete": "Marcado como completado",
+    "appleHealthManageNote": "Omi accede a Apple Health a través del framework HealthKit de Apple. Puedes revocar el acceso en cualquier momento desde los Ajustes de iOS.",
+    "appleHealthConnectCta": "Conectar con Apple Health",
+    "appleHealthDisconnectCta": "Desconectar Apple Health",
+    "appleHealthConnectedBadge": "Conectado",
+    "appleHealthFeatureChatTitle": "Conversa sobre tu salud",
+    "appleHealthFeatureChatDesc": "Pregunta a Omi sobre tus pasos, sueño, frecuencia cardíaca y entrenamientos.",
+    "appleHealthFeatureReadOnlyTitle": "Acceso solo de lectura",
+    "appleHealthFeatureReadOnlyDesc": "Omi nunca escribe en Apple Health ni modifica tus datos.",
+    "appleHealthFeatureSecureTitle": "Sincronización segura",
+    "appleHealthFeatureSecureDesc": "Tus datos de Apple Health se sincronizan de forma privada con tu cuenta de Omi.",
+    "appleHealthDeniedTitle": "Acceso a Apple Health denegado",
+    "appleHealthDeniedBody": "Omi no tiene permiso para leer tus datos de Apple Health. Actívalo en Ajustes de iOS → Privacidad y seguridad → Salud → Omi."
 }

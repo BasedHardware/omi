@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Εκκαθάριση ολοκληρωμένων",
     "tasksSelectAll": "Επιλογή όλων",
     "tasksDeleteSelected": "Διαγραφή {count} εργασίας(ών)",
-    "tasksMarkComplete": "Επισημάνθηκε ως ολοκληρωμένο"
+    "tasksMarkComplete": "Επισημάνθηκε ως ολοκληρωμένο",
+    "appleHealthManageNote": "Το Omi αποκτά πρόσβαση στο Apple Health μέσω του πλαισίου HealthKit της Apple. Μπορείτε να ανακαλέσετε την πρόσβαση ανά πάσα στιγμή από τις Ρυθμίσεις iOS.",
+    "appleHealthConnectCta": "Σύνδεση με το Apple Health",
+    "appleHealthDisconnectCta": "Αποσύνδεση από το Apple Health",
+    "appleHealthConnectedBadge": "Συνδέθηκε",
+    "appleHealthFeatureChatTitle": "Μιλήστε για την υγεία σας",
+    "appleHealthFeatureChatDesc": "Ρωτήστε το Omi για τα βήματα, τον ύπνο, τον καρδιακό ρυθμό και τις προπονήσεις σας.",
+    "appleHealthFeatureReadOnlyTitle": "Πρόσβαση μόνο για ανάγνωση",
+    "appleHealthFeatureReadOnlyDesc": "Το Omi δεν γράφει ποτέ στο Apple Health και δεν τροποποιεί τα δεδομένα σας.",
+    "appleHealthFeatureSecureTitle": "Ασφαλής συγχρονισμός",
+    "appleHealthFeatureSecureDesc": "Τα δεδομένα Apple Health συγχρονίζονται ιδιωτικά στον λογαριασμό Omi.",
+    "appleHealthDeniedTitle": "Απορρίφθηκε η πρόσβαση στο Apple Health",
+    "appleHealthDeniedBody": "Το Omi δεν έχει άδεια να διαβάσει τα δεδομένα σας Apple Health. Ενεργοποιήστε το στο Ρυθμίσεις iOS → Απόρρητο και ασφάλεια → Health → Omi."
 }

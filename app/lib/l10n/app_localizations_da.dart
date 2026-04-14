@@ -8893,4 +8893,42 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Markeret som fuldført';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi tilgår Apple Health via Apples HealthKit-framework. Du kan til enhver tid tilbagekalde adgangen i iOS-indstillingerne.';
+
+  @override
+  String get appleHealthConnectCta => 'Forbind til Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Afbryd Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Forbundet';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat om dit helbred';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Spørg Omi om dine skridt, søvn, puls og træninger.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Kun læseadgang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi skriver aldrig til Apple Health eller ændrer dine data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sikker synkronisering';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Dine Apple Health-data synkroniseres privat til din Omi-konto.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Adgang til Apple Health nægtet';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi har ikke tilladelse til at læse dine Apple Health-data. Aktivér det i iOS-indstillinger → Anonymitet og sikkerhed → Health → Omi.';
 }

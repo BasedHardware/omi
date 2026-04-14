@@ -1706,7 +1706,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8580,7 +8585,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8920,4 +8930,42 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Označeno kao završeno';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pristupa Apple Health-u preko Appleovog HealthKit okvira. Pristup možete opozvati u bilo kojem trenutku u iOS postavkama.';
+
+  @override
+  String get appleHealthConnectCta => 'Poveži s Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Prekini vezu s Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Povezano';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Razgovarajte o svom zdravlju';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Pitajte Omi o vašim koracima, snu, otkucajima srca i treninzima.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Samo za čitanje';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nikada ne upisuje u Apple Health niti mijenja vaše podatke.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sigurna sinhronizacija';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Vaši Apple Health podaci se privatno sinhroniziraju s vašim Omi računom.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Pristup Apple Health-u je odbijen';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nema dozvolu za čitanje vaših Apple Health podataka. Omogućite ga u iOS Postavke → Privatnost i sigurnost → Health → Omi.';
 }

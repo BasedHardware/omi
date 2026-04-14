@@ -1708,7 +1708,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8589,7 +8594,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8928,4 +8938,43 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi Apple ನ HealthKit ಫ್ರೇಮ್‌ವರ್ಕ್ ಮೂಲಕ Apple Health ಅನ್ನು ಪ್ರವೇಶಿಸುತ್ತದೆ. ನೀವು iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ಪ್ರವೇಶವನ್ನು ಹಿಂಪಡೆಯಬಹುದು.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health ಗೆ ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health ಸಂಪರ್ಕ ಕಡಿತಗೊಳಿಸಿ';
+
+  @override
+  String get appleHealthConnectedBadge => 'ಸಂಪರ್ಕಿಸಲಾಗಿದೆ';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'ನಿಮ್ಮ ಆರೋಗ್ಯದ ಬಗ್ಗೆ ಮಾತನಾಡಿ';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Omi ಯೊಂದಿಗೆ ಹೆಜ್ಜೆಗಳು, ನಿದ್ರೆ, ಹೃದಯ ಬಡಿತ ಮತ್ತು ವ್ಯಾಯಾಮಗಳ ಬಗ್ಗೆ ಕೇಳಿ.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'ಕೇವಲ ಓದುವ ಪ್ರವೇಶ';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Omi ಎಂದಿಗೂ Apple Health ಗೆ ಬರೆಯುವುದಿಲ್ಲ ಅಥವಾ ಡೇಟಾವನ್ನು ಬದಲಾಯಿಸುವುದಿಲ್ಲ.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'ಸುರಕ್ಷಿತ ಸಿಂಕ್';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'ನಿಮ್ಮ Apple Health ಡೇಟಾ ಖಾಸಗಿಯಾಗಿ ನಿಮ್ಮ Omi ಖಾತೆಗೆ ಸಿಂಕ್ ಆಗುತ್ತದೆ.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health ಪ್ರವೇಶ ನಿರಾಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi ಗೆ ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು ಓದುವ ಅನುಮತಿ ಇಲ್ಲ. iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳು → ಗೌಪ್ಯತೆ ಮತ್ತು ಭದ್ರತೆ → Health → Omi ನಲ್ಲಿ ಇದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ.';
 }

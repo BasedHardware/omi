@@ -2871,5 +2871,17 @@
     "tasksClearCompleted": "Vymazat dokončené",
     "tasksSelectAll": "Vybrat vše",
     "tasksDeleteSelected": "Smazat {count} úkol(y)",
-    "tasksMarkComplete": "Označeno jako dokončené"
+    "tasksMarkComplete": "Označeno jako dokončené",
+    "appleHealthManageNote": "Omi přistupuje k Apple Health prostřednictvím frameworku HealthKit od Applu. Přístup můžete kdykoli odvolat v Nastavení iOS.",
+    "appleHealthConnectCta": "Připojit k Apple Health",
+    "appleHealthDisconnectCta": "Odpojit Apple Health",
+    "appleHealthConnectedBadge": "Připojeno",
+    "appleHealthFeatureChatTitle": "Mluvte o svém zdraví",
+    "appleHealthFeatureChatDesc": "Zeptejte se Omi na své kroky, spánek, tepovou frekvenci a tréninky.",
+    "appleHealthFeatureReadOnlyTitle": "Přístup pouze pro čtení",
+    "appleHealthFeatureReadOnlyDesc": "Omi nikdy nezapisuje do Apple Health ani neupravuje vaše data.",
+    "appleHealthFeatureSecureTitle": "Bezpečná synchronizace",
+    "appleHealthFeatureSecureDesc": "Vaše data z Apple Health se soukromě synchronizují s účtem Omi.",
+    "appleHealthDeniedTitle": "Přístup k Apple Health zamítnut",
+    "appleHealthDeniedBody": "Omi nemá oprávnění číst vaše data z Apple Health. Povolte ho v Nastavení iOS → Soukromí a zabezpečení → Health → Omi."
 }

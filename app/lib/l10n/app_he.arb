@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "נקה גמורים",
     "tasksSelectAll": "בחר הכל",
     "tasksDeleteSelected": "מחק {count} משימה(ות)",
-    "tasksMarkComplete": "סומן כהושלם"
+    "tasksMarkComplete": "סומן כהושלם",
+    "appleHealthManageNote": "Omi ניגש ל-Apple Health דרך מסגרת העבודה HealthKit של Apple. ניתן לבטל את הגישה בכל עת בהגדרות iOS.",
+    "appleHealthConnectCta": "התחבר ל-Apple Health",
+    "appleHealthDisconnectCta": "נתק את Apple Health",
+    "appleHealthConnectedBadge": "מחובר",
+    "appleHealthFeatureChatTitle": "צ'אט על הבריאות שלך",
+    "appleHealthFeatureChatDesc": "שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.",
+    "appleHealthFeatureReadOnlyTitle": "גישת קריאה בלבד",
+    "appleHealthFeatureReadOnlyDesc": "Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.",
+    "appleHealthFeatureSecureTitle": "סנכרון מאובטח",
+    "appleHealthFeatureSecureDesc": "נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.",
+    "appleHealthDeniedTitle": "הגישה ל-Apple Health נדחתה",
+    "appleHealthDeniedBody": "ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi."
 }

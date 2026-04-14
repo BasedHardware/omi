@@ -1711,7 +1711,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8902,4 +8907,42 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Đã đánh dấu hoàn thành';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi truy cập Apple Health thông qua framework HealthKit của Apple. Bạn có thể thu hồi quyền truy cập bất cứ lúc nào trong Cài đặt iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Kết nối với Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Ngắt kết nối Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Đã kết nối';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Trò chuyện về sức khỏe của bạn';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Hỏi Omi về số bước, giấc ngủ, nhịp tim và bài tập của bạn.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Quyền chỉ đọc';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi không bao giờ ghi vào Apple Health hoặc thay đổi dữ liệu của bạn.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Đồng bộ an toàn';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Dữ liệu Apple Health của bạn được đồng bộ riêng tư vào tài khoản Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Truy cập Apple Health bị từ chối';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
 }

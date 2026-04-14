@@ -2944,5 +2944,17 @@
     "tasksClearCompleted": "Hapus yang selesai",
     "tasksSelectAll": "Pilih semua",
     "tasksDeleteSelected": "Hapus {count} tugas",
-    "tasksMarkComplete": "Ditandai selesai"
+    "tasksMarkComplete": "Ditandai selesai",
+    "appleHealthManageNote": "Omi mengakses Apple Health melalui framework HealthKit dari Apple. Anda dapat mencabut akses kapan saja di Pengaturan iOS.",
+    "appleHealthConnectCta": "Hubungkan ke Apple Health",
+    "appleHealthDisconnectCta": "Putuskan Apple Health",
+    "appleHealthConnectedBadge": "Terhubung",
+    "appleHealthFeatureChatTitle": "Bicarakan kesehatan Anda",
+    "appleHealthFeatureChatDesc": "Tanyakan pada Omi tentang langkah, tidur, detak jantung, dan latihan Anda.",
+    "appleHealthFeatureReadOnlyTitle": "Akses hanya-baca",
+    "appleHealthFeatureReadOnlyDesc": "Omi tidak pernah menulis ke Apple Health atau mengubah data Anda.",
+    "appleHealthFeatureSecureTitle": "Sinkronisasi aman",
+    "appleHealthFeatureSecureDesc": "Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.",
+    "appleHealthDeniedTitle": "Akses Apple Health ditolak",
+    "appleHealthDeniedBody": "Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi."
 }

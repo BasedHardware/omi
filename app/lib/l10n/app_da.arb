@@ -2911,5 +2911,17 @@
     "tasksClearCompleted": "Ryd afsluttede",
     "tasksSelectAll": "Vælg alle",
     "tasksDeleteSelected": "Slet {count} opgave(r)",
-    "tasksMarkComplete": "Markeret som fuldført"
+    "tasksMarkComplete": "Markeret som fuldført",
+    "appleHealthManageNote": "Omi tilgår Apple Health via Apples HealthKit-framework. Du kan til enhver tid tilbagekalde adgangen i iOS-indstillingerne.",
+    "appleHealthConnectCta": "Forbind til Apple Health",
+    "appleHealthDisconnectCta": "Afbryd Apple Health",
+    "appleHealthConnectedBadge": "Forbundet",
+    "appleHealthFeatureChatTitle": "Chat om dit helbred",
+    "appleHealthFeatureChatDesc": "Spørg Omi om dine skridt, søvn, puls og træninger.",
+    "appleHealthFeatureReadOnlyTitle": "Kun læseadgang",
+    "appleHealthFeatureReadOnlyDesc": "Omi skriver aldrig til Apple Health eller ændrer dine data.",
+    "appleHealthFeatureSecureTitle": "Sikker synkronisering",
+    "appleHealthFeatureSecureDesc": "Dine Apple Health-data synkroniseres privat til din Omi-konto.",
+    "appleHealthDeniedTitle": "Adgang til Apple Health nægtet",
+    "appleHealthDeniedBody": "Omi har ikke tilladelse til at læse dine Apple Health-data. Aktivér det i iOS-indstillinger → Anonymitet og sikkerhed → Health → Omi."
 }

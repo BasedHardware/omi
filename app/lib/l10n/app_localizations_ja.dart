@@ -8419,7 +8419,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -8753,4 +8758,42 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => '完了としてマーク';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health に接続';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health の接続を解除';
+
+  @override
+  String get appleHealthConnectedBadge => '接続済み';
+
+  @override
+  String get appleHealthFeatureChatTitle => '健康についてチャット';
+
+  @override
+  String get appleHealthFeatureChatDesc => '歩数、睡眠、心拍数、ワークアウトについて Omi に質問できます。';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '読み取り専用アクセス';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi は Apple Health に書き込みや変更を行いません。';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '安全な同期';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health のデータは Omi アカウントに安全に同期されます。';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health へのアクセスが拒否されました';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
 }

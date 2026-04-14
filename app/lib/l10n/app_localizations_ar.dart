@@ -1693,7 +1693,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8841,4 +8846,42 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'تم وضع علامة مكتمل';
+
+  @override
+  String get appleHealthManageNote =>
+      'يصل Omi إلى Apple Health عبر إطار عمل HealthKit من Apple. يمكنك إلغاء الوصول في أي وقت من إعدادات iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'الاتصال بـ Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'قطع الاتصال عن Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'متصل';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'تحدث عن صحتك';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'اسأل Omi عن خطواتك ونومك ومعدل ضربات قلبك وتمارينك.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'وصول للقراءة فقط';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'لا يكتب Omi في Apple Health أبدًا ولا يعدل بياناتك.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'مزامنة آمنة';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'تتم مزامنة بيانات Apple Health بخصوصية مع حسابك في Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'تم رفض الوصول إلى Apple Health';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi.';
 }

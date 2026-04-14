@@ -1715,7 +1715,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOZITIVE',
+      one: 'DISPOZITIV',
+    );
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -8945,4 +8950,42 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marcat ca finalizat';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesează Apple Health prin framework-ul HealthKit de la Apple. Poți revoca accesul oricând din Setările iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Conectează-te la Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Deconectează Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Conectat';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Discută despre sănătatea ta';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Întreabă Omi despre pașii, somnul, ritmul cardiac și antrenamentele tale.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Acces doar pentru citire';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nu scrie niciodată în Apple Health și nu modifică datele tale.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sincronizare sigură';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Datele tale Apple Health se sincronizează privat cu contul tău Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Acces la Apple Health refuzat';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nu are permisiunea de a citi datele tale Apple Health. Activează din Setări iOS → Confidențialitate și securitate → Health → Omi.';
 }

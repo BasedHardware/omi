@@ -10632,5 +10632,17 @@
             }
         }
     },
-    "tasksMarkComplete": "Marked as complete"
+    "tasksMarkComplete": "Marked as complete",
+    "appleHealthManageNote": "Omi accesses Apple Health through Apple's HealthKit framework. You can revoke access anytime in iOS Settings.",
+    "appleHealthConnectCta": "Connect to Apple Health",
+    "appleHealthDisconnectCta": "Disconnect Apple Health",
+    "appleHealthConnectedBadge": "Connected",
+    "appleHealthFeatureChatTitle": "Chat about your health",
+    "appleHealthFeatureChatDesc": "Ask Omi about your steps, sleep, heart rate, and workouts.",
+    "appleHealthFeatureReadOnlyTitle": "Read-only access",
+    "appleHealthFeatureReadOnlyDesc": "Omi never writes to Apple Health or modifies your data.",
+    "appleHealthFeatureSecureTitle": "Secure sync",
+    "appleHealthFeatureSecureDesc": "Your Apple Health data syncs privately to your Omi account.",
+    "appleHealthDeniedTitle": "Apple Health access denied",
+    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi."
 }

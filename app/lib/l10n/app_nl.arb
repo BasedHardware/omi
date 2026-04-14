@@ -2902,5 +2902,17 @@
     "tasksClearCompleted": "Verwijder voltooide",
     "tasksSelectAll": "Alles selecteren",
     "tasksDeleteSelected": "{count} taak/taken verwijderen",
-    "tasksMarkComplete": "Gemarkeerd als voltooid"
+    "tasksMarkComplete": "Gemarkeerd als voltooid",
+    "appleHealthManageNote": "Omi heeft toegang tot Apple Health via Apple's HealthKit-framework. Je kunt de toegang op elk moment intrekken in de iOS-instellingen.",
+    "appleHealthConnectCta": "Verbinden met Apple Health",
+    "appleHealthDisconnectCta": "Apple Health loskoppelen",
+    "appleHealthConnectedBadge": "Verbonden",
+    "appleHealthFeatureChatTitle": "Chat over je gezondheid",
+    "appleHealthFeatureChatDesc": "Vraag Omi over je stappen, slaap, hartslag en workouts.",
+    "appleHealthFeatureReadOnlyTitle": "Alleen-lezen toegang",
+    "appleHealthFeatureReadOnlyDesc": "Omi schrijft nooit naar Apple Health en wijzigt je gegevens niet.",
+    "appleHealthFeatureSecureTitle": "Veilige synchronisatie",
+    "appleHealthFeatureSecureDesc": "Je Apple Health-gegevens synchroniseren privé naar je Omi-account.",
+    "appleHealthDeniedTitle": "Apple Health-toegang geweigerd",
+    "appleHealthDeniedBody": "Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi."
 }

@@ -1709,7 +1709,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'IERĪCES',
+      one: 'IERĪCE',
+    );
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -8920,4 +8925,42 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Atzīmēts kā pabeigts';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi piekļūst Apple Health, izmantojot Apple HealthKit ietvaru. Piekļuvi varat atsaukt jebkurā laikā iOS iestatījumos.';
+
+  @override
+  String get appleHealthConnectCta => 'Pievienot Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Atvienot Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Pievienots';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Runājiet par savu veselību';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Jautājiet Omi par saviem soļiem, miegu, sirdsdarbību un treniņiem.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Tikai lasīšanas piekļuve';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nekad neraksta Apple Health un nemaina jūsu datus.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Droša sinhronizācija';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Jūsu Apple Health dati privāti sinhronizējas ar Omi kontu.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Piekļuve Apple Health liegta';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nav atļaujas lasīt jūsu Apple Health datus. Iespējojiet: iOS Iestatījumi → Privātums un drošība → Health → Omi.';
 }

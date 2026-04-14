@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "పూర్తయినవి తీసివేయి",
     "tasksSelectAll": "అన్నీ ఎంచుకో",
     "tasksDeleteSelected": "{count} పని(లు) తొలగించు",
-    "tasksMarkComplete": "పూర్తయినట్లు గుర్తించబడింది"
+    "tasksMarkComplete": "పూర్తయినట్లు గుర్తించబడింది",
+    "appleHealthManageNote": "Omi Apple యొక్క HealthKit ఫ్రేమ్‌వర్క్ ద్వారా Apple Health ను యాక్సెస్ చేస్తుంది. మీరు ఎప్పుడైనా iOS సెట్టింగ్‌ల నుండి యాక్సెస్‌ను ఉపసంహరించుకోవచ్చు.",
+    "appleHealthConnectCta": "Apple Health కి కనెక్ట్ చేయండి",
+    "appleHealthDisconnectCta": "Apple Health డిస్కనెక్ట్ చేయండి",
+    "appleHealthConnectedBadge": "కనెక్ట్ అయింది",
+    "appleHealthFeatureChatTitle": "మీ ఆరోగ్యం గురించి చాట్ చేయండి",
+    "appleHealthFeatureChatDesc": "Omi ను మీ అడుగులు, నిద్ర, గుండె రేటు మరియు వర్కవుట్‌ల గురించి అడగండి.",
+    "appleHealthFeatureReadOnlyTitle": "చదవడానికి మాత్రమే యాక్సెస్",
+    "appleHealthFeatureReadOnlyDesc": "Omi Apple Health కు ఎప్పుడూ వ్రాయదు లేదా మీ డేటాను మార్చదు.",
+    "appleHealthFeatureSecureTitle": "సురక్షిత సమకాలీకరణ",
+    "appleHealthFeatureSecureDesc": "మీ Apple Health డేటా ప్రైవేట్‌గా మీ Omi ఖాతాకు సమకాలీకరించబడుతుంది.",
+    "appleHealthDeniedTitle": "Apple Health యాక్సెస్ తిరస్కరించబడింది",
+    "appleHealthDeniedBody": "Omi కి మీ Apple Health డేటాను చదవడానికి అనుమతి లేదు. iOS సెట్టింగ్‌లు → గోప్యత & భద్రత → Health → Omi లో దీన్ని ప్రారంభించండి."
 }

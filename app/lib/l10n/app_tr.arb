@@ -2937,5 +2937,17 @@
     "tasksClearCompleted": "Tamamlananları temizle",
     "tasksSelectAll": "Tümünü seç",
     "tasksDeleteSelected": "{count} görevi sil",
-    "tasksMarkComplete": "Tamamlandı olarak işaretlendi"
+    "tasksMarkComplete": "Tamamlandı olarak işaretlendi",
+    "appleHealthManageNote": "Omi, Apple Health'e Apple'ın HealthKit çerçevesi üzerinden erişir. Erişimi istediğiniz zaman iOS Ayarlar'dan iptal edebilirsiniz.",
+    "appleHealthConnectCta": "Apple Health'e Bağlan",
+    "appleHealthDisconnectCta": "Apple Health Bağlantısını Kes",
+    "appleHealthConnectedBadge": "Bağlandı",
+    "appleHealthFeatureChatTitle": "Sağlığın hakkında sohbet et",
+    "appleHealthFeatureChatDesc": "Adımların, uykun, kalp atışın ve antrenmanların hakkında Omi'ye sor.",
+    "appleHealthFeatureReadOnlyTitle": "Yalnızca okuma erişimi",
+    "appleHealthFeatureReadOnlyDesc": "Omi, Apple Health'e asla yazmaz ve verilerini değiştirmez.",
+    "appleHealthFeatureSecureTitle": "Güvenli senkronizasyon",
+    "appleHealthFeatureSecureDesc": "Apple Health verilerin Omi hesabına gizli şekilde senkronize edilir.",
+    "appleHealthDeniedTitle": "Apple Health erişimi reddedildi",
+    "appleHealthDeniedBody": "Omi'nin Apple Health verilerinizi okuma izni yok. Bunu iOS Ayarlar → Gizlilik ve Güvenlik → Sağlık → Omi yolundan etkinleştirin."
 }

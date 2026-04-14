@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "پاک کردن تکمیل‌شده‌ها",
     "tasksSelectAll": "انتخاب همه",
     "tasksDeleteSelected": "حذف {count} وظیفه",
-    "tasksMarkComplete": "به عنوان تکمیل‌شده علامت‌گذاری شد"
+    "tasksMarkComplete": "به عنوان تکمیل‌شده علامت‌گذاری شد",
+    "appleHealthManageNote": "Omi از طریق چارچوب HealthKit اپل به Apple Health دسترسی دارد. در هر زمان می‌توانید دسترسی را از تنظیمات iOS لغو کنید.",
+    "appleHealthConnectCta": "اتصال به Apple Health",
+    "appleHealthDisconnectCta": "قطع اتصال از Apple Health",
+    "appleHealthConnectedBadge": "متصل",
+    "appleHealthFeatureChatTitle": "درباره سلامتی خود گفتگو کنید",
+    "appleHealthFeatureChatDesc": "از Omi درباره قدم‌ها، خواب، ضربان قلب و تمرین‌های خود بپرسید.",
+    "appleHealthFeatureReadOnlyTitle": "دسترسی فقط خواندنی",
+    "appleHealthFeatureReadOnlyDesc": "Omi هرگز در Apple Health نمی‌نویسد و داده‌های شما را تغییر نمی‌دهد.",
+    "appleHealthFeatureSecureTitle": "همگام‌سازی امن",
+    "appleHealthFeatureSecureDesc": "داده‌های Apple Health شما به‌صورت خصوصی با حساب Omi همگام می‌شوند.",
+    "appleHealthDeniedTitle": "دسترسی به Apple Health رد شد",
+    "appleHealthDeniedBody": "Omi مجوز خواندن داده‌های Apple Health شما را ندارد. آن را در تنظیمات iOS ← حریم خصوصی و امنیت ← Health ← Omi فعال کنید."
 }

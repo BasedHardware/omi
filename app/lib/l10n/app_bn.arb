@@ -10625,5 +10625,17 @@
     "tasksClearCompleted": "সম্পন্নগুলো মুছুন",
     "tasksSelectAll": "সব নির্বাচন করুন",
     "tasksDeleteSelected": "{count}টি কাজ মুছুন",
-    "tasksMarkComplete": "সম্পন্ন হিসেবে চিহ্নিত"
+    "tasksMarkComplete": "সম্পন্ন হিসেবে চিহ্নিত",
+    "appleHealthManageNote": "Omi অ্যাপলের HealthKit ফ্রেমওয়ার্কের মাধ্যমে Apple Health-এ অ্যাক্সেস করে। আপনি যেকোনো সময় iOS সেটিংস থেকে অ্যাক্সেস প্রত্যাহার করতে পারেন।",
+    "appleHealthConnectCta": "Apple Health-এ সংযুক্ত করুন",
+    "appleHealthDisconnectCta": "Apple Health সংযোগ বিচ্ছিন্ন করুন",
+    "appleHealthConnectedBadge": "সংযুক্ত",
+    "appleHealthFeatureChatTitle": "আপনার স্বাস্থ্য নিয়ে চ্যাট করুন",
+    "appleHealthFeatureChatDesc": "Omi-কে আপনার পদক্ষেপ, ঘুম, হৃদস্পন্দন ও ব্যায়াম সম্পর্কে জিজ্ঞাসা করুন।",
+    "appleHealthFeatureReadOnlyTitle": "শুধুমাত্র পড়ার অ্যাক্সেস",
+    "appleHealthFeatureReadOnlyDesc": "Omi কখনই Apple Health-এ লেখে না বা আপনার ডেটা পরিবর্তন করে না।",
+    "appleHealthFeatureSecureTitle": "সুরক্ষিত সিঙ্ক",
+    "appleHealthFeatureSecureDesc": "আপনার Apple Health ডেটা ব্যক্তিগতভাবে আপনার Omi অ্যাকাউন্টে সিঙ্ক হয়।",
+    "appleHealthDeniedTitle": "Apple Health অ্যাক্সেস অস্বীকৃত",
+    "appleHealthDeniedBody": "Omi-র আপনার Apple Health ডেটা পড়ার অনুমতি নেই। iOS সেটিংস → Privacy & Security → Health → Omi-তে এটি সক্ষম করুন।"
 }

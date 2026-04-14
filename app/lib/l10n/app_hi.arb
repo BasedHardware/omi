@@ -2903,5 +2903,17 @@
     "tasksClearCompleted": "पूर्ण हटाएं",
     "tasksSelectAll": "सभी चुनें",
     "tasksDeleteSelected": "{count} कार्य हटाएं",
-    "tasksMarkComplete": "पूर्ण के रूप में चिह्नित"
+    "tasksMarkComplete": "पूर्ण के रूप में चिह्नित",
+    "appleHealthManageNote": "Omi Apple के HealthKit फ्रेमवर्क के माध्यम से Apple Health तक पहुँचता है। आप किसी भी समय iOS सेटिंग्स से एक्सेस रद्द कर सकते हैं।",
+    "appleHealthConnectCta": "Apple Health से कनेक्ट करें",
+    "appleHealthDisconnectCta": "Apple Health डिस्कनेक्ट करें",
+    "appleHealthConnectedBadge": "कनेक्टेड",
+    "appleHealthFeatureChatTitle": "अपने स्वास्थ्य के बारे में चैट करें",
+    "appleHealthFeatureChatDesc": "Omi से अपने कदम, नींद, हृदय गति और वर्कआउट के बारे में पूछें।",
+    "appleHealthFeatureReadOnlyTitle": "केवल पढ़ने का एक्सेस",
+    "appleHealthFeatureReadOnlyDesc": "Omi कभी Apple Health में नहीं लिखता या आपका डेटा नहीं बदलता।",
+    "appleHealthFeatureSecureTitle": "सुरक्षित सिंक",
+    "appleHealthFeatureSecureDesc": "आपका Apple Health डेटा निजी रूप से आपके Omi खाते से सिंक होता है।",
+    "appleHealthDeniedTitle": "Apple Health एक्सेस अस्वीकृत",
+    "appleHealthDeniedBody": "Omi के पास आपका Apple Health डेटा पढ़ने की अनुमति नहीं है। iOS सेटिंग्स → गोपनीयता और सुरक्षा → Health → Omi में इसे सक्षम करें।"
 }

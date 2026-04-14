@@ -1703,7 +1703,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8554,7 +8559,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8893,4 +8903,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marked as complete';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.';
+
+  @override
+  String get appleHealthConnectCta => 'Connect to Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Disconnect Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Connected';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat about your health';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Ask Omi about your steps, sleep, heart rate, and workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Read-only access';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi never writes to Apple Health or modifies your data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Secure sync';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Your Apple Health data syncs privately to your Omi account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health access denied';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
 }

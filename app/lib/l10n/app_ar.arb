@@ -2869,5 +2869,17 @@
     "tasksClearCompleted": "مسح المكتملة",
     "tasksSelectAll": "تحديد الكل",
     "tasksDeleteSelected": "حذف {count} مهمة",
-    "tasksMarkComplete": "تم وضع علامة مكتمل"
+    "tasksMarkComplete": "تم وضع علامة مكتمل",
+    "appleHealthManageNote": "يصل Omi إلى Apple Health عبر إطار عمل HealthKit من Apple. يمكنك إلغاء الوصول في أي وقت من إعدادات iOS.",
+    "appleHealthConnectCta": "الاتصال بـ Apple Health",
+    "appleHealthDisconnectCta": "قطع الاتصال عن Apple Health",
+    "appleHealthConnectedBadge": "متصل",
+    "appleHealthFeatureChatTitle": "تحدث عن صحتك",
+    "appleHealthFeatureChatDesc": "اسأل Omi عن خطواتك ونومك ومعدل ضربات قلبك وتمارينك.",
+    "appleHealthFeatureReadOnlyTitle": "وصول للقراءة فقط",
+    "appleHealthFeatureReadOnlyDesc": "لا يكتب Omi في Apple Health أبدًا ولا يعدل بياناتك.",
+    "appleHealthFeatureSecureTitle": "مزامنة آمنة",
+    "appleHealthFeatureSecureDesc": "تتم مزامنة بيانات Apple Health بخصوصية مع حسابك في Omi.",
+    "appleHealthDeniedTitle": "تم رفض الوصول إلى Apple Health",
+    "appleHealthDeniedBody": "ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi."
 }
