@@ -40,6 +40,23 @@ class AppleHealthService {
     }
   }
 
+  /// Probe for actual read access. HealthKit's `requestAuthorization` succeeds
+  /// even when the user denies read permission (Apple hides read-auth status
+  /// for privacy), so this queries several data types over the last 90 days and
+  /// returns true only if at least one sample is readable — the only reliable
+  /// way to distinguish allow from deny.
+  Future<bool> probeAccess() async {
+    if (!isAvailable) return false;
+
+    try {
+      final result = await _channel.invokeMethod('probeAccess');
+      return result == true;
+    } catch (e) {
+      Logger.debug('Error probing health access: $e');
+      return false;
+    }
+  }
+
   /// Get health summary data for the chat context
   /// Returns a map containing various health metrics
   Future<Map<String, dynamic>?> getHealthSummary({int days = 7}) async {
@@ -158,13 +175,16 @@ class AppleHealthService {
       return AppleHealthResult.unsupported;
     }
 
-    // Check permission first
-    bool hasPermission = await this.hasPermission();
-    if (!hasPermission) {
-      hasPermission = await requestPermission();
-      if (!hasPermission) {
-        return AppleHealthResult.permissionDenied;
-      }
+    final promptShown = await requestPermission();
+    if (!promptShown) {
+      return AppleHealthResult.permissionDenied;
+    }
+
+    // HealthKit's request callback returns true whether the user allowed or
+    // denied read access, so verify by probing for actual data.
+    final canRead = await probeAccess();
+    if (!canRead) {
+      return AppleHealthResult.permissionDenied;
     }
 
     return AppleHealthResult.success;
