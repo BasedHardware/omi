@@ -1,0 +1,249 @@
+// TTS proxy route — proxies ElevenLabs text-to-speech requests server-side.
+// Key stays on the backend; desktop client authenticates via Firebase token only.
+//
+// Per-user rate limits (Redis-backed):
+//   - 50 requests per rolling 60-second window → 429
+//   - 10,000 characters per calendar day → 429
+//
+// Issue #6622: Remove client-side ElevenLabs API key exposure.
+
+use axum::{
+    body::Bytes,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::post,
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
+
+use crate::auth::AuthUser;
+use crate::AppState;
+
+/// Per-user burst limit: max requests per rolling 60-second window.
+const TTS_BURST_PER_MINUTE: i64 = 50;
+
+/// Per-user daily character limit.
+const TTS_DAILY_CHAR_LIMIT: i64 = 10_000;
+
+/// Rolling burst window in seconds.
+const TTS_BURST_WINDOW_SECS: u64 = 60;
+
+#[derive(Deserialize)]
+struct TtsSynthesizeRequest {
+    text: String,
+    #[serde(default = "default_voice_id")]
+    voice_id: String,
+    #[serde(default = "default_model_id")]
+    model_id: String,
+    #[serde(default = "default_output_format")]
+    output_format: String,
+    voice_settings: Option<VoiceSettings>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct VoiceSettings {
+    stability: Option<f64>,
+    similarity_boost: Option<f64>,
+    style: Option<f64>,
+    use_speaker_boost: Option<bool>,
+}
+
+fn default_voice_id() -> String {
+    "BAMYoBHLZM7lJgJAmFz0".to_string() // Sloane
+}
+
+fn default_model_id() -> String {
+    "eleven_turbo_v2_5".to_string()
+}
+
+fn default_output_format() -> String {
+    "mp3_44100_128".to_string()
+}
+
+#[derive(Serialize)]
+struct TtsErrorResponse {
+    error: TtsErrorDetail,
+}
+
+#[derive(Serialize)]
+struct TtsErrorDetail {
+    message: String,
+    code: u16,
+}
+
+/// POST /v1/tts/synthesize
+/// Proxies TTS requests to ElevenLabs API. Per-user rate limited.
+async fn tts_synthesize(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<TtsSynthesizeRequest>,
+) -> Result<Response, Response> {
+    let elevenlabs_key = state
+        .config
+        .elevenlabs_api_key
+        .as_ref()
+        .ok_or_else(|| {
+            tracing::error!("tts_synthesize: ELEVENLABS_API_KEY not configured");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        })?;
+
+    // Validate text is not empty and not excessively long (single request cap: 5000 chars)
+    if req.text.is_empty() {
+        return Err(error_response(StatusCode::BAD_REQUEST, "text must not be empty"));
+    }
+    let char_count = req.text.chars().count() as i64;
+    if char_count > 5000 {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "text exceeds maximum length of 5000 characters",
+        ));
+    }
+
+    // Rate limit check (Redis-backed)
+    if let Some(redis) = &state.redis {
+        match redis
+            .check_tts_rate_limit(&user.uid, TTS_BURST_PER_MINUTE, TTS_BURST_WINDOW_SECS, char_count, TTS_DAILY_CHAR_LIMIT)
+            .await
+        {
+            Ok(TtsRateResult::Allow) => {}
+            Ok(TtsRateResult::BurstExceeded) => {
+                tracing::warn!("tts_synthesize: burst rate limit exceeded uid={}", user.uid);
+                return Err(rate_limit_response("Rate limit exceeded: too many requests. Try again in 60 seconds."));
+            }
+            Ok(TtsRateResult::DailyCharsExceeded) => {
+                tracing::warn!("tts_synthesize: daily character limit exceeded uid={}", user.uid);
+                return Err(rate_limit_response(
+                    "Daily character limit exceeded (10,000 characters). Resets at midnight UTC.",
+                ));
+            }
+            Err(e) => {
+                tracing::error!("tts_synthesize: Redis rate limit error, allowing unmetered: {}", e);
+                // Fail open — allow the request if Redis is down
+            }
+        }
+    }
+
+    // Build ElevenLabs upstream request
+    let upstream_url = format!(
+        "https://api.elevenlabs.io/v1/text-to-speech/{}",
+        req.voice_id
+    );
+
+    let mut body = serde_json::json!({
+        "text": req.text,
+        "model_id": req.model_id,
+        "output_format": req.output_format,
+    });
+    if let Some(vs) = &req.voice_settings {
+        body["voice_settings"] = serde_json::to_value(vs).unwrap_or_default();
+    }
+
+    let upstream = reqwest::Client::new()
+        .post(&upstream_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "audio/mpeg")
+        .header("xi-api-key", elevenlabs_key)
+        .body(serde_json::to_vec(&body).unwrap_or_default())
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!("tts_synthesize: upstream request failed: {}", e);
+            StatusCode::BAD_GATEWAY.into_response()
+        })?;
+
+    let status = StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+
+    if !status.is_success() {
+        let error_body = upstream.text().await.unwrap_or_default();
+        tracing::warn!(
+            "tts_synthesize: ElevenLabs returned {} for uid={}: {}",
+            status.as_u16(),
+            user.uid,
+            &error_body[..error_body.len().min(200)]
+        );
+        return Err((status, error_body).into_response());
+    }
+
+    let audio_bytes = upstream.bytes().await.map_err(|e| {
+        tracing::error!("tts_synthesize: failed to read upstream body: {}", e);
+        StatusCode::BAD_GATEWAY.into_response()
+    })?;
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "audio/mpeg")
+        .header("Content-Length", audio_bytes.len().to_string())
+        .body(axum::body::Body::from(audio_bytes))
+        .unwrap())
+}
+
+fn error_response(status: StatusCode, message: &str) -> Response {
+    let body = TtsErrorResponse {
+        error: TtsErrorDetail {
+            message: message.to_string(),
+            code: status.as_u16(),
+        },
+    };
+    (status, Json(body)).into_response()
+}
+
+fn rate_limit_response(message: &str) -> Response {
+    let body = serde_json::json!({
+        "error": {
+            "message": message,
+            "code": 429,
+        }
+    });
+    Response::builder()
+        .status(StatusCode::TOO_MANY_REQUESTS)
+        .header("Content-Type", "application/json")
+        .header("Retry-After", "60")
+        .body(axum::body::Body::from(serde_json::to_vec(&body).unwrap_or_default()))
+        .unwrap()
+}
+
+/// Result of a TTS rate limit check.
+pub enum TtsRateResult {
+    Allow,
+    BurstExceeded,
+    DailyCharsExceeded,
+}
+
+pub fn tts_routes() -> Router<AppState> {
+    Router::new().route("/v1/tts/synthesize", post(tts_synthesize))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_voice_id_is_sloane() {
+        assert_eq!(default_voice_id(), "BAMYoBHLZM7lJgJAmFz0");
+    }
+
+    #[test]
+    fn default_model_id_value() {
+        assert_eq!(default_model_id(), "eleven_turbo_v2_5");
+    }
+
+    #[test]
+    fn default_output_format_value() {
+        assert_eq!(default_output_format(), "mp3_44100_128");
+    }
+
+    #[test]
+    fn error_response_format() {
+        let resp = error_response(StatusCode::BAD_REQUEST, "test error");
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn rate_limit_response_format() {
+        let resp = rate_limit_response("too many");
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(resp.headers().get("Retry-After").unwrap(), "60");
+    }
+}
