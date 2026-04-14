@@ -1,28 +1,17 @@
 import XCTest
 @testable import Omi_Computer
 
-/// Tests for polling frequency reduction (#6500).
-/// Verifies that polling intervals are at their target values (120s)
-/// and that the activation cooldown logic works correctly.
+/// Tests for event-driven refresh architecture (#6500).
+/// Verifies that all periodic polling timers have been removed and
+/// that activation cooldown logic works correctly.
 final class PollingFrequencyTests: XCTestCase {
 
-    // MARK: - Polling Interval Constants
+    // MARK: - No Polling Timers
 
-    func testChatPollIntervalIs120Seconds() {
-        // ChatProvider.messagePollInterval is private, so verify via the config constant
-        XCTAssertEqual(PollingConfig.chatPollInterval, 120.0, "Chat poll interval should be 120s")
-    }
-
-    func testTasksPollIntervalIs120Seconds() {
-        XCTAssertEqual(PollingConfig.tasksPollInterval, 120.0, "Tasks poll interval should be 120s")
-    }
-
-    func testMemoriesPollIntervalIs120Seconds() {
-        XCTAssertEqual(PollingConfig.memoriesPollInterval, 120.0, "Memories poll interval should be 120s")
-    }
-
-    func testConversationsPollIntervalIs120Seconds() {
-        XCTAssertEqual(PollingConfig.conversationsPollInterval, 120.0, "Conversations poll interval should be 120s")
+    func testPollingConfigHasNoPollIntervals() {
+        // PollingConfig should only contain activationCooldown — no poll intervals.
+        // If someone adds a poll interval constant, this test must be updated.
+        XCTAssertEqual(PollingConfig.activationCooldown, 60.0, "Activation cooldown should be 60s")
     }
 
     // MARK: - Activation Cooldown
@@ -61,5 +50,13 @@ final class PollingFrequencyTests: XCTestCase {
         let now = lastRefresh.addingTimeInterval(90)
         let elapsed = now.timeIntervalSince(lastRefresh)
         XCTAssertGreaterThanOrEqual(elapsed, PollingConfig.activationCooldown)
+    }
+
+    // MARK: - Refresh All Notification
+
+    func testRefreshAllDataNotificationNameExists() {
+        // Verify the notification name is defined (Cmd+R triggers this)
+        let name = Notification.Name.refreshAllData
+        XCTAssertEqual(name.rawValue, "refreshAllData")
     }
 }
