@@ -115,6 +115,19 @@ class AppState: ObservableObject {
   @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
   @Published var hasFullDiskAccess = false
 
+  /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the
+  /// user hits a free-tier cap (transcription minutes, monthly chat messages, etc).
+  /// The popup is mounted as an overlay in `DesktopHomeView` and is closable.
+  @Published var showUsageLimitPopup: Bool = false
+  @Published var usageLimitReason: String = ""
+
+  /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
+  /// `@Published` dedupes identical-value writes automatically.
+  func triggerUsageLimitPopup(reason: String) {
+    usageLimitReason = reason
+    showUsageLimitPopup = true
+  }
+
   /// True if notifications are enabled but won't show visual banners
   var isNotificationBannerDisabled: Bool {
     hasNotificationPermission && notificationAlertStyle == .none
@@ -2509,6 +2522,7 @@ class AppState: ObservableObject {
     case "freemium_threshold_reached":
       let remaining = event.raw["remaining_seconds"] as? Int ?? 0
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
+      triggerUsageLimitPopup(reason: "transcription")
 
     case "translating":
       if let segmentsArray = event.raw["segments"] as? [[String: Any]] {
@@ -3026,6 +3040,8 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
+  static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings
   static let navigateToRewindSettings = Notification.Name("navigateToRewindSettings")
   /// Posted to navigate to Rewind page (global hotkey: Cmd+Option+R)
