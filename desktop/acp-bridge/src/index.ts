@@ -1110,6 +1110,7 @@ async function runPiMonoMode(): Promise<void> {
     passApiKey: !!process.env.ANTHROPIC_API_KEY,
     apiKey: process.env.ANTHROPIC_API_KEY,
     omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+    // Use Firebase ID token injected by ACPBridge.swift for backend auth
     authToken: process.env.OMI_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
   };
 
@@ -1121,8 +1122,10 @@ async function runPiMonoMode(): Promise<void> {
   send({ type: "init", sessionId: "" });
   logErr("Pi-mono Bridge started, waiting for queries...");
 
-  let piActiveSessionId = "";
+  // Multi-session support: keyed sessions matching ACP mode's contract
+  const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string }>();
   let piActiveAbort: AbortController | null = null;
+  let piActiveSessionId = "";
 
   const rl = createInterface({ input: process.stdin, terminal: false });
 
@@ -1142,6 +1145,7 @@ async function runPiMonoMode(): Promise<void> {
         const qm = msg as QueryMessage;
         const cwd = qm.cwd || process.env.HOME || "/";
         const model = qm.model || "omi-sonnet";
+        const sessionKey = qm.sessionKey ?? model;
 
         // Abort any previous query
         if (piActiveAbort) {
@@ -1150,13 +1154,32 @@ async function runPiMonoMode(): Promise<void> {
         }
 
         try {
-          // Create or reuse session
-          if (!piActiveSessionId) {
-            piActiveSessionId = await adapter.createSession({ cwd, model, systemPrompt: qm.systemPrompt });
-          } else if (model) {
-            await adapter.setModel(piActiveSessionId, model);
+          // Resolve session by key (like ACP mode does)
+          let entry = piSessions.get(sessionKey);
+          let sessionId = entry?.sessionId ?? "";
+
+          if (!sessionId || (entry && entry.cwd !== cwd)) {
+            // Need a new session — cwd changed or doesn't exist
+            if (entry) {
+              logErr(`Pi-mono cwd changed for ${sessionKey}, creating new session`);
+            }
+            sessionId = await adapter.createSession({
+              cwd,
+              model,
+              systemPrompt: qm.systemPrompt,
+            });
+            piSessions.set(sessionKey, { sessionId, cwd, model });
+            logErr(`Pi-mono session created: ${sessionId} (key=${sessionKey}, model=${model})`);
+          } else {
+            // Reuse existing session, update model if needed
+            if (model && entry?.model !== model) {
+              await adapter.setModel(sessionId, model);
+              piSessions.set(sessionKey, { sessionId, cwd, model });
+            }
+            logErr(`Reusing pi-mono session: ${sessionId} (key=${sessionKey})`);
           }
 
+          piActiveSessionId = sessionId;
           const abortController = new AbortController();
           piActiveAbort = abortController;
 
@@ -1166,8 +1189,10 @@ async function runPiMonoMode(): Promise<void> {
           }
           promptBlocks.push({ type: "text", text: qm.prompt });
 
-          const result = await adapter.sendPrompt(
-            piActiveSessionId,
+          // sendPrompt's onEvent callback already emits "result" via handleTurnEnd,
+          // so we do NOT send a separate result here — that would duplicate it.
+          await adapter.sendPrompt(
+            sessionId,
             promptBlocks,
             [], // tools
             qm.mode ?? "act",
@@ -1181,17 +1206,6 @@ async function runPiMonoMode(): Promise<void> {
             },
             abortController.signal
           );
-
-          send({
-            type: "result",
-            text: result.text,
-            sessionId: result.sessionId,
-            costUsd: result.costUsd ?? 0,
-            inputTokens: result.inputTokens ?? 0,
-            outputTokens: result.outputTokens ?? 0,
-            cacheReadTokens: result.cacheReadTokens ?? 0,
-            cacheWriteTokens: result.cacheWriteTokens ?? 0,
-          });
         } catch (err) {
           logErr(`Pi-mono query error: ${err}`);
           send({ type: "error", message: String(err) });
@@ -1202,9 +1216,18 @@ async function runPiMonoMode(): Promise<void> {
       case "warmup": {
         const wm = msg as WarmupMessage;
         const cwd = wm.cwd || process.env.HOME || "/";
-        const sessions = wm.sessions ?? [{ key: "main", model: wm.model || "omi-sonnet" }];
+        const warmupSessions = wm.sessions ?? [{ key: "main", model: wm.model || "omi-sonnet" }];
         try {
-          await adapter.warmup(cwd, sessions);
+          // Pre-create sessions with system prompts (matching ACP warmup contract)
+          for (const s of warmupSessions) {
+            const sessionId = await adapter.createSession({
+              cwd,
+              model: s.model,
+              systemPrompt: s.systemPrompt,
+            });
+            piSessions.set(s.key, { sessionId, cwd, model: s.model });
+            logErr(`Pi-mono pre-warmed session: ${sessionId} (key=${s.key}, model=${s.model || "default"})`);
+          }
         } catch (err) {
           logErr(`Pi-mono warmup error: ${err}`);
         }
@@ -1220,8 +1243,8 @@ async function runPiMonoMode(): Promise<void> {
         break;
 
       case "invalidate_session":
+        piSessions.delete(msg.sessionKey);
         adapter.invalidateSession(msg.sessionKey);
-        piActiveSessionId = "";
         logErr(`Invalidated pi-mono session for key=${msg.sessionKey}`);
         break;
 
