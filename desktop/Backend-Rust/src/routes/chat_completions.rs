@@ -190,7 +190,7 @@ fn translate_request(
         &req.tool_choice,
         Some(serde_json::Value::String(s)) if s == "none"
     );
-    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice);
+    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
@@ -207,25 +207,47 @@ fn translate_request(
 /// Translate OpenAI tool_choice to Anthropic format.
 /// OpenAI: "none" | "auto" | "required" | {"type":"function","function":{"name":"..."}}
 /// Anthropic: {"type":"auto"} | {"type":"any"} | {"type":"tool","name":"..."}
-fn translate_tool_choice(choice: &Option<serde_json::Value>) -> Option<serde_json::Value> {
+///
+/// Returns Err for unsupported strings or malformed objects — the caller maps
+/// this to a 400 Bad Request so clients don't silently get "tools auto-run"
+/// behavior when they sent an invalid value.
+fn translate_tool_choice(
+    choice: &Option<serde_json::Value>,
+) -> Result<Option<serde_json::Value>, String> {
     match choice {
-        None => None,
+        None => Ok(None),
         Some(serde_json::Value::String(s)) => match s.as_str() {
-            "none" => None, // Anthropic has no "none" — just omit tools
-            "auto" => Some(json!({"type": "auto"})),
-            "required" => Some(json!({"type": "any"})),
-            _ => None,
+            "none" => Ok(None), // Anthropic has no "none" — tools are stripped upstream
+            "auto" => Ok(Some(json!({"type": "auto"}))),
+            "required" => Ok(Some(json!({"type": "any"}))),
+            other => Err(format!(
+                "invalid tool_choice string: {:?} (expected one of: none, auto, required)",
+                other
+            )),
         },
         Some(serde_json::Value::Object(obj)) => {
             // {"type":"function","function":{"name":"get_weather"}}
-            if let Some(func) = obj.get("function") {
-                if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
-                    return Some(json!({"type": "tool", "name": name}));
-                }
-            }
-            None
+            let func = obj.get("function").ok_or_else(|| {
+                "invalid tool_choice object: missing 'function' field".to_string()
+            })?;
+            let name = func
+                .get("name")
+                .and_then(|n| n.as_str())
+                .ok_or_else(|| {
+                    "invalid tool_choice object: missing function.name".to_string()
+                })?;
+            Ok(Some(json!({"type": "tool", "name": name})))
         }
-        _ => None,
+        Some(other) => Err(format!(
+            "invalid tool_choice type: expected string or object, got {}",
+            match other {
+                serde_json::Value::Null => "null",
+                serde_json::Value::Bool(_) => "bool",
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::Array(_) => "array",
+                _ => "unknown",
+            }
+        )),
     }
 }
 
@@ -1219,21 +1241,21 @@ mod tests {
     #[test]
     fn test_translate_tool_choice_auto() {
         let choice = Some(json!("auto"));
-        let result = translate_tool_choice(&choice);
+        let result = translate_tool_choice(&choice).unwrap();
         assert_eq!(result, Some(json!({"type": "auto"})));
     }
 
     #[test]
     fn test_translate_tool_choice_required() {
         let choice = Some(json!("required"));
-        let result = translate_tool_choice(&choice);
+        let result = translate_tool_choice(&choice).unwrap();
         assert_eq!(result, Some(json!({"type": "any"})));
     }
 
     #[test]
     fn test_translate_tool_choice_none() {
         let choice = Some(json!("none"));
-        let result = translate_tool_choice(&choice);
+        let result = translate_tool_choice(&choice).unwrap();
         assert!(result.is_none());
     }
 
@@ -1243,13 +1265,13 @@ mod tests {
             "type": "function",
             "function": {"name": "get_weather"}
         }));
-        let result = translate_tool_choice(&choice);
+        let result = translate_tool_choice(&choice).unwrap();
         assert_eq!(result, Some(json!({"type": "tool", "name": "get_weather"})));
     }
 
     #[test]
     fn test_translate_tool_choice_absent() {
-        let result = translate_tool_choice(&None);
+        let result = translate_tool_choice(&None).unwrap();
         assert!(result.is_none());
     }
 
@@ -1310,23 +1332,56 @@ mod tests {
 
     #[test]
     fn test_translate_tool_choice_unknown_string() {
+        // Unknown strings must return Err (→ 400) instead of silently coercing
         let choice = Some(json!("invalid_value"));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_none(), "unknown string tool_choice should map to None");
+        assert!(result.is_err(), "unknown string tool_choice must return Err");
     }
 
     #[test]
     fn test_translate_tool_choice_object_without_function_name() {
+        // Malformed objects must return Err (→ 400)
         let choice = Some(json!({"type": "function", "function": {}}));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_none(), "object without function.name should map to None");
+        assert!(result.is_err(), "object without function.name must return Err");
     }
 
     #[test]
     fn test_translate_tool_choice_object_wrong_shape() {
+        // Non-function object shape must return Err (→ 400)
         let choice = Some(json!({"type": "tool", "name": "foo"}));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_none(), "non-function object shape should map to None");
+        assert!(result.is_err(), "non-function object shape must return Err");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_wrong_type() {
+        // Non-string/object values (numbers, bools, arrays) must return Err
+        assert!(translate_tool_choice(&Some(json!(42))).is_err());
+        assert!(translate_tool_choice(&Some(json!(true))).is_err());
+        assert!(translate_tool_choice(&Some(json!([]))).is_err());
+    }
+
+    #[test]
+    fn test_translate_request_invalid_tool_choice_propagates_error() {
+        // Invalid tool_choice must bubble up as Err from translate_request
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+            tool_choice: Some(json!("bogus")),
+        };
+        let result = translate_request(&req, "claude-sonnet-4-20250514");
+        assert!(result.is_err(), "invalid tool_choice must propagate as Err");
     }
 
     // ── Boundary tests for max_tokens ──────────────────────────────────
