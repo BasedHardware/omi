@@ -8922,38 +8922,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tasksMarkComplete => 'Tamamlandı olarak işaretlendi';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi Apple Health\'ten neleri okur';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Adımlar, yürüyüş ve koşu mesafesi ile aktif enerji';
-
-  @override
-  String get appleHealthReadsHeart => 'Kalp atış hızı ve dinlenme kalp atış hızı';
-
-  @override
-  String get appleHealthReadsSleep => 'Uyku analizi';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Antrenmanlar';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi bu verileri nasıl kullanır';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi, Omi Chat aracılığıyla kondisyonunuz, uykunuz ve aktiviteniz hakkındaki sorularınızı yanıtlamak için Apple Health verilerinizi kullanır. Verileriniz Omi hesabınıza güvenli şekilde senkronize edilir.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi Apple Health\'e neler yazar';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Hiçbir şey yazmaz. Omi yalnızca Apple Health\'ten okur ve sağlık verilerinizi asla yazmaz veya değiştirmez.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi, Apple Health\'e Apple\'ın HealthKit çerçevesi üzerinden erişir. Erişimi istediğiniz zaman iOS Ayarlar\'dan iptal edebilirsiniz.';
 
@@ -8965,13 +8933,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Bağlandı';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health verileriniz senkronize ediliyor…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Omi\'nin sohbette kondisyonunuz, uykunuz ve aktiviteniz hakkındaki soruları yanıtlayabilmesi için Apple Health\'i bağlayın.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Sağlığın hakkında sohbet et';
@@ -8997,7 +8958,4 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi\'nin Apple Health verilerinizi okuma izni yok. Bunu iOS Ayarlar → Gizlilik ve Güvenlik → Sağlık → Omi yolundan etkinleştirin.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Ayarları Aç';
 }

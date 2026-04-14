@@ -16647,66 +16647,6 @@ abstract class AppLocalizations {
   /// **'Marked as complete'**
   String get tasksMarkComplete;
 
-  /// No description provided for @appleHealthScreenTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Apple Health'**
-  String get appleHealthScreenTitle;
-
-  /// No description provided for @appleHealthReadsHeading.
-  ///
-  /// In en, this message translates to:
-  /// **'What Omi reads from Apple Health'**
-  String get appleHealthReadsHeading;
-
-  /// No description provided for @appleHealthReadsStepsActivity.
-  ///
-  /// In en, this message translates to:
-  /// **'Steps, walking & running distance, and active energy'**
-  String get appleHealthReadsStepsActivity;
-
-  /// No description provided for @appleHealthReadsHeart.
-  ///
-  /// In en, this message translates to:
-  /// **'Heart rate and resting heart rate'**
-  String get appleHealthReadsHeart;
-
-  /// No description provided for @appleHealthReadsSleep.
-  ///
-  /// In en, this message translates to:
-  /// **'Sleep analysis'**
-  String get appleHealthReadsSleep;
-
-  /// No description provided for @appleHealthReadsWorkouts.
-  ///
-  /// In en, this message translates to:
-  /// **'Workouts'**
-  String get appleHealthReadsWorkouts;
-
-  /// No description provided for @appleHealthUsageHeading.
-  ///
-  /// In en, this message translates to:
-  /// **'How Omi uses this data'**
-  String get appleHealthUsageHeading;
-
-  /// No description provided for @appleHealthUsageBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi uses your Apple Health data to answer questions about your fitness, sleep, and activity through Omi Chat. Your data is synced securely to your Omi account.'**
-  String get appleHealthUsageBody;
-
-  /// No description provided for @appleHealthWriteHeading.
-  ///
-  /// In en, this message translates to:
-  /// **'What Omi writes to Apple Health'**
-  String get appleHealthWriteHeading;
-
-  /// No description provided for @appleHealthWriteBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing. Omi only reads from Apple Health and never writes or modifies your health data.'**
-  String get appleHealthWriteBody;
-
   /// No description provided for @appleHealthManageNote.
   ///
   /// In en, this message translates to:
@@ -16730,18 +16670,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connected'**
   String get appleHealthConnectedBadge;
-
-  /// No description provided for @appleHealthSyncing.
-  ///
-  /// In en, this message translates to:
-  /// **'Syncing your Apple Health data…'**
-  String get appleHealthSyncing;
-
-  /// No description provided for @appleHealthIntroBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect Apple Health so Omi can answer questions about your fitness, sleep, and activity in chat.'**
-  String get appleHealthIntroBody;
 
   /// No description provided for @appleHealthFeatureChatTitle.
   ///
@@ -16790,12 +16718,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.'**
   String get appleHealthDeniedBody;
-
-  /// No description provided for @appleHealthOpenSettingsCta.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Settings'**
-  String get appleHealthOpenSettingsCta;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

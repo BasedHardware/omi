@@ -8937,38 +8937,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tasksMarkComplete => 'Gemarkeerd als voltooid';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Wat Omi uit Apple Health leest';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Stappen, wandel- en hardloopafstand en actieve energie';
-
-  @override
-  String get appleHealthReadsHeart => 'Hartslag en rusthartslag';
-
-  @override
-  String get appleHealthReadsSleep => 'Slaapanalyse';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Workouts';
-
-  @override
-  String get appleHealthUsageHeading => 'Hoe Omi deze gegevens gebruikt';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi gebruikt je Apple Health-gegevens om vragen over je fitheid, slaap en activiteit te beantwoorden via Omi Chat. Je gegevens worden veilig gesynchroniseerd met je Omi-account.';
-
-  @override
-  String get appleHealthWriteHeading => 'Wat Omi naar Apple Health schrijft';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Niets. Omi leest alleen uit Apple Health en schrijft of wijzigt nooit je gezondheidsgegevens.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi heeft toegang tot Apple Health via Apple\'s HealthKit-framework. Je kunt de toegang op elk moment intrekken in de iOS-instellingen.';
 
@@ -8980,13 +8948,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Verbonden';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health-gegevens synchroniseren…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Verbind Apple Health zodat Omi in de chat vragen kan beantwoorden over je fitheid, slaap en activiteit.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Chat over je gezondheid';
@@ -9012,7 +8973,4 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Instellingen openen';
 }

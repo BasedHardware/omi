@@ -10633,22 +10633,10 @@
         }
     },
     "tasksMarkComplete": "Marked as complete",
-    "appleHealthScreenTitle": "Apple Health",
-    "appleHealthReadsHeading": "What Omi reads from Apple Health",
-    "appleHealthReadsStepsActivity": "Steps, walking & running distance, and active energy",
-    "appleHealthReadsHeart": "Heart rate and resting heart rate",
-    "appleHealthReadsSleep": "Sleep analysis",
-    "appleHealthReadsWorkouts": "Workouts",
-    "appleHealthUsageHeading": "How Omi uses this data",
-    "appleHealthUsageBody": "Omi uses your Apple Health data to answer questions about your fitness, sleep, and activity through Omi Chat. Your data is synced securely to your Omi account.",
-    "appleHealthWriteHeading": "What Omi writes to Apple Health",
-    "appleHealthWriteBody": "Nothing. Omi only reads from Apple Health and never writes or modifies your health data.",
     "appleHealthManageNote": "Omi accesses Apple Health through Apple's HealthKit framework. You can revoke access anytime in iOS Settings.",
     "appleHealthConnectCta": "Connect to Apple Health",
     "appleHealthDisconnectCta": "Disconnect Apple Health",
     "appleHealthConnectedBadge": "Connected",
-    "appleHealthSyncing": "Syncing your Apple Health data…",
-    "appleHealthIntroBody": "Connect Apple Health so Omi can answer questions about your fitness, sleep, and activity in chat.",
     "appleHealthFeatureChatTitle": "Chat about your health",
     "appleHealthFeatureChatDesc": "Ask Omi about your steps, sleep, heart rate, and workouts.",
     "appleHealthFeatureReadOnlyTitle": "Read-only access",
@@ -10656,6 +10644,5 @@
     "appleHealthFeatureSecureTitle": "Secure sync",
     "appleHealthFeatureSecureDesc": "Your Apple Health data syncs privately to your Omi account.",
     "appleHealthDeniedTitle": "Apple Health access denied",
-    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.",
-    "appleHealthOpenSettingsCta": "Open Settings"
+    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi."
 }

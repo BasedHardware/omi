@@ -8760,37 +8760,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksMarkComplete => '完了としてマーク';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi が Apple Health から読み取る内容';
-
-  @override
-  String get appleHealthReadsStepsActivity => '歩数、ウォーキング・ランニング距離、アクティブエネルギー';
-
-  @override
-  String get appleHealthReadsHeart => '心拍数と安静時心拍数';
-
-  @override
-  String get appleHealthReadsSleep => '睡眠分析';
-
-  @override
-  String get appleHealthReadsWorkouts => 'ワークアウト';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi がこのデータをどのように使用するか';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi は Apple Health のデータを使用して、Omi Chat を通じてあなたのフィットネス、睡眠、アクティビティに関する質問に回答します。データは安全に Omi アカウントに同期されます。';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi が Apple Health に書き込む内容';
-
-  @override
-  String get appleHealthWriteBody => '何も書き込みません。Omi は Apple Health から読み取るのみで、健康データを書き込んだり変更したりすることはありません。';
-
-  @override
   String get appleHealthManageNote =>
       'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
 
@@ -8802,12 +8771,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => '接続済み';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health のデータを同期中…';
-
-  @override
-  String get appleHealthIntroBody => 'Apple Health を接続すると、Omi がチャットであなたのフィットネス、睡眠、アクティビティに関する質問に回答できます。';
 
   @override
   String get appleHealthFeatureChatTitle => '健康についてチャット';
@@ -8833,7 +8796,4 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
-
-  @override
-  String get appleHealthOpenSettingsCta => '設定を開く';
 }

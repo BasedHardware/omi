@@ -8837,37 +8837,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tasksMarkComplete => 'סומן כהושלם';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'מה Omi קורא מ-Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'צעדים, מרחק הליכה וריצה ואנרגיה פעילה';
-
-  @override
-  String get appleHealthReadsHeart => 'דופק ודופק במנוחה';
-
-  @override
-  String get appleHealthReadsSleep => 'ניתוח שינה';
-
-  @override
-  String get appleHealthReadsWorkouts => 'אימונים';
-
-  @override
-  String get appleHealthUsageHeading => 'איך Omi משתמש בנתונים האלה';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi משתמש בנתוני Apple Health שלך כדי לענות על שאלות לגבי הכושר, השינה והפעילות שלך דרך Omi Chat. הנתונים שלך מסונכרנים באופן מאובטח עם חשבון Omi שלך.';
-
-  @override
-  String get appleHealthWriteHeading => 'מה Omi כותב ל-Apple Health';
-
-  @override
-  String get appleHealthWriteBody => 'שום דבר. Omi רק קורא מ-Apple Health ולעולם לא כותב או משנה את נתוני הבריאות שלך.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi ניגש ל-Apple Health דרך מסגרת העבודה HealthKit של Apple. ניתן לבטל את הגישה בכל עת בהגדרות iOS.';
 
@@ -8879,13 +8848,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'מחובר';
-
-  @override
-  String get appleHealthSyncing => 'מסנכרן את נתוני Apple Health שלך…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'חבר את Apple Health כדי ש-Omi יוכל לענות בצ\'אט על שאלות לגבי הכושר, השינה והפעילות שלך.';
 
   @override
   String get appleHealthFeatureChatTitle => 'צ\'אט על הבריאות שלך';
@@ -8911,7 +8873,4 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'פתח הגדרות';
 }

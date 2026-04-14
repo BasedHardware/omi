@@ -8908,38 +8908,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tasksMarkComplete => 'Merkitty valmiiksi';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Mitä Omi lukee Apple Healthista';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Askeleet, kävely- ja juoksumatka sekä aktiivienergia';
-
-  @override
-  String get appleHealthReadsHeart => 'Syke ja leposyke';
-
-  @override
-  String get appleHealthReadsSleep => 'Unianalyysi';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Harjoitukset';
-
-  @override
-  String get appleHealthUsageHeading => 'Miten Omi käyttää näitä tietoja';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi käyttää Apple Health -tietojasi vastatakseen kysymyksiin kunnostasi, unestasi ja aktiivisuudestasi Omi Chatissa. Tietosi synkronoidaan turvallisesti Omi-tiliisi.';
-
-  @override
-  String get appleHealthWriteHeading => 'Mitä Omi kirjoittaa Apple Healthiin';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Ei mitään. Omi vain lukee Apple Healthista eikä koskaan kirjoita tai muokkaa terveystietojasi.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi käyttää Apple Healthia Applen HealthKit-kehyksen kautta. Voit perua käyttöoikeuden milloin tahansa iOS-asetuksista.';
 
@@ -8951,13 +8919,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Yhdistetty';
-
-  @override
-  String get appleHealthSyncing => 'Synkronoidaan Apple Health -tietoja…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Yhdistä Apple Health, jotta Omi voi vastata keskustelussa kysymyksiin kunnostasi, unestasi ja aktiivisuudestasi.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Keskustele terveydestäsi';
@@ -8983,7 +8944,4 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Avaa asetukset';
 }

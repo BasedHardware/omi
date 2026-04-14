@@ -8975,38 +8975,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get tasksMarkComplete => 'முடிந்தது என குறிக்கப்பட்டது';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi Apple Health-இல் இருந்து என்ன படிக்கிறது';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'படிகள், நடை மற்றும் ஓட்ட தூரம், மற்றும் செயல் ஆற்றல்';
-
-  @override
-  String get appleHealthReadsHeart => 'இதயத் துடிப்பு மற்றும் ஓய்வு இதயத் துடிப்பு';
-
-  @override
-  String get appleHealthReadsSleep => 'தூக்க பகுப்பாய்வு';
-
-  @override
-  String get appleHealthReadsWorkouts => 'உடற்பயிற்சிகள்';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi இந்த தரவை எப்படி பயன்படுத்துகிறது';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi உங்கள் Apple Health தரவைப் பயன்படுத்தி Omi Chat மூலம் உங்கள் உடற்தகுதி, தூக்கம் மற்றும் செயல்பாடு குறித்த கேள்விகளுக்கு பதிலளிக்கிறது. உங்கள் தரவு பாதுகாப்பாக உங்கள் Omi கணக்குடன் ஒத்திசைக்கப்படுகிறது.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi Apple Health-இல் என்ன எழுதுகிறது';
-
-  @override
-  String get appleHealthWriteBody =>
-      'எதுவும் இல்லை. Omi Apple Health-இல் இருந்து மட்டுமே படிக்கிறது, ஒருபோதும் உங்கள் சுகாதார தரவை எழுதுவதோ மாற்றுவதோ இல்லை.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi, Apple இன் HealthKit கட்டமைப்பின் மூலம் Apple Health-ஐ அணுகுகிறது. iOS அமைப்புகளில் எந்த நேரத்திலும் அணுகலை ரத்து செய்யலாம்.';
 
@@ -9018,13 +8986,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'இணைக்கப்பட்டது';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health தரவு ஒத்திசைக்கிறது…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Apple Health-ஐ இணையுங்கள், அதன் மூலம் Omi அரட்டையில் உங்கள் உடற்தகுதி, தூக்கம் மற்றும் செயல்பாடு குறித்த கேள்விகளுக்கு பதிலளிக்கும்.';
 
   @override
   String get appleHealthFeatureChatTitle => 'உங்கள் ஆரோக்கியம் பற்றி அரட்டை';
@@ -9052,7 +9013,4 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'உங்கள் Apple Health தரவைப் படிக்க Omi க்கு அனுமதி இல்லை. iOS அமைப்புகள் → தனியுரிமை & பாதுகாப்பு → Health → Omi இல் இதை இயக்கவும்.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'அமைப்புகளைத் திற';
 }

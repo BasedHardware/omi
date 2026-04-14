@@ -8927,38 +8927,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tasksMarkComplete => 'Atzīmēts kā pabeigts';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Ko Omi nolasa no Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Soļi, iešanas un skriešanas attālums un aktīvā enerģija';
-
-  @override
-  String get appleHealthReadsHeart => 'Sirdsdarbība un sirdsdarbība miera stāvoklī';
-
-  @override
-  String get appleHealthReadsSleep => 'Miega analīze';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Treniņi';
-
-  @override
-  String get appleHealthUsageHeading => 'Kā Omi izmanto šos datus';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi izmanto jūsu Apple Health datus, lai atbildētu uz jautājumiem par jūsu fizisko formu, miegu un aktivitāti caur Omi Chat. Jūsu dati tiek droši sinhronizēti ar jūsu Omi kontu.';
-
-  @override
-  String get appleHealthWriteHeading => 'Ko Omi raksta Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Neko. Omi tikai nolasa no Apple Health un nekad neraksta vai nemaina jūsu veselības datus.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi piekļūst Apple Health, izmantojot Apple HealthKit ietvaru. Piekļuvi varat atsaukt jebkurā laikā iOS iestatījumos.';
 
@@ -8970,13 +8938,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Pievienots';
-
-  @override
-  String get appleHealthSyncing => 'Sinhronizē Apple Health datus…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Pievienojiet Apple Health, lai Omi čatā varētu atbildēt uz jautājumiem par jūsu fizisko formu, miegu un aktivitāti.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Runājiet par savu veselību';
@@ -9002,7 +8963,4 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nav atļaujas lasīt jūsu Apple Health datus. Iespējojiet: iOS Iestatījumi → Privātums un drošība → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Atvērt iestatījumus';
 }

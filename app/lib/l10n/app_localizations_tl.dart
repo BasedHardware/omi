@@ -8989,38 +8989,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tasksMarkComplete => 'Minarkahan bilang kumpleto';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Ano ang binabasa ng Omi mula sa Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Mga hakbang, distansya ng paglalakad at pagtakbo, at aktibong enerhiya';
-
-  @override
-  String get appleHealthReadsHeart => 'Tibok ng puso at tibok ng puso habang nagpapahinga';
-
-  @override
-  String get appleHealthReadsSleep => 'Pagsusuri ng tulog';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Mga ehersisyo';
-
-  @override
-  String get appleHealthUsageHeading => 'Paano ginagamit ng Omi ang datos na ito';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Ginagamit ng Omi ang iyong datos sa Apple Health para sagutin ang mga tanong tungkol sa iyong fitness, tulog, at aktibidad sa Omi Chat. Ang iyong datos ay ligtas na ini-sync sa iyong Omi account.';
-
-  @override
-  String get appleHealthWriteHeading => 'Ano ang isinusulat ng Omi sa Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Wala. Ang Omi ay nagbabasa lamang mula sa Apple Health at hindi kailanman sumusulat o nagbabago sa iyong datos sa kalusugan.';
-
-  @override
   String get appleHealthManageNote =>
       'Ina-access ng Omi ang Apple Health sa pamamagitan ng HealthKit framework ng Apple. Maaari mong bawiin ang access anumang oras sa iOS Settings.';
 
@@ -9032,13 +9000,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Nakakonekta';
-
-  @override
-  String get appleHealthSyncing => 'Sinisync ang iyong datos sa Apple Health…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Ikonekta ang Apple Health upang masagot ng Omi sa chat ang mga tanong tungkol sa iyong fitness, tulog, at aktibidad.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Kumustahin ang iyong kalusugan';
@@ -9067,7 +9028,4 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Walang pahintulot ang Omi na basahin ang iyong Apple Health data. I-enable ito sa iOS Settings → Privacy & Security → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Buksan ang Settings';
 }

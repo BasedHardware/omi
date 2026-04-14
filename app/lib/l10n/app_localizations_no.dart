@@ -8905,38 +8905,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tasksMarkComplete => 'Merket som fullført';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Hva Omi leser fra Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Skritt, gå- og løpedistanse og aktiv energi';
-
-  @override
-  String get appleHealthReadsHeart => 'Puls og hvilepuls';
-
-  @override
-  String get appleHealthReadsSleep => 'Søvnanalyse';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Treningsøkter';
-
-  @override
-  String get appleHealthUsageHeading => 'Slik bruker Omi disse dataene';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi bruker Apple Health-dataene dine til å svare på spørsmål om formen, søvnen og aktiviteten din via Omi Chat. Dataene dine synkroniseres sikkert til Omi-kontoen din.';
-
-  @override
-  String get appleHealthWriteHeading => 'Hva Omi skriver til Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Ingenting. Omi leser bare fra Apple Health og skriver eller endrer aldri helsedataene dine.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi får tilgang til Apple Health gjennom Apples HealthKit-rammeverk. Du kan når som helst trekke tilbake tilgangen i iOS-innstillingene.';
 
@@ -8948,13 +8916,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Tilkoblet';
-
-  @override
-  String get appleHealthSyncing => 'Synkroniserer Apple Health-data…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Koble til Apple Health slik at Omi kan svare på spørsmål om formen, søvnen og aktiviteten din i chatten.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Chat om helsen din';
@@ -8980,7 +8941,4 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Åpne innstillinger';
 }

@@ -8762,37 +8762,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksMarkComplete => '완료로 표시됨';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi가 Apple Health에서 읽어오는 항목';
-
-  @override
-  String get appleHealthReadsStepsActivity => '걸음 수, 걷기 및 달리기 거리, 활동 에너지';
-
-  @override
-  String get appleHealthReadsHeart => '심박수 및 안정 시 심박수';
-
-  @override
-  String get appleHealthReadsSleep => '수면 분석';
-
-  @override
-  String get appleHealthReadsWorkouts => '운동';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi가 이 데이터를 사용하는 방법';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi는 Apple Health 데이터를 사용하여 Omi Chat에서 피트니스, 수면, 활동에 관한 질문에 답합니다. 데이터는 Omi 계정과 안전하게 동기화됩니다.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi가 Apple Health에 쓰는 항목';
-
-  @override
-  String get appleHealthWriteBody => '없습니다. Omi는 Apple Health에서 읽기만 하며, 건강 데이터를 작성하거나 수정하지 않습니다.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi는 Apple의 HealthKit 프레임워크를 통해 Apple Health에 접근합니다. iOS 설정에서 언제든지 접근 권한을 철회할 수 있습니다.';
 
@@ -8804,12 +8773,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => '연결됨';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health 데이터 동기화 중…';
-
-  @override
-  String get appleHealthIntroBody => 'Apple Health를 연결하면 Omi가 채팅에서 피트니스, 수면, 활동에 관한 질문에 답할 수 있습니다.';
 
   @override
   String get appleHealthFeatureChatTitle => '건강에 대해 대화하기';
@@ -8834,7 +8797,4 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appleHealthDeniedBody => 'Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요.';
-
-  @override
-  String get appleHealthOpenSettingsCta => '설정 열기';
 }

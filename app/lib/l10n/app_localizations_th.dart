@@ -8863,38 +8863,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get tasksMarkComplete => 'ทำเครื่องหมายว่าเสร็จสิ้น';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'สิ่งที่ Omi อ่านจาก Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'ก้าว ระยะทางการเดินและวิ่ง และพลังงานที่ใช้';
-
-  @override
-  String get appleHealthReadsHeart => 'อัตราการเต้นของหัวใจและอัตราการเต้นขณะพัก';
-
-  @override
-  String get appleHealthReadsSleep => 'การวิเคราะห์การนอน';
-
-  @override
-  String get appleHealthReadsWorkouts => 'การออกกำลังกาย';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi ใช้ข้อมูลนี้อย่างไร';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi ใช้ข้อมูล Apple Health ของคุณเพื่อตอบคำถามเกี่ยวกับสมรรถภาพ การนอน และกิจกรรมของคุณผ่าน Omi Chat ข้อมูลของคุณจะซิงค์อย่างปลอดภัยไปยังบัญชี Omi ของคุณ';
-
-  @override
-  String get appleHealthWriteHeading => 'สิ่งที่ Omi เขียนไปยัง Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'ไม่มี Omi อ่านจาก Apple Health เท่านั้น และไม่เคยเขียนหรือแก้ไขข้อมูลสุขภาพของคุณ';
-
-  @override
   String get appleHealthManageNote =>
       'Omi เข้าถึง Apple Health ผ่านเฟรมเวิร์ก HealthKit ของ Apple คุณสามารถเพิกถอนการเข้าถึงได้ทุกเมื่อในการตั้งค่า iOS';
 
@@ -8906,13 +8874,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'เชื่อมต่อแล้ว';
-
-  @override
-  String get appleHealthSyncing => 'กำลังซิงค์ข้อมูล Apple Health ของคุณ…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'เชื่อมต่อ Apple Health เพื่อให้ Omi ตอบคำถามในแชทเกี่ยวกับสมรรถภาพ การนอน และกิจกรรมของคุณได้';
 
   @override
   String get appleHealthFeatureChatTitle => 'สนทนาเกี่ยวกับสุขภาพของคุณ';
@@ -8938,7 +8899,4 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'เปิดการตั้งค่า';
 }

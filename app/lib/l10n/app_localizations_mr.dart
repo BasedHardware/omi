@@ -8920,38 +8920,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get tasksMarkComplete => 'पूर्ण म्हणून चिन्हांकित';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi Apple Health मधून काय वाचतो';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'पावले, चालण्याचे व धावण्याचे अंतर आणि सक्रिय ऊर्जा';
-
-  @override
-  String get appleHealthReadsHeart => 'हृदय गती आणि विश्रांती हृदय गती';
-
-  @override
-  String get appleHealthReadsSleep => 'झोपेचे विश्लेषण';
-
-  @override
-  String get appleHealthReadsWorkouts => 'वर्कआउट्स';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi हा डेटा कसा वापरतो';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi आपला Apple Health डेटा Omi Chat द्वारे आपल्या तंदुरुस्ती, झोप आणि क्रियाकलापांबद्दल प्रश्नांची उत्तरे देण्यासाठी वापरतो. आपला डेटा सुरक्षितपणे आपल्या Omi खात्याशी समक्रमित केला जातो.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi Apple Health मध्ये काय लिहितो';
-
-  @override
-  String get appleHealthWriteBody =>
-      'काहीही नाही. Omi फक्त Apple Health मधून वाचतो आणि आपला आरोग्य डेटा कधीही लिहित किंवा बदलत नाही.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi Apple च्या HealthKit फ्रेमवर्कद्वारे Apple Health ला प्रवेश करतो. आपण कोणत्याही वेळी iOS सेटिंग्जमधून प्रवेश रद्द करू शकता.';
 
@@ -8963,13 +8931,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'कनेक्ट केले';
-
-  @override
-  String get appleHealthSyncing => 'आपला Apple Health डेटा समक्रमित होत आहे…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Apple Health ला कनेक्ट करा जेणेकरून Omi चॅटमध्ये आपल्या तंदुरुस्ती, झोप आणि क्रियाकलापांबद्दल प्रश्नांची उत्तरे देऊ शकेल.';
 
   @override
   String get appleHealthFeatureChatTitle => 'आपल्या आरोग्याबद्दल गप्पा मारा';
@@ -8995,7 +8956,4 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi कडे आपला Apple Health डेटा वाचण्याची परवानगी नाही. iOS सेटिंग्ज → गोपनीयता आणि सुरक्षा → Health → Omi मध्ये ते सक्षम करा.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'सेटिंग्ज उघडा';
 }

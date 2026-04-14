@@ -8895,38 +8895,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tasksMarkComplete => 'Markeret som fuldført';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Hvad Omi læser fra Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Skridt, gå- og løbedistance samt aktiv energi';
-
-  @override
-  String get appleHealthReadsHeart => 'Puls og hvilepuls';
-
-  @override
-  String get appleHealthReadsSleep => 'Søvnanalyse';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Træninger';
-
-  @override
-  String get appleHealthUsageHeading => 'Sådan bruger Omi disse data';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi bruger dine Apple Health-data til at besvare spørgsmål om din fysiske form, søvn og aktivitet via Omi Chat. Dine data synkroniseres sikkert til din Omi-konto.';
-
-  @override
-  String get appleHealthWriteHeading => 'Hvad Omi skriver til Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Intet. Omi læser kun fra Apple Health og skriver eller ændrer aldrig dine sundhedsdata.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi tilgår Apple Health via Apples HealthKit-framework. Du kan til enhver tid tilbagekalde adgangen i iOS-indstillingerne.';
 
@@ -8938,13 +8906,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Forbundet';
-
-  @override
-  String get appleHealthSyncing => 'Synkroniserer dine Apple Health-data…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Forbind Apple Health, så Omi kan besvare spørgsmål om din fysiske form, søvn og aktivitet i chatten.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Chat om dit helbred';
@@ -8970,7 +8931,4 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi har ikke tilladelse til at læse dine Apple Health-data. Aktivér det i iOS-indstillinger → Anonymitet og sikkerhed → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Åbn indstillinger';
 }

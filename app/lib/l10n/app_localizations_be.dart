@@ -8934,37 +8934,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tasksMarkComplete => 'Адзначана як выкананае';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Што Omi чытае з Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Крокі, адлегласць хады і бегу, актыўная энергія';
-
-  @override
-  String get appleHealthReadsHeart => 'Пульс і пульс у стане спакою';
-
-  @override
-  String get appleHealthReadsSleep => 'Аналіз сну';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Трэніроўкі';
-
-  @override
-  String get appleHealthUsageHeading => 'Як Omi выкарыстоўвае гэтыя даныя';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi выкарыстоўвае вашы даныя Apple Health, каб адказваць на пытанні пра ваш фітнес, сон і актыўнасць у Omi Chat. Даныя надзейна сінхранізуюцца з вашым акаўнтам Omi.';
-
-  @override
-  String get appleHealthWriteHeading => 'Што Omi запісвае ў Apple Health';
-
-  @override
-  String get appleHealthWriteBody => 'Нічога. Omi толькі чытае з Apple Health і ніколі не запісвае і не змяняе даныя.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi атрымлівае доступ да Apple Health праз фрэймворк HealthKit ад Apple. Вы можаце адклікаць доступ у любы час у Наладах iOS.';
 
@@ -8976,13 +8945,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Падключана';
-
-  @override
-  String get appleHealthSyncing => 'Сінхранізацыя даных Apple Health…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Падключыце Apple Health, каб Omi мог адказваць на пытанні пра ваш фітнес, сон і актыўнасць у чаце.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Размаўляйце пра здароўе';
@@ -9008,7 +8970,4 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'У Omi няма дазволу на чытанне даных Apple Health. Уключыце яго ў Налады iOS → Прыватнасць і бяспека → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Адкрыць налады';
 }

@@ -8972,38 +8972,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksMarkComplete => 'Επισημάνθηκε ως ολοκληρωμένο';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Τι διαβάζει το Omi από το Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Βήματα, απόσταση περπατήματος και τρεξίματος, ενεργή ενέργεια';
-
-  @override
-  String get appleHealthReadsHeart => 'Καρδιακός ρυθμός και καρδιακός ρυθμός ηρεμίας';
-
-  @override
-  String get appleHealthReadsSleep => 'Ανάλυση ύπνου';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Προπονήσεις';
-
-  @override
-  String get appleHealthUsageHeading => 'Πώς χρησιμοποιεί το Omi αυτά τα δεδομένα';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Το Omi χρησιμοποιεί τα δεδομένα σας Apple Health για να απαντά σε ερωτήσεις σχετικά με τη φυσική σας κατάσταση, τον ύπνο και τη δραστηριότητα μέσω του Omi Chat. Τα δεδομένα σας συγχρονίζονται με ασφάλεια στον λογαριασμό Omi σας.';
-
-  @override
-  String get appleHealthWriteHeading => 'Τι γράφει το Omi στο Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Τίποτα. Το Omi διαβάζει μόνο από το Apple Health και δεν γράφει ποτέ ούτε τροποποιεί τα δεδομένα υγείας σας.';
-
-  @override
   String get appleHealthManageNote =>
       'Το Omi αποκτά πρόσβαση στο Apple Health μέσω του πλαισίου HealthKit της Apple. Μπορείτε να ανακαλέσετε την πρόσβαση ανά πάσα στιγμή από τις Ρυθμίσεις iOS.';
 
@@ -9015,13 +8983,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Συνδέθηκε';
-
-  @override
-  String get appleHealthSyncing => 'Συγχρονισμός δεδομένων Apple Health…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Συνδέστε το Apple Health για να μπορεί το Omi να απαντά σε ερωτήσεις για τη φυσική κατάσταση, τον ύπνο και τη δραστηριότητά σας στο chat.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Μιλήστε για την υγεία σας';
@@ -9049,7 +9010,4 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Το Omi δεν έχει άδεια να διαβάσει τα δεδομένα σας Apple Health. Ενεργοποιήστε το στο Ρυθμίσεις iOS → Απόρρητο και ασφάλεια → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Άνοιγμα Ρυθμίσεων';
 }

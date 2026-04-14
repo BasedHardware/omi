@@ -8909,38 +8909,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tasksMarkComplete => 'Đã đánh dấu hoàn thành';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi đọc gì từ Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Số bước, quãng đường đi bộ & chạy, và năng lượng hoạt động';
-
-  @override
-  String get appleHealthReadsHeart => 'Nhịp tim và nhịp tim khi nghỉ';
-
-  @override
-  String get appleHealthReadsSleep => 'Phân tích giấc ngủ';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Bài tập';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi sử dụng dữ liệu này như thế nào';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi sử dụng dữ liệu Apple Health của bạn để trả lời các câu hỏi về thể chất, giấc ngủ và hoạt động của bạn qua Omi Chat. Dữ liệu của bạn được đồng bộ an toàn với tài khoản Omi.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi ghi gì vào Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Không ghi gì. Omi chỉ đọc từ Apple Health và không bao giờ ghi hoặc thay đổi dữ liệu sức khỏe của bạn.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi truy cập Apple Health thông qua framework HealthKit của Apple. Bạn có thể thu hồi quyền truy cập bất cứ lúc nào trong Cài đặt iOS.';
 
@@ -8952,13 +8920,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Đã kết nối';
-
-  @override
-  String get appleHealthSyncing => 'Đang đồng bộ dữ liệu Apple Health của bạn…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Kết nối Apple Health để Omi có thể trả lời trong chat các câu hỏi về thể chất, giấc ngủ và hoạt động của bạn.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Trò chuyện về sức khỏe của bạn';
@@ -8984,7 +8945,4 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Mở Cài đặt';
 }

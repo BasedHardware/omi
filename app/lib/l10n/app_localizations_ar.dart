@@ -8848,37 +8848,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get tasksMarkComplete => 'تم وضع علامة مكتمل';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'ما يقرأه Omi من Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'الخطوات ومسافة المشي والجري والطاقة النشطة';
-
-  @override
-  String get appleHealthReadsHeart => 'معدل ضربات القلب ومعدل ضربات القلب أثناء الراحة';
-
-  @override
-  String get appleHealthReadsSleep => 'تحليل النوم';
-
-  @override
-  String get appleHealthReadsWorkouts => 'التمارين';
-
-  @override
-  String get appleHealthUsageHeading => 'كيف يستخدم Omi هذه البيانات';
-
-  @override
-  String get appleHealthUsageBody =>
-      'يستخدم Omi بياناتك من Apple Health للإجابة على أسئلتك حول لياقتك البدنية ونومك ونشاطك عبر Omi Chat. تتم مزامنة بياناتك بأمان مع حسابك في Omi.';
-
-  @override
-  String get appleHealthWriteHeading => 'ما يكتبه Omi إلى Apple Health';
-
-  @override
-  String get appleHealthWriteBody => 'لا شيء. يقرأ Omi من Apple Health فقط ولا يكتب أو يعدل بياناتك الصحية أبدًا.';
-
-  @override
   String get appleHealthManageNote =>
       'يصل Omi إلى Apple Health عبر إطار عمل HealthKit من Apple. يمكنك إلغاء الوصول في أي وقت من إعدادات iOS.';
 
@@ -8890,13 +8859,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'متصل';
-
-  @override
-  String get appleHealthSyncing => 'جارٍ مزامنة بيانات Apple Health…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'اربط Apple Health حتى يتمكن Omi من الإجابة على أسئلتك حول لياقتك ونومك ونشاطك في الدردشة.';
 
   @override
   String get appleHealthFeatureChatTitle => 'تحدث عن صحتك';
@@ -8922,7 +8884,4 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'فتح الإعدادات';
 }

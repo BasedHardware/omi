@@ -8940,38 +8940,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get tasksMarkComplete => 'ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Omi Apple Health ನಿಂದ ಏನು ಓದುತ್ತದೆ';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'ಹೆಜ್ಜೆಗಳು, ನಡಿಗೆ ಮತ್ತು ಓಟದ ದೂರ, ಮತ್ತು ಸಕ್ರಿಯ ಶಕ್ತಿ';
-
-  @override
-  String get appleHealthReadsHeart => 'ಹೃದಯ ಬಡಿತ ಮತ್ತು ವಿಶ್ರಾಂತಿ ಹೃದಯ ಬಡಿತ';
-
-  @override
-  String get appleHealthReadsSleep => 'ನಿದ್ರಾ ವಿಶ್ಲೇಷಣೆ';
-
-  @override
-  String get appleHealthReadsWorkouts => 'ವ್ಯಾಯಾಮಗಳು';
-
-  @override
-  String get appleHealthUsageHeading => 'Omi ಈ ಡೇಟಾವನ್ನು ಹೇಗೆ ಬಳಸುತ್ತದೆ';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು Omi Chat ಮೂಲಕ ನಿಮ್ಮ ಫಿಟ್‌ನೆಸ್, ನಿದ್ರೆ ಮತ್ತು ಚಟುವಟಿಕೆಯ ಬಗ್ಗೆ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಲು ಬಳಸುತ್ತದೆ. ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ನಿಮ್ಮ Omi ಖಾತೆಗೆ ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತದೆ.';
-
-  @override
-  String get appleHealthWriteHeading => 'Omi Apple Health ಗೆ ಏನು ಬರೆಯುತ್ತದೆ';
-
-  @override
-  String get appleHealthWriteBody =>
-      'ಏನೂ ಇಲ್ಲ. Omi Apple Health ನಿಂದ ಮಾತ್ರ ಓದುತ್ತದೆ ಮತ್ತು ನಿಮ್ಮ ಆರೋಗ್ಯ ಡೇಟಾವನ್ನು ಎಂದಿಗೂ ಬರೆಯುವುದಿಲ್ಲ ಅಥವಾ ಮಾರ್ಪಡಿಸುವುದಿಲ್ಲ.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi Apple ನ HealthKit ಫ್ರೇಮ್‌ವರ್ಕ್ ಮೂಲಕ Apple Health ಅನ್ನು ಪ್ರವೇಶಿಸುತ್ತದೆ. ನೀವು iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ಪ್ರವೇಶವನ್ನು ಹಿಂಪಡೆಯಬಹುದು.';
 
@@ -8983,13 +8951,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'ಸಂಪರ್ಕಿಸಲಾಗಿದೆ';
-
-  @override
-  String get appleHealthSyncing => 'ನಿಮ್ಮ Apple Health ಡೇಟಾ ಸಿಂಕ್ ಆಗುತ್ತಿದೆ…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Apple Health ಅನ್ನು ಸಂಪರ್ಕಿಸಿ ಇದರಿಂದ Omi ಚಾಟ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಫಿಟ್‌ನೆಸ್, ನಿದ್ರೆ ಮತ್ತು ಚಟುವಟಿಕೆಯ ಬಗ್ಗೆ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಬಹುದು.';
 
   @override
   String get appleHealthFeatureChatTitle => 'ನಿಮ್ಮ ಆರೋಗ್ಯದ ಬಗ್ಗೆ ಮಾತನಾಡಿ';
@@ -9016,7 +8977,4 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi ಗೆ ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು ಓದುವ ಅನುಮತಿ ಇಲ್ಲ. iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳು → ಗೌಪ್ಯತೆ ಮತ್ತು ಭದ್ರತೆ → Health → Omi ನಲ್ಲಿ ಇದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ';
 }

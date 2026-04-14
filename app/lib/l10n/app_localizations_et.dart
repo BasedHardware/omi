@@ -8906,38 +8906,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tasksMarkComplete => 'Märgitud lõpetatuks';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Mida Omi Apple Health\'ist loeb';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Sammud, kõndimis- ja jooksudistants ning aktiivne energia';
-
-  @override
-  String get appleHealthReadsHeart => 'Pulss ja puhkeolekupulss';
-
-  @override
-  String get appleHealthReadsSleep => 'Uneanalüüs';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Treeningud';
-
-  @override
-  String get appleHealthUsageHeading => 'Kuidas Omi neid andmeid kasutab';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi kasutab teie Apple Health\'i andmeid, et vastata Omi Chat\'is küsimustele teie vormisoleku, une ja aktiivsuse kohta. Andmed sünkroonitakse turvaliselt teie Omi kontoga.';
-
-  @override
-  String get appleHealthWriteHeading => 'Mida Omi Apple Health\'i kirjutab';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Mitte midagi. Omi ainult loeb Apple Health\'ist ega kirjuta ega muuda kunagi teie terviseandmeid.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi kasutab Apple Health\'i juurdepääsuks Apple\'i HealthKit\'i raamistikku. Juurdepääsu saate igal ajal tühistada iOS\'i seadetes.';
 
@@ -8949,13 +8917,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Ühendatud';
-
-  @override
-  String get appleHealthSyncing => 'Apple Health\'i andmete sünkroonimine…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Ühendage Apple Health, et Omi saaks vestluses vastata küsimustele teie vormisoleku, une ja aktiivsuse kohta.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Vestle oma tervisest';
@@ -8981,7 +8942,4 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omil pole luba teie Apple Health\'i andmete lugemiseks. Lubage see: iOS Seaded → Privaatsus ja turvalisus → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Ava seaded';
 }

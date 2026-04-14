@@ -8933,38 +8933,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tasksMarkComplete => 'Označeno kot dokončano';
 
   @override
-  String get appleHealthScreenTitle => 'Apple Health';
-
-  @override
-  String get appleHealthReadsHeading => 'Kaj Omi bere iz Apple Health';
-
-  @override
-  String get appleHealthReadsStepsActivity => 'Koraki, razdalja hoje in teka ter aktivna energija';
-
-  @override
-  String get appleHealthReadsHeart => 'Srčni utrip in srčni utrip v mirovanju';
-
-  @override
-  String get appleHealthReadsSleep => 'Analiza spanja';
-
-  @override
-  String get appleHealthReadsWorkouts => 'Treningi';
-
-  @override
-  String get appleHealthUsageHeading => 'Kako Omi uporablja te podatke';
-
-  @override
-  String get appleHealthUsageBody =>
-      'Omi uporablja vaše podatke iz Apple Health za odgovarjanje na vprašanja o vaši kondiciji, spanju in aktivnosti prek Omi Chat. Vaši podatki so varno sinhronizirani z vašim računom Omi.';
-
-  @override
-  String get appleHealthWriteHeading => 'Kaj Omi zapiše v Apple Health';
-
-  @override
-  String get appleHealthWriteBody =>
-      'Nič. Omi samo bere iz Apple Health in nikoli ne zapisuje ali spreminja vaših zdravstvenih podatkov.';
-
-  @override
   String get appleHealthManageNote =>
       'Omi dostopa do Apple Health prek Applovega ogrodja HealthKit. Dostop lahko kadar koli prekličete v nastavitvah iOS.';
 
@@ -8976,13 +8944,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get appleHealthConnectedBadge => 'Povezano';
-
-  @override
-  String get appleHealthSyncing => 'Sinhroniziranje podatkov Apple Health…';
-
-  @override
-  String get appleHealthIntroBody =>
-      'Povežite Apple Health, da bo Omi v klepetu lahko odgovarjal na vprašanja o vaši kondiciji, spanju in aktivnosti.';
 
   @override
   String get appleHealthFeatureChatTitle => 'Pogovarjajte se o svojem zdravju';
@@ -9008,7 +8969,4 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nima dovoljenja za branje vaših podatkov Apple Health. Omogočite ga v Nastavitvah iOS → Zasebnost in varnost → Health → Omi.';
-
-  @override
-  String get appleHealthOpenSettingsCta => 'Odpri nastavitve';
 }
