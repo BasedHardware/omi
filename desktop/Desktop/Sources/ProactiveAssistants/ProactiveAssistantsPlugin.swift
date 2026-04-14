@@ -688,10 +688,23 @@ public class ProactiveAssistantsPlugin: NSObject {
         if #available(macOS 14.0, *) {
             // Use the window ID already resolved above (line 624) to avoid stale cache hits
             // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage()
-            let cgImage: CGImage? = if let wid = windowID {
-                await screenCaptureService.captureWindowCGImage(windowID: wid)
+            var cgImage: CGImage? = nil
+            if let wid = windowID {
+                switch await screenCaptureService.captureWindowCGImage(windowID: wid) {
+                case .success(let image):
+                    cgImage = image
+                case .windowGone:
+                    // The window disappeared between resolution and capture (user closed
+                    // a tab, dismissed a modal, app destroyed the window). Re-resolve the
+                    // active window fresh and retry once — do NOT count this as a capture
+                    // failure. This used to trip the consecutive-failure counter and falsely
+                    // declare "screen recording permission lost" after normal user actions.
+                    cgImage = await screenCaptureService.captureActiveWindowCGImage()
+                case .failed:
+                    cgImage = nil
+                }
             } else {
-                await screenCaptureService.captureActiveWindowCGImage()
+                cgImage = await screenCaptureService.captureActiveWindowCGImage()
             }
             if let cgImage = cgImage,
                let appName = appName {
@@ -1163,29 +1176,48 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
-        // Refresh permission state
+        // First pass: run a single permission test.
         refreshScreenRecordingPermission()
 
-        // Check if permission is actually lost
-        if !hasScreenRecordingPermission {
-            log("ProactiveAssistantsPlugin: Screen recording permission lost")
+        if hasScreenRecordingPermission {
+            // Permission appears granted but capture is failing
+            // This could be a transient issue - enter recovery mode instead of stopping
+            log("ProactiveAssistantsPlugin: Capture failing with permission granted, entering recovery mode")
+            enterRecoveryMode()
+            return
+        }
+
+        // First permission test failed. Do NOT declare permission lost yet —
+        // `/usr/sbin/screencapture` can transiently fail during app-switches,
+        // mid-animation, or while macOS is mid-context-switch. A single failed
+        // probe previously stopped monitoring + fired a scary "permission lost"
+        // notification even though real recording was still working.
+        // Re-test after a short delay; only stop if both tests fail.
+        log("ProactiveAssistantsPlugin: First permission test failed, re-testing to avoid false positive")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
+            guard let self = self, self.isMonitoring else { return }
+
+            self.refreshScreenRecordingPermission()
+            if self.hasScreenRecordingPermission {
+                log("ProactiveAssistantsPlugin: Permission test recovered on second check — treating initial failure as transient, entering recovery mode")
+                self.enterRecoveryMode()
+                return
+            }
+
+            log("ProactiveAssistantsPlugin: Screen recording permission lost (confirmed by second test)")
 
             // Post notification for AppState to update UI
             NotificationCenter.default.post(name: .screenCapturePermissionLost, object: nil)
 
             // Stop monitoring since we can't capture
-            stopMonitoring()
+            self.stopMonitoring()
 
             // Send user notification
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
                 message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
             )
-        } else {
-            // Permission appears granted but capture is failing
-            // This could be a transient issue - enter recovery mode instead of stopping
-            log("ProactiveAssistantsPlugin: Capture failing with permission granted, entering recovery mode")
-            enterRecoveryMode()
         }
     }
 
