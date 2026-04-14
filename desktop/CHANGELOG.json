@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup"
+  ],
   "releases": [
     {
       "version": "0.11.309",
