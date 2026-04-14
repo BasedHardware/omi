@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.310",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup"
+      ]
+    },
     {
       "version": "0.11.309",
       "date": "2026-04-14",
