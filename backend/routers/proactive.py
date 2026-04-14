@@ -72,7 +72,7 @@ async def handle_proactive_session(send_event, receive_message, uid):
     task_assistant = ServerTaskAssistant()
     tool_result_queue = asyncio.Queue(maxsize=4)
 
-    client_queue = asyncio.Queue()
+    client_queue = asyncio.Queue(maxsize=8)
 
     async def _pump_client():
         try:
