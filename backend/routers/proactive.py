@@ -21,6 +21,8 @@ router = APIRouter()
 
 PROTOCOL_VERSION = '1.0'
 MAX_MODEL_ITERATIONS = 5
+_BIDI_WAIT_TIMEOUT_S = 30.0
+_ANALYSIS_TIMEOUT_S = 60.0
 _STREAM_END = object()
 
 
@@ -175,7 +177,7 @@ async def handle_proactive_session(send_event, receive_message, uid):
                         client_read = asyncio.ensure_future(client_queue.get())
                         done, pending = await asyncio.wait(
                             {output_get, client_read},
-                            timeout=30.0,
+                            timeout=_BIDI_WAIT_TIMEOUT_S,
                             return_when=asyncio.FIRST_COMPLETED,
                         )
 
@@ -212,7 +214,7 @@ async def handle_proactive_session(send_event, receive_message, uid):
                                 logger.warning('Unexpected %s during tool wait: uid=%s', next_type, safe_uid)
                     else:
                         try:
-                            event = await asyncio.wait_for(output_queue.get(), timeout=60.0)
+                            event = await asyncio.wait_for(output_queue.get(), timeout=_ANALYSIS_TIMEOUT_S)
                         except asyncio.TimeoutError:
                             logger.warning('Analysis timed out: uid=%s frame=%s', safe_uid, frame_id)
                             gen_task.cancel()
