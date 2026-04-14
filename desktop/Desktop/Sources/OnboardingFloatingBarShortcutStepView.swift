@@ -96,12 +96,12 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
-            GlobalShortcutManager.shared.unregisterShortcuts()
+            GlobalShortcutManager.shared.setRegistrationSuspended(true)
             installKeyMonitor()
         }
         .onDisappear {
             removeKeyMonitors()
-            GlobalShortcutManager.shared.registerShortcuts()
+            GlobalShortcutManager.shared.setRegistrationSuspended(false)
         }
     }
 
@@ -150,7 +150,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
                 Spacer()
 
-                Button(action: beginCustomShortcutCapture) {
+                Button(action: handleCustomShortcutSaveButton) {
                     Text(isRecordingCustomShortcut ? "Listening..." : "Save")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(OmiColors.textPrimary)
@@ -162,6 +162,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .disabled(isRecordingCustomShortcut)
             }
 
             Text("Use at least one non-modifier key, like J or Return.")
@@ -246,9 +247,25 @@ struct OnboardingFloatingBarShortcutStepView: View {
         resetDetectionState()
     }
 
+    private func handleCustomShortcutSaveButton() {
+        guard shortcutSettings.askOmiUsesCustomShortcut else {
+            beginCustomShortcutCapture()
+            return
+        }
+        confirmShortcutAndContinue()
+    }
+
     private func resetDetectionState() {
         shortcutDetected = false
         showContinue = false
+    }
+
+    private func confirmShortcutAndContinue() {
+        captureError = nil
+        shortcutDetected = true
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showContinue = true
+        }
     }
 
     private func installKeyMonitor() {
@@ -260,12 +277,12 @@ struct OnboardingFloatingBarShortcutStepView: View {
             _ = handleShortcutEvent(event)
         }
 
-        // Temporarily strip the main menu so ⌘-key combos (⌘O, ⌘J, ⌘Return, etc.) aren't
-        // swallowed by NSMenu's performKeyEquivalent before our monitor sees them.
-        DispatchQueue.main.async {
+        // Strip the main menu immediately so the first keypress can't be swallowed
+        // by NSMenu key equivalents before our monitor sees it.
+        if Self.savedMenu == nil {
             Self.savedMenu = NSApp.mainMenu
-            NSApp.mainMenu = nil
         }
+        NSApp.mainMenu = nil
     }
 
     private func removeKeyMonitors() {
@@ -292,10 +309,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
         guard shortcutSettings.askOmiShortcut.matchesKeyDown(event) else { return false }
 
         DispatchQueue.main.async {
-            shortcutDetected = true
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showContinue = true
-            }
+            confirmShortcutAndContinue()
         }
         return true
     }
