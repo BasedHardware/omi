@@ -507,7 +507,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private lazy var acpBridge: ACPBridge = {
         let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue
         let useOmiKey = mode != BridgeMode.userClaude.rawValue
-        return ACPBridge(passApiKey: useOmiKey)
+        let harness = mode == BridgeMode.piMono.rawValue ? "piMono" : "acp"
+        return ACPBridge(passApiKey: useOmiKey, harnessMode: harness)
     }()
     private var acpBridgeStarted = false
 
@@ -814,7 +815,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         // Switch mode and recreate bridge with appropriate passApiKey
         // Both omiAI and piMono use Omi's API key; userClaude uses OAuth
         bridgeMode = mode.rawValue
-        acpBridge = ACPBridge(passApiKey: mode != .userClaude)
+        let harness = mode == .piMono ? "piMono" : "acp"
+        acpBridge = ACPBridge(passApiKey: mode != .userClaude, harnessMode: harness)
         AnalyticsManager.shared.chatBridgeModeChanged(from: oldMode, to: mode.rawValue)
 
         // Check Claude connection status when switching to user's Claude account
@@ -1659,7 +1661,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
                 // Show upgrade prompt if over threshold but don't block chat
-                if self.bridgeMode == BridgeMode.omiAI.rawValue && serverCost >= 50.0 {
+                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0 {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
                 }
@@ -2155,7 +2157,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         // Show upgrade prompt if over threshold but don't block the message
-        if bridgeMode == BridgeMode.omiAI.rawValue && omiAICumulativeCostUsd >= 50.0 {
+        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
             showOmiThresholdAlert = true
         }
 
@@ -2503,7 +2505,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageLength: responseLength
             )
 
-            let isOmiMode = bridgeMode == BridgeMode.omiAI.rawValue
+            let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
             let accountType = isOmiMode ? "omi" : "personal"
             let r = queryResult
             Task.detached(priority: .background) {
