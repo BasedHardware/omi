@@ -1466,17 +1466,22 @@ class FloatingControlBarManager {
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
 
-        // Check weekly usage limit for free users
+        // Check monthly usage limit for free users (shared with main chat page).
         let limiter = FloatingBarUsageLimiter.shared
         if limiter.isLimitReached {
             guard isActiveQueryGeneration(generation) else { return }
             barWindow.state.isAILoading = false
             barWindow.state.showingAIResponse = true
             barWindow.state.currentAIMessage = ChatMessage(
-                text: "You've used all \(FloatingBarUsageLimiter.weeklyFreeLimit) free queries this week. Upgrade to Pro for unlimited access, or wait for your weekly reset.",
+                text: "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting without restrictions.",
                 sender: .ai
             )
             barWindow.resizeToResponseHeightPublic(animated: true)
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "floating_bar"]
+            )
             return
         }
 
