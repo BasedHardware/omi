@@ -499,39 +499,28 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
             }
         }
 
-        // Validate inside generation_config / generationConfig
-        let gc_key = if obj.contains_key("generation_config") {
-            "generation_config"
-        } else {
-            "generationConfig"
-        };
-        if let Some(gc) = obj.get_mut(gc_key).and_then(|v| v.as_object_mut()) {
-            // Reject candidate_count > 1 inside generation_config
-            let cc_key = if gc.contains_key("candidate_count") {
-                Some("candidate_count")
-            } else if gc.contains_key("candidateCount") {
-                Some("candidateCount")
-            } else {
-                None
-            };
-            if let Some(cc_key) = cc_key {
-                if let Some(n) = gc.get(cc_key).and_then(|v| v.as_u64()) {
-                    if n > 1 {
-                        return Err(format!("candidate_count must be 1 or absent, got {}", n));
+        // Validate inside generation_config / generationConfig.
+        // Check BOTH casings to prevent dual-key bypass where an attacker
+        // sends an empty generation_config + a real generationConfig.
+        for gc_key in &["generation_config", "generationConfig"] {
+            if let Some(gc) = obj.get_mut(*gc_key).and_then(|v| v.as_object_mut()) {
+                // Reject candidate_count > 1
+                for cc_key in &["candidate_count", "candidateCount"] {
+                    if let Some(n) = gc.get(*cc_key).and_then(|v| v.as_u64()) {
+                        if n > 1 {
+                            return Err(format!("candidate_count must be 1 or absent, got {}", n));
+                        }
                     }
                 }
-            }
 
-            // Cap max_output_tokens
-            let mot_key = if gc.contains_key("max_output_tokens") {
-                "max_output_tokens"
-            } else {
-                "maxOutputTokens"
-            };
-            if let Some(mot) = gc.get_mut(mot_key) {
-                if let Some(n) = mot.as_u64() {
-                    if n > MAX_OUTPUT_TOKENS_CAP {
-                        *mot = serde_json::Value::Number(MAX_OUTPUT_TOKENS_CAP.into());
+                // Cap max_output_tokens
+                for mot_key in &["max_output_tokens", "maxOutputTokens"] {
+                    if let Some(mot) = gc.get_mut(*mot_key) {
+                        if let Some(n) = mot.as_u64() {
+                            if n > MAX_OUTPUT_TOKENS_CAP {
+                                *mot = serde_json::Value::Number(MAX_OUTPUT_TOKENS_CAP.into());
+                            }
+                        }
                     }
                 }
             }
@@ -847,6 +836,42 @@ mod tests {
             "generateContent",
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn sanitize_rejects_dual_key_bypass() {
+        // Attacker sends empty generation_config + real generationConfig to bypass validation
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": {},
+            "generationConfig": {"candidateCount": 8, "maxOutputTokens": 999999}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("candidate_count"));
+    }
+
+    #[test]
+    fn sanitize_caps_dual_key_max_tokens() {
+        // Both casings present — max_output_tokens should be capped in both
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": {"max_output_tokens": 100},
+            "generationConfig": {"maxOutputTokens": 999999}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["generation_config"]["max_output_tokens"], 100);
+        assert_eq!(
+            parsed["generationConfig"]["maxOutputTokens"],
+            serde_json::json!(MAX_OUTPUT_TOKENS_CAP)
+        );
     }
 
     #[test]
