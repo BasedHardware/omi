@@ -5,7 +5,6 @@ import Foundation
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
 
-  static let devAPIKeyDefaultsKey = "dev_elevenlabs_api_key"
   static let devVoiceIDDefaultsKey = "dev_elevenlabs_voice_id"
 
   nonisolated private static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"  // Sloane
@@ -66,14 +65,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
     }
-    guard let mode = currentMode, case .elevenLabs(let apiKey, let voiceID) = mode else { return }
+    guard let mode = currentMode, case .elevenLabs(let voiceID) = mode else { return }
 
     hasStartedRealPlayback = false
     let phrase = Self.fillerPhrases.randomElement()!
     fillerTask = Task { [weak self] in
       do {
         let audioData = try await Self.synthesizeSpeech(
-          text: phrase, apiKey: apiKey, voiceID: voiceID)
+          text: phrase, voiceID: voiceID)
         try Task.checkCancellation()
         await MainActor.run {
           guard let self, !self.hasStartedRealPlayback else { return }
@@ -144,15 +143,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   private func resolvePlaybackMode() -> PlaybackMode {
-    guard
-      let apiKey = APIKeyService.currentElevenLabsKey?.trimmingCharacters(
-        in: .whitespacesAndNewlines),
-      !apiKey.isEmpty
-    else {
+    // TTS is now proxied through the backend — no client-side API key needed.
+    // Fall back to system voice only if the backend URL is not configured.
+    guard getenv("OMI_API_URL") != nil else {
       return .systemFallback
     }
-
-    return .elevenLabs(apiKey: apiKey, voiceID: Self.defaultVoiceID)
+    return .elevenLabs(voiceID: Self.defaultVoiceID)
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
@@ -181,7 +177,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   private func startSynthesisIfNeeded(mode: PlaybackMode) {
     guard !isSynthesizing else { return }
-    guard case .elevenLabs(let apiKey, let voiceID) = mode else { return }
+    guard case .elevenLabs(let voiceID) = mode else { return }
     guard !synthesisQueue.isEmpty else { return }
 
     let text = synthesisQueue.removeFirst()
@@ -190,7 +186,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     playbackTask = Task { [weak self] in
       do {
         let audioData = try await Self.synthesizeSpeech(
-          text: text, apiKey: apiKey, voiceID: voiceID)
+          text: text, voiceID: voiceID)
         try Task.checkCancellation()
         await MainActor.run {
           guard let self else { return }
@@ -316,20 +312,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     return AVSpeechSynthesisVoice(language: "en-US")
   }
 
-  private nonisolated static func synthesizeSpeech(text: String, apiKey: String, voiceID: String)
+  /// Synthesize speech via the backend TTS proxy (ElevenLabs key stays server-side).
+  private nonisolated static func synthesizeSpeech(text: String, voiceID: String)
     async throws -> Data
   {
-    var request = URLRequest(
-      url: URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(voiceID)")!)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue("audio/mpeg", forHTTPHeaderField: "Accept")
-    request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-    request.timeoutInterval = 45
-
-    let body = ElevenLabsSpeechRequest(
+    let request = APIClient.TtsSynthesizeRequest(
       text: text,
-      modelID: defaultModelID,
+      voiceId: voiceID,
+      modelId: defaultModelID,
       outputFormat: "mp3_44100_128",
       voiceSettings: .init(
         stability: 0.34,
@@ -338,18 +328,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
         useSpeakerBoost: true
       )
     )
-    request.httpBody = try JSONEncoder().encode(body)
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw FloatingBarVoicePlaybackError.invalidResponse
-    }
-    guard (200..<300).contains(httpResponse.statusCode) else {
-      let errorBody = String(data: data.prefix(300), encoding: .utf8) ?? "Unknown error"
-      throw FloatingBarVoicePlaybackError.requestFailed(
-        statusCode: httpResponse.statusCode, body: errorBody)
-    }
-    return data
+    return try await APIClient.shared.synthesizeSpeech(request: request)
   }
 
   private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
@@ -455,36 +434,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 }
 
 private enum PlaybackMode {
-  case elevenLabs(apiKey: String, voiceID: String)
+  case elevenLabs(voiceID: String)
   case systemFallback
-}
-
-private struct ElevenLabsSpeechRequest: Encodable {
-  let text: String
-  let modelID: String
-  let outputFormat: String
-  let voiceSettings: ElevenLabsVoiceSettings
-
-  enum CodingKeys: String, CodingKey {
-    case text
-    case modelID = "model_id"
-    case outputFormat = "output_format"
-    case voiceSettings = "voice_settings"
-  }
-}
-
-private struct ElevenLabsVoiceSettings: Encodable {
-  let stability: Double
-  let similarityBoost: Double
-  let style: Double
-  let useSpeakerBoost: Bool
-
-  enum CodingKeys: String, CodingKey {
-    case stability
-    case similarityBoost = "similarity_boost"
-    case style
-    case useSpeakerBoost = "use_speaker_boost"
-  }
 }
 
 private enum FloatingBarVoicePlaybackError: LocalizedError {
@@ -494,9 +445,9 @@ private enum FloatingBarVoicePlaybackError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidResponse:
-      return "Invalid ElevenLabs response"
+      return "Invalid TTS response"
     case .requestFailed(let statusCode, let body):
-      return "ElevenLabs request failed (\(statusCode)): \(body)"
+      return "TTS request failed (\(statusCode)): \(body)"
   }
 }
 }
