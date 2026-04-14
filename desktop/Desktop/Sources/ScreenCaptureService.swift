@@ -751,11 +751,22 @@ final class ScreenCaptureService: Sendable {
 
   // MARK: - CGImage Capture (macOS 14+)
 
+  /// Result of an attempted per-window capture.
+  /// Distinguishes "the window went away" (normal — the user closed a tab / modal)
+  /// from a real capture engine failure (permission revoked, stream error, etc.).
+  enum WindowCaptureResult {
+    case success(CGImage)
+    case windowGone
+    case failed
+  }
+
   /// Capture the active window and return the raw CGImage (no JPEG encoding).
   /// Use this on macOS 14+ to avoid redundant encode/decode round-trips.
   @available(macOS 14.0, *)
-  /// Capture a specific window by ID (avoids re-resolving the active window)
-  func captureWindowCGImage(windowID: CGWindowID) async -> CGImage? {
+  /// Capture a specific window by ID (avoids re-resolving the active window).
+  /// Returns a detailed result so the caller can distinguish transient window
+  /// disappearance from real capture failures.
+  func captureWindowCGImage(windowID: CGWindowID) async -> WindowCaptureResult {
     do {
       let content = try await SCShareableContent.excludingDesktopWindows(
         false,
@@ -786,17 +797,21 @@ final class ScreenCaptureService: Sendable {
       }
 
       guard let (filter, config) = filterAndConfig else {
-        log("Window \(windowID) not found in SCShareableContent")
-        return nil
+        // Window ID no longer exists — the user closed a tab, dismissed a modal,
+        // or the app destroyed the window between resolution and capture. This is
+        // routine, not a capture failure. Caller should re-resolve and retry.
+        log("Window \(windowID) not found in SCShareableContent (window closed)")
+        return .windowGone
       }
 
-      return try await SCScreenshotManager.captureImage(
+      let image = try await SCScreenshotManager.captureImage(
         contentFilter: filter,
         configuration: config
       )
+      return .success(image)
     } catch {
       log("ScreenCaptureKit CGImage error for window \(windowID): \(error.localizedDescription)")
-      return nil
+      return .failed
     }
   }
 
