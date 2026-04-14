@@ -26,6 +26,7 @@ async def get_current_user_id(
         return decoded_token["uid"]
     except Exception as e:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+            logger.warning(f"LOCAL_DEVELOPMENT bypass: token verification failed ({e}), returning stub uid '123'")
             return '123'
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
