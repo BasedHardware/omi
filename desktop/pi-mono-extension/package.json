@@ -1,0 +1,8 @@
+{
+  "name": "omi-provider",
+  "version": "1.0.0",
+  "description": "Pi-mono extension that registers Omi as an LLM provider, routing all inference through api.omi.me",
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
