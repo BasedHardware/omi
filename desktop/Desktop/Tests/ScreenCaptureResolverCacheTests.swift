@@ -164,4 +164,76 @@ final class ScreenCaptureResolverCacheTests: XCTestCase {
     XCTAssertEqual(cached?.windowID, CGWindowID(99))
     XCTAssertEqual(cached?.appName, "Xcode")
   }
+
+  // MARK: - Fallback streak flag (P7)
+
+  func testNilWindowFallbackStreakIsSetOnFirstFallbackAndIdempotent() async {
+    ScreenCaptureService._seedActiveWindowCacheForTests(
+      appName: "Safari",
+      windowTitle: "GitHub",
+      windowID: CGWindowID(42),
+      resolvedAt: Date()
+    )
+    ScreenCaptureService._resolverOverrideForTests = {
+      (appName: "LogiPluginService", windowTitle: nil, windowID: nil)
+    }
+
+    XCTAssertFalse(ScreenCaptureService._peekNilWindowFallbackStreakForTests())
+
+    _ = await ScreenCaptureService.getActiveWindowInfoAsync()
+    XCTAssertTrue(
+      ScreenCaptureService._peekNilWindowFallbackStreakForTests(),
+      "first nil-window fallback should enter the streak"
+    )
+
+    _ = await ScreenCaptureService.getActiveWindowInfoAsync()
+    _ = await ScreenCaptureService.getActiveWindowInfoAsync()
+    XCTAssertTrue(
+      ScreenCaptureService._peekNilWindowFallbackStreakForTests(),
+      "consecutive nil-window fallbacks should stay in the streak (idempotent)"
+    )
+  }
+
+  func testSuccessfulResolutionClearsNilWindowFallbackStreak() async {
+    ScreenCaptureService._seedActiveWindowCacheForTests(
+      appName: "Safari",
+      windowTitle: "GitHub",
+      windowID: CGWindowID(42),
+      resolvedAt: Date()
+    )
+    ScreenCaptureService._forceNilWindowFallbackStreakForTests(true)
+
+    ScreenCaptureService._resolverOverrideForTests = {
+      (appName: "Xcode", windowTitle: "Project.swift", windowID: CGWindowID(99))
+    }
+    _ = await ScreenCaptureService.getActiveWindowInfoAsync()
+
+    XCTAssertFalse(
+      ScreenCaptureService._peekNilWindowFallbackStreakForTests(),
+      "successful non-nil resolution must clear the streak"
+    )
+  }
+
+  // MARK: - Test-only reset (P8)
+
+  func testResetActiveWindowCacheClearsAllState() {
+    ScreenCaptureService._seedActiveWindowCacheForTests(
+      appName: "Safari",
+      windowTitle: "GitHub",
+      windowID: CGWindowID(42),
+      resolvedAt: Date()
+    )
+    ScreenCaptureService._forceResolutionInFlightForTests(true)
+    ScreenCaptureService._forceNilWindowFallbackStreakForTests(true)
+
+    XCTAssertNotNil(ScreenCaptureService._peekActiveWindowCacheForTests())
+    XCTAssertTrue(ScreenCaptureService._peekIsResolutionInFlightForTests())
+    XCTAssertTrue(ScreenCaptureService._peekNilWindowFallbackStreakForTests())
+
+    ScreenCaptureService._resetActiveWindowCacheForTests()
+
+    XCTAssertNil(ScreenCaptureService._peekActiveWindowCacheForTests())
+    XCTAssertFalse(ScreenCaptureService._peekIsResolutionInFlightForTests())
+    XCTAssertFalse(ScreenCaptureService._peekNilWindowFallbackStreakForTests())
+  }
 }

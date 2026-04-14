@@ -534,6 +534,28 @@ final class ScreenCaptureService: Sendable {
     axStateLock.withLock { lastActiveWindowSnapshot }
   }
 
+  /// Returns the current value of `isInNilWindowFallbackStreak` for test assertions.
+  internal static func _peekNilWindowFallbackStreakForTests() -> Bool {
+    axStateLock.withLock { isInNilWindowFallbackStreak }
+  }
+
+  /// Returns the current value of `isActiveWindowResolutionInFlight` for test assertions.
+  internal static func _peekIsResolutionInFlightForTests() -> Bool {
+    axStateLock.withLock { isActiveWindowResolutionInFlight }
+  }
+
+  /// Forces `isActiveWindowResolutionInFlight = true` so tests can assert it is
+  /// cleared by `_resetActiveWindowCacheForTests()`.
+  internal static func _forceResolutionInFlightForTests(_ value: Bool) {
+    axStateLock.withLock { isActiveWindowResolutionInFlight = value }
+  }
+
+  /// Forces `isInNilWindowFallbackStreak = true` so tests can assert it is
+  /// cleared by `_resetActiveWindowCacheForTests()`.
+  internal static func _forceNilWindowFallbackStreakForTests(_ value: Bool) {
+    axStateLock.withLock { isInNilWindowFallbackStreak = value }
+  }
+
   private static func resolveActiveWindowInfoWithTimeout() async -> (
     appName: String?, windowTitle: String?, windowID: CGWindowID?
   )? {
