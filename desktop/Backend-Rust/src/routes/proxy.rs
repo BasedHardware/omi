@@ -490,7 +490,7 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     // Generation-specific validation (not for embed actions)
     let is_embed = action == "embedContent" || action == "batchEmbedContents";
     if !is_embed {
-        // Reject candidate_count > 1
+        // Reject top-level candidate_count > 1
         if let Some(cc) = obj.get("candidate_count").or_else(|| obj.get("candidateCount")) {
             if let Some(n) = cc.as_u64() {
                 if n > 1 {
@@ -499,13 +499,30 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
             }
         }
 
-        // Cap max_output_tokens in generation_config
+        // Validate inside generation_config / generationConfig
         let gc_key = if obj.contains_key("generation_config") {
             "generation_config"
         } else {
             "generationConfig"
         };
         if let Some(gc) = obj.get_mut(gc_key).and_then(|v| v.as_object_mut()) {
+            // Reject candidate_count > 1 inside generation_config
+            let cc_key = if gc.contains_key("candidate_count") {
+                Some("candidate_count")
+            } else if gc.contains_key("candidateCount") {
+                Some("candidateCount")
+            } else {
+                None
+            };
+            if let Some(cc_key) = cc_key {
+                if let Some(n) = gc.get(cc_key).and_then(|v| v.as_u64()) {
+                    if n > 1 {
+                        return Err(format!("candidate_count must be 1 or absent, got {}", n));
+                    }
+                }
+            }
+
+            // Cap max_output_tokens
             let mot_key = if gc.contains_key("max_output_tokens") {
                 "max_output_tokens"
             } else {
@@ -783,6 +800,47 @@ mod tests {
         let body = serde_json::json!({
             "contents": [{"parts": [{"text": "hello"}]}],
             "candidate_count": 1
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn sanitize_rejects_nested_candidate_count_gt_1() {
+        // candidateCount inside generationConfig (real Gemini API shape)
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"candidateCount": 4, "maxOutputTokens": 1024}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("candidate_count"));
+    }
+
+    #[test]
+    fn sanitize_rejects_nested_snake_case_candidate_count() {
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": {"candidate_count": 3}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sanitize_allows_nested_candidate_count_1() {
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"candidateCount": 1, "maxOutputTokens": 4096}
         });
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
