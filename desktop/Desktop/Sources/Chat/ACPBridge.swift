@@ -163,6 +163,16 @@ actor ACPBridge {
     // Pass harness mode to bridge (acp or piMono)
     env["HARNESS_MODE"] = harnessMode
 
+    // For piMono mode, inject the Firebase ID token so the bridge can
+    // authenticate against POST /v2/chat/completions (which expects
+    // Authorization: Bearer <firebase-id-token>).
+    if harnessMode == "piMono" {
+      let authService = await MainActor.run { AuthService.shared }
+      if let token = try? await authService.getIdToken() {
+        env["OMI_AUTH_TOKEN"] = token
+      }
+    }
+
     // Ensure the directory containing node is in PATH
     let nodeDir = (nodePath as NSString).deletingLastPathComponent
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
