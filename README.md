@@ -8,8 +8,6 @@ Omi captures your screen and conversations, transcribes in real-time, generates 
 
 Trusted by 300,000+ professionals.
 
-![Omi](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
-
 
 [![Discord](https://img.shields.io/discord/1192313062041067520?label=Discord&logo=discord&logoColor=white&style=for-the-badge)](http://discord.omi.me)&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi?style=for-the-badge)](https://github.com/BasedHardware/Omi)&ensp;
@@ -154,6 +152,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - [BLE Protocol](https://docs.omi.me/doc/developer/Protocol)
 
 ## Omi Hardware
+![Omi](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
 
 Open-source AI wearables that pair with the mobile app for 24h+ continuous capture.
 
