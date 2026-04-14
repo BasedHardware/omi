@@ -17,14 +17,12 @@ Trusted by 300,000+ professionals.
 
 </div>
 
----
-
 ## Quick Start
 
 <p align="center">
   <a href="https://macos.omi.me"><img src="docs/assets/readme/download-macos-badge.png" alt="Download for macOS" height="50"></a>
-  <a href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"><img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" height="50"></a>
-  <a href="https://play.google.com/store/apps/details?id=com.friend.ios"><img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" height="50"></a>
+  <a href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"><img src="docs/assets/readme/download-appstore-badge.png" alt="Download on the App Store" height="50"></a>
+  <a href="https://play.google.com/store/apps/details?id=com.friend.ios"><img src="docs/assets/readme/download-gplay-badge.png" alt="Get it on Google Play" height="50"></a>
 </p>
 
 <p align="center">
@@ -76,7 +74,6 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 </details>
 
----
 <details>
   <summary>How it works</summary>
 
