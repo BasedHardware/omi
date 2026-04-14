@@ -114,6 +114,8 @@ export class PiMonoAdapter implements HarnessAdapter {
   private eventHandler: EventCallback | null = null;
   private toolExecutor: ToolExecutor | null = null;
   private currentAbortController: AbortController | null = null;
+  /** The session ID that is currently executing a prompt */
+  private activeSessionId: string | null = null;
   private piPath: string;
   private extensionPath: string;
 
@@ -234,6 +236,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
     this.currentAbortController = new AbortController();
+    this.activeSessionId = sessionId;
 
     if (signal) {
       signal.addEventListener("abort", () => {
@@ -511,9 +514,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     const usage = message?.usage;
     const costUsd = usage?.cost?.total ?? 0;
 
-    // Find any active session to get sessionId
-    const sessionId =
-      this.sessions.keys().next().value || "pi-session-0";
+    // Use the session that is actively executing the prompt
+    const sessionId = this.activeSessionId || "pi-session-0";
 
     const result: PromptResult = {
       text,
