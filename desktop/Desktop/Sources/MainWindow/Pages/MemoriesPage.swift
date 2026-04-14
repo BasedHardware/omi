@@ -206,9 +206,15 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   init() {
-    // Auto-refresh memories periodically
-    Timer.publish(every: PollingConfig.memoriesPollInterval, on: .main, in: .common)
-      .autoconnect()
+    // Refresh memories when app becomes active
+    NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+      .sink { [weak self] _ in
+        Task { await self?.refreshMemoriesIfNeeded() }
+      }
+      .store(in: &cancellables)
+
+    // Cmd+R: refresh memories on demand
+    NotificationCenter.default.publisher(for: .refreshAllData)
       .sink { [weak self] _ in
         Task { await self?.refreshMemoriesIfNeeded() }
       }
