@@ -100,27 +100,37 @@ async fn tts_synthesize(
         ));
     }
 
-    // Rate limit check (Redis-backed)
-    if let Some(redis) = &state.redis {
-        match redis
-            .check_tts_rate_limit(&user.uid, TTS_BURST_PER_MINUTE, TTS_BURST_WINDOW_SECS, char_count, TTS_DAILY_CHAR_LIMIT)
-            .await
-        {
-            Ok(TtsRateResult::Allow) => {}
-            Ok(TtsRateResult::BurstExceeded) => {
-                tracing::warn!("tts_synthesize: burst rate limit exceeded uid={}", user.uid);
-                return Err(rate_limit_response("Rate limit exceeded: too many requests. Try again in 60 seconds."));
-            }
-            Ok(TtsRateResult::DailyCharsExceeded) => {
-                tracing::warn!("tts_synthesize: daily character limit exceeded uid={}", user.uid);
-                return Err(rate_limit_response(
-                    "Daily character limit exceeded (10,000 characters). Resets at midnight UTC.",
-                ));
-            }
-            Err(e) => {
-                tracing::error!("tts_synthesize: Redis rate limit error, allowing unmetered: {}", e);
-                // Fail open — allow the request if Redis is down
-            }
+    // Rate limit check (Redis-backed, fail closed)
+    let redis = state.redis.as_ref().ok_or_else(|| {
+        tracing::error!("tts_synthesize: Redis not configured — TTS rate limiting requires Redis");
+        error_response(StatusCode::SERVICE_UNAVAILABLE, "TTS service temporarily unavailable")
+    })?;
+
+    match redis
+        .check_tts_rate_limit(&user.uid, TTS_BURST_PER_MINUTE, TTS_BURST_WINDOW_SECS, char_count, TTS_DAILY_CHAR_LIMIT)
+        .await
+    {
+        Ok(TtsRateResult::Allow) => {}
+        Ok(TtsRateResult::BurstExceeded) => {
+            tracing::warn!("tts_synthesize: burst rate limit exceeded uid={}", user.uid);
+            return Err(rate_limit_response_with_retry(
+                "Rate limit exceeded: too many requests. Try again in 60 seconds.",
+                60,
+            ));
+        }
+        Ok(TtsRateResult::DailyCharsExceeded) => {
+            tracing::warn!("tts_synthesize: daily character limit exceeded uid={}", user.uid);
+            return Err(rate_limit_response_with_retry(
+                "Daily character limit exceeded (10,000 characters). Resets at midnight UTC.",
+                seconds_until_midnight_utc(),
+            ));
+        }
+        Err(e) => {
+            tracing::error!("tts_synthesize: Redis error — failing closed: {}", e);
+            return Err(error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "TTS service temporarily unavailable",
+            ));
         }
     }
 
@@ -189,7 +199,7 @@ fn error_response(status: StatusCode, message: &str) -> Response {
     (status, Json(body)).into_response()
 }
 
-fn rate_limit_response(message: &str) -> Response {
+fn rate_limit_response_with_retry(message: &str, retry_after_secs: u64) -> Response {
     let body = serde_json::json!({
         "error": {
             "message": message,
@@ -199,9 +209,17 @@ fn rate_limit_response(message: &str) -> Response {
     Response::builder()
         .status(StatusCode::TOO_MANY_REQUESTS)
         .header("Content-Type", "application/json")
-        .header("Retry-After", "60")
+        .header("Retry-After", retry_after_secs.to_string())
         .body(axum::body::Body::from(serde_json::to_vec(&body).unwrap_or_default()))
         .unwrap()
+}
+
+/// Seconds remaining until the next UTC midnight (for daily limit Retry-After).
+fn seconds_until_midnight_utc() -> u64 {
+    let now = chrono::Utc::now();
+    let tomorrow = (now + chrono::Duration::days(1)).date_naive().and_hms_opt(0, 0, 0).unwrap();
+    let midnight = tomorrow.and_utc();
+    (midnight - now).num_seconds().max(1) as u64
 }
 
 /// Result of a TTS rate limit check.
@@ -241,9 +259,23 @@ mod tests {
     }
 
     #[test]
-    fn rate_limit_response_format() {
-        let resp = rate_limit_response("too many");
+    fn rate_limit_response_burst() {
+        let resp = rate_limit_response_with_retry("too many", 60);
         assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(resp.headers().get("Retry-After").unwrap(), "60");
+    }
+
+    #[test]
+    fn rate_limit_response_daily() {
+        let resp = rate_limit_response_with_retry("daily limit", 3600);
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(resp.headers().get("Retry-After").unwrap(), "3600");
+    }
+
+    #[test]
+    fn seconds_until_midnight_is_positive() {
+        let secs = seconds_until_midnight_utc();
+        assert!(secs >= 1);
+        assert!(secs <= 86400);
     }
 }
