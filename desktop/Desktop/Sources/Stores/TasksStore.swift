@@ -161,9 +161,15 @@ class TasksStore: ObservableObject {
     // MARK: - Initialization
 
     private init() {
-        // Auto-refresh tasks periodically
-        Timer.publish(every: PollingConfig.tasksPollInterval, on: .main, in: .common)
-            .autoconnect()
+        // Refresh tasks when app becomes active
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { await self?.refreshTasksIfNeeded() }
+            }
+            .store(in: &cancellables)
+
+        // Cmd+R: refresh tasks on demand
+        NotificationCenter.default.publisher(for: .refreshAllData)
             .sink { [weak self] _ in
                 Task { await self?.refreshTasksIfNeeded() }
             }
