@@ -1190,9 +1190,10 @@ async function runPiMonoMode(): Promise<void> {
           const abortController = new AbortController();
           piActiveAbort = abortController;
 
-          const promptBlocks: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+          // Pi-mono provider is text-only — strip image blocks
+          const promptBlocks: Array<{ type: "text"; text: string }> = [];
           if (qm.imageBase64) {
-            promptBlocks.push({ type: "image", data: qm.imageBase64, mimeType: "image/jpeg" });
+            logErr("Pi-mono: stripping image (text-only provider)");
           }
           promptBlocks.push({ type: "text", text: qm.prompt });
 
@@ -1258,10 +1259,18 @@ async function runPiMonoMode(): Promise<void> {
       case "refresh_token": {
         // Swift pushes a refreshed Firebase ID token so long-running pi-mono
         // sessions can re-authenticate after the previous token expires.
+        // Must restart the subprocess since the extension bakes the token at startup.
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
-        process.env.OMI_API_KEY = `Bearer ${rtm.token}`;
-        logErr("Pi-mono auth token refreshed");
+        try {
+          await adapter.updateAuthToken(rtm.token);
+          // Clear session cache — subprocess restarted, old sessions are gone
+          piSessions.clear();
+          piActiveSessionId = "";
+          logErr("Pi-mono auth token refreshed (subprocess restarted)");
+        } catch (err) {
+          logErr(`Pi-mono token refresh failed: ${err}`);
+        }
         break;
       }
 
