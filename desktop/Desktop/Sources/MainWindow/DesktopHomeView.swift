@@ -101,6 +101,27 @@ struct DesktopHomeView: View {
             }
           mainContent
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
+            .overlay {
+              if appState.showUsageLimitPopup {
+                UsageLimitPopupView(
+                  reason: appState.usageLimitReason,
+                  onUpgrade: {
+                    appState.showUsageLimitPopup = false
+                    selectedSettingsSection = .planUsage
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                      selectedIndex = SidebarNavItem.settings.rawValue
+                    }
+                  },
+                  onDismiss: {
+                    appState.showUsageLimitPopup = false
+                  }
+                )
+              }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
+              let reason = notification.userInfo?["reason"] as? String ?? ""
+              appState.triggerUsageLimitPopup(reason: reason)
+            }
             .onAppear {
               log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
               // Check all permissions on launch
