@@ -1101,10 +1101,161 @@ process.stdout.on("error", (err) => {
   logCrash(`stdout error: ${err.message}`);
 });
 
+// --- Pi-mono mode ---
+
+async function runPiMonoMode(): Promise<void> {
+  const { PiMonoAdapter } = await import("./adapters/pi-mono.js");
+
+  const config = {
+    passApiKey: !!process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+    authToken: process.env.OMI_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
+  };
+
+  const adapter = new PiMonoAdapter(config);
+  await adapter.start();
+  logErr("Pi-mono adapter started");
+
+  // Signal readiness
+  send({ type: "init", sessionId: "" });
+  logErr("Pi-mono Bridge started, waiting for queries...");
+
+  let piActiveSessionId = "";
+  let piActiveAbort: AbortController | null = null;
+
+  const rl = createInterface({ input: process.stdin, terminal: false });
+
+  rl.on("line", async (line: string) => {
+    if (!line.trim()) return;
+
+    let msg: InboundMessage;
+    try {
+      msg = JSON.parse(line) as InboundMessage;
+    } catch {
+      logErr(`Invalid JSON: ${line}`);
+      return;
+    }
+
+    switch (msg.type) {
+      case "query": {
+        const qm = msg as QueryMessage;
+        const cwd = qm.cwd || process.env.HOME || "/";
+        const model = qm.model || "omi-sonnet";
+
+        // Abort any previous query
+        if (piActiveAbort) {
+          piActiveAbort.abort();
+          piActiveAbort = null;
+        }
+
+        try {
+          // Create or reuse session
+          if (!piActiveSessionId) {
+            piActiveSessionId = await adapter.createSession({ cwd, model, systemPrompt: qm.systemPrompt });
+          } else if (model) {
+            await adapter.setModel(piActiveSessionId, model);
+          }
+
+          const abortController = new AbortController();
+          piActiveAbort = abortController;
+
+          const promptBlocks: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+          if (qm.imageBase64) {
+            promptBlocks.push({ type: "image", data: qm.imageBase64, mimeType: "image/jpeg" });
+          }
+          promptBlocks.push({ type: "text", text: qm.prompt });
+
+          const result = await adapter.sendPrompt(
+            piActiveSessionId,
+            promptBlocks,
+            [], // tools
+            qm.mode ?? "act",
+            (event) => {
+              // Forward adapter events to Swift via stdout
+              send(event as OutboundMessage);
+            },
+            async (_callId, _name, _input) => {
+              // Tool executor — forward to Swift
+              return "";
+            },
+            abortController.signal
+          );
+
+          send({
+            type: "result",
+            text: result.text,
+            sessionId: result.sessionId,
+            costUsd: result.costUsd ?? 0,
+            inputTokens: result.inputTokens ?? 0,
+            outputTokens: result.outputTokens ?? 0,
+            cacheReadTokens: result.cacheReadTokens ?? 0,
+            cacheWriteTokens: result.cacheWriteTokens ?? 0,
+          });
+        } catch (err) {
+          logErr(`Pi-mono query error: ${err}`);
+          send({ type: "error", message: String(err) });
+        }
+        break;
+      }
+
+      case "warmup": {
+        const wm = msg as WarmupMessage;
+        const cwd = wm.cwd || process.env.HOME || "/";
+        const sessions = wm.sessions ?? [{ key: "main", model: wm.model || "omi-sonnet" }];
+        try {
+          await adapter.warmup(cwd, sessions);
+        } catch (err) {
+          logErr(`Pi-mono warmup error: ${err}`);
+        }
+        break;
+      }
+
+      case "interrupt":
+        logErr("Interrupt requested by user (pi-mono)");
+        if (piActiveAbort) piActiveAbort.abort();
+        if (piActiveSessionId) {
+          adapter.abort(piActiveSessionId);
+        }
+        break;
+
+      case "invalidate_session":
+        adapter.invalidateSession(msg.sessionKey);
+        piActiveSessionId = "";
+        logErr(`Invalidated pi-mono session for key=${msg.sessionKey}`);
+        break;
+
+      case "stop":
+        logErr("Received stop signal, exiting (pi-mono)");
+        await adapter.stop();
+        process.exit(0);
+        break;
+
+      default:
+        logErr(`Unknown message type (pi-mono): ${(msg as any).type}`);
+    }
+  });
+
+  rl.on("close", async () => {
+    logErr("stdin closed, exiting (pi-mono)");
+    await adapter.stop();
+    process.exit(0);
+  });
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
+
+  const harnessMode = process.env.HARNESS_MODE || "acp";
+  logErr(`Harness mode: ${harnessMode}`);
+
+  if (harnessMode === "piMono") {
+    // Pi-mono mode: use PiMonoAdapter instead of ACP subprocess
+    await runPiMonoMode();
+    return;
+  }
 
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();
