@@ -8,7 +8,6 @@
 // Issue #6622: Remove client-side ElevenLabs API key exposure.
 
 use axum::{
-    body::Bytes,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -28,6 +27,9 @@ const TTS_DAILY_CHAR_LIMIT: i64 = 10_000;
 
 /// Rolling burst window in seconds.
 const TTS_BURST_WINDOW_SECS: u64 = 60;
+
+/// Single-request text cap for ElevenLabs synthesis.
+const TTS_REQUEST_CHAR_LIMIT: i64 = 5_000;
 
 #[derive(Deserialize)]
 struct TtsSynthesizeRequest {
@@ -79,14 +81,10 @@ async fn tts_synthesize(
     user: AuthUser,
     Json(req): Json<TtsSynthesizeRequest>,
 ) -> Result<Response, Response> {
-    let elevenlabs_key = state
-        .config
-        .elevenlabs_api_key
-        .as_ref()
-        .ok_or_else(|| {
-            tracing::error!("tts_synthesize: ELEVENLABS_API_KEY not configured");
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
-        })?;
+    let elevenlabs_key = state.config.elevenlabs_api_key.as_ref().ok_or_else(|| {
+        tracing::error!("tts_synthesize: ELEVENLABS_API_KEY not configured");
+        StatusCode::SERVICE_UNAVAILABLE.into_response()
+    })?;
 
     // Validate voice_id: must be alphanumeric (ElevenLabs IDs are 20-char base62).
     // Prevents path traversal (e.g. "../../history") that could retarget the xi-api-key.
@@ -95,25 +93,26 @@ async fn tts_synthesize(
     }
 
     // Validate text is not empty and not excessively long (single request cap: 5000 chars)
-    if req.text.is_empty() {
-        return Err(error_response(StatusCode::BAD_REQUEST, "text must not be empty"));
-    }
-    let char_count = req.text.chars().count() as i64;
-    if char_count > 5000 {
-        return Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "text exceeds maximum length of 5000 characters",
-        ));
-    }
+    let char_count = validate_text(&req.text)
+        .map_err(|message| error_response(StatusCode::BAD_REQUEST, message))?;
 
     // Rate limit check (Redis-backed, fail closed)
     let redis = state.redis.as_ref().ok_or_else(|| {
         tracing::error!("tts_synthesize: Redis not configured — TTS rate limiting requires Redis");
-        error_response(StatusCode::SERVICE_UNAVAILABLE, "TTS service temporarily unavailable")
+        error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "TTS service temporarily unavailable",
+        )
     })?;
 
     match redis
-        .check_tts_rate_limit(&user.uid, TTS_BURST_PER_MINUTE, TTS_BURST_WINDOW_SECS, char_count, TTS_DAILY_CHAR_LIMIT)
+        .check_tts_rate_limit(
+            &user.uid,
+            TTS_BURST_PER_MINUTE,
+            TTS_BURST_WINDOW_SECS,
+            char_count,
+            TTS_DAILY_CHAR_LIMIT,
+        )
         .await
     {
         Ok(TtsRateResult::Allow) => {}
@@ -125,7 +124,10 @@ async fn tts_synthesize(
             ));
         }
         Ok(TtsRateResult::DailyCharsExceeded) => {
-            tracing::warn!("tts_synthesize: daily character limit exceeded uid={}", user.uid);
+            tracing::warn!(
+                "tts_synthesize: daily character limit exceeded uid={}",
+                user.uid
+            );
             return Err(rate_limit_response_with_retry(
                 "Daily character limit exceeded (10,000 characters). Resets at midnight UTC.",
                 seconds_until_midnight_utc(),
@@ -169,7 +171,8 @@ async fn tts_synthesize(
             StatusCode::BAD_GATEWAY.into_response()
         })?;
 
-    let status = StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     if !status.is_success() {
         let error_body = upstream.text().await.unwrap_or_default();
@@ -197,9 +200,20 @@ async fn tts_synthesize(
 
 /// Validate voice_id: alphanumeric only, 1-128 chars. Rejects path traversal and injection.
 fn is_valid_voice_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 128
-        && id.chars().all(|c| c.is_ascii_alphanumeric())
+    !id.is_empty() && id.len() <= 128 && id.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+fn validate_text(text: &str) -> Result<i64, &'static str> {
+    if text.is_empty() {
+        return Err("text must not be empty");
+    }
+
+    let char_count = text.chars().count() as i64;
+    if char_count > TTS_REQUEST_CHAR_LIMIT {
+        return Err("text exceeds maximum length of 5000 characters");
+    }
+
+    Ok(char_count)
 }
 
 fn error_response(status: StatusCode, message: &str) -> Response {
@@ -223,14 +237,19 @@ fn rate_limit_response_with_retry(message: &str, retry_after_secs: u64) -> Respo
         .status(StatusCode::TOO_MANY_REQUESTS)
         .header("Content-Type", "application/json")
         .header("Retry-After", retry_after_secs.to_string())
-        .body(axum::body::Body::from(serde_json::to_vec(&body).unwrap_or_default()))
+        .body(axum::body::Body::from(
+            serde_json::to_vec(&body).unwrap_or_default(),
+        ))
         .unwrap()
 }
 
 /// Seconds remaining until the next UTC midnight (for daily limit Retry-After).
 fn seconds_until_midnight_utc() -> u64 {
     let now = chrono::Utc::now();
-    let tomorrow = (now + chrono::Duration::days(1)).date_naive().and_hms_opt(0, 0, 0).unwrap();
+    let tomorrow = (now + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
     let midnight = tomorrow.and_utc();
     (midnight - now).num_seconds().max(1) as u64
 }
@@ -300,6 +319,40 @@ mod tests {
     #[test]
     fn default_output_format_value() {
         assert_eq!(default_output_format(), "mp3_44100_128");
+    }
+
+    #[test]
+    fn deserialize_request_applies_defaults() {
+        let req: TtsSynthesizeRequest = serde_json::from_value(serde_json::json!({
+            "text": "hello"
+        }))
+        .unwrap();
+
+        assert_eq!(req.text, "hello");
+        assert_eq!(req.voice_id, default_voice_id());
+        assert_eq!(req.model_id, default_model_id());
+        assert_eq!(req.output_format, default_output_format());
+        assert!(req.voice_settings.is_none());
+    }
+
+    #[test]
+    fn validate_text_rejects_empty() {
+        assert_eq!(validate_text(""), Err("text must not be empty"));
+    }
+
+    #[test]
+    fn validate_text_accepts_max_length() {
+        let text = "a".repeat(TTS_REQUEST_CHAR_LIMIT as usize);
+        assert_eq!(validate_text(&text), Ok(TTS_REQUEST_CHAR_LIMIT));
+    }
+
+    #[test]
+    fn validate_text_rejects_over_limit() {
+        let text = "a".repeat((TTS_REQUEST_CHAR_LIMIT + 1) as usize);
+        assert_eq!(
+            validate_text(&text),
+            Err("text exceeds maximum length of 5000 characters")
+        );
     }
 
     #[test]
