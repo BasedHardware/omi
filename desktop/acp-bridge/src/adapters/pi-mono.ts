@@ -103,7 +103,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
     string,
-    { cwd: string; model?: string }
+    { cwd: string; model?: string; systemPrompt?: string }
   > = new Map();
   private nextSessionId = 1;
   private pendingRequests: Map<
@@ -210,6 +210,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.set(sessionId, {
       cwd: opts.cwd,
       model: opts.model,
+      systemPrompt: opts.systemPrompt,
     });
 
     // Set model if specified
@@ -218,6 +219,14 @@ export class PiMonoAdapter implements HarnessAdapter {
         type: "set_model",
         provider: "omi",
         modelId: opts.model,
+      });
+    }
+
+    // Set system prompt if specified
+    if (opts.systemPrompt) {
+      this.sendCommand({
+        type: "set_system_prompt",
+        systemPrompt: opts.systemPrompt,
       });
     }
 
