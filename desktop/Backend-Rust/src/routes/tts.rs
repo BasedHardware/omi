@@ -88,6 +88,12 @@ async fn tts_synthesize(
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         })?;
 
+    // Validate voice_id: must be alphanumeric (ElevenLabs IDs are 20-char base62).
+    // Prevents path traversal (e.g. "../../history") that could retarget the xi-api-key.
+    if !is_valid_voice_id(&req.voice_id) {
+        return Err(error_response(StatusCode::BAD_REQUEST, "invalid voice_id"));
+    }
+
     // Validate text is not empty and not excessively long (single request cap: 5000 chars)
     if req.text.is_empty() {
         return Err(error_response(StatusCode::BAD_REQUEST, "text must not be empty"));
@@ -189,6 +195,13 @@ async fn tts_synthesize(
         .unwrap())
 }
 
+/// Validate voice_id: alphanumeric only, 1-128 chars. Rejects path traversal and injection.
+fn is_valid_voice_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
 fn error_response(status: StatusCode, message: &str) -> Response {
     let body = TtsErrorResponse {
         error: TtsErrorDetail {
@@ -240,6 +253,43 @@ mod tests {
     #[test]
     fn default_voice_id_is_sloane() {
         assert_eq!(default_voice_id(), "BAMYoBHLZM7lJgJAmFz0");
+    }
+
+    // --- voice_id validation (path traversal prevention) ---
+
+    #[test]
+    fn valid_voice_id_alphanumeric() {
+        assert!(is_valid_voice_id("BAMYoBHLZM7lJgJAmFz0"));
+        assert!(is_valid_voice_id("abc123"));
+        assert!(is_valid_voice_id("A"));
+    }
+
+    #[test]
+    fn reject_voice_id_path_traversal() {
+        assert!(!is_valid_voice_id("../../history"));
+        assert!(!is_valid_voice_id("../v1/voices"));
+        assert!(!is_valid_voice_id("foo/bar"));
+    }
+
+    #[test]
+    fn reject_voice_id_special_chars() {
+        assert!(!is_valid_voice_id("id-with-dash"));
+        assert!(!is_valid_voice_id("id_with_underscore"));
+        assert!(!is_valid_voice_id("id with space"));
+        assert!(!is_valid_voice_id("id?query=1"));
+    }
+
+    #[test]
+    fn reject_voice_id_empty() {
+        assert!(!is_valid_voice_id(""));
+    }
+
+    #[test]
+    fn reject_voice_id_too_long() {
+        let long_id: String = "a".repeat(129);
+        assert!(!is_valid_voice_id(&long_id));
+        let max_id: String = "a".repeat(128);
+        assert!(is_valid_voice_id(&max_id));
     }
 
     #[test]
