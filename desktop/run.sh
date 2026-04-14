@@ -552,14 +552,16 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null ||
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
-# Embed provisioning profile (required for Sign In with Apple entitlement)
-# Use dev profile for dev builds, production profile for release builds
-if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
-    substep "Copying dev provisioning profile"
-    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
-elif [ -f "Desktop/embedded.provisionprofile" ]; then
-    substep "Copying provisioning profile"
-    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+# Embed provisioning profile for Omi Dev only (profile is bundle-specific to com.omi.desktop-dev).
+# Named test bundles skip this — Apple doesn't allow wildcard profiles with Sign In with Apple.
+if [ "$APP_NAME" = "Omi Dev" ]; then
+    if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+        substep "Embedding dev provisioning profile"
+        cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    elif [ -f "Desktop/embedded.provisionprofile" ]; then
+        substep "Embedding provisioning profile"
+        cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    fi
 fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
@@ -602,23 +604,28 @@ if [ -n "$SIGN_IDENTITY" ]; then
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
     fi
 
-    # If local signing identity doesn't match embedded profile team, macOS rejects
-    # restricted entitlements (notably com.apple.developer.applesignin) and launch
-    # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
+    # Entitlements: named bundles strip com.apple.developer.applesignin (no profile to back it).
+    # Omi Dev keeps it if profile team matches signing identity; falls back otherwise.
     EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
     PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
-    IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
-    PROFILE_TEAM_ID=""
-    if [ -f "$PROFILE_PATH" ]; then
-        PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
-            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
-    fi
-    if [ -n "$PROFILE_TEAM_ID" ] && [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
-        substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
+
+    if [ "$APP_NAME" != "Omi Dev" ] || [ ! -f "$PROFILE_PATH" ]; then
+        # No profile → strip applesignin to avoid RBS launch rejection
         cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
         /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
         rm -f "$PROFILE_PATH"
         EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
+    else
+        IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+        PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
+            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
+        if [ -z "$PROFILE_TEAM_ID" ] || [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
+            substep "Profile/identity team mismatch — stripping applesignin"
+            cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+            rm -f "$PROFILE_PATH"
+            EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
+        fi
     fi
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
