@@ -1257,14 +1257,31 @@ async function runPiMonoMode(): Promise<void> {
         break;
 
       case "refresh_token": {
-        // Swift pushes a refreshed Firebase ID token. Update the stored token
-        // so the next subprocess start uses it. We do NOT restart the subprocess
-        // mid-session to avoid dropping conversation state or orphaning in-flight
-        // requests. The token takes effect on the next natural restart (error/crash).
+        // Swift pushes a refreshed Firebase ID token. Restart the subprocess
+        // (only when idle) so the extension picks up the fresh credential.
+        // Re-warm stored sessions with their system prompts afterwards.
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
-        adapter.updateAuthToken(rtm.token);
-        logErr("Pi-mono auth token updated (applied on next subprocess start)");
+        try {
+          await adapter.updateAuthToken(rtm.token);
+          if (adapter.isIdle) {
+            // Subprocess restarted — re-create sessions from stored state
+            const oldSessions = new Map(piSessions);
+            piSessions.clear();
+            piActiveSessionId = "";
+            for (const [key, entry] of oldSessions) {
+              const newId = await adapter.createSession({
+                cwd: entry.cwd,
+                model: entry.model,
+                systemPrompt: entry.systemPrompt,
+              });
+              piSessions.set(key, { ...entry, sessionId: newId });
+              logErr(`Pi-mono re-warmed session after token refresh: ${key}`);
+            }
+          }
+        } catch (err) {
+          logErr(`Pi-mono token refresh error: ${err}`);
+        }
         break;
       }
 
