@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed floating bar Copy button copying the wrong message when multiple responses are visible"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.313",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed floating bar Copy button copying the wrong message when multiple responses are visible"
+      ]
+    },
     {
       "version": "0.11.312",
       "date": "2026-04-14",
