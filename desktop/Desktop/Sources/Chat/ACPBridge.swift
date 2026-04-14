@@ -102,6 +102,8 @@ actor ACPBridge {
   private var lastExitWasOOM = false
   /// Set when interrupt() is called so query() can skip remaining tool calls
   private var isInterrupted = false
+  /// Timer for periodic Firebase token refresh (piMono mode)
+  private var tokenRefreshTask: Task<Void, Never>?
 
   /// Whether the bridge subprocess is alive and ready
   var isAlive: Bool { isRunning }
@@ -241,6 +243,17 @@ actor ACPBridge {
     // Start reading stdout
     startReadingStdout()
 
+    // Start periodic token refresh for piMono mode (every 45 min)
+    if harnessMode == "piMono" {
+      tokenRefreshTask = Task { [weak self] in
+        while !Task.isCancelled {
+          try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
+          guard !Task.isCancelled else { break }
+          await self?.refreshAuthToken()
+        }
+      }
+    }
+
     // Wait for the initial "init" message indicating bridge is ready
     let initMsg = try await waitForMessage(timeout: 30.0)
     if case .`init`(let sessionId) = initMsg {
@@ -257,6 +270,8 @@ actor ACPBridge {
   /// Stop the bridge process
   func stop() {
     log("ACPBridge: stopping")
+    tokenRefreshTask?.cancel()
+    tokenRefreshTask = nil
     readTask?.cancel()
     readTask = nil
 
@@ -530,6 +545,19 @@ actor ACPBridge {
     guard isRunning else { return }
     isInterrupted = true
     sendLine("{\"type\":\"interrupt\"}")
+  }
+
+  /// Push a refreshed Firebase ID token to the bridge (piMono mode only).
+  /// Called periodically so long-running sessions don't expire.
+  func refreshAuthToken() async {
+    guard isRunning, harnessMode == "piMono" else { return }
+    let authService = await MainActor.run { AuthService.shared }
+    guard let token = try? await authService.getIdToken(forceRefresh: true) else { return }
+    let msg: [String: Any] = ["type": "refresh_token", "token": token]
+    if let data = try? JSONSerialization.data(withJSONObject: msg),
+       let str = String(data: data, encoding: .utf8) {
+      sendLine(str)
+    }
   }
 
   // MARK: - Private
