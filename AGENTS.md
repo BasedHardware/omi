@@ -49,13 +49,13 @@ pusher
 agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
-proactive (proactive/main.py)
-  └── REST ──► Gemini API (generativelanguage.googleapis.com)
+proactive (routers/proactive.py)
+  └── ws ──► Gemini API (generativelanguage.googleapis.com)
 
 notifications-job (modal/job.py)  [cron]
 ```
 
-Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
+Helm charts: `backend/charts/{backend-listen,backend-proactive,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
 
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram for STT (`utils/stt/streaming.py`).
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
@@ -63,7 +63,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called by backend only (`HOSTED_VAD_API_URL`, `HOSTED_SPEECH_PROFILE_API_URL`).
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
-- **proactive** (`proactive/main.py`) — gRPC. Server-side Gemini tool loop for desktop proactive AI. Desktop streams screenshots via bidi gRPC; server calls Gemini, sends search tool requests back to desktop for local SQLite/FTS5 queries, and returns task extraction decisions. Port 50051 (`GRPC_PORT`). Requires `GEMINI_API_KEY`.
+- **proactive** (`routers/proactive.py`) — WebSocket. Server-side Gemini tool loop for desktop proactive AI at `/v1/proactive`. Desktop streams screenshots via bidi WebSocket (JSON protocol); server calls Gemini, sends search tool requests back to desktop for local SQLite/FTS5 queries, and returns task extraction decisions. Runs in the shared backend image. Requires `GEMINI_API_KEY`.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
