@@ -168,11 +168,25 @@ actor ACPBridge {
     // For piMono mode, inject the Firebase ID token so the bridge can
     // authenticate against POST /v2/chat/completions (which expects
     // Authorization: Bearer <firebase-id-token>).
+    //
+    // SECURITY: if we can't get a Firebase token, refuse to start. The bridge
+    // must NEVER fall back to ANTHROPIC_API_KEY as the Omi backend credential.
     if harnessMode == "piMono" {
       let authService = await MainActor.run { AuthService.shared }
-      if let token = try? await authService.getIdToken() {
-        env["OMI_AUTH_TOKEN"] = token
+      let token: String
+      do {
+        token = try await authService.getIdToken()
+      } catch {
+        log("ACPBridge: pi-mono start refused — auth error: \(error.localizedDescription)")
+        throw BridgeError.authMissing
       }
+      guard !token.isEmpty else {
+        log("ACPBridge: pi-mono start refused — Firebase ID token is empty")
+        throw BridgeError.authMissing
+      }
+      env["OMI_AUTH_TOKEN"] = token
+      // Never forward ANTHROPIC_API_KEY to pi-mono — it auths via Firebase only.
+      env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
 
     // Ensure the directory containing node is in PATH
@@ -552,7 +566,17 @@ actor ACPBridge {
   func refreshAuthToken() async {
     guard isRunning, harnessMode == "piMono" else { return }
     let authService = await MainActor.run { AuthService.shared }
-    guard let token = try? await authService.getIdToken(forceRefresh: true) else { return }
+    let token: String
+    do {
+      token = try await authService.getIdToken(forceRefresh: true)
+    } catch {
+      log("ACPBridge: refreshAuthToken failed — \(error.localizedDescription)")
+      return
+    }
+    guard !token.isEmpty else {
+      log("ACPBridge: refreshAuthToken got empty token; skipping push")
+      return
+    }
     let msg: [String: Any] = ["type": "refresh_token", "token": token]
     if let data = try? JSONSerialization.data(withJSONObject: msg),
        let str = String(data: data, encoding: .utf8) {
@@ -938,6 +962,7 @@ enum BridgeError: LocalizedError {
   /// plan label (e.g. "Free" / "Operator" / "Architect") and `resetAtUnix`
   /// is the Unix-seconds timestamp of the cap reset (start of next UTC month).
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
+  case authMissing
 
   var errorDescription: String? {
     switch self {
@@ -961,6 +986,8 @@ enum BridgeError: LocalizedError {
       return "Not enough memory for AI chat. Close some apps and try again."
     case .stopped:
       return "Response stopped."
+    case .authMissing:
+      return "Please sign in to use AI chat."
     case .agentError(let msg):
       let lower = msg.lowercased()
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
