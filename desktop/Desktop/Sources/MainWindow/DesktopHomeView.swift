@@ -240,9 +240,9 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            // Periodic refresh to pick up conversations from other devices (e.g. Omi Glass)
-            .onReceive(Timer.publish(every: PollingConfig.conversationsPollInterval, on: .main, in: .common).autoconnect()) { _ in
-              Task { await appState.refreshConversations(skipCount: true) }
+            // Cmd+R: refresh all data (conversations, chat, tasks, memories)
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
+              Task { await appState.refreshConversations() }
             }
             // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
             // hasCompletedOnboarding must be set here (in a View) because @AppStorage
