@@ -95,12 +95,15 @@ interface PiUsage {
  * For desktop chat, we disable pi-mono's built-in tools and rely on
  * the omi-provider extension to handle all tool calls server-side.
  */
-// Map desktop model IDs (claude-*) to omi provider model IDs
+// Map desktop model IDs (claude-*) to omi provider model IDs.
+// Covers short aliases and dated versions used by ChatProvider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
   "claude-opus-4-6": "omi-opus",
   "claude-sonnet-4-6": "omi-sonnet",
   "claude-sonnet-4": "omi-sonnet",
   "claude-opus-4": "omi-opus",
+  "claude-sonnet-4-20250514": "omi-sonnet",
+  "claude-opus-4-20250514": "omi-opus",
 };
 
 function mapModel(model: string): string {
@@ -357,15 +360,13 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
-  /** Update auth token by restarting the subprocess with new credentials.
-   *  The pi-mono extension reads OMI_API_KEY from env at startup, so the
-   *  only way to refresh it is to restart the process. */
-  async updateAuthToken(token: string): Promise<void> {
+  /** Update the stored auth token. The token is baked into the subprocess
+   *  env at spawn time, so it only takes effect on the next subprocess
+   *  start (after error/crash or explicit restart). This avoids dropping
+   *  conversation state or orphaning in-flight requests. */
+  updateAuthToken(token: string): void {
     this.config.authToken = token;
-    // Restart the subprocess so the new token takes effect
-    await this.stop();
-    await this.start();
-    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
+    process.stderr.write("[pi-mono] auth token updated (will apply on next subprocess start)\n");
   }
 
   supportsFeature(feature: HarnessFeature): boolean {
