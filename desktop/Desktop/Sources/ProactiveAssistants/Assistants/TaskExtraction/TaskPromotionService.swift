@@ -46,7 +46,7 @@ actor TaskPromotionService {
     /// (either cap reached or no staged tasks available).
     /// Returns the list of promoted tasks so callers can insert them directly.
     @discardableResult
-    func promoteIfNeeded() async -> [TaskActionItem] {
+    func promoteIfNeeded(shouldNotify: Bool = true) async -> [TaskActionItem] {
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
             return []
@@ -78,7 +78,7 @@ actor TaskPromotionService {
                     let notificationsEnabled = await MainActor.run {
                         TaskAssistantSettings.shared.notificationsEnabled
                     }
-                    if notificationsEnabled {
+                    if shouldNotify && notificationsEnabled {
                         let message = "New task: \(promotedTask.description)"
                         let context = Self.buildNotificationContext(from: promotedTask)
                         await MainActor.run {
@@ -116,7 +116,7 @@ actor TaskPromotionService {
     @discardableResult
     func ensureMinimumOnStartup() async -> [TaskActionItem] {
         log("TaskPromotion: Checking minimum on startup")
-        return await promoteIfNeeded()
+        return await promoteIfNeeded(shouldNotify: false)
     }
 
     // MARK: - Notification Context
