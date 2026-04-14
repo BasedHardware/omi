@@ -121,16 +121,26 @@ export class PiMonoAdapter implements HarnessAdapter {
     { cwd: string; model?: string; systemPrompt?: string }
   > = new Map();
   private nextSessionId = 1;
+  /** Per-prompt state — keyed by monotonic prompt generation ID, not session ID.
+   *  Pi-mono RPC only processes one prompt at a time, so a generation counter
+   *  is sufficient for correlation. Late/stray turn_end events that don't
+   *  match the in-flight generation are dropped. */
   private pendingRequests: Map<
-    string,
-    { resolve: (value: unknown) => void; reject: (err: Error) => void }
+    number,
+    {
+      sessionId: string;
+      resolve: (value: unknown) => void;
+      reject: (err: Error) => void;
+    }
   > = new Map();
+  /** Generation of the currently-in-flight prompt (0 = none) */
+  private activePromptGeneration = 0;
+  /** Monotonic counter for prompt generations */
+  private nextPromptGeneration = 1;
   private nextRequestId = 1;
   private eventHandler: EventCallback | null = null;
   private toolExecutor: ToolExecutor | null = null;
   private currentAbortController: AbortController | null = null;
-  /** The session ID that is currently executing a prompt */
-  private activeSessionId: string | null = null;
   private piPath: string;
   private extensionPath: string;
   /** True when a token refresh was deferred because a prompt was active */
@@ -162,14 +172,24 @@ export class PiMonoAdapter implements HarnessAdapter {
       "--no-extensions", // disable auto-discovered extensions
     ];
 
+    // SECURITY: require a Firebase ID token. We MUST NOT fall back to
+    // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
+    // one here would leak the upstream secret to api.omi.me.
+    if (!this.config.authToken) {
+      throw new Error(
+        "pi-mono adapter requires config.authToken (Firebase ID token)"
+      );
+    }
+
+    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
+    // accidentally read it as a credential. pi-mono talks to api.omi.me with
+    // OMI_API_KEY only.
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
     };
+    delete env.ANTHROPIC_API_KEY;
 
-    // Pass the Omi API auth token
-    if (this.config.authToken) {
-      env.OMI_API_KEY = `Bearer ${this.config.authToken}`;
-    }
+    env.OMI_API_KEY = `Bearer ${this.config.authToken}`;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
@@ -209,6 +229,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         req.reject(new Error(`pi-mono process exited (code ${code})`));
       }
       this.pendingRequests.clear();
+      this.activePromptGeneration = 0;
     });
   }
 
@@ -220,6 +241,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     this.sessions.clear();
     this.pendingRequests.clear();
+    this.activePromptGeneration = 0;
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
@@ -260,10 +282,28 @@ export class PiMonoAdapter implements HarnessAdapter {
     onToolCall: ToolExecutor,
     signal?: AbortSignal
   ): Promise<PromptResult> {
+    // Serialization invariant: pi-mono RPC only handles one prompt at a time.
+    // Any stray in-flight request here indicates a caller contract violation
+    // or a missed abort — drop it so a late turn_end can't leak into this one.
+    if (this.activePromptGeneration !== 0) {
+      const stale = this.pendingRequests.get(this.activePromptGeneration);
+      if (stale) {
+        this.pendingRequests.delete(this.activePromptGeneration);
+        stale.reject(
+          new Error(
+            "pi-mono prompt superseded before turn_end (previous request dropped)"
+          )
+        );
+      }
+      this.activePromptGeneration = 0;
+    }
+
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
     this.currentAbortController = new AbortController();
-    this.activeSessionId = sessionId;
+
+    const generation = this.nextPromptGeneration++;
+    this.activePromptGeneration = generation;
 
     if (signal) {
       signal.addEventListener("abort", () => {
@@ -299,9 +339,10 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.sendCommand(cmd);
 
-    // Wait for turn_end event
+    // Wait for turn_end event mapped to THIS generation
     return new Promise<PromptResult>((resolve, reject) => {
-      this.pendingRequests.set(sessionId, {
+      this.pendingRequests.set(generation, {
+        sessionId,
         resolve: (value: unknown) => resolve(value as PromptResult),
         reject,
       });
@@ -312,18 +353,23 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sendCommand({ type: "abort" });
     this.currentAbortController?.abort();
 
-    // Resolve with partial result
-    const pending = this.pendingRequests.get(sessionId);
+    // Resolve the in-flight prompt (by generation) with a partial result and
+    // CLEAR activePromptGeneration so a stray late turn_end is dropped instead
+    // of completing whatever comes next.
+    const generation = this.activePromptGeneration;
+    if (generation === 0) return;
+    const pending = this.pendingRequests.get(generation);
     if (pending) {
-      this.pendingRequests.delete(sessionId);
+      this.pendingRequests.delete(generation);
       pending.resolve({
         text: "",
-        sessionId,
+        sessionId: pending.sessionId || sessionId,
         costUsd: 0,
         inputTokens: 0,
         outputTokens: 0,
       });
     }
+    this.activePromptGeneration = 0;
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -573,6 +619,25 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   private handleTurnEnd(event: PiRpcEvent): void {
+    // Drop stray turn_end events that don't belong to an in-flight prompt.
+    // This happens after abort() or when the subprocess emits a late
+    // completion for a prompt that was superseded by another sendPrompt.
+    const generation = this.activePromptGeneration;
+    if (generation === 0) {
+      process.stderr.write(
+        "[pi-mono] dropping stray turn_end (no in-flight prompt)\n"
+      );
+      return;
+    }
+    const pending = this.pendingRequests.get(generation);
+    if (!pending) {
+      process.stderr.write(
+        `[pi-mono] dropping stray turn_end for generation ${generation}\n`
+      );
+      this.activePromptGeneration = 0;
+      return;
+    }
+
     const message = event.message as PiAssistantMessage | undefined;
 
     // Extract text from content blocks
@@ -588,12 +653,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     const usage = message?.usage;
     const costUsd = usage?.cost?.total ?? 0;
 
-    // Use the session that is actively executing the prompt
-    const sessionId = this.activeSessionId || "pi-session-0";
-
     const result: PromptResult = {
       text,
-      sessionId,
+      sessionId: pending.sessionId,
       costUsd,
       inputTokens: usage?.input ?? 0,
       outputTokens: usage?.output ?? 0,
@@ -607,12 +669,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       ...result,
     });
 
-    // Resolve the pending promise
-    const pending = this.pendingRequests.get(sessionId);
-    if (pending) {
-      this.pendingRequests.delete(sessionId);
-      pending.resolve(result);
-    }
+    // Resolve + clear the in-flight state
+    this.pendingRequests.delete(generation);
+    this.activePromptGeneration = 0;
+    pending.resolve(result);
 
     this.eventHandler = null;
     this.toolExecutor = null;
