@@ -366,7 +366,6 @@ struct SettingsContentView: View {
   // Developer API Key overrides
   @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
-  @AppStorage("dev_elevenlabs_api_key") private var devElevenLabsKey: String = ""
 
   init(
     appState: AppState,
@@ -4824,29 +4823,13 @@ struct SettingsContentView: View {
         value: $devAnthropicKey
       )
 
-      developerKeyField(
-        title: "ElevenLabs API Key",
-        subtitle: "For experimental floating-bar voice answers with the Sloane voice",
-        settingId: "advanced.devkeys.elevenlabs",
-        value: syncedElevenLabsKeyBinding
-      )
-
-      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devElevenLabsKey.isEmpty {
+      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
         settingsCard(settingId: "advanced.devkeys.clear") {
           HStack {
             Spacer()
             Button(action: {
               devGeminiKey = ""
               devAnthropicKey = ""
-              devElevenLabsKey = ""
-              SettingsSyncManager.shared.pushPartialUpdate(
-                AssistantSettingsResponse(
-                  floatingBar: FloatingBarSettingsResponse(
-                    elevenLabsApiKey: "",
-                    elevenLabsVoiceID: ""
-                  )
-                )
-              )
             }) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: 13, weight: .medium)
@@ -4994,20 +4977,6 @@ struct SettingsContentView: View {
         }
       }
     }
-  }
-
-  private var syncedElevenLabsKeyBinding: Binding<String> {
-    Binding(
-      get: { devElevenLabsKey },
-      set: { newValue in
-        devElevenLabsKey = newValue
-        SettingsSyncManager.shared.pushPartialUpdate(
-          AssistantSettingsResponse(
-            floatingBar: FloatingBarSettingsResponse(elevenLabsApiKey: newValue)
-          )
-        )
-      }
-    )
   }
 
   private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
