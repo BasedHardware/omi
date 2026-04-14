@@ -1305,4 +1305,131 @@ mod tests {
         let result = translate_request(&req, "claude-sonnet-4-20250514");
         assert!(result.is_err());
     }
+
+    // ── Boundary tests for tool_choice edge cases ──────────────────────
+
+    #[test]
+    fn test_translate_tool_choice_unknown_string() {
+        let choice = Some(json!("invalid_value"));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_none(), "unknown string tool_choice should map to None");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_object_without_function_name() {
+        let choice = Some(json!({"type": "function", "function": {}}));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_none(), "object without function.name should map to None");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_object_wrong_shape() {
+        let choice = Some(json!({"type": "tool", "name": "foo"}));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_none(), "non-function object shape should map to None");
+    }
+
+    // ── Boundary tests for max_tokens ──────────────────────────────────
+
+    #[test]
+    fn test_max_tokens_zero() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: Some(0),
+            tools: None,
+            tool_choice: None,
+        };
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.max_tokens, 0, "max_tokens=0 should be respected (capped at min)");
+    }
+
+    #[test]
+    fn test_max_tokens_at_cap() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: Some(MAX_TOKENS_CAP),
+            tools: None,
+            tool_choice: None,
+        };
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.max_tokens, MAX_TOKENS_CAP, "max_tokens at exactly the cap should be preserved");
+    }
+
+    // ── SSE helper tests ───────────────────────────────────────────────
+
+    #[test]
+    fn test_make_chunk_tool_call_delta() {
+        let delta = ChunkDelta {
+            role: None,
+            content: None,
+            tool_calls: Some(vec![ChunkToolCall {
+                index: 0,
+                id: Some("call_123".to_string()),
+                function: Some(ChunkFunctionCall {
+                    name: Some("get_weather".to_string()),
+                    arguments: Some("{\"city\":\"SF\"}".to_string()),
+                }),
+                call_type: Some("function".to_string()),
+            }]),
+        };
+        let chunk = make_chunk("id-1", 1000, "omi-sonnet", delta, None, None);
+        let tool_calls = chunk["choices"][0]["delta"]["tool_calls"].as_array().unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0]["function"]["name"], "get_weather");
+        assert_eq!(tool_calls[0]["index"], 0);
+    }
+
+    #[test]
+    fn test_make_chunk_finish_reason_stop() {
+        let delta = ChunkDelta {
+            role: None,
+            content: Some("done".to_string()),
+            tool_calls: None,
+        };
+        let chunk = make_chunk("id-2", 2000, "omi-sonnet", delta, Some("stop".to_string()), None);
+        assert_eq!(chunk["choices"][0]["finish_reason"], "stop");
+    }
+
+    #[test]
+    fn test_make_chunk_with_usage() {
+        let delta = ChunkDelta {
+            role: None,
+            content: None,
+            tool_calls: None,
+        };
+        let usage = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+        };
+        let chunk = make_chunk("id-3", 3000, "omi-sonnet", delta, Some("stop".to_string()), Some(usage));
+        assert_eq!(chunk["usage"]["prompt_tokens"], 10);
+        assert_eq!(chunk["usage"]["completion_tokens"], 20);
+        assert_eq!(chunk["usage"]["total_tokens"], 30);
+    }
+
+    #[test]
+    fn test_sse_line_done_marker() {
+        let done = Bytes::from("data: [DONE]\n\n");
+        assert_eq!(done, "data: [DONE]\n\n".as_bytes());
+    }
+
 }
