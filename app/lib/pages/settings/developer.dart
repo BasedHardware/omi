@@ -37,11 +37,8 @@ class DeveloperSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => DeveloperModeProvider()..initialize()),
-        ChangeNotifierProvider(create: (_) => McpProvider()),
-      ],
+    return ChangeNotifierProvider(
+      create: (_) => DeveloperModeProvider()..initialize(),
       child: const _DeveloperSettingsPageView(),
     );
   }
