@@ -1924,11 +1924,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         isLoading = false
     }
 
-    // MARK: - Cross-Platform Message Polling
+    // MARK: - Cross-Platform Message Sync
 
-    /// Poll for new messages from other platforms (e.g. mobile).
+    /// Whether a poll is currently in-flight (prevents overlapping fetches)
+    private var isPolling = false
+
+    /// Fetch new messages from other platforms (e.g. mobile).
     /// Merges new messages into the existing array without disrupting the UI.
     private func pollForNewMessages() async {
+        // Prevent overlapping fetches from activation + Cmd+R firing together
+        guard !isPolling else { return }
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
         // Skip if in auth backoff period (recent 401 errors)
@@ -1941,6 +1946,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         guard !messages.isEmpty || sessionsLoadError != nil else { return }
         // Skip if there's an active streaming message
         guard !messages.contains(where: { $0.isStreaming }) else { return }
+
+        isPolling = true
+        defer { isPolling = false }
 
         do {
             let persistedMessages: [ChatMessageDB]
