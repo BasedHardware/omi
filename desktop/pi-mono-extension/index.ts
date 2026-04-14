@@ -22,7 +22,7 @@ export default function omiProvider(pi: PiExtensionApi) {
         id: "omi-sonnet",
         name: "Omi Sonnet",
         reasoning: true,
-        input: ["text", "image"],
+        input: ["text"],
         contextWindow: 200_000,
         maxTokens: 16_384,
         // Cost set to 0 client-side — tracked server-side by the backend
@@ -37,7 +37,7 @@ export default function omiProvider(pi: PiExtensionApi) {
         id: "omi-opus",
         name: "Omi Opus",
         reasoning: true,
-        input: ["text", "image"],
+        input: ["text"],
         contextWindow: 200_000,
         maxTokens: 16_384,
         cost: {
