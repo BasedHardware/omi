@@ -8407,7 +8407,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -8741,4 +8746,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => '已标记为完成';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Omi 从 Apple Health 读取的内容';
+
+  @override
+  String get appleHealthReadsStepsActivity => '步数、步行与跑步距离以及活动能量';
+
+  @override
+  String get appleHealthReadsHeart => '心率和静息心率';
+
+  @override
+  String get appleHealthReadsSleep => '睡眠分析';
+
+  @override
+  String get appleHealthReadsWorkouts => '锻炼';
+
+  @override
+  String get appleHealthUsageHeading => 'Omi 如何使用这些数据';
+
+  @override
+  String get appleHealthUsageBody => 'Omi 使用您的 Apple Health 数据,通过 Omi Chat 回答有关您的健康、睡眠和活动的问题。您的数据会安全地同步到您的 Omi 账户。';
+
+  @override
+  String get appleHealthWriteHeading => 'Omi 向 Apple Health 写入的内容';
+
+  @override
+  String get appleHealthWriteBody => '无。Omi 仅从 Apple Health 读取,永远不会写入或修改您的健康数据。';
+
+  @override
+  String get appleHealthManageNote => 'Omi 通过 Apple 的 HealthKit 框架访问 Apple Health。您可以随时在 iOS 设置中撤销访问权限。';
+
+  @override
+  String get appleHealthConnectCta => '连接 Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => '断开 Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => '已连接';
+
+  @override
+  String get appleHealthSyncing => '正在同步您的 Apple Health 数据…';
+
+  @override
+  String get appleHealthIntroBody => '连接 Apple Health,让 Omi 可以在聊天中回答有关您的健康、睡眠和活动的问题。';
+
+  @override
+  String get appleHealthFeatureChatTitle => '聊聊你的健康';
+
+  @override
+  String get appleHealthFeatureChatDesc => '向 Omi 询问你的步数、睡眠、心率和锻炼。';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '仅限读取访问';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi 永远不会写入 Apple Health 或修改您的数据。';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '安全同步';
+
+  @override
+  String get appleHealthFeatureSecureDesc => '您的 Apple Health 数据私密同步到您的 Omi 账户。';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health 访问被拒绝';
+
+  @override
+  String get appleHealthDeniedBody => 'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
+
+  @override
+  String get appleHealthOpenSettingsCta => '打开设置';
 }

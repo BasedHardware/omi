@@ -1703,7 +1703,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8554,7 +8559,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8893,4 +8903,84 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marked as complete';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'What Omi reads from Apple Health';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Steps, walking & running distance, and active energy';
+
+  @override
+  String get appleHealthReadsHeart => 'Heart rate and resting heart rate';
+
+  @override
+  String get appleHealthReadsSleep => 'Sleep analysis';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Workouts';
+
+  @override
+  String get appleHealthUsageHeading => 'How Omi uses this data';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi uses your Apple Health data to answer questions about your fitness, sleep, and activity through Omi Chat. Your data is synced securely to your Omi account.';
+
+  @override
+  String get appleHealthWriteHeading => 'What Omi writes to Apple Health';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Nothing. Omi only reads from Apple Health and never writes or modifies your health data.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.';
+
+  @override
+  String get appleHealthConnectCta => 'Connect to Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Disconnect Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Connected';
+
+  @override
+  String get appleHealthSyncing => 'Syncing your Apple Health data…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Connect Apple Health so Omi can answer questions about your fitness, sleep, and activity in chat.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat about your health';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Ask Omi about your steps, sleep, heart rate, and workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Read-only access';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi never writes to Apple Health or modifies your data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Secure sync';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Your Apple Health data syncs privately to your Omi account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health access denied';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Open Settings';
 }

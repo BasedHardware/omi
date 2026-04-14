@@ -1705,7 +1705,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8572,7 +8577,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8912,4 +8922,86 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'مکمل کے طور پر نشان زد';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Omi Apple Health سے کیا پڑھتا ہے';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'قدم، چلنے اور دوڑنے کا فاصلہ، اور فعال توانائی';
+
+  @override
+  String get appleHealthReadsHeart => 'دل کی دھڑکن اور آرام کی دل کی دھڑکن';
+
+  @override
+  String get appleHealthReadsSleep => 'نیند کا تجزیہ';
+
+  @override
+  String get appleHealthReadsWorkouts => 'ورزشیں';
+
+  @override
+  String get appleHealthUsageHeading => 'Omi اس ڈیٹا کو کیسے استعمال کرتا ہے';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi آپ کے Apple Health ڈیٹا کو Omi Chat کے ذریعے آپ کی فٹنس، نیند، اور سرگرمی کے بارے میں سوالات کے جوابات دینے کے لیے استعمال کرتا ہے۔ آپ کا ڈیٹا محفوظ طریقے سے آپ کے Omi اکاؤنٹ کے ساتھ ہم وقت ہوتا ہے۔';
+
+  @override
+  String get appleHealthWriteHeading => 'Omi Apple Health میں کیا لکھتا ہے';
+
+  @override
+  String get appleHealthWriteBody =>
+      'کچھ نہیں۔ Omi صرف Apple Health سے پڑھتا ہے اور کبھی بھی آپ کا صحت کا ڈیٹا نہیں لکھتا یا تبدیل نہیں کرتا۔';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi، Apple کے HealthKit فریم ورک کے ذریعے Apple Health تک رسائی حاصل کرتا ہے۔ آپ کسی بھی وقت iOS کی ترتیبات سے رسائی منسوخ کر سکتے ہیں۔';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health سے منسلک کریں';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health منقطع کریں';
+
+  @override
+  String get appleHealthConnectedBadge => 'منسلک';
+
+  @override
+  String get appleHealthSyncing => 'آپ کا Apple Health ڈیٹا ہم وقت ہو رہا ہے…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Apple Health کو منسلک کریں تاکہ Omi چیٹ میں آپ کی فٹنس، نیند، اور سرگرمی کے بارے میں سوالات کے جوابات دے سکے۔';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'اپنی صحت کے بارے میں گفتگو کریں';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Omi سے اپنے قدم، نیند، دل کی دھڑکن اور ورزشوں کے بارے میں پوچھیں۔';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'صرف پڑھنے کی رسائی';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Omi کبھی Apple Health میں نہیں لکھتا اور نہ ہی آپ کا ڈیٹا تبدیل کرتا ہے۔';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'محفوظ ہم وقت سازی';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'آپ کا Apple Health ڈیٹا نجی طور پر آپ کے Omi اکاؤنٹ کے ساتھ ہم وقت ہوتا ہے۔';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health تک رسائی مسترد';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi کو آپ کا Apple Health ڈیٹا پڑھنے کی اجازت نہیں ہے۔ اسے iOS ترتیبات ← پرائیویسی اور سیکیورٹی ← Health ← Omi میں فعال کریں۔';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'ترتیبات کھولیں';
 }

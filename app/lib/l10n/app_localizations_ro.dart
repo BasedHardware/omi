@@ -1715,7 +1715,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOZITIVE',
+      one: 'DISPOZITIV',
+    );
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -8945,4 +8950,84 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marcat ca finalizat';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Ce citește Omi din Apple Health';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Pași, distanța de mers și alergare și energie activă';
+
+  @override
+  String get appleHealthReadsHeart => 'Ritm cardiac și ritm cardiac în repaus';
+
+  @override
+  String get appleHealthReadsSleep => 'Analiza somnului';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Antrenamente';
+
+  @override
+  String get appleHealthUsageHeading => 'Cum folosește Omi aceste date';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi folosește datele tale din Apple Health pentru a răspunde la întrebări despre condiția ta fizică, somn și activitate prin Omi Chat. Datele tale sunt sincronizate în siguranță cu contul tău Omi.';
+
+  @override
+  String get appleHealthWriteHeading => 'Ce scrie Omi în Apple Health';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Nimic. Omi doar citește din Apple Health și nu scrie sau modifică niciodată datele tale de sănătate.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesează Apple Health prin framework-ul HealthKit de la Apple. Poți revoca accesul oricând din Setările iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Conectează-te la Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Deconectează Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Conectat';
+
+  @override
+  String get appleHealthSyncing => 'Se sincronizează datele Apple Health…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Conectează Apple Health pentru ca Omi să poată răspunde în chat la întrebări despre condiția ta fizică, somn și activitate.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Discută despre sănătatea ta';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Întreabă Omi despre pașii, somnul, ritmul cardiac și antrenamentele tale.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Acces doar pentru citire';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nu scrie niciodată în Apple Health și nu modifică datele tale.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sincronizare sigură';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Datele tale Apple Health se sincronizează privat cu contul tău Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Acces la Apple Health refuzat';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nu are permisiunea de a citi datele tale Apple Health. Activează din Setări iOS → Confidențialitate și securitate → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Deschide Setări';
 }

@@ -1710,7 +1710,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -8890,4 +8895,84 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Označené ako dokončené';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Čo Omi číta z Apple Health';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Kroky, vzdialenosť chôdze a behu a aktívna energia';
+
+  @override
+  String get appleHealthReadsHeart => 'Tepová frekvencia a pokojová tepová frekvencia';
+
+  @override
+  String get appleHealthReadsSleep => 'Analýza spánku';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Tréningy';
+
+  @override
+  String get appleHealthUsageHeading => 'Ako Omi používa tieto údaje';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi používa vaše údaje z Apple Health na zodpovedanie otázok o vašej kondícii, spánku a aktivite v Omi Chate. Údaje sa bezpečne synchronizujú s vaším účtom Omi.';
+
+  @override
+  String get appleHealthWriteHeading => 'Čo Omi zapisuje do Apple Health';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Nič. Omi iba číta z Apple Health a nikdy nezapisuje ani neupravuje vaše zdravotné údaje.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pristupuje k Apple Health prostredníctvom frameworku HealthKit od spoločnosti Apple. Prístup môžete kedykoľvek zrušiť v Nastaveniach iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Pripojiť k Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Odpojiť Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Pripojené';
+
+  @override
+  String get appleHealthSyncing => 'Synchronizácia údajov z Apple Health…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Pripojte Apple Health, aby Omi mohol v chate odpovedať na otázky o vašej kondícii, spánku a aktivite.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Hovorte o svojom zdraví';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Pýtajte sa Omi na kroky, spánok, tep a tréningy.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Prístup iba na čítanie';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nikdy nezapisuje do Apple Health ani neupravuje vaše údaje.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Bezpečná synchronizácia';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Vaše údaje z Apple Health sa súkromne synchronizujú s účtom Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Prístup k Apple Health zamietnutý';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nemá povolenie na čítanie vašich údajov Apple Health. Povoľte ho v Nastaveniach iOS → Súkromie a bezpečnosť → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Otvoriť nastavenia';
 }

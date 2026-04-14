@@ -1711,7 +1711,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -8912,4 +8917,84 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Ditandai selesai';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Apa yang dibaca Omi dari Apple Health';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Langkah, jarak jalan & lari, dan energi aktif';
+
+  @override
+  String get appleHealthReadsHeart => 'Detak jantung dan detak jantung istirahat';
+
+  @override
+  String get appleHealthReadsSleep => 'Analisis tidur';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Latihan';
+
+  @override
+  String get appleHealthUsageHeading => 'Bagaimana Omi menggunakan data ini';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi menggunakan data Apple Health Anda untuk menjawab pertanyaan tentang kebugaran, tidur, dan aktivitas Anda melalui Omi Chat. Data Anda disinkronkan dengan aman ke akun Omi Anda.';
+
+  @override
+  String get appleHealthWriteHeading => 'Apa yang ditulis Omi ke Apple Health';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Tidak ada. Omi hanya membaca dari Apple Health dan tidak pernah menulis atau mengubah data kesehatan Anda.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi mengakses Apple Health melalui framework HealthKit dari Apple. Anda dapat mencabut akses kapan saja di Pengaturan iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Hubungkan ke Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Putuskan Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Terhubung';
+
+  @override
+  String get appleHealthSyncing => 'Menyinkronkan data Apple Health Anda…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Hubungkan Apple Health agar Omi dapat menjawab pertanyaan tentang kebugaran, tidur, dan aktivitas Anda di obrolan.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Bicarakan kesehatan Anda';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Tanyakan pada Omi tentang langkah, tidur, detak jantung, dan latihan Anda.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Akses hanya-baca';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi tidak pernah menulis ke Apple Health atau mengubah data Anda.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sinkronisasi aman';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Akses Apple Health ditolak';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Buka Pengaturan';
 }

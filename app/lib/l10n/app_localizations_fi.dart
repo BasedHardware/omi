@@ -1705,7 +1705,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'LAITETTA',
+      one: 'LAITE',
+    );
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -8901,4 +8906,84 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Merkitty valmiiksi';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Mitä Omi lukee Apple Healthista';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Askeleet, kävely- ja juoksumatka sekä aktiivienergia';
+
+  @override
+  String get appleHealthReadsHeart => 'Syke ja leposyke';
+
+  @override
+  String get appleHealthReadsSleep => 'Unianalyysi';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Harjoitukset';
+
+  @override
+  String get appleHealthUsageHeading => 'Miten Omi käyttää näitä tietoja';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi käyttää Apple Health -tietojasi vastatakseen kysymyksiin kunnostasi, unestasi ja aktiivisuudestasi Omi Chatissa. Tietosi synkronoidaan turvallisesti Omi-tiliisi.';
+
+  @override
+  String get appleHealthWriteHeading => 'Mitä Omi kirjoittaa Apple Healthiin';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Ei mitään. Omi vain lukee Apple Healthista eikä koskaan kirjoita tai muokkaa terveystietojasi.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi käyttää Apple Healthia Applen HealthKit-kehyksen kautta. Voit perua käyttöoikeuden milloin tahansa iOS-asetuksista.';
+
+  @override
+  String get appleHealthConnectCta => 'Yhdistä Apple Healthiin';
+
+  @override
+  String get appleHealthDisconnectCta => 'Katkaise yhteys Apple Healthiin';
+
+  @override
+  String get appleHealthConnectedBadge => 'Yhdistetty';
+
+  @override
+  String get appleHealthSyncing => 'Synkronoidaan Apple Health -tietoja…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Yhdistä Apple Health, jotta Omi voi vastata keskustelussa kysymyksiin kunnostasi, unestasi ja aktiivisuudestasi.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Keskustele terveydestäsi';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Kysy Omilta askelista, unesta, sykkeestä ja harjoituksista.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Vain lukuoikeus';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ei koskaan kirjoita Apple Healthiin tai muuta tietojasi.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Turvallinen synkronointi';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health -tietosi synkronoidaan yksityisesti Omi-tilillesi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health -käyttöoikeus evätty';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Avaa asetukset';
 }

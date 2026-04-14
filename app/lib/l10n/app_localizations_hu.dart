@@ -1717,7 +1717,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ESZKÖZ',
+      one: 'ESZKÖZ',
+    );
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -8941,4 +8946,84 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Befejezettként megjelölve';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'Mit olvas az Omi az Apple Healthből';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'Lépések, gyaloglási és futási távolság, aktív energia';
+
+  @override
+  String get appleHealthReadsHeart => 'Pulzus és nyugalmi pulzus';
+
+  @override
+  String get appleHealthReadsSleep => 'Alváselemzés';
+
+  @override
+  String get appleHealthReadsWorkouts => 'Edzések';
+
+  @override
+  String get appleHealthUsageHeading => 'Hogyan használja az Omi ezeket az adatokat';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Az Omi az Apple Health-adataidat arra használja, hogy válaszoljon az erőnlétedre, alvásodra és aktivitásodra vonatkozó kérdésekre az Omi Chatben. Az adataid biztonságosan szinkronizálódnak az Omi-fiókoddal.';
+
+  @override
+  String get appleHealthWriteHeading => 'Mit ír az Omi az Apple Healthbe';
+
+  @override
+  String get appleHealthWriteBody =>
+      'Semmit. Az Omi csak olvas az Apple Healthből, és soha nem ír vagy módosít egészségügyi adatokat.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Az Omi az Apple HealthKit keretrendszerén keresztül fér hozzá az Apple Healthhez. A hozzáférést bármikor visszavonhatod az iOS beállításaiból.';
+
+  @override
+  String get appleHealthConnectCta => 'Csatlakozás az Apple Healthhez';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health leválasztása';
+
+  @override
+  String get appleHealthConnectedBadge => 'Csatlakoztatva';
+
+  @override
+  String get appleHealthSyncing => 'Apple Health-adatok szinkronizálása…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'Csatlakoztasd az Apple Healthet, hogy az Omi válaszolhasson a chaten az erőnlétedre, alvásodra és aktivitásodra vonatkozó kérdésekre.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Beszélj az egészségedről';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Kérdezd az Omit a lépéseidről, alvásodról, pulzusodról és edzéseidről.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Csak olvasási hozzáférés';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Az Omi soha nem ír az Apple Healthbe, és nem módosítja az adataidat.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Biztonságos szinkronizálás';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health-adataid bizalmasan szinkronizálódnak az Omi-fiókoddal.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-hozzáférés megtagadva';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Az Ominak nincs engedélye az Apple Health-adataid olvasására. Engedélyezd: iOS Beállítások → Adatvédelem és biztonság → Health → Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'Beállítások megnyitása';
 }

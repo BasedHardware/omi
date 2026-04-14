@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -16646,6 +16646,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Marked as complete'**
   String get tasksMarkComplete;
+
+  /// No description provided for @appleHealthScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Health'**
+  String get appleHealthScreenTitle;
+
+  /// No description provided for @appleHealthReadsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi reads from Apple Health'**
+  String get appleHealthReadsHeading;
+
+  /// No description provided for @appleHealthReadsStepsActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps, walking & running distance, and active energy'**
+  String get appleHealthReadsStepsActivity;
+
+  /// No description provided for @appleHealthReadsHeart.
+  ///
+  /// In en, this message translates to:
+  /// **'Heart rate and resting heart rate'**
+  String get appleHealthReadsHeart;
+
+  /// No description provided for @appleHealthReadsSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep analysis'**
+  String get appleHealthReadsSleep;
+
+  /// No description provided for @appleHealthReadsWorkouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Workouts'**
+  String get appleHealthReadsWorkouts;
+
+  /// No description provided for @appleHealthUsageHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'How Omi uses this data'**
+  String get appleHealthUsageHeading;
+
+  /// No description provided for @appleHealthUsageBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses your Apple Health data to answer questions about your fitness, sleep, and activity through Omi Chat. Your data is synced securely to your Omi account.'**
+  String get appleHealthUsageBody;
+
+  /// No description provided for @appleHealthWriteHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi writes to Apple Health'**
+  String get appleHealthWriteHeading;
+
+  /// No description provided for @appleHealthWriteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing. Omi only reads from Apple Health and never writes or modifies your health data.'**
+  String get appleHealthWriteBody;
+
+  /// No description provided for @appleHealthManageNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.'**
+  String get appleHealthManageNote;
+
+  /// No description provided for @appleHealthConnectCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to Apple Health'**
+  String get appleHealthConnectCta;
+
+  /// No description provided for @appleHealthDisconnectCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect Apple Health'**
+  String get appleHealthDisconnectCta;
+
+  /// No description provided for @appleHealthConnectedBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get appleHealthConnectedBadge;
+
+  /// No description provided for @appleHealthSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing your Apple Health data…'**
+  String get appleHealthSyncing;
+
+  /// No description provided for @appleHealthIntroBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Apple Health so Omi can answer questions about your fitness, sleep, and activity in chat.'**
+  String get appleHealthIntroBody;
+
+  /// No description provided for @appleHealthFeatureChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat about your health'**
+  String get appleHealthFeatureChatTitle;
+
+  /// No description provided for @appleHealthFeatureChatDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi about your steps, sleep, heart rate, and workouts.'**
+  String get appleHealthFeatureChatDesc;
+
+  /// No description provided for @appleHealthFeatureReadOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only access'**
+  String get appleHealthFeatureReadOnlyTitle;
+
+  /// No description provided for @appleHealthFeatureReadOnlyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi never writes to Apple Health or modifies your data.'**
+  String get appleHealthFeatureReadOnlyDesc;
+
+  /// No description provided for @appleHealthFeatureSecureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure sync'**
+  String get appleHealthFeatureSecureTitle;
+
+  /// No description provided for @appleHealthFeatureSecureDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Apple Health data syncs privately to your Omi account.'**
+  String get appleHealthFeatureSecureDesc;
+
+  /// No description provided for @appleHealthDeniedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Health access denied'**
+  String get appleHealthDeniedTitle;
+
+  /// No description provided for @appleHealthDeniedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.'**
+  String get appleHealthDeniedBody;
+
+  /// No description provided for @appleHealthOpenSettingsCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get appleHealthOpenSettingsCta;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16658,56 +16808,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'be',
-    'bg',
-    'bn',
-    'bs',
-    'ca',
-    'cs',
-    'da',
-    'de',
-    'el',
-    'en',
-    'es',
-    'et',
-    'fa',
-    'fi',
-    'fr',
-    'he',
-    'hi',
-    'hr',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'ko',
-    'lt',
-    'lv',
-    'mk',
-    'mr',
-    'ms',
-    'nl',
-    'no',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'sr',
-    'sv',
-    'ta',
-    'te',
-    'th',
-    'tl',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'be',
+        'bg',
+        'bn',
+        'bs',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fa',
+        'fi',
+        'fr',
+        'he',
+        'hi',
+        'hr',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'kn',
+        'ko',
+        'lt',
+        'lv',
+        'mk',
+        'mr',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sl',
+        'sr',
+        'sv',
+        'ta',
+        'te',
+        'th',
+        'tl',
+        'tr',
+        'uk',
+        'ur',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16816,10 +16966,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

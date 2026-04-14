@@ -1696,7 +1696,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -8488,7 +8493,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8825,4 +8835,83 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'סומן כהושלם';
+
+  @override
+  String get appleHealthScreenTitle => 'Apple Health';
+
+  @override
+  String get appleHealthReadsHeading => 'מה Omi קורא מ-Apple Health';
+
+  @override
+  String get appleHealthReadsStepsActivity => 'צעדים, מרחק הליכה וריצה ואנרגיה פעילה';
+
+  @override
+  String get appleHealthReadsHeart => 'דופק ודופק במנוחה';
+
+  @override
+  String get appleHealthReadsSleep => 'ניתוח שינה';
+
+  @override
+  String get appleHealthReadsWorkouts => 'אימונים';
+
+  @override
+  String get appleHealthUsageHeading => 'איך Omi משתמש בנתונים האלה';
+
+  @override
+  String get appleHealthUsageBody =>
+      'Omi משתמש בנתוני Apple Health שלך כדי לענות על שאלות לגבי הכושר, השינה והפעילות שלך דרך Omi Chat. הנתונים שלך מסונכרנים באופן מאובטח עם חשבון Omi שלך.';
+
+  @override
+  String get appleHealthWriteHeading => 'מה Omi כותב ל-Apple Health';
+
+  @override
+  String get appleHealthWriteBody => 'שום דבר. Omi רק קורא מ-Apple Health ולעולם לא כותב או משנה את נתוני הבריאות שלך.';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi ניגש ל-Apple Health דרך מסגרת העבודה HealthKit של Apple. ניתן לבטל את הגישה בכל עת בהגדרות iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'התחבר ל-Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'נתק את Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'מחובר';
+
+  @override
+  String get appleHealthSyncing => 'מסנכרן את נתוני Apple Health שלך…';
+
+  @override
+  String get appleHealthIntroBody =>
+      'חבר את Apple Health כדי ש-Omi יוכל לענות בצ\'אט על שאלות לגבי הכושר, השינה והפעילות שלך.';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'צ\'אט על הבריאות שלך';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'גישת קריאה בלבד';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'סנכרון מאובטח';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'הגישה ל-Apple Health נדחתה';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi.';
+
+  @override
+  String get appleHealthOpenSettingsCta => 'פתח הגדרות';
 }
