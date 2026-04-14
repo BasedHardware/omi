@@ -505,14 +505,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
     // not always defaulting to Omi mode on cold start.
     private lazy var acpBridge: ACPBridge = {
-        let isOmi = (UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue) != BridgeMode.userClaude.rawValue
-        return ACPBridge(passApiKey: isOmi)
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue
+        let useOmiKey = mode != BridgeMode.userClaude.rawValue
+        return ACPBridge(passApiKey: useOmiKey)
     }()
     private var acpBridgeStarted = false
 
     enum BridgeMode: String {
         case omiAI = "agentSDK"
         case userClaude = "claudeCode"
+        case piMono = "piMono"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.omiAI.rawValue
 
@@ -798,13 +800,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         await loadSchemaIfNeeded()
     }
 
-    /// Switch between bridge modes (Omi AI vs user's Claude account)
+    /// Switch between bridge modes (Omi AI, Pi-Mono, or user's Claude account)
     func switchBridgeMode(to mode: BridgeMode) async {
-        // Compare against the actual running bridge state, not bridgeMode (@AppStorage updates
-        // immediately when the Picker changes, so bridgeMode already equals `mode` by the time
-        // this function is called — the old string comparison always exits early).
-        guard (mode == .omiAI) != acpBridge.passApiKey else { return }
         let oldMode = bridgeMode
+        // Skip if already in this mode
+        guard mode.rawValue != oldMode else { return }
         log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
 
         // Stop the current bridge
@@ -812,8 +812,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         acpBridgeStarted = false
 
         // Switch mode and recreate bridge with appropriate passApiKey
+        // Both omiAI and piMono use Omi's API key; userClaude uses OAuth
         bridgeMode = mode.rawValue
-        acpBridge = ACPBridge(passApiKey: mode == .omiAI)
+        acpBridge = ACPBridge(passApiKey: mode != .userClaude)
         AnalyticsManager.shared.chatBridgeModeChanged(from: oldMode, to: mode.rawValue)
 
         // Check Claude connection status when switching to user's Claude account
