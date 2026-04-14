@@ -30,9 +30,11 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
 // Allowed Gemini models — only these can be requested through the proxy.
 // Desktop app uses: gemini-3-flash-preview (default), gemini-pro-latest (tasks/insights),
 // gemini-embedding-001 (embeddings). Rate limiting may rewrite pro → flash.
+// gemini-3-pro-preview: used by desktop app versions before Mar 2026, kept for backward compatibility.
 const GEMINI_ALLOWED_MODELS: &[&str] = &[
     "gemini-3-flash-preview",
     "gemini-pro-latest",
+    "gemini-3-pro-preview",
     "gemini-embedding-001",
 ];
 
