@@ -62,6 +62,9 @@ actor ACPBridge {
   /// (Mode A: OMI's key). When false, the key is stripped so ACP uses OAuth.
   let passApiKey: Bool
 
+  /// Which harness to use: "acp" (default) or "piMono"
+  let harnessMode: String
+
   /// Persistent auth handler called whenever auth_required arrives (even outside query)
   var onAuthRequiredGlobal: AuthRequiredHandler?
   /// Persistent auth success handler called whenever auth_success arrives (even outside query)
@@ -75,8 +78,9 @@ actor ACPBridge {
     self.onAuthSuccessGlobal = onAuthSuccess
   }
 
-  init(passApiKey: Bool = false) {
+  init(passApiKey: Bool = false, harnessMode: String = "acp") {
     self.passApiKey = passApiKey
+    self.harnessMode = harnessMode
   }
 
   // MARK: - State
@@ -155,6 +159,9 @@ actor ACPBridge {
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+
+    // Pass harness mode to bridge (acp or piMono)
+    env["HARNESS_MODE"] = harnessMode
 
     // Ensure the directory containing node is in PATH
     let nodeDir = (nodePath as NSString).deletingLastPathComponent
