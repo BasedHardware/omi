@@ -40,6 +40,7 @@ import type {
   OutboundMessage,
   QueryMessage,
   WarmupMessage,
+  RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
@@ -1123,7 +1124,7 @@ async function runPiMonoMode(): Promise<void> {
   logErr("Pi-mono Bridge started, waiting for queries...");
 
   // Multi-session support: keyed sessions matching ACP mode's contract
-  const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string }>();
+  const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string; systemPrompt?: string }>();
   let piActiveAbort: AbortController | null = null;
   let piActiveSessionId = "";
 
@@ -1163,18 +1164,24 @@ async function runPiMonoMode(): Promise<void> {
             if (entry) {
               logErr(`Pi-mono cwd changed for ${sessionKey}, creating new session`);
             }
+            const prompt = qm.systemPrompt || entry?.systemPrompt;
             sessionId = await adapter.createSession({
               cwd,
               model,
-              systemPrompt: qm.systemPrompt,
+              systemPrompt: prompt,
             });
-            piSessions.set(sessionKey, { sessionId, cwd, model });
+            piSessions.set(sessionKey, { sessionId, cwd, model, systemPrompt: prompt });
             logErr(`Pi-mono session created: ${sessionId} (key=${sessionKey}, model=${model})`);
           } else {
-            // Reuse existing session, update model if needed
+            // Reuse existing session — restore system prompt + update model if switching contexts
+            if (entry?.systemPrompt) {
+              // Pi-mono RPC is single-process with global state, so re-send
+              // the system prompt whenever we switch to a different session key
+              adapter.restoreSystemPrompt(entry.systemPrompt);
+            }
             if (model && entry?.model !== model) {
               await adapter.setModel(sessionId, model);
-              piSessions.set(sessionKey, { sessionId, cwd, model });
+              piSessions.set(sessionKey, { ...entry!, sessionId, model });
             }
             logErr(`Reusing pi-mono session: ${sessionId} (key=${sessionKey})`);
           }
@@ -1200,8 +1207,8 @@ async function runPiMonoMode(): Promise<void> {
               // Forward adapter events to Swift via stdout
               send(event as OutboundMessage);
             },
-            async (_callId, _name, _input) => {
-              // Tool executor — forward to Swift
+            async (_name, _input) => {
+              // Tool executor — pi-mono handles tools internally
               return "";
             },
             abortController.signal
@@ -1225,7 +1232,7 @@ async function runPiMonoMode(): Promise<void> {
               model: s.model,
               systemPrompt: s.systemPrompt,
             });
-            piSessions.set(s.key, { sessionId, cwd, model: s.model });
+            piSessions.set(s.key, { sessionId, cwd, model: s.model, systemPrompt: s.systemPrompt });
             logErr(`Pi-mono pre-warmed session: ${sessionId} (key=${s.key}, model=${s.model || "default"})`);
           }
         } catch (err) {
@@ -1247,6 +1254,16 @@ async function runPiMonoMode(): Promise<void> {
         adapter.invalidateSession(msg.sessionKey);
         logErr(`Invalidated pi-mono session for key=${msg.sessionKey}`);
         break;
+
+      case "refresh_token": {
+        // Swift pushes a refreshed Firebase ID token so long-running pi-mono
+        // sessions can re-authenticate after the previous token expires.
+        const rtm = msg as RefreshTokenMessage;
+        process.env.OMI_AUTH_TOKEN = rtm.token;
+        process.env.OMI_API_KEY = `Bearer ${rtm.token}`;
+        logErr("Pi-mono auth token refreshed");
+        break;
+      }
 
       case "stop":
         logErr("Received stop signal, exiting (pi-mono)");
