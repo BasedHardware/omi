@@ -7,6 +7,8 @@ import XCTest
 private struct CapturedRequest {
     let url: URL
     let method: String
+    let headers: [String: String]
+    let body: Data?
 }
 
 /// Intercepts HTTP requests, records their URL and method, then returns 403
@@ -40,7 +42,9 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
         if let url = request.url {
             URLCapture.record(CapturedRequest(
                 url: url,
-                method: request.httpMethod ?? "GET"
+                method: request.httpMethod ?? "GET",
+                headers: request.allHTTPHeaderFields ?? [:],
+                body: request.httpBody
             ))
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
@@ -288,6 +292,53 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
                      pathContains: "v1/config/api-keys", method: "GET",
                      label: "fetchApiKeys")
+    }
+
+    func testSynthesizeSpeechRoutesToRustWithExpectedPayload() async throws {
+        let client = await makeTestClient()
+        let request = APIClient.TtsSynthesizeRequest(
+            text: "hello from test",
+            voiceId: "BAMYoBHLZM7lJgJAmFz0",
+            modelId: "eleven_turbo_v2_5",
+            outputFormat: "mp3_44100_128",
+            voiceSettings: .init(
+                stability: 0.34,
+                similarityBoost: 0.88,
+                style: 0.12,
+                useSpeakerBoost: true
+            )
+        )
+
+        _ = try? await client.synthesizeSpeech(request: request)
+
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/tts/synthesize", method: "POST",
+                     label: "synthesizeSpeech")
+
+        let captured = try XCTUnwrap(URLCapture.capturedRequests.first)
+        XCTAssertEqual(captured.headers["Authorization"], "Bearer test-token")
+        XCTAssertEqual(captured.headers["Content-Type"], "application/json")
+
+        let body = try XCTUnwrap(captured.body)
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+
+        XCTAssertEqual(json["text"] as? String, "hello from test")
+        XCTAssertEqual(json["voice_id"] as? String, "BAMYoBHLZM7lJgJAmFz0")
+        XCTAssertEqual(json["model_id"] as? String, "eleven_turbo_v2_5")
+        XCTAssertEqual(json["output_format"] as? String, "mp3_44100_128")
+        XCTAssertNil(json["voiceId"])
+        XCTAssertNil(json["modelId"])
+        XCTAssertNil(json["outputFormat"])
+
+        let voiceSettings = try XCTUnwrap(json["voice_settings"] as? [String: Any])
+        XCTAssertEqual(voiceSettings["stability"] as? Double, 0.34)
+        XCTAssertEqual(voiceSettings["similarity_boost"] as? Double, 0.88)
+        XCTAssertEqual(voiceSettings["style"] as? Double, 0.12)
+        XCTAssertEqual(voiceSettings["use_speaker_boost"] as? Bool, true)
+        XCTAssertNil(voiceSettings["similarityBoost"])
+        XCTAssertNil(voiceSettings["useSpeakerBoost"])
     }
 
     // -- Assistant settings (GET → Python, migrated from Rust) --
