@@ -1,6 +1,7 @@
+import AppKit
 import Foundation
 
-/// Polls the backend Crisp API endpoint for unread operator messages,
+/// Fetches Crisp operator messages on app activation and Cmd+R,
 /// fires macOS notifications, and tracks unread count for the sidebar badge.
 @MainActor
 class CrispManager: ObservableObject {
@@ -38,15 +39,15 @@ class CrispManager: ObservableObject {
     /// Track message texts we've already sent notifications for (to avoid duplicates)
     private var notifiedMessages = Set<String>()
 
-    /// Polling timer
-    private var pollTimer: Timer?
-
-    /// Whether polling has started
+    /// Whether start() has been called
     private var isStarted = false
+
+    private var activationObserver: NSObjectProtocol?
+    private var refreshAllObserver: NSObjectProtocol?
 
     private init() {}
 
-    /// Call once after sign-in to start polling for Crisp messages
+    /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R
     func start() {
         guard !isStarted else { return }
         isStarted = true
@@ -58,15 +59,19 @@ class CrispManager: ObservableObject {
             lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
         }
 
-        // Poll immediately, then every 2 minutes
+        // Fetch immediately on start
         pollForMessages()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.pollForMessages()
-            }
-        }
 
-        log("CrispManager: started polling for operator messages")
+        // Refresh on app activation and Cmd+R (no periodic timer)
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.pollForMessages() } }
+
+        refreshAllObserver = NotificationCenter.default.addObserver(
+            forName: .refreshAllData, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.pollForMessages() } }
+
+        log("CrispManager: started (event-driven, no polling timer)")
     }
 
     /// Mark messages as read (called when user opens Help tab)
@@ -75,10 +80,12 @@ class CrispManager: ObservableObject {
         lastSeenTimestamp = latestOperatorTimestamp
     }
 
-    /// Stop polling (called on sign-out)
+    /// Stop observing (called on sign-out)
     func stop() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+        if let obs = activationObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = refreshAllObserver { NotificationCenter.default.removeObserver(obs) }
+        activationObserver = nil
+        refreshAllObserver = nil
         isStarted = false
         unreadCount = 0
         // Clear persisted timestamps so next sign-in starts fresh
