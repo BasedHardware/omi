@@ -227,6 +227,18 @@ fn translate_tool_choice(
         },
         Some(serde_json::Value::Object(obj)) => {
             // {"type":"function","function":{"name":"get_weather"}}
+            let choice_type = obj
+                .get("type")
+                .and_then(|t| t.as_str())
+                .ok_or_else(|| {
+                    "invalid tool_choice object: missing 'type' field".to_string()
+                })?;
+            if choice_type != "function" {
+                return Err(format!(
+                    "invalid tool_choice object: unsupported type {:?}",
+                    choice_type
+                ));
+            }
             let func = obj.get("function").ok_or_else(|| {
                 "invalid tool_choice object: missing 'function' field".to_string()
             })?;
@@ -1339,11 +1351,45 @@ mod tests {
     }
 
     #[test]
+    fn test_translate_tool_choice_empty_string() {
+        let choice = Some(json!(""));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_err(), "empty string tool_choice must return Err");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_null() {
+        let choice = Some(serde_json::Value::Null);
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_err(), "null tool_choice must return Err");
+    }
+
+    #[test]
     fn test_translate_tool_choice_object_without_function_name() {
         // Malformed objects must return Err (→ 400)
         let choice = Some(json!({"type": "function", "function": {}}));
         let result = translate_tool_choice(&choice);
         assert!(result.is_err(), "object without function.name must return Err");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_object_with_non_string_function_name() {
+        let choice = Some(json!({
+            "type": "function",
+            "function": {"name": 123}
+        }));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_err(), "non-string function.name must return Err");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_object_with_non_function_type() {
+        let choice = Some(json!({
+            "type": "tool",
+            "function": {"name": "get_weather"}
+        }));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_err(), "non-function tool_choice object must return Err");
     }
 
     #[test]
