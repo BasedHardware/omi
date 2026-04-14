@@ -490,10 +490,22 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     // Generation-specific validation (not for embed actions)
     let is_embed = action == "embedContent" || action == "batchEmbedContents";
     if !is_embed {
-        // Helper: parse a JSON value as u64 from either a number or a string
-        // (ProtoJSON allows integer fields to be encoded as quoted strings)
+        // Helper: parse a JSON value as u64 from a number (int or integral float),
+        // or a string. ProtoJSON allows integer fields as quoted strings and
+        // protobuf parsers accept integral floats (e.g. 8.0) for int32/int64.
         let parse_as_u64 = |v: &serde_json::Value| -> Option<u64> {
-            v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
+            v.as_u64()
+                .or_else(|| {
+                    // Handle integral floats like 8.0, 999999.0
+                    v.as_f64().and_then(|f| {
+                        if f >= 0.0 && f <= (u64::MAX as f64) && f == (f as u64 as f64) {
+                            Some(f as u64)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
         };
 
         // Reject top-level candidate_count > 1
@@ -521,10 +533,10 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                     }
                 }
 
-                // Cap max_output_tokens (handles both numeric and string-encoded values)
+                // Cap max_output_tokens (handles numeric, integral float, and string-encoded values)
                 for mot_key in &["max_output_tokens", "maxOutputTokens"] {
                     if let Some(mot) = gc.get_mut(*mot_key) {
-                        if let Some(n) = mot.as_u64().or_else(|| mot.as_str().and_then(|s| s.parse::<u64>().ok())) {
+                        if let Some(n) = parse_as_u64(mot) {
                             if n > MAX_OUTPUT_TOKENS_CAP {
                                 *mot = serde_json::Value::Number(MAX_OUTPUT_TOKENS_CAP.into());
                             }
@@ -928,6 +940,39 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("candidate_count"));
+    }
+
+    #[test]
+    fn sanitize_rejects_float_encoded_candidate_count() {
+        // Protobuf parsers accept integral floats (8.0) for int32 fields
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"candidateCount": 8.0}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("candidate_count"));
+    }
+
+    #[test]
+    fn sanitize_caps_float_encoded_max_output_tokens() {
+        // Float-encoded maxOutputTokens must still be capped
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generationConfig": {"maxOutputTokens": 999999.0}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(
+            parsed["generationConfig"]["maxOutputTokens"],
+            serde_json::json!(MAX_OUTPUT_TOKENS_CAP)
+        );
     }
 
     #[test]
