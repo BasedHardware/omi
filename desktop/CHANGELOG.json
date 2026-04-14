@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed silent recordings when Bluetooth headphones are connected while another app plays audio, and included system audio in the conversation transcript"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.312",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed silent recordings when Bluetooth headphones are connected while another app plays audio, and included system audio in the conversation transcript"
+      ]
+    },
     {
       "version": "0.11.311",
       "date": "2026-04-14",
