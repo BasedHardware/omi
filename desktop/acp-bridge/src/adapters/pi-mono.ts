@@ -133,6 +133,8 @@ export class PiMonoAdapter implements HarnessAdapter {
   private activeSessionId: string | null = null;
   private piPath: string;
   private extensionPath: string;
+  /** True when a token refresh was deferred because a prompt was active */
+  private pendingTokenRefresh = false;
 
   constructor(config: HarnessConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
@@ -362,25 +364,40 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   /** Update auth token by restarting the subprocess when idle.
    *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
-   *  to refresh is to restart the process. Waits until no prompt is active
-   *  to avoid orphaning in-flight requests. Sessions must be re-created
-   *  by the caller after this returns. */
-  async updateAuthToken(token: string): Promise<void> {
+   *  to refresh is to restart the process. If a prompt is active, marks a
+   *  pending restart that handleTurnEnd will execute after the prompt completes.
+   *  Returns true if restart happened immediately, false if deferred. */
+  async updateAuthToken(token: string): Promise<boolean> {
     this.config.authToken = token;
-    if (this.activeSessionId && this.pendingRequests.size > 0) {
-      // Defer restart: store token, let current prompt finish.
-      // The next prompt will trigger a fresh subprocess if it's dead.
+    if (this.pendingRequests.size > 0) {
+      this.pendingTokenRefresh = true;
       process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
-      return;
+      return false;
     }
     await this.stop();
     await this.start();
+    this.pendingTokenRefresh = false;
     process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
+    return true;
   }
 
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0;
+  }
+
+  /** Whether a deferred token restart is pending */
+  get hasPendingRestart(): boolean {
+    return this.pendingTokenRefresh;
+  }
+
+  /** Execute the deferred token restart (call after prompt completes) */
+  async executePendingRestart(): Promise<void> {
+    if (!this.pendingTokenRefresh) return;
+    this.pendingTokenRefresh = false;
+    await this.stop();
+    await this.start();
+    process.stderr.write("[pi-mono] deferred token refresh executed (subprocess restarted)\n");
   }
 
   supportsFeature(feature: HarnessFeature): boolean {
