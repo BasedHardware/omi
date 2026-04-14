@@ -2505,19 +2505,25 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageLength: responseLength
             )
 
+            // Skip client-side usage recording for piMono — the backend already
+            // logs usage server-side via POST /v2/chat/completions, so recording
+            // here would double-count.
             let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
-            let accountType = isOmiMode ? "omi" : "personal"
-            let r = queryResult
-            Task.detached(priority: .background) {
-                await APIClient.shared.recordLlmUsage(
-                    inputTokens: r.inputTokens,
-                    outputTokens: r.outputTokens,
-                    cacheReadTokens: r.cacheReadTokens,
-                    cacheWriteTokens: r.cacheWriteTokens,
-                    totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
-                    costUsd: r.costUsd,
-                    account: accountType
-                )
+            let isPiMono = bridgeMode == BridgeMode.piMono.rawValue
+            if !isPiMono {
+                let accountType = isOmiMode ? "omi" : "personal"
+                let r = queryResult
+                Task.detached(priority: .background) {
+                    await APIClient.shared.recordLlmUsage(
+                        inputTokens: r.inputTokens,
+                        outputTokens: r.outputTokens,
+                        cacheReadTokens: r.cacheReadTokens,
+                        cacheWriteTokens: r.cacheWriteTokens,
+                        totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
+                        costUsd: r.costUsd,
+                        account: accountType
+                    )
+                }
             }
             if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
