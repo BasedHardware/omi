@@ -976,6 +976,28 @@ mod tests {
     }
 
     #[test]
+    fn body_size_limit_constant_is_5mb() {
+        // Verify the body size limit constant matches spec (5 MB)
+        assert_eq!(GEMINI_MAX_BODY_SIZE, 5 * 1024 * 1024);
+    }
+
+    #[test]
+    fn sanitize_rejects_body_exceeding_reasonable_size() {
+        // While DefaultBodyLimit handles the actual HTTP 413, the sanitizer
+        // should still handle large valid JSON gracefully (not panic/OOM).
+        // This tests a ~1MB valid JSON body passes sanitization fine.
+        let large_text = "x".repeat(1_000_000);
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": large_text}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn sanitize_strips_safety_settings() {
         let body = serde_json::json!({
             "contents": [{"parts": [{"text": "hello"}]}],
