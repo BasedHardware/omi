@@ -473,6 +473,11 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
       sttProvider: sttProvider,
+      // Custom STT handles transcription — send only forwarded transcripts to
+      // the Omi backend, never raw audio. Without this, the backend transcribes
+      // the audio stream in parallel and counts listening minutes even though
+      // the custom provider is doing the actual transcription work.
+      skipAudioToSecondary: true,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,
