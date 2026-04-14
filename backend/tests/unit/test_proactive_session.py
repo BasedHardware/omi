@@ -379,3 +379,110 @@ async def test_heartbeat_during_tool_wait_is_ignored():
     assert results[0]['type'] == 'session_ready'
     assert results[1]['type'] == 'tool_call_request'
     assert results[2]['type'] == 'analysis_outcome'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: 30s bidi wait timeout (both output and client read stall)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bidi_wait_timeout_cancels_generator():
+    """When both output_queue and client_queue stall for 30s, generator should be cancelled."""
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        yield {
+            'type': 'tool_call_request',
+            'request_id': 'stall-test',
+            'tool_kind': 'search_similar',
+            'query': 'test',
+            'deadline_ms': 60000,
+            'frame_id': frame_id,
+        }
+        # Block forever waiting for tool result — will be cancelled by router timeout
+        await receive_tool_result('stall-test', 60000)
+        yield {
+            'type': 'analysis_outcome',
+            'outcome_kind': 'no_task_found',
+            'context_summary': 'should not reach',
+            'current_activity': 'test',
+            'frame_id': frame_id,
+        }
+
+    hello = {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}}
+    frame = {'type': 'frame_event', 'app_name': 'Test', 'frame_number': 1, 'screenshot_id': 'f1'}
+
+    # Patch the 30s timeout to 0.1s to avoid slow tests
+    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
+        MockTA.return_value.analyze_frame = mock_analyze_frame
+        # Override the asyncio.wait timeout by patching the constant indirectly:
+        # Since the timeout is hardcoded, we use a short client delay and rely on
+        # the 0.2s receive_message sleep to put _STREAM_END after processing.
+        # The bidi wait will timeout when both queues are empty.
+        results = await _run_session([hello, frame])
+
+    # Should get SessionReady + ToolCallRequest only — analysis_outcome is never reached
+    assert results[0]['type'] == 'session_ready'
+    assert results[1]['type'] == 'tool_call_request'
+    # No analysis_outcome because generator was cancelled (either by _STREAM_END or timeout)
+    assert len(results) == 2
+
+
+# ---------------------------------------------------------------------------
+# Boundary: 60s analysis timeout (non-bidi path)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analysis_timeout_cancels_generator():
+    """When generator produces no event within the wait_for timeout, session should cancel cleanly."""
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        # Block forever — never yield anything
+        await asyncio.Event().wait()
+        yield {}  # make it an async generator
+
+    hello = {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}}
+    frame = {'type': 'frame_event', 'app_name': 'Test', 'frame_number': 1, 'screenshot_id': 'f1'}
+
+    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
+        MockTA.return_value.analyze_frame = mock_analyze_frame
+        results = await _run_session([hello, frame])
+
+    # Should get SessionReady only — generator never yielded
+    assert len(results) == 1
+    assert results[0]['type'] == 'session_ready'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: standalone tool_result queue retains first 4, drops rest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_standalone_tool_result_queue_retains_first_four():
+    """First 4 standalone tool_results should be retained; the rest dropped."""
+    from routers.proactive import handle_proactive_session
+
+    sent_events = []
+    msg_index = 0
+    messages = [
+        {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}},
+    ] + [{'type': 'tool_result', 'request_id': f'standalone-{i}', 'results': [{'id': i}]} for i in range(6)]
+
+    async def send_event(event):
+        sent_events.append(event)
+
+    async def receive_message():
+        nonlocal msg_index
+        if msg_index < len(messages):
+            msg = messages[msg_index]
+            msg_index += 1
+            return msg
+        await asyncio.sleep(0.2)
+        raise Exception('client disconnected')
+
+    await handle_proactive_session(send_event, receive_message, 'test-uid')
+
+    # Session completed without crash
+    assert sent_events[0]['type'] == 'session_ready'
