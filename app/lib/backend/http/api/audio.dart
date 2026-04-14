@@ -82,3 +82,69 @@ Future<List<AudioFileUrlInfo>> getConversationAudioSignedUrls(String conversatio
     return [];
   }
 }
+
+class CloudAudioConversation {
+  final String id;
+  final String title;
+  final DateTime? createdAt;
+  final int audioFileCount;
+  final double totalDuration;
+
+  CloudAudioConversation({
+    required this.id,
+    required this.title,
+    this.createdAt,
+    required this.audioFileCount,
+    required this.totalDuration,
+  });
+
+  factory CloudAudioConversation.fromJson(Map<String, dynamic> json) {
+    return CloudAudioConversation(
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'Untitled',
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      audioFileCount: json['audio_file_count'] ?? 0,
+      totalDuration: (json['total_duration'] ?? 0).toDouble(),
+    );
+  }
+}
+
+Future<List<CloudAudioConversation>> getCloudAudioConversations() async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio/conversations',
+      headers: headers,
+      method: 'GET',
+      body: '',
+    );
+
+    if (response == null || response.statusCode != 200) {
+      return [];
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final conversations = decoded['conversations'] as List<dynamic>? ?? [];
+    return conversations.map((c) => CloudAudioConversation.fromJson(c as Map<String, dynamic>)).toList();
+  } catch (e) {
+    Logger.debug('Error getting cloud audio conversations: $e');
+    return [];
+  }
+}
+
+Future<bool> deleteAllCloudAudio() async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio',
+      headers: headers,
+      method: 'DELETE',
+      body: '',
+    );
+
+    return response?.statusCode == 200;
+  } catch (e) {
+    Logger.debug('Error deleting all cloud audio: $e');
+    return false;
+  }
+}
