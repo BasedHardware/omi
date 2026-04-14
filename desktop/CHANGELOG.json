@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Tightened Gemini proxy security with model allowlist, request body size limit, and input validation"
+  ],
   "releases": [
     {
       "version": "0.11.307",
