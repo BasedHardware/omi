@@ -231,9 +231,11 @@ final class AudioSourceManager: ObservableObject {
             systemAudioCaptureService = SystemAudioCaptureService()
         }
 
-        // Start the audio mixer
-        audioMixer?.start { [weak self] stereoData in
-            self?.onStereoAudio?(stereoData)
+        // Start the audio mixer (dormant path — AudioSourceManager.startStreaming
+        // is not currently used by any caller, but keep the signature in sync with
+        // the updated AudioMixer API for future reactivation.)
+        audioMixer?.start { [weak self] mixed in
+            self?.onStereoAudio?(mixed)
         }
 
         // Start microphone capture

@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed silent recordings when Bluetooth headphones are connected while another app plays audio, and included system audio in the conversation transcript"
+  ],
   "releases": [
     {
       "version": "0.11.311",
