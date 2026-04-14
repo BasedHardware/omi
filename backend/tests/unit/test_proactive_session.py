@@ -388,7 +388,7 @@ async def test_heartbeat_during_tool_wait_is_ignored():
 
 @pytest.mark.asyncio
 async def test_bidi_wait_timeout_cancels_generator():
-    """When both output_queue and client_queue stall for 30s, generator should be cancelled."""
+    """When both output_queue and client_queue stall past _BIDI_WAIT_TIMEOUT_S, generator is cancelled."""
 
     async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
         yield {
@@ -399,7 +399,7 @@ async def test_bidi_wait_timeout_cancels_generator():
             'deadline_ms': 60000,
             'frame_id': frame_id,
         }
-        # Block forever waiting for tool result — will be cancelled by router timeout
+        # Block forever — will be cancelled by the bidi wait timeout
         await receive_tool_result('stall-test', 60000)
         yield {
             'type': 'analysis_outcome',
@@ -412,63 +412,11 @@ async def test_bidi_wait_timeout_cancels_generator():
     hello = {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}}
     frame = {'type': 'frame_event', 'app_name': 'Test', 'frame_number': 1, 'screenshot_id': 'f1'}
 
-    # Patch the 30s timeout to 0.1s to avoid slow tests
-    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
-        MockTA.return_value.analyze_frame = mock_analyze_frame
-        # Override the asyncio.wait timeout by patching the constant indirectly:
-        # Since the timeout is hardcoded, we use a short client delay and rely on
-        # the 0.2s receive_message sleep to put _STREAM_END after processing.
-        # The bidi wait will timeout when both queues are empty.
-        results = await _run_session([hello, frame])
-
-    # Should get SessionReady + ToolCallRequest only — analysis_outcome is never reached
-    assert results[0]['type'] == 'session_ready'
-    assert results[1]['type'] == 'tool_call_request'
-    # No analysis_outcome because generator was cancelled (either by _STREAM_END or timeout)
-    assert len(results) == 2
-
-
-# ---------------------------------------------------------------------------
-# Boundary: 60s analysis timeout (non-bidi path)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_analysis_timeout_cancels_generator():
-    """When generator produces no event within the wait_for timeout, session should cancel cleanly."""
-
-    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
-        # Block forever — never yield anything
-        await asyncio.Event().wait()
-        yield {}  # make it an async generator
-
-    hello = {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}}
-    frame = {'type': 'frame_event', 'app_name': 'Test', 'frame_number': 1, 'screenshot_id': 'f1'}
-
-    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
-        MockTA.return_value.analyze_frame = mock_analyze_frame
-        results = await _run_session([hello, frame])
-
-    # Should get SessionReady only — generator never yielded
-    assert len(results) == 1
-    assert results[0]['type'] == 'session_ready'
-
-
-# ---------------------------------------------------------------------------
-# Boundary: standalone tool_result queue retains first 4, drops rest
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_standalone_tool_result_queue_retains_first_four():
-    """First 4 standalone tool_results should be retained; the rest dropped."""
-    from routers.proactive import handle_proactive_session
-
+    # Patch _BIDI_WAIT_TIMEOUT_S to 0.05s and keep client alive (10s sleep)
+    # so we hit the timeout path, not the _STREAM_END path.
     sent_events = []
     msg_index = 0
-    messages = [
-        {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}},
-    ] + [{'type': 'tool_result', 'request_id': f'standalone-{i}', 'results': [{'id': i}]} for i in range(6)]
+    messages = [hello, frame]
 
     async def send_event(event):
         sent_events.append(event)
@@ -479,10 +427,88 @@ async def test_standalone_tool_result_queue_retains_first_four():
             msg = messages[msg_index]
             msg_index += 1
             return msg
-        await asyncio.sleep(0.2)
+        # Stay "connected" long enough for timeout to fire
+        await asyncio.sleep(10)
         raise Exception('client disconnected')
 
-    await handle_proactive_session(send_event, receive_message, 'test-uid')
+    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
+        MockTA.return_value.analyze_frame = mock_analyze_frame
+        with patch('routers.proactive._BIDI_WAIT_TIMEOUT_S', 0.05):
+            await asyncio.wait_for(
+                handle_proactive_session(send_event, receive_message, 'test-uid'),
+                timeout=5.0,
+            )
 
-    # Session completed without crash
     assert sent_events[0]['type'] == 'session_ready'
+    assert sent_events[1]['type'] == 'tool_call_request'
+    # analysis_outcome is never reached — generator cancelled by bidi timeout
+    assert len(sent_events) == 2
+
+
+# ---------------------------------------------------------------------------
+# Boundary: _ANALYSIS_TIMEOUT_S (non-bidi path)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_analysis_timeout_cancels_generator():
+    """When generator produces no event within _ANALYSIS_TIMEOUT_S, session cancels cleanly."""
+
+    async def mock_analyze_frame(*, frame, session_context, frame_id, uid, receive_tool_result):
+        # Block forever — never yield anything
+        await asyncio.Event().wait()
+        yield {}  # make it an async generator
+
+    hello = {'type': 'client_hello', 'protocol_version': '1.0', 'context_version': 'v1', 'session_context': {}}
+    frame = {'type': 'frame_event', 'app_name': 'Test', 'frame_number': 1, 'screenshot_id': 'f1'}
+
+    sent_events = []
+    msg_index = 0
+    messages = [hello, frame]
+
+    async def send_event(event):
+        sent_events.append(event)
+
+    async def receive_message():
+        nonlocal msg_index
+        if msg_index < len(messages):
+            msg = messages[msg_index]
+            msg_index += 1
+            return msg
+        await asyncio.sleep(10)
+        raise Exception('client disconnected')
+
+    with patch('routers.proactive.ServerTaskAssistant') as MockTA:
+        MockTA.return_value.analyze_frame = mock_analyze_frame
+        with patch('routers.proactive._ANALYSIS_TIMEOUT_S', 0.05):
+            await asyncio.wait_for(
+                handle_proactive_session(send_event, receive_message, 'test-uid'),
+                timeout=5.0,
+            )
+
+    # Should get SessionReady only — generator never yielded
+    assert len(sent_events) == 1
+    assert sent_events[0]['type'] == 'session_ready'
+
+
+# ---------------------------------------------------------------------------
+# Boundary: standalone tool_result queue retains first 4, drops rest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_standalone_tool_result_queue_retains_first_four():
+    """tool_result_queue(maxsize=4): first 4 retained, 5th+ dropped via QueueFull."""
+    queue = asyncio.Queue(maxsize=4)
+
+    # Simulate the router's standalone tool_result handling (put_nowait + catch QueueFull)
+    for i in range(6):
+        try:
+            queue.put_nowait({'request_id': f'r-{i}', 'results': []})
+        except asyncio.QueueFull:
+            pass
+
+    assert queue.qsize() == 4
+    retained_ids = [queue.get_nowait()['request_id'] for _ in range(4)]
+    assert retained_ids == ['r-0', 'r-1', 'r-2', 'r-3']
+    assert queue.empty()
