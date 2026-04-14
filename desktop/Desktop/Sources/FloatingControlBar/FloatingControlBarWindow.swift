@@ -1303,6 +1303,17 @@ class FloatingControlBarManager {
     private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
         guard storedNotificationMessages[notification.id] == nil else { return }
 
+        // Also append the notification as an assistant message in the main chat
+        // history provider so it is visible on the home-page chat and synced to
+        // the backend. The floating bar still uses its own provider for follow-up
+        // questions (see openNotificationConversation), so this append does not
+        // affect the floating-bar session in any way.
+        if let historyProvider = historyChatProvider {
+            let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            let messageText = bodyText.isEmpty ? notification.title : bodyText
+            _ = historyProvider.appendAssistantMessage(messageText)
+        }
+
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
             notification: notification,
             context: notification.context,

@@ -482,18 +482,6 @@ actor TaskAssistant: ProactiveAssistant {
         }
     }
 
-    /// Send a notification for the extracted task
-    private func sendTaskNotification(task: ExtractedTask) async {
-        let message = task.title
-        await MainActor.run {
-            NotificationService.shared.sendNotification(
-                title: "Task",
-                message: message,
-                assistantId: identifier
-            )
-        }
-    }
-
     func onAppSwitch(newApp: String) async {
         if newApp != currentApp {
             if let currentApp = currentApp {
