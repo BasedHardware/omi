@@ -202,7 +202,7 @@ struct DesktopHomeView: View {
             ) { _ in
               // Cooldown: only refresh conversations if last activation was 60+ seconds ago
               let now = Date()
-              if now.timeIntervalSince(lastActivationRefresh) >= PollingConfig.activationCooldown {
+              if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
                 lastActivationRefresh = now
                 Task { await appState.refreshConversations() }
               }
