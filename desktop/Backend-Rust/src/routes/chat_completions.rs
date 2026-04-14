@@ -183,7 +183,13 @@ fn translate_request(
         .unwrap_or(DEFAULT_MAX_TOKENS)
         .min(MAX_TOKENS_CAP);
 
-    // Translate tool_choice from OpenAI format to Anthropic format
+    // Translate tool_choice from OpenAI format to Anthropic format.
+    // When tool_choice is "none", strip tools entirely — Anthropic has no "none"
+    // and would auto-use tools if they're present in the request.
+    let is_tool_choice_none = matches!(
+        &req.tool_choice,
+        Some(serde_json::Value::String(s)) if s == "none"
+    );
     let anthropic_tool_choice = translate_tool_choice(&req.tool_choice);
 
     Ok(AnthropicRequest {
@@ -193,7 +199,7 @@ fn translate_request(
         system: system_prompt,
         temperature: req.temperature,
         stream: req.stream,
-        tools: anthropic_tools,
+        tools: if is_tool_choice_none { None } else { anthropic_tools },
         tool_choice: anthropic_tool_choice,
     })
 }
@@ -1245,6 +1251,37 @@ mod tests {
     fn test_translate_tool_choice_absent() {
         let result = translate_tool_choice(&None);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_tool_choice_none_strips_tools() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: Some(vec![ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "get_weather".to_string(),
+                    description: Some("Get weather".to_string()),
+                    parameters: Some(json!({"type": "object", "properties": {}})),
+                },
+            }]),
+            tool_choice: Some(json!("none")),
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        // tool_choice "none" must strip tools entirely
+        assert!(result.tools.is_none(), "tools should be stripped when tool_choice is 'none'");
+        assert!(result.tool_choice.is_none());
     }
 
     #[test]
