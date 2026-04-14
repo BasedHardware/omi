@@ -10,6 +10,7 @@ class GlobalShortcutManager {
     static let askAINotification = Notification.Name("com.omi.desktop.askAI")
 
     private var hotKeyRefs: [HotKeyID: EventHotKeyRef] = [:]
+    private var isRegistrationSuspended = false
 
     private enum HotKeyID: UInt32 {
         case askOmi = 2
@@ -42,11 +43,22 @@ class GlobalShortcutManager {
 
     func registerShortcuts() {
         unregisterShortcuts()
+        guard !isRegistrationSuspended else { return }
         // Register Ask Omi shortcut from user settings
         registerAskOmi()
     }
 
+    func setRegistrationSuspended(_ suspended: Bool) {
+        isRegistrationSuspended = suspended
+        if suspended {
+            unregisterShortcuts()
+        } else {
+            registerShortcuts()
+        }
+    }
+
     private func registerAskOmi() {
+        guard !isRegistrationSuspended else { return }
         // Unregister previous Ask Omi hotkey if any
         if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
             UnregisterEventHotKey(ref)
