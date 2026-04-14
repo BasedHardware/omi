@@ -55,6 +55,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "mcp:sse": (200, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
+    # Memory batch writes — each request can create up to 100 memories, so the
+    # per-request cap is intentionally tighter than memories:create.
+    "memories:batch": (30, 3600),
     # Goals — single LLM call
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),

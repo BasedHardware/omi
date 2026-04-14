@@ -75,6 +75,7 @@ pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_rate_limiting.py -v
+pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_vision_stream_async.py -v

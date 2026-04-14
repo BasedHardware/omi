@@ -1276,47 +1276,41 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       let drafts = await buildLocalFileMemoryDrafts(from: snapshot)
       guard !drafts.isEmpty else { return 0 }
 
-      let concurrency = min(12, drafts.count)
-      var nextIndex = 0
-
-      let saved = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
-        func enqueueNext() {
-          guard nextIndex < drafts.count else { return }
-          let draft = drafts[nextIndex]
-          nextIndex += 1
-          group.addTask {
-            do {
-              _ = try await APIClient.shared.createMemory(
-                content: draft.content,
-                visibility: "private",
-                tags: draft.tags,
-                source: draft.source,
-                headline: draft.headline
-              )
-              return true
-            } catch {
-              log("OnboardingPagedIntroCoordinator: Failed to save local file memory: \(error)")
-              return false
-            }
-          }
+      // Batch the drafts through POST /v3/memories/batch. The previous
+      // implementation fanned out 12 concurrent POST /v3/memories calls
+      // per draft; with up to ~2800 drafts, that blew through Cloud
+      // Armor's 120 req/min per-Authorization limit in seconds and
+      // collaterally 429'd unrelated onboarding calls (goals, sync, chat).
+      //
+      // One batch request = one Firestore write + one embeddings call +
+      // one Pinecone upsert on the server, regardless of batch size.
+      let chunkSize = APIClient.memoriesBatchMaxSize
+      var savedCount = 0
+      var index = 0
+      while index < drafts.count {
+        let end = min(index + chunkSize, drafts.count)
+        let chunk = drafts[index..<end].map { draft in
+          MemoryBatchItem(
+            content: draft.content,
+            visibility: "private",
+            tags: draft.tags,
+            headline: draft.headline
+          )
         }
+        index = end
 
-        for _ in 0..<concurrency {
-          enqueueNext()
+        do {
+          let response = try await APIClient.shared.createMemoriesBatch(Array(chunk))
+          savedCount += response.createdCount
+        } catch {
+          log(
+            "OnboardingPagedIntroCoordinator: Failed to save local file memory batch "
+              + "(\(chunk.count) items): \(error)")
         }
-
-        var savedCount = 0
-        while let success = await group.next() {
-          if success {
-            savedCount += 1
-          }
-          enqueueNext()
-        }
-        return savedCount
       }
 
-      log("OnboardingPagedIntroCoordinator: Saved \(saved) local file memories")
-      return saved
+      log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file memories")
+      return savedCount
     }
 
     localFileMemoryImportTask = task

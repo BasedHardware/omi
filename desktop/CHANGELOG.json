@@ -2,6 +2,69 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.309",
+      "date": "2026-04-14",
+      "changes": [
+        "Tightened Gemini proxy security with model allowlist, request body size limit, and input validation"
+      ]
+    },
+    {
+      "version": "0.11.308",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.307",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.305",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.304",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.303",
+      "date": "2026-04-14",
+      "changes": [
+        "Task, memory, and focus notifications now open the floating bar with full provenance and sync into home chat history, so follow-up questions can reference the source app, window, and context"
+      ]
+    },
+    {
+      "version": "0.11.302",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.301",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.300",
+      "date": "2026-04-13",
+      "changes": [
+        "Added a Cancel link on the sign-in screen so a failed web OAuth attempt no longer leaves the sign-in buttons permanently disabled"
+      ]
+    },
+    {
       "version": "0.11.299",
       "date": "2026-04-13",
       "changes": [

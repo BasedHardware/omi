@@ -599,6 +599,7 @@ struct ChatBubble: View {
   var isDuplicate: Bool = false
 
   @State private var isHovering = false
+  @State private var isTimestampHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
@@ -627,10 +628,12 @@ struct ChatBubble: View {
     !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
   }
 
-  /// The text to display (truncated or full) — shows the END of the message
+  /// The text to display (truncated or full) — keeps the start of the message visible
   private var displayText: String {
     if shouldTruncate {
-      return "…" + String(message.text.suffix(Self.truncationThreshold))
+      return String(message.text.prefix(Self.truncationThreshold)).trimmingCharacters(
+        in: .whitespacesAndNewlines
+      ) + "…"
     }
     return message.text
   }
@@ -683,6 +686,7 @@ struct ChatBubble: View {
                   .padding(.vertical, 10)
                   .background(OmiColors.backgroundTertiary.opacity(0.92))
                   .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                  .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
               ToolCallsGroup(calls: calls)
@@ -735,6 +739,7 @@ struct ChatBubble: View {
                   ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
               )
               .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+              .padding(.top, 2)
 
             // Show more / Show less toggle for long messages
             if message.text.count > Self.truncationThreshold {
@@ -756,28 +761,13 @@ struct ChatBubble: View {
           .frame(maxWidth: 280)
         }
 
-        // Rating buttons, copy button, and timestamp row for AI messages
+        // Rating buttons, copy button, and message metadata
         if message.sender == .ai && !message.isStreaming && message.isSynced {
-          HStack(spacing: 8) {
-            ratingButtons
-            copyButton
-
-            Text(message.createdAt, style: .time)
-              .scaledFont(size: 10)
-              .foregroundColor(OmiColors.textTertiary)
-          }
+          messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
         } else if message.sender == .ai && !message.isStreaming && !message.text.isEmpty {
-          HStack(spacing: 8) {
-            copyButton
-
-            Text(message.createdAt, style: .time)
-              .scaledFont(size: 10)
-              .foregroundColor(OmiColors.textTertiary)
-          }
+          messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
         } else if !message.isStreaming || !message.text.isEmpty {
-          Text(message.createdAt, style: .time)
-            .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textTertiary)
+          messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
         }
       }
 
@@ -792,6 +782,7 @@ struct ChatBubble: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+    .contentShape(Rectangle())
     .onHover { isHovering = $0 }
     .onChange(of: message.contentBlocks.count) {
       // Refresh grouped blocks when new blocks are added (e.g. tool calls)
@@ -802,6 +793,32 @@ struct ChatBubble: View {
       // (streaming appends to the last text block without changing count)
       cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
     }
+  }
+
+  @ViewBuilder
+  private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
+    HStack(spacing: 8) {
+      if includeRatingButtons {
+        ratingButtons
+      }
+
+      if includeCopyButton {
+        copyButton
+      }
+
+      Text(message.createdAt, format: .dateTime.hour().minute())
+        .scaledFont(size: 10, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+        .onHover { isTimestampHovering = $0 }
+
+      if isTimestampHovering {
+        Text(message.createdAt, format: .dateTime.month(.abbreviated).day())
+          .scaledFont(size: 10, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeInOut(duration: 0.12), value: isTimestampHovering)
   }
 
   @ViewBuilder

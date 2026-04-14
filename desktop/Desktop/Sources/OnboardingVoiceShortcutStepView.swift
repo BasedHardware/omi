@@ -161,7 +161,7 @@ struct OnboardingVoiceShortcutStepView: View {
 
                 Spacer()
 
-                Button(action: beginCustomShortcutCapture) {
+                Button(action: handleCustomShortcutSaveButton) {
                     Text(isRecordingCustomShortcut ? "Listening..." : "Save")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(OmiColors.textPrimary)
@@ -173,6 +173,7 @@ struct OnboardingVoiceShortcutStepView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .disabled(isRecordingCustomShortcut)
             }
 
             Text("You can use one key or a combination like ⌘ J.")
@@ -257,9 +258,25 @@ struct OnboardingVoiceShortcutStepView: View {
         resetDetectionState()
     }
 
+    private func handleCustomShortcutSaveButton() {
+        guard shortcutSettings.pttUsesCustomShortcut else {
+            beginCustomShortcutCapture()
+            return
+        }
+        confirmShortcutAndContinue()
+    }
+
     private func resetDetectionState() {
         shortcutDetected = false
         showContinue = false
+    }
+
+    private func confirmShortcutAndContinue() {
+        captureError = nil
+        shortcutDetected = true
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showContinue = true
+        }
     }
 
     private func installKeyMonitor() {
@@ -271,10 +288,10 @@ struct OnboardingVoiceShortcutStepView: View {
             _ = handleShortcutEvent(event)
         }
 
-        DispatchQueue.main.async {
+        if Self.savedMenu == nil {
             Self.savedMenu = NSApp.mainMenu
-            NSApp.mainMenu = nil
         }
+        NSApp.mainMenu = nil
     }
 
     private func removeKeyMonitors() {
@@ -312,10 +329,7 @@ struct OnboardingVoiceShortcutStepView: View {
 
         guard detected else { return false }
 
-        shortcutDetected = true
-        withAnimation(.easeInOut(duration: 0.3)) {
-            showContinue = true
-        }
+        confirmShortcutAndContinue()
         return true
     }
 
