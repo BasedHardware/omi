@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed floating bar Copy button copying the wrong message when multiple responses are visible"
+  ],
   "releases": [
     {
       "version": "0.11.312",
