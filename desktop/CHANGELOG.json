@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Tightened Gemini proxy security with model allowlist, request body size limit, and input validation"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.309",
+      "date": "2026-04-14",
+      "changes": [
+        "Tightened Gemini proxy security with model allowlist, request body size limit, and input validation"
+      ]
+    },
     {
       "version": "0.11.308",
       "date": "2026-04-14",
