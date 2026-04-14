@@ -95,6 +95,18 @@ interface PiUsage {
  * For desktop chat, we disable pi-mono's built-in tools and rely on
  * the omi-provider extension to handle all tool calls server-side.
  */
+// Map desktop model IDs (claude-*) to omi provider model IDs
+const MODEL_MAP: Record<string, string> = {
+  "claude-opus-4-6": "omi-opus",
+  "claude-sonnet-4-6": "omi-sonnet",
+  "claude-sonnet-4": "omi-sonnet",
+  "claude-opus-4": "omi-opus",
+};
+
+function mapModel(model: string): string {
+  return MODEL_MAP[model] ?? model;
+}
+
 export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
@@ -206,19 +218,20 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
+    const mapped = opts.model ? mapModel(opts.model) : undefined;
     const sessionId = `pi-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
       cwd: opts.cwd,
-      model: opts.model,
+      model: mapped,
       systemPrompt: opts.systemPrompt,
     });
 
-    // Set model if specified
-    if (opts.model) {
+    // Set model if specified (map claude-* → omi-*)
+    if (mapped) {
       this.sendCommand({
         type: "set_model",
         provider: "omi",
-        modelId: opts.model,
+        modelId: mapped,
       });
     }
 
@@ -309,14 +322,15 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
+    const mapped = mapModel(model);
     const session = this.sessions.get(sessionId);
     if (session) {
-      session.model = model;
+      session.model = mapped;
     }
     this.sendCommand({
       type: "set_model",
       provider: "omi",
-      modelId: model,
+      modelId: mapped,
     });
   }
 
@@ -341,6 +355,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       type: "set_system_prompt",
       systemPrompt,
     });
+  }
+
+  /** Update auth token by restarting the subprocess with new credentials.
+   *  The pi-mono extension reads OMI_API_KEY from env at startup, so the
+   *  only way to refresh it is to restart the process. */
+  async updateAuthToken(token: string): Promise<void> {
+    this.config.authToken = token;
+    // Restart the subprocess so the new token takes effect
+    await this.stop();
+    await this.start();
+    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
   }
 
   supportsFeature(feature: HarnessFeature): boolean {
