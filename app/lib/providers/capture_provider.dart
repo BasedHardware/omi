@@ -401,9 +401,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -417,13 +416,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -516,24 +515,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -621,8 +616,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -725,9 +720,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 

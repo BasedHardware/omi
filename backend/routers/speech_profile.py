@@ -22,7 +22,6 @@ from database.users import (
     get_profiles_shared_with_user,
     get_users_shared_with,
 )
-from models.conversation import Conversation
 from models.other import ShareSpeechProfileRequest, UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -87,16 +86,14 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
     url = upload_profile_audio(file_path, uid)
 
-    embedding_status = "ok"
     try:
         embedding = extract_embedding(file_path)
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
         logger.info(f"Speech profile: stored speaker embedding for {uid}")
     except Exception as e:
-        embedding_status = "failed"
         logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
 
-    return {"url": url, "embedding_status": embedding_status}
+    return {"url": url}
 
 
 # ******************************************************
