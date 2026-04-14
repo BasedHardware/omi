@@ -1,6 +1,7 @@
 import AVFoundation
 import Cocoa
 import Combine
+import CoreAudio
 
 /// Push-to-talk manager for voice input via the Option (⌥) key.
 ///
@@ -514,11 +515,23 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func startMicCapture(batchMode: Bool = false) {
+  private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
     if audioCaptureService == nil {
-      audioCaptureService = AudioCaptureService()
+      if let override = overrideDeviceID {
+        audioCaptureService = AudioCaptureService(overrideDeviceID: override)
+      } else {
+        audioCaptureService = AudioCaptureService()
+      }
     }
     guard let capture = audioCaptureService else { return }
+
+    // Silent-mic watchdog: Bluetooth input often returns zero samples while another app
+    // holds A2DP output. Fall back to the built-in mic so PTT still captures the user.
+    capture.onSilentMicDetected = { [weak self] in
+      Task { @MainActor in
+        self?.handleSilentMicFallback(batchMode: batchMode)
+      }
+    }
 
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -544,6 +557,23 @@ class PushToTalkManager: ObservableObject {
         self.stopListening()
       }
     }
+  }
+
+  /// Swap the current capture for one pinned to the built-in mic when the silent-mic
+  /// watchdog detects a dead Bluetooth input (A2DP profile conflict).
+  @MainActor
+  private func handleSilentMicFallback(batchMode: Bool) {
+    guard state == .listening || state == .lockedListening || state == .pendingLockDecision else {
+      return
+    }
+    guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
+      log("PushToTalkManager: silent-mic detected but no built-in mic to fall back to")
+      return
+    }
+    log("PushToTalkManager: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
+    audioCaptureService?.stopCapture()
+    audioCaptureService = nil
+    startMicCapture(batchMode: batchMode, overrideDeviceID: builtInID)
   }
 
   private func stopAudioTranscription() {
