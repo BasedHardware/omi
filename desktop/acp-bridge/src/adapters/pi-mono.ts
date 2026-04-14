@@ -360,13 +360,27 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
-  /** Update the stored auth token. The token is baked into the subprocess
-   *  env at spawn time, so it only takes effect on the next subprocess
-   *  start (after error/crash or explicit restart). This avoids dropping
-   *  conversation state or orphaning in-flight requests. */
-  updateAuthToken(token: string): void {
+  /** Update auth token by restarting the subprocess when idle.
+   *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
+   *  to refresh is to restart the process. Waits until no prompt is active
+   *  to avoid orphaning in-flight requests. Sessions must be re-created
+   *  by the caller after this returns. */
+  async updateAuthToken(token: string): Promise<void> {
     this.config.authToken = token;
-    process.stderr.write("[pi-mono] auth token updated (will apply on next subprocess start)\n");
+    if (this.activeSessionId && this.pendingRequests.size > 0) {
+      // Defer restart: store token, let current prompt finish.
+      // The next prompt will trigger a fresh subprocess if it's dead.
+      process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
+      return;
+    }
+    await this.stop();
+    await this.start();
+    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
+  }
+
+  /** Whether a prompt is currently in-flight */
+  get isIdle(): boolean {
+    return this.pendingRequests.size === 0;
   }
 
   supportsFeature(feature: HarnessFeature): boolean {
