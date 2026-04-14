@@ -4132,12 +4132,10 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
-  var elevenLabsApiKey: String?
   var elevenLabsVoiceID: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
-    case elevenLabsApiKey = "elevenlabs_api_key"
     case elevenLabsVoiceID = "elevenlabs_voice_id"
   }
 }
@@ -4931,7 +4929,6 @@ extension APIClient {
     let deepgramApiKey: String?
     let geminiApiKey: String?
     let anthropicApiKey: String?
-    let elevenLabsApiKey: String?
     let firebaseApiKey: String?
     let googleCalendarApiKey: String?
 
@@ -4939,7 +4936,6 @@ extension APIClient {
       case deepgramApiKey = "deepgram_api_key"
       case geminiApiKey = "gemini_api_key"
       case anthropicApiKey = "anthropic_api_key"
-      case elevenLabsApiKey = "elevenlabs_api_key"
       case firebaseApiKey = "firebase_api_key"
       case googleCalendarApiKey = "google_calendar_api_key"
     }
@@ -4947,6 +4943,79 @@ extension APIClient {
 
   func fetchApiKeys() async throws -> ApiKeysResponse {
     return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
+  }
+
+  // MARK: - TTS Proxy (issue #6622)
+
+  struct TtsSynthesizeRequest: Encodable {
+    let text: String
+    let voiceId: String
+    let modelId: String
+    let outputFormat: String
+    let voiceSettings: TtsVoiceSettings
+
+    enum CodingKeys: String, CodingKey {
+      case text
+      case voiceId = "voice_id"
+      case modelId = "model_id"
+      case outputFormat = "output_format"
+      case voiceSettings = "voice_settings"
+    }
+  }
+
+  struct TtsVoiceSettings: Encodable {
+    let stability: Double
+    let similarityBoost: Double
+    let style: Double
+    let useSpeakerBoost: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case stability
+      case similarityBoost = "similarity_boost"
+      case style
+      case useSpeakerBoost = "use_speaker_boost"
+    }
+  }
+
+  /// Synthesize speech via the backend TTS proxy (ElevenLabs key stays server-side).
+  /// Returns raw audio data (audio/mpeg).
+  func synthesizeSpeech(request: TtsSynthesizeRequest) async throws -> Data {
+    let base = rustBackendURL
+    let url = URL(string: base + "v1/tts/synthesize")!
+    var urlRequest = URLRequest(url: url)
+    urlRequest.httpMethod = "POST"
+    urlRequest.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    urlRequest.httpBody = try JSONEncoder().encode(request)
+    urlRequest.timeoutInterval = 60
+
+    let (data, response) = try await session.data(for: urlRequest)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      // Retry with refreshed token
+      let authService = await MainActor.run { AuthService.shared }
+      _ = try await authService.getIdToken(forceRefresh: true)
+
+      var retryRequest = urlRequest
+      retryRequest.setValue(
+        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+
+      let (retryData, retryResponse) = try await session.data(for: retryRequest)
+      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
+        throw APIError.invalidResponse
+      }
+      guard (200...299).contains(retryHttpResponse.statusCode) else {
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+      }
+      return retryData
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
+    }
+    return data
   }
 
   // MARK: - Platform Tools (backend RAG)
