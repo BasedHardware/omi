@@ -183,6 +183,9 @@ fn translate_request(
         .unwrap_or(DEFAULT_MAX_TOKENS)
         .min(MAX_TOKENS_CAP);
 
+    // Translate tool_choice from OpenAI format to Anthropic format
+    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice);
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
@@ -191,8 +194,33 @@ fn translate_request(
         temperature: req.temperature,
         stream: req.stream,
         tools: anthropic_tools,
-        tool_choice: req.tool_choice.clone(),
+        tool_choice: anthropic_tool_choice,
     })
+}
+
+/// Translate OpenAI tool_choice to Anthropic format.
+/// OpenAI: "none" | "auto" | "required" | {"type":"function","function":{"name":"..."}}
+/// Anthropic: {"type":"auto"} | {"type":"any"} | {"type":"tool","name":"..."}
+fn translate_tool_choice(choice: &Option<serde_json::Value>) -> Option<serde_json::Value> {
+    match choice {
+        None => None,
+        Some(serde_json::Value::String(s)) => match s.as_str() {
+            "none" => None, // Anthropic has no "none" — just omit tools
+            "auto" => Some(json!({"type": "auto"})),
+            "required" => Some(json!({"type": "any"})),
+            _ => None,
+        },
+        Some(serde_json::Value::Object(obj)) => {
+            // {"type":"function","function":{"name":"get_weather"}}
+            if let Some(func) = obj.get("function") {
+                if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
+                    return Some(json!({"type": "tool", "name": name}));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 fn extract_text_content(content: &Option<serde_json::Value>) -> String {
@@ -1180,6 +1208,43 @@ mod tests {
         );
 
         assert_eq!(val["choices"][0]["finish_reason"], "stop");
+    }
+
+    #[test]
+    fn test_translate_tool_choice_auto() {
+        let choice = Some(json!("auto"));
+        let result = translate_tool_choice(&choice);
+        assert_eq!(result, Some(json!({"type": "auto"})));
+    }
+
+    #[test]
+    fn test_translate_tool_choice_required() {
+        let choice = Some(json!("required"));
+        let result = translate_tool_choice(&choice);
+        assert_eq!(result, Some(json!({"type": "any"})));
+    }
+
+    #[test]
+    fn test_translate_tool_choice_none() {
+        let choice = Some(json!("none"));
+        let result = translate_tool_choice(&choice);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_translate_tool_choice_named_function() {
+        let choice = Some(json!({
+            "type": "function",
+            "function": {"name": "get_weather"}
+        }));
+        let result = translate_tool_choice(&choice);
+        assert_eq!(result, Some(json!({"type": "tool", "name": "get_weather"})));
+    }
+
+    #[test]
+    fn test_translate_tool_choice_absent() {
+        let result = translate_tool_choice(&None);
+        assert!(result.is_none());
     }
 
     #[test]
