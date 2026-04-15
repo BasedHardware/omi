@@ -6,9 +6,9 @@
 //
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
-import type { PiExtensionApi } from "@anthropic-ai/pi-mono";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-export default function omiProvider(pi: PiExtensionApi) {
+export default function omiProvider(pi: ExtensionAPI) {
   const baseUrl =
     process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
