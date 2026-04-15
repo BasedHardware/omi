@@ -48,13 +48,23 @@ from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execu
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.observability import submit_langsmith_feedback
+from utils.voice_duration_limiter import (
+    MAX_SESSION_DURATION_S,
+    compute_max_pcm_bytes,
+    compute_pcm_duration_ms,
+    read_wav_duration_ms,
+    try_consume_budget,
+    check_budget,
+    record_actual_duration,
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_MAX_PCM_BODY_BYTES = 15 * 1024 * 1024  # 15 MB ≈ ~480 s (~8 min) of 16kHz mono 16-bit PCM
+# WS idle timeout: close if no audio bytes received for this long
+_WS_IDLE_TIMEOUT_S = 60
 
 
 def filter_messages(messages, app_id):
@@ -355,11 +365,21 @@ async def create_voice_message_stream(
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
+    # Per-session duration cap + daily budget (first file only — matches actual DG usage)
+    first_wav = list(wav_paths)[0]
+    duration_ms = read_wav_duration_ms(first_wav)
+    if duration_ms is not None:
+        if duration_ms > MAX_SESSION_DURATION_S * 1000:
+            raise HTTPException(status_code=413, detail=f'Audio duration exceeds {MAX_SESSION_DURATION_S}s limit')
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+
     resolved_language = resolve_voice_message_language(uid, language)
 
     # process
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid, language=resolved_language):
+        async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
@@ -384,8 +404,6 @@ async def transcribe_voice_message(
         audio_bytes = await request.body()
         if not audio_bytes or len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail='No audio data provided')
-        if len(audio_bytes) > _MAX_PCM_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Audio payload too large')
 
         language = request.query_params.get("language")
         encoding = request.query_params.get("encoding", "linear16")
@@ -399,6 +417,19 @@ async def transcribe_voice_message(
             raise HTTPException(status_code=422, detail='sample_rate must be between 8000 and 48000')
         if channels < 1 or channels > 2:
             raise HTTPException(status_code=422, detail='channels must be 1 or 2')
+
+        # Per-session duration cap: reject if audio exceeds 120s at the given format
+        max_bytes = compute_max_pcm_bytes(sample_rate, channels, MAX_SESSION_DURATION_S)
+        if len(audio_bytes) > max_bytes:
+            del audio_bytes
+            raise HTTPException(status_code=413, detail=f'Audio duration exceeds {MAX_SESSION_DURATION_S}s limit')
+
+        # Daily budget check
+        duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        if not allowed:
+            del audio_bytes
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         resolved_language = resolve_voice_message_language(uid, language)
         try:
@@ -451,6 +482,34 @@ async def transcribe_voice_message(
         converted_wav_paths = decode_files_to_wav(other_file_paths)
         if converted_wav_paths:
             wav_paths.extend(converted_wav_paths)
+
+    # Per-session duration cap + daily budget check (sum all files)
+    total_duration_ms = 0
+    for wav_path in wav_paths:
+        dur = read_wav_duration_ms(wav_path)
+        if dur is not None:
+            total_duration_ms += dur
+
+    if total_duration_ms > MAX_SESSION_DURATION_S * 1000:
+        # Cleanup temp files before rejecting
+        for p in wav_paths:
+            if p.startswith(f"/tmp/{uid}_"):
+                try:
+                    Path(p).unlink()
+                except Exception:
+                    pass
+        raise HTTPException(status_code=413, detail=f'Audio duration exceeds {MAX_SESSION_DURATION_S}s limit')
+
+    if total_duration_ms > 0:
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        if not allowed:
+            for p in wav_paths:
+                if p.startswith(f"/tmp/{uid}_"):
+                    try:
+                        Path(p).unlink()
+                    except Exception:
+                        pass
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
     # Process all WAV files and collect transcripts
     transcripts = []
@@ -568,12 +627,24 @@ async def transcribe_voice_message_stream(
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
+    # Daily budget check — reject if already exhausted before opening DG connection
+    try:
+        has_budget, used_ms, remaining_ms = check_budget(uid)
+        if not has_budget:
+            await websocket.close(code=1008, reason='Daily transcription budget exhausted')
+            return
+    except Exception:
+        pass  # Fail-open
+
     websocket_active = True
     dg_socket = None
     sender_task = None
     stt_audio_buffer = bytearray()
+    total_audio_bytes = 0  # Track cumulative bytes for duration cap + budget recording
     # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
-    stt_buffer_flush_size = int(sample_rate * channels * 2 * 0.03)
+    bytes_per_second = sample_rate * channels * 2
+    stt_buffer_flush_size = int(bytes_per_second * 0.03)
+    max_session_bytes = bytes_per_second * MAX_SESSION_DURATION_S
 
     # PTT transcribe-stream always uses Deepgram (lightweight, no conversation lifecycle).
     # get_stt_service_for_language resolves the language/model for the DG call.
@@ -623,10 +694,15 @@ async def transcribe_voice_message_stream(
         # Start segment sender task
         sender_task = asyncio.create_task(segment_sender())
 
-        # Audio receive loop
+        # Audio receive loop with idle timeout
+        last_audio_time = asyncio.get_event_loop().time()
         while websocket_active:
             try:
-                message = await websocket.receive()
+                message = await asyncio.wait_for(websocket.receive(), timeout=_WS_IDLE_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                logger.info(f'transcribe-stream: idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
+                await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
+                break
             except WebSocketDisconnect:
                 break
 
@@ -652,10 +728,29 @@ async def transcribe_voice_message_stream(
             if data is None:
                 continue
 
+            last_audio_time = asyncio.get_event_loop().time()
+
             # Guard against oversized frames (5 MB matches REST endpoint limit)
             if len(data) > 5 * 1024 * 1024:
                 logger.warning(f'transcribe-stream: oversized frame uid={uid} size={len(data)}')
                 continue
+
+            # Per-session duration cap: close WS at 120s of cumulative audio
+            total_audio_bytes += len(data)
+            if total_audio_bytes > max_session_bytes:
+                logger.info(f'transcribe-stream: session duration cap reached uid={uid}')
+                # Finalize DG to get last transcript, then close
+                if dg_socket and not dg_socket.is_connection_dead:
+                    if len(stt_audio_buffer) > 0:
+                        dg_socket.send(bytes(stt_audio_buffer))
+                        stt_audio_buffer.clear()
+                    try:
+                        dg_socket.finalize()
+                        await asyncio.sleep(0.3)
+                    except Exception:
+                        pass
+                await websocket.close(code=1008, reason=f'Audio duration exceeds {MAX_SESSION_DURATION_S}s limit')
+                break
 
             stt_audio_buffer.extend(data)
 
@@ -677,6 +772,11 @@ async def transcribe_voice_message_stream(
         logger.error(f'transcribe-stream: error uid={uid}: {e}')
     finally:
         websocket_active = False
+
+        # Record actual consumed duration against daily budget
+        if total_audio_bytes > 0 and bytes_per_second > 0:
+            actual_duration_ms = compute_pcm_duration_ms(total_audio_bytes, sample_rate, channels)
+            record_actual_duration(uid, actual_duration_ms)
 
         # Flush remaining audio buffer
         if dg_socket and not dg_socket.is_connection_dead and len(stt_audio_buffer) > 0:
