@@ -16,6 +16,11 @@ pub struct ChatCompletionRequest {
     pub temperature: Option<f64>,
     #[serde(default)]
     pub max_tokens: Option<u64>,
+    // OpenAI renamed `max_tokens` to `max_completion_tokens` for reasoning
+    // models. Pi's openai-completions client sends this field instead of
+    // `max_tokens`. Accept both and prefer `max_completion_tokens` when set.
+    #[serde(default)]
+    pub max_completion_tokens: Option<u64>,
     #[serde(default)]
     pub tools: Option<Vec<ToolDefinition>>,
     #[serde(default)]
