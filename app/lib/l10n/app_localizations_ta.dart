@@ -9013,4 +9013,68 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'உங்கள் Apple Health தரவைப் படிக்க Omi க்கு அனுமதி இல்லை. iOS அமைப்புகள் → தனியுரிமை & பாதுகாப்பு → Health → Omi இல் இதை இயக்கவும்.';
+
+  @override
+  String get deleteFlowReasonTitle => 'நீங்கள் ஏன் வெளியேறுகிறீர்கள்?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'உங்கள் கருத்து அனைவருக்கும் Omi-ஐ சிறப்பாக்க எங்களுக்கு உதவுகிறது.';
+
+  @override
+  String get deleteReasonPrivacy => 'தனியுரிமை கவலைகள்';
+
+  @override
+  String get deleteReasonNotUsing => 'போதுமான அளவு பயன்படுத்தவில்லை';
+
+  @override
+  String get deleteReasonMissingFeatures => 'எனக்குத் தேவையான அம்சங்கள் இல்லை';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'பல தொழில்நுட்பச் சிக்கல்கள்';
+
+  @override
+  String get deleteReasonFoundAlternative => 'வேறு ஒன்றைப் பயன்படுத்துகிறேன்';
+
+  @override
+  String get deleteReasonTakingBreak => 'சற்று இடைவேளை எடுக்கிறேன்';
+
+  @override
+  String get deleteReasonOther => 'மற்றவை';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'மேலும் சொல்லுங்கள்';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Omi உங்களுக்கு எவ்வாறு பயனுள்ளதாக இருந்திருக்கும்?';
+
+  @override
+  String get deleteFlowFeedbackHint =>
+      'விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'இது நிரந்தரமானது';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.';
+
+  @override
+  String get deleteConsequenceSubscription => 'செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'உங்கள் கணக்கை மீட்டெடுக்க முடியாது — ஆதரவுக் குழுவாலும் முடியாது.';
+
+  @override
+  String get deleteTypeToConfirm => 'உறுதிப்படுத்த DELETE என தட்டச்சு செய்யவும்';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'கணக்கை நிரந்தரமாக நீக்கு';
+
+  @override
+  String get keepMyAccount => 'என் கணக்கை வைத்திரு';
+
+  @override
+  String get deleteAccountFailed => 'உங்கள் கணக்கை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 }

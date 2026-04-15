@@ -8949,4 +8949,67 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi har inte behörighet att läsa dina Apple Health-data. Aktivera det i iOS-inställningar → Integritet och säkerhet → Hälsa → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Varför lämnar du oss?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Din feedback hjälper oss att förbättra Omi för alla.';
+
+  @override
+  String get deleteReasonPrivacy => 'Integritetsskäl';
+
+  @override
+  String get deleteReasonNotUsing => 'Använder den inte tillräckligt';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Saknar funktioner jag behöver';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'För många tekniska problem';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Använder något annat';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tar bara en paus';
+
+  @override
+  String get deleteReasonOther => 'Annat';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Berätta mer';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Vad hade fått Omi att fungera för dig?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valfritt — dina tankar hjälper oss att bygga en bättre produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Detta är permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'När du har raderat ditt konto går det inte att återställa.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Eventuell aktiv prenumeration avslutas.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ditt konto kan inte återställas — inte ens av supporten.';
+
+  @override
+  String get deleteTypeToConfirm => 'Skriv DELETE för att bekräfta';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Radera kontot permanent';
+
+  @override
+  String get keepMyAccount => 'Behåll mitt konto';
+
+  @override
+  String get deleteAccountFailed => 'Kunde inte radera ditt konto. Försök igen.';
 }

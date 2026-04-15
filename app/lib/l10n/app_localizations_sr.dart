@@ -8958,4 +8958,67 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi нема дозволу да чита ваше Apple Health податке. Омогућите га у iOS Подешавања → Приватност и безбедност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Зашто одлазите?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Ваше повратне информације помажу нам да побољшамо Omi за све.';
+
+  @override
+  String get deleteReasonPrivacy => 'Бриге о приватности';
+
+  @override
+  String get deleteReasonNotUsing => 'Не користим довољно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Недостају функције које су ми потребне';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Превише техничких проблема';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Користим нешто друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Само правим паузу';
+
+  @override
+  String get deleteReasonOther => 'Остало';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Реците нам више';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Шта би учинило да Omi ради за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Опционо — ваше мисли нам помажу да направимо бољи производ.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ово је трајно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Након брисања налога, његово враћање није могуће.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Свака активна претплата биће отказана.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ваш налог се не може вратити — чак ни путем подршке.';
+
+  @override
+  String get deleteTypeToConfirm => 'Унесите DELETE за потврду';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Трајно избриши налог';
+
+  @override
+  String get keepMyAccount => 'Задржи мој налог';
+
+  @override
+  String get deleteAccountFailed => 'Брисање вашег налога није успело. Покушајте поново.';
 }

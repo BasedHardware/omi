@@ -8984,4 +8984,67 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Az Ominak nincs engedélye az Apple Health-adataid olvasására. Engedélyezd: iOS Beállítások → Adatvédelem és biztonság → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Miért távozol?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'A visszajelzésed segít nekünk, hogy az Omi mindenki számára jobb legyen.';
+
+  @override
+  String get deleteReasonPrivacy => 'Adatvédelmi aggályok';
+
+  @override
+  String get deleteReasonNotUsing => 'Nem használom elég gyakran';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Hiányoznak a funkciók, amikre szükségem van';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Túl sok műszaki probléma';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Mást használok';
+
+  @override
+  String get deleteReasonTakingBreak => 'Csak szünetet tartok';
+
+  @override
+  String get deleteReasonOther => 'Egyéb';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Mesélj többet';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Mi tette volna használhatóvá az Omit számodra?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Nem kötelező — a gondolataid segítenek nekünk jobb terméket építeni.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ez végleges';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Miután törölted a fiókodat, nincs mód a visszaállítására.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Minden aktív előfizetés megszűnik.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'A fiókod nem állítható vissza — még az ügyfélszolgálat által sem.';
+
+  @override
+  String get deleteTypeToConfirm => 'Írd be a DELETE szót a megerősítéshez';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Fiók végleges törlése';
+
+  @override
+  String get keepMyAccount => 'Fiókom megtartása';
+
+  @override
+  String get deleteAccountFailed => 'Nem sikerült törölni a fiókodat. Próbáld újra.';
 }

@@ -8988,4 +8988,67 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nu are permisiunea de a citi datele tale Apple Health. Activează din Setări iOS → Confidențialitate și securitate → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'De ce pleci?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Feedbackul tău ne ajută să îmbunătățim Omi pentru toți.';
+
+  @override
+  String get deleteReasonPrivacy => 'Probleme de confidențialitate';
+
+  @override
+  String get deleteReasonNotUsing => 'Nu îl folosesc suficient';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Lipsesc funcții de care am nevoie';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Prea multe probleme tehnice';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Folosesc altceva';
+
+  @override
+  String get deleteReasonTakingBreak => 'Iau doar o pauză';
+
+  @override
+  String get deleteReasonOther => 'Altul';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Spune-ne mai multe';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Ce ar fi făcut ca Omi să funcționeze pentru tine?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opțional — ideile tale ne ajută să construim un produs mai bun.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Acest lucru este permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Odată ce îți ștergi contul, nu mai poate fi recuperat.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Orice abonament activ va fi anulat.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Contul tău nu poate fi restaurat — nici măcar de echipa de suport.';
+
+  @override
+  String get deleteTypeToConfirm => 'Scrie DELETE pentru a confirma';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Șterge contul definitiv';
+
+  @override
+  String get keepMyAccount => 'Păstrează contul meu';
+
+  @override
+  String get deleteAccountFailed => 'Nu am putut șterge contul tău. Încearcă din nou.';
 }

@@ -8969,4 +8969,67 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nima dovoljenja za branje vaših podatkov Apple Health. Omogočite ga v Nastavitvah iOS → Zasebnost in varnost → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Zakaj odhajate?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vaše povratne informacije nam pomagajo izboljšati Omi za vse.';
+
+  @override
+  String get deleteReasonPrivacy => 'Skrbi glede zasebnosti';
+
+  @override
+  String get deleteReasonNotUsing => 'Ne uporabljam dovolj pogosto';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Manjkajo funkcije, ki jih potrebujem';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Preveč tehničnih težav';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Uporabljam nekaj drugega';
+
+  @override
+  String get deleteReasonTakingBreak => 'Samo si vzamem premor';
+
+  @override
+  String get deleteReasonOther => 'Drugo';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Povejte nam več';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Kaj bi povzročilo, da bi Omi deloval za vas?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Neobvezno — vaše misli nam pomagajo zgraditi boljši izdelek.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'To je dokončno';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Ko izbrišete račun, ga ni mogoče obnoviti.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Kakršna koli aktivna naročnina bo preklicana.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Vašega računa ni mogoče obnoviti — niti s strani podpore.';
+
+  @override
+  String get deleteTypeToConfirm => 'Vnesite DELETE za potrditev';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Trajno izbriši račun';
+
+  @override
+  String get keepMyAccount => 'Obdrži moj račun';
+
+  @override
+  String get deleteAccountFailed => 'Vašega računa ni bilo mogoče izbrisati. Poskusite znova.';
 }

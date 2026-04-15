@@ -8958,4 +8958,67 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi\'nin Apple Health verilerinizi okuma izni yok. Bunu iOS Ayarlar → Gizlilik ve Güvenlik → Sağlık → Omi yolundan etkinleştirin.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Neden ayrılıyorsun?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Geri bildiriminiz Omi\'yi herkes için iyileştirmemize yardımcı olur.';
+
+  @override
+  String get deleteReasonPrivacy => 'Gizlilik endişeleri';
+
+  @override
+  String get deleteReasonNotUsing => 'Yeterince kullanmıyorum';
+
+  @override
+  String get deleteReasonMissingFeatures => 'İhtiyacım olan özellikler eksik';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Çok fazla teknik sorun';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Başka bir şey kullanıyorum';
+
+  @override
+  String get deleteReasonTakingBreak => 'Sadece ara veriyorum';
+
+  @override
+  String get deleteReasonOther => 'Diğer';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Daha fazlasını anlat';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Omi\'nin senin için işe yaramasını ne sağlardı?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'İsteğe bağlı — düşünceleriniz daha iyi bir ürün oluşturmamıza yardımcı olur.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Bu kalıcıdır';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Hesabınızı sildiğinizde, kurtarmanın bir yolu yoktur.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Etkin abonelik iptal edilecektir.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Hesabınız geri yüklenemez — destek ekibi bile yapamaz.';
+
+  @override
+  String get deleteTypeToConfirm => 'Onaylamak için DELETE yazın';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Hesabı kalıcı olarak sil';
+
+  @override
+  String get keepMyAccount => 'Hesabımı koru';
+
+  @override
+  String get deleteAccountFailed => 'Hesabınız silinemedi. Lütfen tekrar deneyin.';
 }

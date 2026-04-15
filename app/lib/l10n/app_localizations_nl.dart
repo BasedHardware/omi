@@ -8973,4 +8973,67 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Waarom vertrek je?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Jouw feedback helpt ons Omi voor iedereen te verbeteren.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privacyzorgen';
+
+  @override
+  String get deleteReasonNotUsing => 'Ik gebruik het niet genoeg';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Functies die ik nodig heb ontbreken';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Te veel technische problemen';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Ik gebruik iets anders';
+
+  @override
+  String get deleteReasonTakingBreak => 'Ik neem gewoon een pauze';
+
+  @override
+  String get deleteReasonOther => 'Anders';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Vertel ons meer';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Wat zou Omi voor jou hebben laten werken?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Optioneel — jouw inzichten helpen ons een beter product te bouwen.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dit is definitief';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Zodra je je account verwijdert, is herstel niet meer mogelijk.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Een actief abonnement wordt geannuleerd.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Je account kan niet worden hersteld — zelfs niet door support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Typ DELETE om te bevestigen';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Account definitief verwijderen';
+
+  @override
+  String get keepMyAccount => 'Mijn account behouden';
+
+  @override
+  String get deleteAccountFailed => 'Je account kon niet worden verwijderd. Probeer het opnieuw.';
 }

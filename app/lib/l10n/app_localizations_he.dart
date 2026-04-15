@@ -8873,4 +8873,67 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'למה אתה עוזב?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'המשוב שלך עוזר לנו לשפר את Omi עבור כולם.';
+
+  @override
+  String get deleteReasonPrivacy => 'חששות פרטיות';
+
+  @override
+  String get deleteReasonNotUsing => 'לא משתמש בו מספיק';
+
+  @override
+  String get deleteReasonMissingFeatures => 'חסרות תכונות שאני צריך';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'יותר מדי בעיות טכניות';
+
+  @override
+  String get deleteReasonFoundAlternative => 'משתמש במשהו אחר';
+
+  @override
+  String get deleteReasonTakingBreak => 'סתם לוקח הפסקה';
+
+  @override
+  String get deleteReasonOther => 'אחר';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'ספר לנו עוד';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'מה היה גורם ל-Omi לעבוד עבורך?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'זה לצמיתות';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'לאחר מחיקת החשבון, אין דרך לשחזר אותו.';
+
+  @override
+  String get deleteConsequenceSubscription => 'כל מנוי פעיל יבוטל.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.';
+
+  @override
+  String get deleteTypeToConfirm => 'הקלד DELETE לאישור';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'מחק חשבון לצמיתות';
+
+  @override
+  String get keepMyAccount => 'שמור על החשבון שלי';
+
+  @override
+  String get deleteAccountFailed => 'לא ניתן היה למחוק את החשבון שלך. נסה שוב.';
 }

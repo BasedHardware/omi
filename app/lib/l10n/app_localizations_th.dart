@@ -8899,4 +8899,67 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi';
+
+  @override
+  String get deleteFlowReasonTitle => 'ทำไมคุณถึงจะไป?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'ความคิดเห็นของคุณช่วยให้เราปรับปรุง Omi ให้ดีขึ้นสำหรับทุกคน';
+
+  @override
+  String get deleteReasonPrivacy => 'ความกังวลด้านความเป็นส่วนตัว';
+
+  @override
+  String get deleteReasonNotUsing => 'ใช้งานไม่มากพอ';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ขาดฟีเจอร์ที่ต้องการ';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'มีปัญหาทางเทคนิคมากเกินไป';
+
+  @override
+  String get deleteReasonFoundAlternative => 'กำลังใช้สิ่งอื่น';
+
+  @override
+  String get deleteReasonTakingBreak => 'แค่หยุดพักสักครู่';
+
+  @override
+  String get deleteReasonOther => 'อื่นๆ';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'อะไรจะทำให้ Omi ใช้งานได้ดีสำหรับคุณ?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น';
+
+  @override
+  String get deleteFlowConfirmTitle => 'การกระทำนี้ถาวร';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'เมื่อคุณลบบัญชีของคุณแล้ว จะไม่สามารถกู้คืนได้';
+
+  @override
+  String get deleteConsequenceSubscription => 'การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
+
+  @override
+  String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'ลบบัญชีถาวร';
+
+  @override
+  String get keepMyAccount => 'เก็บบัญชีของฉันไว้';
+
+  @override
+  String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
 }

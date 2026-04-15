@@ -8963,4 +8963,67 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nav atļaujas lasīt jūsu Apple Health datus. Iespējojiet: iOS Iestatījumi → Privātums un drošība → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Kāpēc tu aizej?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tava atsauksme palīdz mums uzlabot Omi visiem.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privātuma bažas';
+
+  @override
+  String get deleteReasonNotUsing => 'Nelietoju pietiekami bieži';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Trūkst funkciju, kas man vajadzīgas';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Pārāk daudz tehnisku problēmu';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Lietoju kaut ko citu';
+
+  @override
+  String get deleteReasonTakingBreak => 'Vienkārši paņemu pārtraukumu';
+
+  @override
+  String get deleteReasonOther => 'Cits';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Pastāsti vairāk';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Kas būtu licis Omi strādāt tev?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Neobligāti — tavas domas palīdz mums veidot labāku produktu.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tas ir neatgriezenisks';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kad esi izdzēsis savu kontu, to nav iespējams atjaunot.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Visi aktīvie abonementi tiks atcelti.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tavu kontu nevar atjaunot — pat ne atbalsts.';
+
+  @override
+  String get deleteTypeToConfirm => 'Lai apstiprinātu, ieraksti DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Neatgriezeniski dzēst kontu';
+
+  @override
+  String get keepMyAccount => 'Paturēt manu kontu';
+
+  @override
+  String get deleteAccountFailed => 'Tavu kontu nevarēja izdzēst. Lūdzu, mēģini vēlreiz.';
 }

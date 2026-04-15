@@ -9010,4 +9010,67 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Το Omi δεν έχει άδεια να διαβάσει τα δεδομένα σας Apple Health. Ενεργοποιήστε το στο Ρυθμίσεις iOS → Απόρρητο και ασφάλεια → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Γιατί φεύγετε;';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Τα σχόλιά σας μας βοηθούν να βελτιώσουμε το Omi για όλους.';
+
+  @override
+  String get deleteReasonPrivacy => 'Ανησυχίες για το απόρρητο';
+
+  @override
+  String get deleteReasonNotUsing => 'Δεν το χρησιμοποιώ αρκετά';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Λείπουν λειτουργίες που χρειάζομαι';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Πάρα πολλά τεχνικά προβλήματα';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Χρησιμοποιώ κάτι άλλο';
+
+  @override
+  String get deleteReasonTakingBreak => 'Απλώς κάνω ένα διάλειμμα';
+
+  @override
+  String get deleteReasonOther => 'Άλλο';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Πείτε μας περισσότερα';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Τι θα έκανε το Omi να δουλεύει για σας;';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Προαιρετικό — οι σκέψεις σας μας βοηθούν να φτιάξουμε ένα καλύτερο προϊόν.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Αυτό είναι μόνιμο';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Μόλις διαγράψετε τον λογαριασμό σας, δεν μπορεί να ανακτηθεί.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Κάθε ενεργή συνδρομή θα ακυρωθεί.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ο λογαριασμός σας δεν μπορεί να αποκατασταθεί — ούτε από την υποστήριξη.';
+
+  @override
+  String get deleteTypeToConfirm => 'Πληκτρολογήστε DELETE για επιβεβαίωση';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Οριστική διαγραφή λογαριασμού';
+
+  @override
+  String get keepMyAccount => 'Διατήρηση λογαριασμού μου';
+
+  @override
+  String get deleteAccountFailed => 'Δεν ήταν δυνατή η διαγραφή του λογαριασμού σας. Δοκιμάστε ξανά.';
 }

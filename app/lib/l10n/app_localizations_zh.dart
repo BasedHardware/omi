@@ -8782,4 +8782,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appleHealthDeniedBody => 'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
+
+  @override
+  String get deleteFlowReasonTitle => '您为何离开?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '您的反馈有助于我们为所有人改进 Omi。';
+
+  @override
+  String get deleteReasonPrivacy => '隐私方面的顾虑';
+
+  @override
+  String get deleteReasonNotUsing => '使用得不够多';
+
+  @override
+  String get deleteReasonMissingFeatures => '缺少我需要的功能';
+
+  @override
+  String get deleteReasonTechnicalIssues => '技术问题太多';
+
+  @override
+  String get deleteReasonFoundAlternative => '在使用其他产品';
+
+  @override
+  String get deleteReasonTakingBreak => '只是休息一下';
+
+  @override
+  String get deleteReasonOther => '其他';
+
+  @override
+  String get deleteFlowFeedbackTitle => '告诉我们更多';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '怎样才能让 Omi 对您有用?';
+
+  @override
+  String get deleteFlowFeedbackHint => '可选 — 您的想法有助于我们打造更好的产品。';
+
+  @override
+  String get deleteFlowConfirmTitle => '此操作不可撤销';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '一旦删除账户,将无法恢复。';
+
+  @override
+  String get deleteConsequenceSubscription => '任何有效的订阅都将被取消。';
+
+  @override
+  String get deleteConsequenceNoRecovery => '您的账户无法恢复 — 即使是客服也无法处理。';
+
+  @override
+  String get deleteTypeToConfirm => '输入 DELETE 以确认';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '永久删除账户';
+
+  @override
+  String get keepMyAccount => '保留我的账户';
+
+  @override
+  String get deleteAccountFailed => '无法删除您的账户。请重试。';
 }

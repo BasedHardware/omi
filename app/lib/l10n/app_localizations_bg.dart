@@ -8980,4 +8980,67 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi няма разрешение да чете данните ви от Apple Health. Активирайте го в Настройки на iOS → Поверителност и сигурност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Защо си тръгвате?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Вашата обратна връзка ни помага да направим Omi по-добър за всички.';
+
+  @override
+  String get deleteReasonPrivacy => 'Притеснения за поверителността';
+
+  @override
+  String get deleteReasonNotUsing => 'Не го използвам достатъчно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Липсват функции, които са ми нужни';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Твърде много технически проблеми';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Използвам нещо друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Просто правя почивка';
+
+  @override
+  String get deleteReasonOther => 'Друго';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Разкажете ни повече';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Какво би накарало Omi да работи за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'По избор — вашите мисли ни помагат да изградим по-добър продукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Това е окончателно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'След като изтриете акаунта си, той не може да бъде възстановен.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Всеки активен абонамент ще бъде отменен.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Акаунтът ви не може да бъде възстановен — дори от поддръжката.';
+
+  @override
+  String get deleteTypeToConfirm => 'Въведете DELETE за потвърждение';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Изтрий акаунта окончателно';
+
+  @override
+  String get keepMyAccount => 'Запази акаунта ми';
+
+  @override
+  String get deleteAccountFailed => 'Акаунтът ви не може да бъде изтрит. Моля, опитайте отново.';
 }

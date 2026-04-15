@@ -8962,4 +8962,67 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi کو آپ کا Apple Health ڈیٹا پڑھنے کی اجازت نہیں ہے۔ اسے iOS ترتیبات ← پرائیویسی اور سیکیورٹی ← Health ← Omi میں فعال کریں۔';
+
+  @override
+  String get deleteFlowReasonTitle => 'آپ کیوں جا رہے ہیں؟';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'آپ کا فیڈ بیک ہمیں Omi کو سب کے لیے بہتر بنانے میں مدد کرتا ہے۔';
+
+  @override
+  String get deleteReasonPrivacy => 'رازداری کے خدشات';
+
+  @override
+  String get deleteReasonNotUsing => 'اتنا زیادہ استعمال نہیں کرتا';
+
+  @override
+  String get deleteReasonMissingFeatures => 'جن فیچرز کی ضرورت ہے وہ موجود نہیں';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'بہت زیادہ تکنیکی مسائل';
+
+  @override
+  String get deleteReasonFoundAlternative => 'کچھ اور استعمال کر رہا ہوں';
+
+  @override
+  String get deleteReasonTakingBreak => 'بس تھوڑا وقفہ لے رہا ہوں';
+
+  @override
+  String get deleteReasonOther => 'دیگر';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'مزید بتائیں';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'کس چیز سے Omi آپ کے لیے کام کرتا؟';
+
+  @override
+  String get deleteFlowFeedbackHint => 'اختیاری — آپ کے خیالات ہمیں بہتر پروڈکٹ بنانے میں مدد دیتے ہیں۔';
+
+  @override
+  String get deleteFlowConfirmTitle => 'یہ مستقل ہے';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'ایک بار اکاؤنٹ حذف ہونے کے بعد اسے بحال نہیں کیا جا سکتا۔';
+
+  @override
+  String get deleteConsequenceSubscription => 'کوئی بھی فعال سبسکرپشن منسوخ کر دی جائے گی۔';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'آپ کا اکاؤنٹ بحال نہیں ہو سکتا — سپورٹ بھی نہیں کر سکتی۔';
+
+  @override
+  String get deleteTypeToConfirm => 'تصدیق کے لیے DELETE ٹائپ کریں';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'اکاؤنٹ مستقل طور پر حذف کریں';
+
+  @override
+  String get keepMyAccount => 'میرا اکاؤنٹ برقرار رکھیں';
+
+  @override
+  String get deleteAccountFailed => 'آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔';
 }

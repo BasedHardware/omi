@@ -8944,4 +8944,67 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Miksi lähdet?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Palautteesi auttaa meitä parantamaan Omia kaikille.';
+
+  @override
+  String get deleteReasonPrivacy => 'Yksityisyyteen liittyvät huolet';
+
+  @override
+  String get deleteReasonNotUsing => 'En käytä sitä tarpeeksi';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Tarvitsemiani ominaisuuksia puuttuu';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Liian monta teknistä ongelmaa';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Käytän jotain muuta';
+
+  @override
+  String get deleteReasonTakingBreak => 'Pidän vain tauon';
+
+  @override
+  String get deleteReasonOther => 'Muu';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Kerro lisää';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Mikä olisi saanut Omin toimimaan sinulle?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tämä on lopullista';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kun poistat tilisi, sitä ei voi enää palauttaa.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Mahdolliset aktiiviset tilaukset peruutetaan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tiliäsi ei voi palauttaa — ei edes tuki voi tehdä sitä.';
+
+  @override
+  String get deleteTypeToConfirm => 'Kirjoita DELETE vahvistaaksesi';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Poista tili pysyvästi';
+
+  @override
+  String get keepMyAccount => 'Säilytä tilini';
+
+  @override
+  String get deleteAccountFailed => 'Tiliäsi ei voitu poistaa. Yritä uudelleen.';
 }

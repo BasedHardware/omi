@@ -8941,4 +8941,67 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Hvorfor forlater du oss?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tilbakemeldingen din hjelper oss å gjøre Omi bedre for alle.';
+
+  @override
+  String get deleteReasonPrivacy => 'Personvernhensyn';
+
+  @override
+  String get deleteReasonNotUsing => 'Bruker den ikke nok';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Mangler funksjoner jeg trenger';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'For mange tekniske problemer';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Bruker noe annet';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tar bare en pause';
+
+  @override
+  String get deleteReasonOther => 'Annet';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Fortell oss mer';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Hva ville fått Omi til å fungere for deg?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valgfritt — tankene dine hjelper oss å bygge et bedre produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dette er permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Når du sletter kontoen din, kan den ikke gjenopprettes.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Aktive abonnementer vil bli kansellert.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Kontoen din kan ikke gjenopprettes — ikke engang av kundestøtte.';
+
+  @override
+  String get deleteTypeToConfirm => 'Skriv DELETE for å bekrefte';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Slett kontoen permanent';
+
+  @override
+  String get keepMyAccount => 'Behold kontoen min';
+
+  @override
+  String get deleteAccountFailed => 'Kunne ikke slette kontoen din. Prøv igjen.';
 }

@@ -8966,4 +8966,67 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi no tiene permiso para leer tus datos de Apple Health. Actívalo en Ajustes de iOS → Privacidad y seguridad → Salud → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => '¿Por qué te vas?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tus comentarios nos ayudan a mejorar Omi para todos.';
+
+  @override
+  String get deleteReasonPrivacy => 'Preocupaciones de privacidad';
+
+  @override
+  String get deleteReasonNotUsing => 'No la uso lo suficiente';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Faltan funciones que necesito';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Demasiados problemas técnicos';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Estoy usando otra cosa';
+
+  @override
+  String get deleteReasonTakingBreak => 'Solo me tomo un descanso';
+
+  @override
+  String get deleteReasonOther => 'Otro';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Cuéntanos más';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '¿Qué habría hecho que Omi funcionara para ti?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opcional: tus ideas nos ayudan a crear un mejor producto.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Esto es permanente';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Una vez que elimines tu cuenta, no hay forma de recuperarla.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Cualquier suscripción activa será cancelada.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tu cuenta no podrá restaurarse, ni siquiera por soporte.';
+
+  @override
+  String get deleteTypeToConfirm => 'Escribe DELETE para confirmar';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Eliminar cuenta permanentemente';
+
+  @override
+  String get keepMyAccount => 'Conservar mi cuenta';
+
+  @override
+  String get deleteAccountFailed => 'No se pudo eliminar tu cuenta. Inténtalo de nuevo.';
 }

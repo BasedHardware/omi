@@ -8970,4 +8970,67 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'У Omi няма дазволу на чытанне даных Apple Health. Уключыце яго ў Налады iOS → Прыватнасць і бяспека → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Чаму вы сыходзіце?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Ваш водгук дапамагае нам зрабіць Omi лепшым для ўсіх.';
+
+  @override
+  String get deleteReasonPrivacy => 'Праблемы з прыватнасцю';
+
+  @override
+  String get deleteReasonNotUsing => 'Карыстаюся недастаткова часта';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Не хапае патрэбных функцый';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Зашмат тэхнічных праблем';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Карыстаюся нечым іншым';
+
+  @override
+  String get deleteReasonTakingBreak => 'Проста раблю перапынак';
+
+  @override
+  String get deleteReasonOther => 'Іншае';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Раскажыце падрабязней';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Што прымусіла б Omi працаваць для вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Гэта назаўсёды';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Пасля выдалення ўліковага запісу аднавіць яго немагчыма.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Любая актыўная падпіска будзе скасавана.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.';
+
+  @override
+  String get deleteTypeToConfirm => 'Увядзіце DELETE для пацвярджэння';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Выдаліць уліковы запіс назаўсёды';
+
+  @override
+  String get keepMyAccount => 'Захаваць мой уліковы запіс';
+
+  @override
+  String get deleteAccountFailed => 'Не атрымалася выдаліць ваш уліковы запіс. Паспрабуйце яшчэ раз.';
 }

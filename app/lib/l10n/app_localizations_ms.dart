@@ -8969,4 +8969,67 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi tidak mempunyai kebenaran membaca data Apple Health anda. Dayakan di Tetapan iOS → Privasi & Keselamatan → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Mengapa anda pergi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Maklum balas anda membantu kami menambah baik Omi untuk semua orang.';
+
+  @override
+  String get deleteReasonPrivacy => 'Kebimbangan privasi';
+
+  @override
+  String get deleteReasonNotUsing => 'Tidak cukup kerap menggunakannya';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Ciri yang saya perlukan tiada';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Terlalu banyak masalah teknikal';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Menggunakan sesuatu yang lain';
+
+  @override
+  String get deleteReasonTakingBreak => 'Hanya berehat sebentar';
+
+  @override
+  String get deleteReasonOther => 'Lain-lain';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Beritahu kami lebih lanjut';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Apakah yang akan menjadikan Omi sesuai untuk anda?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Pilihan — pandangan anda membantu kami membina produk yang lebih baik.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ini adalah kekal';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Setelah anda memadam akaun, tiada cara untuk memulihkannya.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Sebarang langganan aktif akan dibatalkan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Akaun anda tidak boleh dipulihkan — walaupun oleh sokongan.';
+
+  @override
+  String get deleteTypeToConfirm => 'Taip DELETE untuk sahkan';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Padam akaun secara kekal';
+
+  @override
+  String get keepMyAccount => 'Kekalkan akaun saya';
+
+  @override
+  String get deleteAccountFailed => 'Tidak dapat memadam akaun anda. Sila cuba lagi.';
 }

@@ -8933,4 +8933,67 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nemá povolenie na čítanie vašich údajov Apple Health. Povoľte ho v Nastaveniach iOS → Súkromie a bezpečnosť → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Prečo odchádzate?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vaša spätná väzba nám pomáha zlepšovať Omi pre všetkých.';
+
+  @override
+  String get deleteReasonPrivacy => 'Obavy o súkromie';
+
+  @override
+  String get deleteReasonNotUsing => 'Nepoužívam to dostatočne často';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Chýbajú funkcie, ktoré potrebujem';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Príliš veľa technických problémov';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Používam niečo iné';
+
+  @override
+  String get deleteReasonTakingBreak => 'Len si dávam pauzu';
+
+  @override
+  String get deleteReasonOther => 'Iné';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Povedzte nám viac';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Čo by spôsobilo, že by Omi pre vás fungovalo?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlienky nám pomáhajú vytvoriť lepší produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Po odstránení účtu sa nedá obnoviť.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Akékoľvek aktívne predplatné bude zrušené.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Váš účet nie je možné obnoviť — ani podporou.';
+
+  @override
+  String get deleteTypeToConfirm => 'Pre potvrdenie napíšte DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Trvalo odstrániť účet';
+
+  @override
+  String get keepMyAccount => 'Ponechať môj účet';
+
+  @override
+  String get deleteAccountFailed => 'Váš účet sa nepodarilo odstrániť. Skúste to znova.';
 }
