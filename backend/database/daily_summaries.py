@@ -23,6 +23,7 @@ from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
+from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
 
@@ -41,6 +42,7 @@ def create_daily_summary(uid: str, summary_data: dict) -> str:
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
     summary_ref.set(summary_data)
+    redis_db.store_daily_summary_to_uid(summary_data['id'], uid)
     return summary_data['id']
 
 
