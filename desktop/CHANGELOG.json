@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Restored crash reporting and error telemetry (Sentry DSN was pointing at an inaccessible org since 2026-03-22, silently dropping every event)"
+  ],
   "releases": [
     {
       "version": "0.11.314",
