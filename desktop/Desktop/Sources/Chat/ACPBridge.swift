@@ -185,6 +185,17 @@ actor ACPBridge {
         throw BridgeError.authMissing
       }
       env["OMI_AUTH_TOKEN"] = token
+      // Point pi-mono at the Rust desktop-backend's /v2/chat/completions proxy.
+      // Without this, pi-mono-extension falls back to https://api.omi.me/v2 which
+      // does NOT serve chat/completions — the shipped app would get 404 on every
+      // prompt. rustBackendURL is baked at build time from OMI_API_URL in .env.
+      let rustBase = await APIClient.shared.rustBackendURL
+      if !rustBase.isEmpty {
+        env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
+      } else {
+        log("ACPBridge: pi-mono start refused — OMI_API_URL (Rust backend) not configured")
+        throw BridgeError.bridgeScriptNotFound
+      }
       // Never forward ANTHROPIC_API_KEY to pi-mono — it auths via Firebase only.
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
