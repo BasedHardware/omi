@@ -218,8 +218,15 @@ def _get_conversation_obj(
     uid: str,
     structured: Structured,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    discarded: bool = False,
 ):
-    discarded = structured.title == ''
+    # The authoritative `discarded` signal is passed by the caller from
+    # `_get_structured`, which already applies the `should_discard_conversation`
+    # heuristic to transcript content. Previously this function re-derived
+    # `discarded = structured.title == ''`, which silently dropped valid
+    # conversations whenever the LLM returned an empty title (see #5668).
+    # The default `False` is a safety net: any future caller that forgets to
+    # pass a value will preserve the conversation rather than silently drop it.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
@@ -654,7 +661,7 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
-    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation = _get_conversation_obj(uid, structured, conversation, discarded=discarded)
 
     # AI-based folder assignment
     assigned_folder_id = None
