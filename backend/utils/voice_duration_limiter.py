@@ -17,6 +17,7 @@ Constants:
 """
 
 import logging
+import struct
 import time
 
 from database.redis_db import r
@@ -218,8 +219,6 @@ def read_wav_duration_ms(file_path: str) -> int | None:
     Returns duration in milliseconds, or None if the file cannot be read
     or has an invalid/unsupported format.
     """
-    import struct
-
     try:
         with open(file_path, 'rb') as f:
             # Read RIFF header
