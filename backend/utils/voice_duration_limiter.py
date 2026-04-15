@@ -17,8 +17,9 @@ Constants:
 """
 
 import logging
-import struct
 import time
+
+import av
 
 from database.redis_db import r
 
@@ -214,56 +215,19 @@ def compute_max_pcm_bytes(sample_rate: int, channels: int, max_duration_s: int =
 
 
 def read_wav_duration_ms(file_path: str) -> int | None:
-    """Read duration from a WAV file header.
+    """Read audio duration using PyAV (FFmpeg).
 
     Returns duration in milliseconds, or None if the file cannot be read
     or has an invalid/unsupported format.
     """
     try:
-        with open(file_path, 'rb') as f:
-            # Read RIFF header
-            riff = f.read(12)
-            if len(riff) < 12 or riff[:4] != b'RIFF' or riff[8:12] != b'WAVE':
+        with av.open(file_path) as container:
+            if not container.streams.audio:
                 return None
-
-            # Find 'fmt ' chunk
-            sample_rate = None
-            byte_rate = None
-            data_size = None
-
-            while True:
-                chunk_header = f.read(8)
-                if len(chunk_header) < 8:
-                    break
-                chunk_id = chunk_header[:4]
-                chunk_size = struct.unpack('<I', chunk_header[4:8])[0]
-
-                # RIFF chunks are padded to even byte boundaries
-                pad = chunk_size % 2
-
-                if chunk_id == b'fmt ':
-                    if chunk_size < 16:
-                        return None
-                    fmt_data = f.read(min(chunk_size, 40))
-                    if len(fmt_data) < 16:
-                        return None
-                    sample_rate = struct.unpack('<I', fmt_data[4:8])[0]
-                    byte_rate = struct.unpack('<I', fmt_data[8:12])[0]
-                    # Skip remaining fmt data + pad byte if any
-                    remaining = chunk_size - len(fmt_data) + pad
-                    if remaining > 0:
-                        f.seek(remaining, 1)
-                elif chunk_id == b'data':
-                    data_size = chunk_size
-                    break
-                else:
-                    f.seek(chunk_size + pad, 1)
-
-            if sample_rate and byte_rate and data_size and byte_rate > 0:
-                duration_s = data_size / byte_rate
-                return int(duration_s * 1000)
-
-            return None
+            duration_s = float(container.duration) / av.time_base
+            if duration_s <= 0:
+                return None
+            return int(duration_s * 1000)
     except Exception as e:
-        logger.warning(f'voice_duration_limiter: failed to read WAV header from {file_path}: {e}')
+        logger.warning(f'voice_duration_limiter: failed to read audio duration from {file_path}: {e}')
         return None
