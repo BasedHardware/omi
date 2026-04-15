@@ -107,8 +107,11 @@ def _fallback_title_for_empty_llm_response(
 
     Notes:
       * The 2-word minimum avoids producing noisy one-word titles when overview
-        begins with an abbreviation ("Dr. Smith met..." → first_sentence=="Dr")
-        or a decimal ("Scored 3.5..." → first_sentence=="Scored 3").
+        begins with an abbreviation ("Dr. Smith met..." → first_sentence=="Dr").
+        Decimal-split fragments like "Scored 3.5..." → first_sentence=="Scored 3"
+        are 2 words and still pass through as the title — accepted as a
+        known cosmetic caveat of naive period-splitting; raising the threshold
+        higher would block legitimate short titles like "Team meeting".
       * Month name is hard-coded in English rather than using strftime('%b')
         so the label is locale-independent (strftime is locale-sensitive and
         would return "avr." on an fr_FR.UTF-8 system).

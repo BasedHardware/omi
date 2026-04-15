@@ -254,7 +254,7 @@ class TestFallbackTitleForEmptyLlmResponse:
         assert result == 'Untitled Conversation'
 
     def test_fallback_skips_single_word_first_sentence(self):
-        """Avoid noisy one-word titles from abbreviations ('Dr. Smith...') or decimals ('Scored 3.5...')."""
+        """Avoid noisy one-word titles from abbreviations ('Dr. Smith met...' → first_sentence=='Dr')."""
         structured = Structured(title='', overview='Dr. Smith met with the team.')
         started_at = datetime(2026, 4, 15, tzinfo=timezone.utc)
 
