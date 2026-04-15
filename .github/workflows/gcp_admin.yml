@@ -74,6 +74,9 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           revision_traffic: LATEST=100
+          # listUsers() scans ~112K Firebase Auth users for the Cumulative
+          # Users chart; 512Mi was OOMing (SIGABRT) during the scan.
+          flags: '--memory=1Gi --cpu=1'
           secrets: |
             FIREBASE_PROJECT_ID=WEB_ADMIN_FIREBASE_PROJECT_ID:latest
             FIREBASE_CLIENT_EMAIL=WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest
