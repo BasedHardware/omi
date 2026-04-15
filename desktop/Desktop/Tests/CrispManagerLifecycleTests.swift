@@ -35,7 +35,7 @@ final class CrispManagerLifecycleTests: XCTestCase {
         let manager = CrispManager.shared
         XCTAssertFalse(manager.isStarted, "Manager must be stopped after setUp()")
 
-        manager.start()
+        manager.start(performInitialPoll: false)
         XCTAssertTrue(manager.isStarted, "start() must set isStarted true")
         let firstActivationObs = manager.activationObserver
         let firstRefreshObs = manager.refreshAllObserver
@@ -44,7 +44,7 @@ final class CrispManagerLifecycleTests: XCTestCase {
 
         // Second start() call must be a no-op — observers must NOT be replaced.
         // A new token would mean we leaked the first registration.
-        manager.start()
+        manager.start(performInitialPoll: false)
         XCTAssertTrue(manager.isStarted)
         XCTAssertTrue(
             manager.activationObserver === firstActivationObs as AnyObject,
@@ -58,7 +58,7 @@ final class CrispManagerLifecycleTests: XCTestCase {
 
     func testStopRemovesBothObservers() {
         let manager = CrispManager.shared
-        manager.start()
+        manager.start(performInitialPoll: false)
         XCTAssertNotNil(manager.activationObserver)
         XCTAssertNotNil(manager.refreshAllObserver)
         XCTAssertTrue(manager.isStarted)
@@ -69,7 +69,7 @@ final class CrispManagerLifecycleTests: XCTestCase {
         XCTAssertFalse(manager.isStarted, "stop() must clear isStarted so start() can run again")
 
         // After stop(), a subsequent start() must succeed (observer lifecycle reusable).
-        manager.start()
+        manager.start(performInitialPoll: false)
         XCTAssertTrue(manager.isStarted, "start() after stop() must re-register observers")
         XCTAssertNotNil(manager.activationObserver)
         XCTAssertNotNil(manager.refreshAllObserver)
@@ -77,7 +77,7 @@ final class CrispManagerLifecycleTests: XCTestCase {
 
     func testStopIsIdempotent() {
         let manager = CrispManager.shared
-        manager.start()
+        manager.start(performInitialPoll: false)
         manager.stop()
         // Second stop() must not crash or change state
         manager.stop()
