@@ -446,9 +446,13 @@ def test_process_conversation_filters_shared_ids_before_people_lookup():
     conversations_mod = sys.modules["database.conversations"]
     conversations_mod.upsert_conversation = MagicMock()
 
-    with patch.object(process_conversation, "_get_structured", MagicMock(return_value=(MagicMock(), True))), patch.object(
+    with patch.object(
+        process_conversation, "_get_structured", MagicMock(return_value=(MagicMock(), True))
+    ), patch.object(
         process_conversation, "_get_conversation_obj", MagicMock(return_value=final_conversation)
-    ), patch.object(process_conversation, "resolve_shared_people", MagicMock(return_value=[])) as resolve_shared_mock:
+    ), patch.object(
+        process_conversation, "resolve_shared_people", MagicMock(return_value=[])
+    ) as resolve_shared_mock:
         result = process_conversation.process_conversation("user-6", "en", conversation, is_reprocess=True)
 
     assert result is final_conversation
