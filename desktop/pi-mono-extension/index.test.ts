@@ -290,6 +290,97 @@ test("classifyBash: allows redirect into unrelated dotfiles", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Review round-3 bypass regressions — quoted dangerous targets
+//
+// Round-2 classifier rewrite used a shared `DANGEROUS_TARGET` matcher that
+// required an UNquoted path right after the rm/chmod/chown command token.
+// Reviewer probe caught six real shell spellings that bypassed the rule by
+// wrapping the target in "..." or '...'. Round-3 adds `['"]?` before the
+// target in rm / chmod+chown / redirect-to-system-path rules. These tests
+// nail down the exact bypass strings so the gap never reopens.
+// ---------------------------------------------------------------------------
+
+test("classifyBash: blocks rm with double-quoted dangerous target", () => {
+  const cases = [
+    `rm "/etc/hosts"`,
+    `rm "/etc/passwd"`,
+    `rm --recursive --force "/"`,
+    `rm -rf "/System/Library"`,
+    `rm -rf "/usr/local/bin/foo"`,
+    `rm -rf "$HOME"`,
+    `rm "$HOME/"`,
+  ];
+  for (const cmd of cases) {
+    const d = classifyBash(cmd);
+    assert.ok(d, `expected deny: ${cmd}`);
+    assert.match(d!.reason, /root or system path/);
+  }
+});
+
+test("classifyBash: blocks rm with single-quoted dangerous target", () => {
+  const cases = [
+    `rm '/etc/hosts'`,
+    `rm -rf '/System/Library'`,
+    `rm --force --recursive '/usr'`,
+  ];
+  for (const cmd of cases) {
+    const d = classifyBash(cmd);
+    assert.ok(d, `expected deny: ${cmd}`);
+    assert.match(d!.reason, /root or system path/);
+  }
+});
+
+test("classifyBash: blocks chmod/chown with quoted dangerous target", () => {
+  const cases = [
+    `chmod 000 "/"`,
+    `chmod 000 '/'`,
+    `chmod -R 000 "$HOME"`,
+    `chmod -R 000 "/etc"`,
+    `chown root:wheel "/usr"`,
+    `chown -R root:wheel '/System/Library'`,
+  ];
+  for (const cmd of cases) {
+    const d = classifyBash(cmd);
+    assert.ok(d, `expected deny: ${cmd}`);
+    assert.match(d!.reason, /permissions or ownership of a root or system/);
+  }
+});
+
+test("classifyBash: blocks redirect into quoted system paths", () => {
+  const cases = [
+    `echo bad > "/etc/hosts"`,
+    `echo bad > '/etc/hosts'`,
+    `cat bad.txt >> "/etc/passwd"`,
+    `echo x > "/System/thing"`,
+    `echo x > "/usr/bin/foo"`,
+    `echo x > "/dev/disk2"`,
+  ];
+  for (const cmd of cases) {
+    const d = classifyBash(cmd);
+    assert.ok(d, `expected deny: ${cmd}`);
+    assert.match(d!.reason, /system path/);
+  }
+});
+
+test("classifyBash: still allows quoted non-system targets", () => {
+  // Regression: the round-3 quoted-leading-char expansion must not bleed into
+  // scratch paths. `rm "/tmp/scratch"` is a normal dev operation.
+  const allowed = [
+    `rm "/tmp/scratch"`,
+    `rm -rf "/tmp/scratch"`,
+    `rm -rf "./build"`,
+    `rm -rf "node_modules"`,
+    `chmod 644 "./src/index.ts"`,
+    `chown staff "/tmp/mine"`,
+    `echo hi > "/usr/local/etc/foo.conf"`,
+    `echo hi > "/Library/Caches/com.omi.tmp"`,
+  ];
+  for (const cmd of allowed) {
+    assert.equal(classifyBash(cmd), null, `expected allow: ${cmd}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // classifyFileWrite
 // ---------------------------------------------------------------------------
 
