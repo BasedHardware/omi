@@ -68,12 +68,17 @@ final class ReentrancyGateTests: XCTestCase {
         gate.exit()
     }
 
-    func testGuardDeferPatternOnlyExitsWhenOwnerEntered() {
+    func testGuardDeferPatternNonOwnerDoesNotCallExit() {
         // Models the canonical ChatProvider.pollForNewMessages() usage:
         //   guard gate.tryEnter() else { return }
         //   defer { gate.exit() }
-        // Non-owners return before the defer is registered, so exit() is
-        // never called from a non-owning caller — the contract holds.
+        //
+        // Regression guard: if a future edit swapped `defer` above `guard`, a
+        // non-owning caller would still fire `exit()` and reopen the gate while
+        // the owner was still inside the critical section. This test forces an
+        // overlap — caller A holds the gate, caller B invokes the critical
+        // section while A is still in-flight — and asserts B neither enters
+        // nor reopens the gate.
         let gate = ReentrancyGate()
         var exitCalls = 0
 
@@ -83,16 +88,26 @@ final class ReentrancyGateTests: XCTestCase {
                 gate.exit()
                 exitCalls += 1
             }
-            // simulated critical work — the second concurrent call below runs
-            // before this defer fires because Swift closures run synchronously.
         }
 
-        // First caller acquires + releases via defer.
-        criticalSection()
-        XCTAssertEqual(exitCalls, 1)
+        // Caller A (the test itself) acquires the gate directly.
+        XCTAssertTrue(gate.tryEnter(), "Precondition: caller A must acquire the gate")
 
-        // Second sequential caller also acquires cleanly after the first exited.
+        // Caller B invokes the critical section while A is still in-flight.
+        // Under guard/defer, B's guard short-circuits and no `defer` is registered,
+        // so exit() must not fire.
         criticalSection()
-        XCTAssertEqual(exitCalls, 2)
+        XCTAssertEqual(exitCalls, 0, "Non-owner caller B must not register an exit")
+
+        // Gate must still be owned by A — B must not have reopened it.
+        XCTAssertFalse(
+            gate.tryEnter(),
+            "Gate must still be held by A; a regressed guard/defer order would have reopened it"
+        )
+
+        // A releases; caller C can now run through the critical section normally.
+        gate.exit()
+        criticalSection()
+        XCTAssertEqual(exitCalls, 1, "Owner caller C must register exactly one exit")
     }
 }
