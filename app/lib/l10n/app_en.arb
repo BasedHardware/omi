@@ -10644,5 +10644,89 @@
     "appleHealthFeatureSecureTitle": "Secure sync",
     "appleHealthFeatureSecureDesc": "Your Apple Health data syncs privately to your Omi account.",
     "appleHealthDeniedTitle": "Apple Health access denied",
-    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi."
+    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.",
+    "deleteFlowReasonTitle": "Why are you leaving?",
+    "@deleteFlowReasonTitle": {
+        "description": "Title on delete-account flow reason step"
+    },
+    "deleteFlowReasonSubtitle": "Your feedback helps us improve Omi for everyone.",
+    "@deleteFlowReasonSubtitle": {
+        "description": "Subtitle on delete-account flow reason step"
+    },
+    "deleteReasonPrivacy": "Privacy concerns",
+    "@deleteReasonPrivacy": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonNotUsing": "Not using it enough",
+    "@deleteReasonNotUsing": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonMissingFeatures": "Missing features I need",
+    "@deleteReasonMissingFeatures": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTechnicalIssues": "Too many technical issues",
+    "@deleteReasonTechnicalIssues": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonFoundAlternative": "Using something else",
+    "@deleteReasonFoundAlternative": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTakingBreak": "Just taking a break",
+    "@deleteReasonTakingBreak": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonOther": "Other",
+    "@deleteReasonOther": {
+        "description": "Delete reason option"
+    },
+    "deleteFlowFeedbackTitle": "Tell us more",
+    "@deleteFlowFeedbackTitle": {
+        "description": "Title on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackSubtitle": "What would have made Omi work for you?",
+    "@deleteFlowFeedbackSubtitle": {
+        "description": "Subtitle on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackHint": "Optional — your thoughts help us build a better product.",
+    "@deleteFlowFeedbackHint": {
+        "description": "TextField hint on delete feedback step"
+    },
+    "deleteFlowConfirmTitle": "This is permanent",
+    "@deleteFlowConfirmTitle": {
+        "description": "Title on final delete confirmation step"
+    },
+    "deleteFlowConfirmSubtitle": "Once you delete your account, there is no way to recover it.",
+    "@deleteFlowConfirmSubtitle": {
+        "description": "Subtitle on final delete confirmation step"
+    },
+    "deleteConsequenceSubscription": "Any active subscription will be cancelled.",
+    "@deleteConsequenceSubscription": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteConsequenceNoRecovery": "Your account cannot be restored — not even by support.",
+    "@deleteConsequenceNoRecovery": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteTypeToConfirm": "Type DELETE to confirm",
+    "@deleteTypeToConfirm": {
+        "description": "Instruction to type DELETE to confirm"
+    },
+    "deleteConfirmationWord": "DELETE",
+    "@deleteConfirmationWord": {
+        "description": "The literal word users type to confirm deletion. Keep uppercase."
+    },
+    "deleteAccountPermanently": "Delete account permanently",
+    "@deleteAccountPermanently": {
+        "description": "Primary destructive action label"
+    },
+    "keepMyAccount": "Keep my account",
+    "@keepMyAccount": {
+        "description": "Secondary action to back out of deletion"
+    },
+    "deleteAccountFailed": "Could not delete your account. Please try again.",
+    "@deleteAccountFailed": {
+        "description": "Error shown when deletion API fails"
+    }
 }
