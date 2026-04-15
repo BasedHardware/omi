@@ -28,6 +28,13 @@ class TasksStore: ObservableObject {
     @Published var hasMoreDeletedTasks = true
     @Published var error: String?
 
+    /// Counter bumped at the top of `refreshTasksIfNeeded()`, before any of the
+    /// early-exit guards. Lets `TasksStoreObserverTests` prove that posting
+    /// `didBecomeActive` / `.refreshAllData` actually reaches the refresh method
+    /// — if the observer rewire regresses (wrong notification name, dropped
+    /// subscription), the counter stays flat and the test fails.
+    @Published private(set) var refreshInvocations: Int = 0
+
     // Legacy compatibility - combines both lists
     var tasks: [TaskActionItem] {
         incompleteTasks + completedTasks
@@ -181,6 +188,7 @@ class TasksStore: ObservableObject {
     /// Uses local-first pattern: sync API to cache, then reload from cache
     /// Merges changes in-place to avoid wholesale array replacement (which kills SwiftUI gestures)
     private func refreshTasksIfNeeded() async {
+        refreshInvocations += 1
         // Skip if not signed in
         guard AuthService.shared.isSignedIn else { return }
         // Skip if in auth backoff period (recent 401 errors)
