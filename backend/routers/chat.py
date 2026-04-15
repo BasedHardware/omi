@@ -64,6 +64,10 @@ router = APIRouter()
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
 
+# Hard body-size cap for octet-stream uploads (200 MB).
+# Prevents memory exhaustion from oversized payloads regardless of budget.
+_MAX_PCM_BODY_BYTES = 200_000_000
+
 
 def filter_messages(messages, app_id):
     logger.info(f'filter_messages {len(messages)} {app_id}')
@@ -397,9 +401,18 @@ async def transcribe_voice_message(
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
+        # Check Content-Length before buffering to reject oversized payloads early
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > _MAX_PCM_BODY_BYTES:
+            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
+
         audio_bytes = await request.body()
         if not audio_bytes or len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail='No audio data provided')
+
+        if len(audio_bytes) > _MAX_PCM_BODY_BYTES:
+            del audio_bytes
+            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         language = request.query_params.get("language")
         encoding = request.query_params.get("encoding", "linear16")
@@ -727,19 +740,18 @@ async def transcribe_voice_message_stream(
                 logger.warning(f'transcribe-stream: oversized frame uid={uid} size={len(data)}')
                 continue
 
-            total_audio_bytes += len(data)
-
-            # In-session budget enforcement: close if cumulative audio exceeds
-            # the remaining daily budget captured at connect time.
+            # In-session budget enforcement: check BEFORE incrementing total_audio_bytes
+            # so that the triggering frame is not counted as consumed (it won't be sent to DG).
             if budget_remaining_ms is not None and bytes_per_second > 0:
-                elapsed_ms = compute_pcm_duration_ms(total_audio_bytes, sample_rate, channels)
-                if elapsed_ms > budget_remaining_ms:
+                prospective_ms = compute_pcm_duration_ms(total_audio_bytes + len(data), sample_rate, channels)
+                if prospective_ms > budget_remaining_ms:
                     logger.info(
-                        f'transcribe-stream: budget exhausted mid-session uid={uid} elapsed={elapsed_ms}ms remaining={budget_remaining_ms}ms'
+                        f'transcribe-stream: budget exhausted mid-session uid={uid} elapsed={prospective_ms}ms remaining={budget_remaining_ms}ms'
                     )
                     await websocket.close(code=1008, reason='Daily transcription budget exhausted')
                     break
 
+            total_audio_bytes += len(data)
             stt_audio_buffer.extend(data)
 
             # Flush to Deepgram in 30ms chunks
