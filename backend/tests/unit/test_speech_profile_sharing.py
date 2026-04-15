@@ -820,6 +820,24 @@ def test_non_shared_person_ids_ignored():
     mock_users.get_profiles_shared_with_user.assert_not_called()
 
 
+def test_get_local_person_ids_filters_shared_ids():
+    """Local people lookups must skip reserved shared:{uid} identifiers."""
+    from utils.shared_profiles import get_local_person_ids
+
+    result = get_local_person_ids(['person-bob', 'shared:alice_uid', 'user', 'shared:charlie_uid', 'regular-id'])
+
+    assert result == ['person-bob', 'user', 'regular-id']
+
+
+def test_get_local_person_ids_keeps_plain_ids_unchanged():
+    """No-op when there are no shared profile references present."""
+    from utils.shared_profiles import get_local_person_ids
+
+    source = ['person-a', 'user', 'person-b']
+
+    assert get_local_person_ids(source) == source
+
+
 def test_empty_target_uid_rejected_by_pydantic():
     """Empty target_uid is rejected with a 422 validation error."""
     from pydantic import ValidationError

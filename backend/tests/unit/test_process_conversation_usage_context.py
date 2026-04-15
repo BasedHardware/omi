@@ -426,6 +426,39 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
+def test_process_conversation_filters_shared_ids_before_people_lookup():
+    """process_conversation() must not pass shared:{uid} IDs into get_people_by_ids()."""
+    conversation = MagicMock()
+    conversation.id = None
+    conversation.get_person_ids.return_value = ['person-alice', 'shared:owner_uid', 'shared:owner_uid']
+
+    final_conversation = MagicMock()
+    final_conversation.id = 'conv-123'
+    final_conversation.private_cloud_sync_enabled = False
+    final_conversation.dict.return_value = {'id': 'conv-123'}
+
+    users_mod = sys.modules["database.users"]
+    users_mod.get_people_by_ids = MagicMock(return_value=[])
+
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_conversation_meeting_id = MagicMock(return_value=None)
+
+    conversations_mod = sys.modules["database.conversations"]
+    conversations_mod.upsert_conversation = MagicMock()
+
+    with patch.object(process_conversation, "_get_structured", MagicMock(return_value=(MagicMock(), True))), patch.object(
+        process_conversation, "_get_conversation_obj", MagicMock(return_value=final_conversation)
+    ), patch.object(process_conversation, "resolve_shared_people", MagicMock(return_value=[])) as resolve_shared_mock:
+        result = process_conversation.process_conversation("user-6", "en", conversation, is_reprocess=True)
+
+    assert result is final_conversation
+    users_mod.get_people_by_ids.assert_called_once_with("user-6", ["person-alice"])
+    resolve_shared_mock.assert_called_once()
+    resolved_person_ids = resolve_shared_mock.call_args[0][0]
+    assert "shared:owner_uid" in resolved_person_ids
+    assert "person-alice" in resolved_person_ids
+
+
 def test_models_unchanged_for_llm_calls():
     """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
     # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py

@@ -9,6 +9,11 @@ from models.other import Person
 logger = logging.getLogger(__name__)
 
 
+def get_local_person_ids(person_ids: list[str]) -> list[str]:
+    """Return only local people IDs, excluding reserved shared:{uid} references."""
+    return [person_id for person_id in person_ids if not person_id.startswith("shared:")]
+
+
 def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
     """Resolve shared:{owner_uid} person IDs into Person objects, validating ownership."""
     shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
