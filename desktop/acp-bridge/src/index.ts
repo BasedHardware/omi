@@ -1158,6 +1158,9 @@ async function runPiMonoMode(): Promise<void> {
     systemPrompt: string | undefined
   ): Promise<string> {
     logErr(`Pi-mono: switching session key ${piActiveSessionKey || "(none)"} -> ${targetKey}`);
+    // Bake the target system prompt before restart so pi spawns with the
+    // correct --system-prompt flag for this session key.
+    await adapter.setSystemPrompt(systemPrompt);
     await adapter.stop();
     await adapter.start();
     const sessionId = await adapter.createSession({ cwd, model, systemPrompt });
@@ -1226,9 +1229,12 @@ async function runPiMonoMode(): Promise<void> {
             piActiveSessionKey = sessionKey;
             logErr(`Pi-mono session created: ${sessionId} (key=${sessionKey}, model=${model})`);
           } else {
-            // Same-key reuse — restore system prompt + update model if needed.
+            // Same-key reuse — re-apply system prompt + update model if needed.
+            // setSystemPrompt is a no-op when the value hasn't changed; it
+            // triggers a subprocess restart only when the baked --system-prompt
+            // flag differs from what pi was spawned with.
             if (entry?.systemPrompt) {
-              adapter.restoreSystemPrompt(entry.systemPrompt);
+              await adapter.setSystemPrompt(entry.systemPrompt);
             }
             if (model && entry?.model !== model) {
               await adapter.setModel(sessionId, model);
