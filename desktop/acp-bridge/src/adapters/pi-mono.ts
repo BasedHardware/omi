@@ -279,9 +279,22 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   async stop(): Promise<void> {
     if (this.process) {
+      // Remove all listeners from the old process FIRST so its delayed exit
+      // event can't fire the exit handler after we've already spawned a
+      // replacement. Without this, a stop()/start() cycle that interleaves
+      // with an incoming sendPrompt can race: the old process's exit event
+      // arrives after the new pendingRequest is registered, and the handler
+      // rejects the fresh request with "pi-mono process exited (code null)".
+      this.process.removeAllListeners("exit");
+      if (this.process.stdout) this.process.stdout.removeAllListeners();
+      if (this.process.stderr) this.process.stderr.removeAllListeners();
       this.process.kill("SIGTERM");
       this.process = null;
-      this.readline = null;
+      if (this.readline) {
+        this.readline.removeAllListeners();
+        this.readline.close();
+        this.readline = null;
+      }
     }
     this.sessions.clear();
     this.pendingRequests.clear();
@@ -594,9 +607,14 @@ export class PiMonoAdapter implements HarnessAdapter {
       case "response":
       case "compaction_start":
       case "compaction_end":
+      case "auto_retry_start":
+      case "auto_retry_end":
         // Protocol control events the adapter observes but does not act on.
         // Turn boundaries and streaming state are already tracked via
         // message_update / turn_end; no action needed here.
+        // auto_retry_* events fire when pi retries after a transient provider
+        // error (rate limit, 5xx). They do NOT end the in-flight turn — the
+        // subsequent turn_end is still authoritative for completion.
         break;
 
       default:
