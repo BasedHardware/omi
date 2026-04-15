@@ -33,7 +33,10 @@ from database.redis_db import (
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
+    get_daily_summary_uid,
+    store_daily_summary_to_uid,
 )
+
 from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
@@ -1044,6 +1047,9 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
+    # Lazy backfill: ensure Redis has the uid mapping so the share link works
+    if not get_daily_summary_uid(summary_id):
+        store_daily_summary_to_uid(summary_id, uid)
     return summary
 
 
@@ -1059,6 +1065,22 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+def get_shared_daily_summary(summary_id: str):
+    """
+    Public endpoint to retrieve a daily summary for sharing. No auth required.
+    """
+    uid = get_daily_summary_uid(summary_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    return summary
 
 
 # ***********************************
