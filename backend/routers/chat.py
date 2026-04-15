@@ -673,13 +673,23 @@ async def transcribe_voice_message_stream(
         # Start segment sender task
         sender_task = asyncio.create_task(segment_sender())
 
-        # Audio receive loop with idle timeout
+        # Audio receive loop with audio-idle timeout.
+        # Timeout is based on last *audio* frame, not last message — text-only
+        # frames (e.g. "finalize") don't reset the idle clock.
         last_audio_time = asyncio.get_event_loop().time()
         while websocket_active:
+            # Compute remaining idle budget based on last audio receipt
+            now = asyncio.get_event_loop().time()
+            remaining_idle = _WS_IDLE_TIMEOUT_S - (now - last_audio_time)
+            if remaining_idle <= 0:
+                logger.info(f'transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
+                await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
+                break
+
             try:
-                message = await asyncio.wait_for(websocket.receive(), timeout=_WS_IDLE_TIMEOUT_S)
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining_idle)
             except asyncio.TimeoutError:
-                logger.info(f'transcribe-stream: idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
+                logger.info(f'transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
                 await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
             except WebSocketDisconnect:
@@ -690,6 +700,7 @@ async def transcribe_voice_message_stream(
 
             # Handle text "finalize" message: flush remaining audio, finalize Deepgram,
             # wait for final transcript, then continue receiving (client closes when ready).
+            # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
                 if dg_socket and not dg_socket.is_connection_dead:
