@@ -322,6 +322,7 @@ export default function AnalyticsPage() {
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
+  const [cumulativeGranularity, setCumulativeGranularity] = useState<"day" | "week" | "month">("month");
 
   const swrOpts = { revalidateOnFocus: false };
 
@@ -409,10 +410,9 @@ export default function AnalyticsPage() {
     if (c.data.length > cohortMaxDays) cohortMaxDays = c.data.length;
   }
 
-  // Cumulative Users chart fetches the full history window so the growth
-  // curve is meaningful; use the whole series rather than the last 30 days.
+  // Cumulative Users chart fetches the full history since the first
+  // signup so the growth curve is meaningful.
   const allDailyData = dailyNewUsers?.data ?? [];
-  const dailyData = allDailyData;
   const dauData = dauTrends?.data?.slice(-30) ?? [];
   const ratingsData = messageRatings?.data ?? [];
   const totalThumbsUp = ratingsData.reduce((s, d) => s + d.thumbs_up, 0);
@@ -464,6 +464,40 @@ export default function AnalyticsPage() {
         };
       });
   }, [ratingsData]);
+
+  // Bucket the all-time daily series into day/week/month granularity for
+  // the Cumulative Users chart. `users` sums the bucket, `cumulative` is
+  // the running total at the end of the bucket (so the last point in each
+  // bucket equals the true cumulative count on that day).
+  const cumulativeSeries = useMemo(() => {
+    if (allDailyData.length === 0) return [] as typeof allDailyData;
+    if (cumulativeGranularity === "day") return allDailyData;
+
+    const bucketKey = (iso: string) => {
+      const d = new Date(iso + "T00:00:00Z");
+      if (cumulativeGranularity === "month") {
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      }
+      // Week: snap to the Monday of the ISO week (UTC)
+      const day = d.getUTCDay();
+      const diff = (day + 6) % 7; // Monday = 0
+      d.setUTCDate(d.getUTCDate() - diff);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const buckets = new Map<string, { date: string; users: number; cumulative: number }>();
+    for (const point of allDailyData) {
+      const key = bucketKey(point.date);
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.users += point.users;
+        existing.cumulative = point.cumulative; // take the latest running total
+      } else {
+        buckets.set(key, { date: key, users: point.users, cumulative: point.cumulative });
+      }
+    }
+    return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [allDailyData, cumulativeGranularity]);
 
   // 7-day rolling average for daily new users
   const dailyWithRollingAvg = useMemo(() => {
@@ -1295,16 +1329,35 @@ export default function AnalyticsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Cumulative Total Users */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Cumulative Users</h2>
-          <p className="text-sm text-muted-foreground mb-4">Total users across all platforms</p>
-          <div className="h-[300px]">
+          <div className="flex items-start justify-between mb-1">
+            <div>
+              <h2 className="text-lg font-semibold">Cumulative Users</h2>
+              <p className="text-sm text-muted-foreground">Total users across all platforms</p>
+            </div>
+            <div className="flex rounded-md border border-input overflow-hidden">
+              {(["day", "week", "month"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setCumulativeGranularity(g)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    cumulativeGranularity === g
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {g === "day" ? "All" : g === "week" ? "Week" : "Month"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-[300px] mt-4">
             {dailyNewUsersLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : dailyData.length > 0 ? (
+            ) : cumulativeSeries.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyData}>
+                <AreaChart data={cumulativeSeries}>
                   <defs>
                     <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
