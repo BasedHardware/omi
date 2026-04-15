@@ -16718,6 +16718,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.'**
   String get appleHealthDeniedBody;
+
+  /// Title on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Why are you leaving?'**
+  String get deleteFlowReasonTitle;
+
+  /// Subtitle on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Your feedback helps us improve Omi for everyone.'**
+  String get deleteFlowReasonSubtitle;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy concerns'**
+  String get deleteReasonPrivacy;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Not using it enough'**
+  String get deleteReasonNotUsing;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Missing features I need'**
+  String get deleteReasonMissingFeatures;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Too many technical issues'**
+  String get deleteReasonTechnicalIssues;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Using something else'**
+  String get deleteReasonFoundAlternative;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Just taking a break'**
+  String get deleteReasonTakingBreak;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get deleteReasonOther;
+
+  /// Title on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more'**
+  String get deleteFlowFeedbackTitle;
+
+  /// Subtitle on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'What would have made Omi work for you?'**
+  String get deleteFlowFeedbackSubtitle;
+
+  /// TextField hint on delete feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — your thoughts help us build a better product.'**
+  String get deleteFlowFeedbackHint;
+
+  /// Title on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'This is permanent'**
+  String get deleteFlowConfirmTitle;
+
+  /// Subtitle on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'Once you delete your account, there is no way to recover it.'**
+  String get deleteFlowConfirmSubtitle;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Any active subscription will be cancelled.'**
+  String get deleteConsequenceSubscription;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Your account cannot be restored — not even by support.'**
+  String get deleteConsequenceNoRecovery;
+
+  /// Instruction to type DELETE to confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Type DELETE to confirm'**
+  String get deleteTypeToConfirm;
+
+  /// The literal word users type to confirm deletion. Keep uppercase.
+  ///
+  /// In en, this message translates to:
+  /// **'DELETE'**
+  String get deleteConfirmationWord;
+
+  /// Primary destructive action label
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account permanently'**
+  String get deleteAccountPermanently;
+
+  /// Secondary action to back out of deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my account'**
+  String get keepMyAccount;
+
+  /// Error shown when deletion API fails
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete your account. Please try again.'**
+  String get deleteAccountFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
