@@ -322,7 +322,7 @@ export default function AnalyticsPage() {
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
-  const [cumulativeGranularity, setCumulativeGranularity] = useState<"day" | "week" | "month">("month");
+  const [cumulativeWindow, setCumulativeWindow] = useState<"7d" | "30d" | "all">("all");
 
   const swrOpts = { revalidateOnFocus: false };
 
@@ -465,39 +465,21 @@ export default function AnalyticsPage() {
       });
   }, [ratingsData]);
 
-  // Bucket the all-time daily series into day/week/month granularity for
-  // the Cumulative Users chart. `users` sums the bucket, `cumulative` is
-  // the running total at the end of the bucket (so the last point in each
-  // bucket equals the true cumulative count on that day).
+  // Slice the all-time daily series to the selected window for the
+  // Cumulative Users chart. Granularity stays daily; only the visible
+  // range changes.
   const cumulativeSeries = useMemo(() => {
-    if (allDailyData.length === 0) return [] as typeof allDailyData;
-    if (cumulativeGranularity === "day") return allDailyData;
+    if (allDailyData.length === 0) return allDailyData;
+    if (cumulativeWindow === "all") return allDailyData;
+    const days = cumulativeWindow === "7d" ? 7 : 30;
+    return allDailyData.slice(-days);
+  }, [allDailyData, cumulativeWindow]);
 
-    const bucketKey = (iso: string) => {
-      const d = new Date(iso + "T00:00:00Z");
-      if (cumulativeGranularity === "month") {
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-      }
-      // Week: snap to the Monday of the ISO week (UTC)
-      const day = d.getUTCDay();
-      const diff = (day + 6) % 7; // Monday = 0
-      d.setUTCDate(d.getUTCDate() - diff);
-      return d.toISOString().slice(0, 10);
-    };
-
-    const buckets = new Map<string, { date: string; users: number; cumulative: number }>();
-    for (const point of allDailyData) {
-      const key = bucketKey(point.date);
-      const existing = buckets.get(key);
-      if (existing) {
-        existing.users += point.users;
-        existing.cumulative = point.cumulative; // take the latest running total
-      } else {
-        buckets.set(key, { date: key, users: point.users, cumulative: point.cumulative });
-      }
-    }
-    return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [allDailyData, cumulativeGranularity]);
+  // On a tight window the cumulative values barely move relative to the
+  // absolute total, so pin the y-axis to the window's min/max. For the
+  // full history we anchor at zero so the curve sweeps from 0 → total.
+  const cumulativeYDomain: [number | "dataMin", number | "dataMax"] =
+    cumulativeWindow === "all" ? [0, "dataMax"] : ["dataMin", "dataMax"];
 
   // 7-day rolling average for daily new users
   const dailyWithRollingAvg = useMemo(() => {
@@ -1335,17 +1317,17 @@ export default function AnalyticsPage() {
               <p className="text-sm text-muted-foreground">Total users across all platforms</p>
             </div>
             <div className="flex rounded-md border border-input overflow-hidden">
-              {(["day", "week", "month"] as const).map((g) => (
+              {(["7d", "30d", "all"] as const).map((w) => (
                 <button
-                  key={g}
-                  onClick={() => setCumulativeGranularity(g)}
+                  key={w}
+                  onClick={() => setCumulativeWindow(w)}
                   className={`px-2.5 py-1 text-xs font-medium transition-colors ${
-                    cumulativeGranularity === g
+                    cumulativeWindow === w
                       ? "bg-primary text-primary-foreground"
                       : "bg-background text-muted-foreground hover:bg-accent"
                   }`}
                 >
-                  {g === "day" ? "All" : g === "week" ? "Week" : "Month"}
+                  {w === "7d" ? "Last week" : w === "30d" ? "Last month" : "All time"}
                 </button>
               ))}
             </div>
@@ -1376,9 +1358,9 @@ export default function AnalyticsPage() {
                     className="text-xs"
                     tick={{ fill: "hsl(var(--muted-foreground))" }}
                     tickFormatter={formatCompact}
-                    domain={[0, "dataMax"]}
+                    domain={cumulativeYDomain}
                     allowDataOverflow={false}
-                    width={48}
+                    width={56}
                   />
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
