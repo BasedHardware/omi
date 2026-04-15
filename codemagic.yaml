@@ -2143,6 +2143,18 @@ workflows:
             exit 1
           fi
 
+          # Copy pi-mono-extension (default harness — registers the Omi provider
+          # with pi and routes requests to the Rust desktop-backend /v2/chat/completions
+          # proxy). Without this, piMono mode cannot start and the app is broken.
+          if [ -d "pi-mono-extension" ]; then
+            mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+            cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+          else
+            echo "ERROR: pi-mono-extension directory not found"
+            exit 1
+          fi
+
           # Update Info.plist metadata
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable   $BINARY_NAME"  "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier   $BUNDLE_ID"    "$APP_BUNDLE/Contents/Info.plist"
