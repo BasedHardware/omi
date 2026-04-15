@@ -72,14 +72,14 @@ for _, member in ipairs(entries) do
     end
 end
 
--- 3. Check budget (>= so used==budget is rejected too)
+-- 3. Check budget (> so users can consume the full allowance)
 -- Skip check when force=1 (post-session recording must always succeed)
 if force ~= 1 then
-    if used + request >= budget and request > 0 then
+    if used + request > budget and request > 0 then
         return {0, used, math.max(0, budget - used)}
     end
-    -- Probe-only (request==0): reject only when already at or over budget
-    if request == 0 and used >= budget then
+    -- Probe-only (request==0): reject only when already over budget
+    if request == 0 and used > budget then
         return {0, used, 0}
     end
 end
