@@ -53,8 +53,9 @@ void main() {
     await tester.pump();
   }
 
-  group('transcription paused warning UI', () {
-    testWidgets('shows reconnecting status and indicator in processing capture widget for phone mic', (tester) async {
+  group('simplified status indicators (#6672)', () {
+    testWidgets('shows Listening with recording indicator when transcription service is down during phone mic recording',
+        (tester) async {
       final captureProvider = CaptureProvider();
       final deviceProvider = _StubDeviceProvider();
       final connectivityProvider = _StubConnectivityProvider();
@@ -77,15 +78,15 @@ void main() {
       );
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      final pausedText = AppLocalizations.of(context).transcriptionPaused;
+      final listeningText = AppLocalizations.of(context).listening;
 
-      expect(find.text(pausedText), findsWidgets);
-      expect(find.byType(ReconnectingStatusIndicator), findsOneWidget);
+      // Should show "Listening" instead of "Recording, reconnecting"
+      expect(find.text(listeningText), findsWidgets);
+      // RecordingStatusIndicator should be present (not ReconnectingStatusIndicator)
+      expect(find.byType(RecordingStatusIndicator), findsWidgets);
     });
 
-    testWidgets('shows reconnecting icon and text in conversation capturing app bar when transcript service is down', (
-      tester,
-    ) async {
+    testWidgets('shows Listening in capturing page app bar when transcript service is down', (tester) async {
       final captureProvider = CaptureProvider();
       final deviceProvider = _StubDeviceProvider();
       addTearDown(captureProvider.dispose);
@@ -105,10 +106,13 @@ void main() {
       );
 
       final context = tester.element(find.byType(ConversationCapturingPage));
-      final pausedText = AppLocalizations.of(context).transcriptionPaused;
+      final listeningText = AppLocalizations.of(context).listening;
 
-      expect(find.text('🎙️⚡'), findsOneWidget);
-      expect(find.text(pausedText), findsOneWidget);
+      // Should show simple microphone emoji, not lightning bolt variant
+      expect(find.text('🎙️'), findsOneWidget);
+      expect(find.text('🎙️⚡'), findsNothing);
+      // Should show "Listening" instead of "Recording, reconnecting"
+      expect(find.text(listeningText), findsOneWidget);
     });
   });
 }
