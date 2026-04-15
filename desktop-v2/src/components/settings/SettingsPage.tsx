@@ -23,8 +23,10 @@ export function SettingsPage() {
   const {
     developerMode,
     memoryIndicatorEnabled,
+    bypassCommercialHours,
     toggleDeveloperMode,
     toggleMemoryIndicator,
+    toggleBypassCommercialHours,
   } = useDevStore();
 
   return (
@@ -101,6 +103,21 @@ export function SettingsPage() {
                 checked={memoryIndicatorEnabled}
                 onCheckedChange={toggleMemoryIndicator}
                 aria-label="Memory usage indicator"
+              />
+            </div>
+          )}
+          {developerMode && (
+            <div className="settings-row">
+              <div className="flex flex-col gap-0.5">
+                <span className="settings-label">Bypass working hours</span>
+                <span className="text-[11px] text-muted-foreground/70">
+                  Allow Rewind and audio capture to run outside Mon–Fri 9am–5pm.
+                </span>
+              </div>
+              <Switch
+                checked={bypassCommercialHours}
+                onCheckedChange={toggleBypassCommercialHours}
+                aria-label="Bypass working hours"
               />
             </div>
           )}

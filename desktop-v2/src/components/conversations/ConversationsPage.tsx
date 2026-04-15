@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { useConversationStore } from "../../stores/conversationStore";
 import type { Conversation, TranscriptSegment } from "../../stores/conversationStore";
-import { MessageSquareText, Star, Search, Clock, User, CalendarIcon, X, StarIcon } from "lucide-react";
+import { useAudioStore } from "../../stores/audioStore";
+import { Star, Search, Clock, User, CalendarIcon, X, StarIcon } from "lucide-react";
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
+import { type PersonaState } from "../ai-elements/persona";
 import { cn } from "@/lib/utils";
+
+function audioStateToPersona(args: {
+  audioEnabled: boolean;
+  isRecording: boolean;
+  inCommercialHours: boolean;
+}): PersonaState {
+  if (args.isRecording) return "listening";
+  if (!args.audioEnabled) return "asleep";
+  if (!args.inCommercialHours) return "asleep";
+  return "idle";
+}
 
 type FilterType = "all" | "starred";
 
@@ -224,7 +237,7 @@ function ConversationCard({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const title = conversation.structured?.title || "Untitled Conversation";
+  const title = conversation.structured?.title || "Untitled Meeting";
   const overview = conversation.structured?.overview || "";
 
   return (
@@ -338,7 +351,7 @@ function TranscriptView({ segments }: { segments: TranscriptSegment[] }) {
 }
 
 function ConversationDetail({ conversation }: { conversation: Conversation }) {
-  const title = conversation.structured?.title || "Untitled Conversation";
+  const title = conversation.structured?.title || "Untitled Meeting";
   const overview = conversation.structured?.overview || "";
   const segments = conversation.transcript_segments;
   const duration = segments && segments.length > 0
@@ -382,6 +395,115 @@ function ConversationDetail({ conversation }: { conversation: Conversation }) {
           <TranscriptView segments={segments} />
         </div>
       )}
+    </div>
+  );
+}
+
+function ConversationsEmptyState() {
+  const audioEnabled = useAudioStore((s) => s.audioEnabled);
+  const isRecording = useAudioStore((s) => s.isRecording);
+  const inCommercialHours = useAudioStore((s) => s.inCommercialHours);
+  const liveTranscript = useAudioStore((s) => s.liveTranscript);
+  const personaState = audioStateToPersona({ audioEnabled, isRecording, inCommercialHours });
+
+  const heading = isRecording
+    ? "Listening…"
+    : !audioEnabled
+      ? "Audio is off"
+      : !inCommercialHours
+        ? "Outside recording hours"
+        : "Ready to listen";
+
+  const subline = isRecording
+    ? "Speak — I'll capture this meeting and add it to your timeline."
+    : !audioEnabled
+      ? "Turn audio on in the sidebar to start capturing meetings."
+      : !inCommercialHours
+        ? "Recording resumes Mon–Fri, 9am–5pm."
+        : "Pick a meeting on the left, or start speaking.";
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-5 px-8 text-center">
+      <PersonaSlot state={personaState} />
+      <div className="flex flex-col items-center gap-1">
+        <h3 className="text-base font-medium text-foreground">{heading}</h3>
+        <p className="max-w-xs text-sm text-muted-foreground">{subline}</p>
+      </div>
+      {isRecording && liveTranscript && (
+        <p className="max-w-md truncate px-4 text-sm italic text-foreground/80">
+          {liveTranscript}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PersonaSlot({ state }: { state: PersonaState }) {
+  const isListening = state === "listening";
+  const isAsleep = state === "asleep";
+  const isThinking = state === "thinking";
+
+  return (
+    <div className="relative flex size-32 items-center justify-center">
+      {/* Outer aura — only when active */}
+      {!isAsleep && (
+        <div
+          className={cn(
+            "absolute inset-0 rounded-full blur-2xl transition-opacity duration-700",
+            isListening
+              ? "animate-orb-pulse bg-red-500/30 opacity-100"
+              : isThinking
+                ? "animate-orb-pulse bg-blue-500/25 opacity-100"
+                : "bg-foreground/10 opacity-60",
+          )}
+        />
+      )}
+
+      {/* Core orb */}
+      <div
+        className={cn(
+          "relative size-24 rounded-full transition-all duration-700",
+          "bg-[radial-gradient(circle_at_30%_30%,_var(--tw-gradient-from),_var(--tw-gradient-to))]",
+          isAsleep
+            ? "from-muted to-muted-foreground/30 opacity-50"
+            : isListening
+              ? "animate-orb-breathe from-red-300 to-red-700 shadow-[0_0_40px_rgba(239,68,68,0.5)]"
+              : isThinking
+                ? "animate-orb-breathe from-blue-300 to-blue-700 shadow-[0_0_40px_rgba(59,130,246,0.5)]"
+                : "animate-orb-drift from-foreground/40 to-foreground shadow-[0_0_30px_rgba(255,255,255,0.15)]",
+        )}
+      >
+        {/* Inner highlight */}
+        <div className="absolute inset-2 rounded-full bg-gradient-to-br from-white/20 to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+function RecordingIndicator() {
+  const isRecording = useAudioStore((s) => s.isRecording);
+  const recordingStartedAt = useAudioStore((s) => s.recordingStartedAt);
+  if (!isRecording) return null;
+  const elapsedSec = recordingStartedAt
+    ? Math.floor((Date.now() - recordingStartedAt) / 1000)
+    : 0;
+  const minutes = Math.floor(elapsedSec / 60);
+  const seconds = elapsedSec % 60;
+  const elapsed = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  return (
+    <div className="shrink-0 px-3 pb-2">
+      <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-secondary/40 px-3 py-2">
+        <span className="relative flex size-2 shrink-0">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500/60" />
+          <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-xs font-medium text-foreground">Listening · {elapsed}</span>
+          <span className="truncate text-[10px] text-muted-foreground">
+            A new meeting will appear when finished.
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -472,11 +594,12 @@ export function ConversationsPage() {
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-6 pb-2 pt-5">
-        <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
+        <h2 className="text-lg font-semibold text-foreground">Meetings</h2>
       </div>
       <div className="flex flex-1 overflow-hidden">
         {/* List panel */}
         <div className="flex w-[340px] shrink-0 flex-col border-r border-border/50">
+          <RecordingIndicator />
           <div className="shrink-0 px-3 pb-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -508,7 +631,7 @@ export function ConversationsPage() {
             )}
             {!isLoading && filteredConversations.length === 0 && (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                <span>{searchQuery || hasActiveFilters ? "No matches" : "No conversations yet"}</span>
+                <span>{searchQuery || hasActiveFilters ? "No matches" : "No meetings yet"}</span>
                 {hasActiveFilters && (
                   <Button
                     variant="ghost"
@@ -549,10 +672,7 @@ export function ConversationsPage() {
           {selectedConversation ? (
             <ConversationDetail conversation={selectedConversation} />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-              <MessageSquareText className="size-8 opacity-40" />
-              <span className="text-sm">Select a conversation</span>
-            </div>
+            <ConversationsEmptyState />
           )}
         </div>
       </div>

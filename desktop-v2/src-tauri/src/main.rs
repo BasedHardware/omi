@@ -47,7 +47,7 @@ fn main() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "nooto_desktop_v2=info,nooto_desktop_backend=info,tauri_plugin_screen_capture=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "nooto_desktop_v2=info,nooto_desktop_backend=info,tauri_plugin_screen_capture=info,tauri_plugin_audio_capture=debug,tower_http=info".into()),
         )
         .with(
             fmt::layer()

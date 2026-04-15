@@ -1,0 +1,28 @@
+[default]
+description = "Default permissions for the audio capture plugin"
+permissions = [
+    "allow-list-devices",
+    "allow-start-recording",
+    "allow-stop-recording",
+    "allow-get-capture-state",
+]
+
+[[permission]]
+identifier = "allow-list-devices"
+description = "Allows listing input audio devices"
+commands.allow = ["list_devices"]
+
+[[permission]]
+identifier = "allow-start-recording"
+description = "Allows starting audio recording"
+commands.allow = ["start_recording"]
+
+[[permission]]
+identifier = "allow-stop-recording"
+description = "Allows stopping audio recording"
+commands.allow = ["stop_recording"]
+
+[[permission]]
+identifier = "allow-get-capture-state"
+description = "Allows reading the current capture state"
+commands.allow = ["get_capture_state"]

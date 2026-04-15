@@ -26,7 +26,7 @@ import { useElapsed } from "../../hooks/useElapsed";
 
 const navItems = [
   { to: "/", label: "Chat", icon: MessageSquare },
-  { to: "/conversations", label: "Conversations", icon: AudioLines },
+  { to: "/meetings", label: "Meetings", icon: AudioLines },
   { to: "/tasks", label: "Tasks", icon: ListTodo },
   { to: "/memories", label: "Memories", icon: Brain },
   { to: "/rewind", label: "Rewind", icon: Rewind },

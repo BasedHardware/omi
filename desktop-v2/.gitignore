@@ -13,6 +13,7 @@ src-tauri/plugins/*/target/
 # Environment
 .env
 .env.local
+*-credentials.json
 
 # IDE
 .vscode/

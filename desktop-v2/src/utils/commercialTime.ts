@@ -6,7 +6,12 @@
  *
  * Used by rewindStore and audioStore to pause capture outside business hours
  * and resume it when the window re-opens.
+ *
+ * A dev-mode bypass (`bypassCommercialHours` in `devStore`) forces the window
+ * open regardless of the actual time.
  */
+
+import { useDevStore } from "@/stores/devStore";
 
 export interface CommercialHours {
   /** Days of the week allowed. 0 = Sunday, 1 = Monday, ..., 6 = Saturday. */
@@ -23,11 +28,12 @@ export const DEFAULT_COMMERCIAL_HOURS: CommercialHours = {
   endHour: 17,
 };
 
-/** Return true if `now` falls inside the given commercial window. */
+/** Return true if `now` falls inside the given commercial window, or if the dev bypass is on. */
 export function isCommercialTime(
   now: Date = new Date(),
   hours: CommercialHours = DEFAULT_COMMERCIAL_HOURS,
 ): boolean {
+  if (useDevStore.getState().bypassCommercialHours) return true;
   const dow = now.getDay();
   if (!hours.daysOfWeek.includes(dow)) return false;
   const h = now.getHours();
@@ -38,7 +44,8 @@ export function isCommercialTime(
  * Subscribe to commercial-time status changes.
  *
  * The callback is fired once immediately with the current state, and again
- * every time the status flips (on a 30-second poll).
+ * whenever the status flips — either via a 30-second clock poll or because
+ * the dev bypass toggle changed.
  *
  * Returns an unsubscribe function.
  */
@@ -49,13 +56,24 @@ export function watchCommercialTime(
   let lastState = isCommercialTime(new Date(), hours);
   onChange(lastState);
 
-  const id = setInterval(() => {
+  const emitIfChanged = () => {
     const current = isCommercialTime(new Date(), hours);
     if (current !== lastState) {
       lastState = current;
       onChange(current);
     }
-  }, 30_000);
+  };
 
-  return () => clearInterval(id);
+  const id = setInterval(emitIfChanged, 30_000);
+
+  const unsubBypass = useDevStore.subscribe((s, prev) => {
+    if (s.bypassCommercialHours !== prev.bypassCommercialHours) {
+      emitIfChanged();
+    }
+  });
+
+  return () => {
+    clearInterval(id);
+    unsubBypass();
+  };
 }

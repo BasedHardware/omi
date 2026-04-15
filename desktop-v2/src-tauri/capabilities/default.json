@@ -20,6 +20,7 @@
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
     "screen-capture:default",
+    "audio-capture:default",
     {
       "identifier": "http:default",
       "allow": [

@@ -136,7 +136,7 @@ export function TasksPage() {
           <div className="page-empty">Loading tasks...</div>
         )}
         {!isLoading && tasks.length === 0 && (
-          <div className="page-empty">No tasks yet. Tasks from your conversations will appear here.</div>
+          <div className="page-empty">No tasks yet. Tasks from your meetings will appear here.</div>
         )}
         <TaskGroup title="Pending" tasks={grouped.pending} onToggle={toggleTask} onDelete={deleteTask} />
         <TaskGroup title="Done" tasks={grouped.done} onToggle={toggleTask} onDelete={deleteTask} />

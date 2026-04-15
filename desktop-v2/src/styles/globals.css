@@ -642,3 +642,23 @@
 }
 
 } /* end @layer components */
+
+/* Persona orb animations — pure CSS, no Rive/WebGL */
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes orb-drift {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.02) rotate(180deg); }
+}
+
+.animate-orb-pulse { animation: orb-pulse 2.4s ease-in-out infinite; }
+.animate-orb-breathe { animation: orb-breathe 2.8s ease-in-out infinite; }
+.animate-orb-drift { animation: orb-drift 12s ease-in-out infinite; }

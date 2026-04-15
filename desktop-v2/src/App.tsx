@@ -68,7 +68,7 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<ChatPage />} />
-            <Route path="/conversations" element={<ConversationsPage />} />
+            <Route path="/meetings" element={<ConversationsPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/memories" element={<MemoriesPage />} />
             <Route path="/rewind" element={<RewindPage />} />

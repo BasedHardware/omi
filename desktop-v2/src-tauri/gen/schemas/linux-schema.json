@@ -693,6 +693,60 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Default permissions for the audio capture plugin\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-start-recording`\n- `allow-stop-recording`\n- `allow-get-capture-state`",
+          "type": "string",
+          "const": "audio-capture:default",
+          "markdownDescription": "Default permissions for the audio capture plugin\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-start-recording`\n- `allow-stop-recording`\n- `allow-get-capture-state`"
+        },
+        {
+          "description": "Allows reading the current capture state",
+          "type": "string",
+          "const": "audio-capture:allow-get-capture-state",
+          "markdownDescription": "Allows reading the current capture state"
+        },
+        {
+          "description": "Allows listing input audio devices",
+          "type": "string",
+          "const": "audio-capture:allow-list-devices",
+          "markdownDescription": "Allows listing input audio devices"
+        },
+        {
+          "description": "Allows starting audio recording",
+          "type": "string",
+          "const": "audio-capture:allow-start-recording",
+          "markdownDescription": "Allows starting audio recording"
+        },
+        {
+          "description": "Allows stopping audio recording",
+          "type": "string",
+          "const": "audio-capture:allow-stop-recording",
+          "markdownDescription": "Allows stopping audio recording"
+        },
+        {
+          "description": "Denies the get_capture_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "audio-capture:deny-get-capture-state",
+          "markdownDescription": "Denies the get_capture_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_devices command without any pre-configured scope.",
+          "type": "string",
+          "const": "audio-capture:deny-list-devices",
+          "markdownDescription": "Denies the list_devices command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_recording command without any pre-configured scope.",
+          "type": "string",
+          "const": "audio-capture:deny-start-recording",
+          "markdownDescription": "Denies the start_recording command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_recording command without any pre-configured scope.",
+          "type": "string",
+          "const": "audio-capture:deny-stop-recording",
+          "markdownDescription": "Denies the stop_recording command without any pre-configured scope."
+        },
+        {
           "description": "This permission set configures if your\napplication can enable or disable auto\nstarting the application on boot.\n\n#### Granted Permissions\n\nIt allows all to check, enable and\ndisable the automatic start on boot.\n\n\n#### This default permission set includes:\n\n- `allow-enable`\n- `allow-disable`\n- `allow-is-enabled`",
           "type": "string",
           "const": "autostart:default",

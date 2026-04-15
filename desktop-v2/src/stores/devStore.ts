@@ -22,8 +22,10 @@ const tauriStorage = createJSONStorage(() => ({
 interface DevState {
   developerMode: boolean;
   memoryIndicatorEnabled: boolean;
+  bypassCommercialHours: boolean;
   toggleDeveloperMode: () => void;
   toggleMemoryIndicator: () => void;
+  toggleBypassCommercialHours: () => void;
 }
 
 export const useDevStore = create<DevState>()(
@@ -31,6 +33,7 @@ export const useDevStore = create<DevState>()(
     (set, get) => ({
       developerMode: false,
       memoryIndicatorEnabled: false,
+      bypassCommercialHours: false,
 
       toggleDeveloperMode: () => {
         const next = !get().developerMode;
@@ -42,6 +45,10 @@ export const useDevStore = create<DevState>()(
 
       toggleMemoryIndicator: () => {
         set({ memoryIndicatorEnabled: !get().memoryIndicatorEnabled });
+      },
+
+      toggleBypassCommercialHours: () => {
+        set({ bypassCommercialHours: !get().bypassCommercialHours });
       },
     }),
     {

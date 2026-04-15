@@ -2,13 +2,27 @@
 name = "tauri-plugin-audio-capture"
 version = "0.1.0"
 edition = "2021"
+links = "tauri-plugin-audio-capture"
 
 [dependencies]
 tauri = "2"
+tauri-plugin-store = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cpal = "0.15"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+tokio-util = "0.7"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+url = "2"
+urlencoding = "2"
+chrono = { version = "0.4", features = ["serde"] }
+iana-time-zone = "0.1"
+uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 ort = { version = "2.0.0-rc.12", features = ["download-binaries", "copy-dylibs", "ndarray"] }
 ndarray = "0.17"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

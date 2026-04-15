@@ -9,6 +9,7 @@
  */
 
 import { create } from "zustand";
+import { listen } from "@tauri-apps/api/event";
 import {
   startRecording,
   stopRecording,
@@ -30,6 +31,8 @@ interface AudioState {
   inCommercialHours: boolean;
   /** Timestamp (ms) of when the current recording started. null when not recording. */
   recordingStartedAt: number | null;
+  /** Live transcript text (interim or last final). Empty when nothing has been said yet. */
+  liveTranscript: string;
 
   toggleAudio: () => Promise<void>;
   startAudio: () => Promise<void>;
@@ -62,6 +65,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   sampleRate: 16000,
   inCommercialHours: isCommercialTime(),
   recordingStartedAt: null,
+  liveTranscript: "",
 
   toggleAudio: async () => {
     const { audioEnabled } = get();
@@ -81,6 +85,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     }
     if (get().isRecording) return;
     try {
+      set({ liveTranscript: "" });
       const state = await startRecording();
       applyCaptureState(set, get, state);
     } catch (err) {
@@ -93,6 +98,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     try {
       const state = await stopRecording();
       applyCaptureState(set, get, state);
+      set({ liveTranscript: "" });
     } catch (err) {
       console.error("[Audio] stopRecording failed:", err);
     }
@@ -107,6 +113,27 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     }
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Live transcript event subscription
+// ---------------------------------------------------------------------------
+
+interface TranscriptEvent {
+  text: string;
+  is_final: boolean;
+}
+
+listen<TranscriptEvent>("transcript:partial", (event) => {
+  const { text, is_final } = event.payload;
+  console.log("[Audio] transcript event:", { text, is_final });
+  if (text) {
+    useAudioStore.setState({ liveTranscript: text });
+  }
+})
+  .then(() => console.log("[Audio] subscribed to transcript:partial"))
+  .catch((err) => {
+    console.error("[Audio] failed to subscribe to transcript:partial:", err);
+  });
 
 // ---------------------------------------------------------------------------
 // Commercial-time watcher
