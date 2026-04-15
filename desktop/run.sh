@@ -487,6 +487,16 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
 fi
 
+substep "Copying pi-mono-extension (for piMono harness)"
+PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
+if [ -d "$PI_MONO_EXT_DIR" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+    cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+else
+    echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
+fi
+
 substep "Copying .env.app"
 if [ -f ".env.app.dev" ]; then
     cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
