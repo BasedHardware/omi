@@ -1,7 +1,7 @@
 """Tests for voice_duration_limiter module.
 
 Covers:
-- Per-session duration cap (compute_pcm_duration_ms, compute_max_pcm_bytes)
+- PCM duration computation (compute_pcm_duration_ms, compute_max_pcm_bytes)
 - WAV header duration reader (read_wav_duration_ms)
 - Rolling daily budget (try_consume_budget, check_budget, record_actual_duration)
 - Shared budget across endpoints (single pool per UID)
