@@ -20,22 +20,32 @@ export async function GET(request: NextRequest) {
 
     const startTimestamp = admin.firestore.Timestamp.fromDate(startDate);
 
-    // Query the window (new users in the last `days` days) and the baseline
-    // (total users that existed before the window) in parallel.
-    const [windowSnapshot, baselineAgg] = await Promise.all([
+    // Run three queries in parallel:
+    //  1. Total document count across the entire users collection — the
+    //     authoritative source for "all users ever" (includes docs with no
+    //     created_at field, which would otherwise be silently dropped).
+    //  2. Count of users created inside the window — subtracted from the
+    //     total to derive the pre-window baseline.
+    //  3. The full window snapshot, bucketed by day for the per-day series.
+    const [totalAgg, windowCountAgg, windowSnapshot] = await Promise.all([
+      db.collection("users").count().get(),
+      db
+        .collection("users")
+        .where("created_at", ">=", startTimestamp)
+        .count()
+        .get(),
       db
         .collection("users")
         .where("created_at", ">=", startTimestamp)
         .orderBy("created_at", "asc")
         .get(),
-      db
-        .collection("users")
-        .where("created_at", "<", startTimestamp)
-        .count()
-        .get(),
     ]);
 
-    const baseline = baselineAgg.data().count;
+    const totalCount = totalAgg.data().count;
+    const windowCount = windowCountAgg.data().count;
+    // Everything that existed before the window — including users that
+    // predate the created_at field and therefore can't be binned by date.
+    const baseline = Math.max(0, totalCount - windowCount);
 
     // Group by date
     const countsByDate: Record<string, number> = {};

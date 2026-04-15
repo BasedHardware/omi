@@ -1294,7 +1294,7 @@ export default function AnalyticsPage() {
         {/* Cumulative Total Users */}
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-1">Cumulative Users</h2>
-          <p className="text-sm text-muted-foreground mb-4">Total macOS users over time</p>
+          <p className="text-sm text-muted-foreground mb-4">Total users across all platforms</p>
           <div className="h-[300px]">
             {dailyNewUsersLoading ? (
               <div className="flex items-center justify-center h-full">
