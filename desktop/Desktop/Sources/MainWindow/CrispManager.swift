@@ -49,7 +49,12 @@ class CrispManager: ObservableObject {
     var activationObserver: NSObjectProtocol?
     var refreshAllObserver: NSObjectProtocol?
 
-    private init() {}
+    /// Counter bumped at the top of `pollForMessages()`, before the auth-backoff
+    /// guard and the network task. Lets `CrispManagerLifecycleTests` prove that
+    /// posting `didBecomeActive` / `.refreshAllData` actually reaches the poll
+    /// method — if an observer subscribes to the wrong notification name or a
+    /// future edit drops the wiring, the counter stays flat and the test fails.
+    @Published private(set) var pollInvocations: Int = 0
 
     /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R.
     ///
@@ -107,6 +112,7 @@ class CrispManager: ObservableObject {
     // MARK: - Private
 
     private func pollForMessages() {
+        pollInvocations += 1
         Task {
             // Skip if in auth backoff period (recent 401 errors)
             guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
