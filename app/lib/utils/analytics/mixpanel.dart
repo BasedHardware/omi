@@ -1435,6 +1435,10 @@ class MixpanelManager {
     track('Daily Summary Section Viewed', properties: {'summary_id': summaryId, 'section_name': sectionName});
   }
 
+  void dailySummaryShared({required String summaryId, required String date}) {
+    track('Daily Summary Shared', properties: {'summary_id': summaryId, 'date': date});
+  }
+
   // ============================================================================
   // ANNOUNCEMENT TRACKING
   // ============================================================================
