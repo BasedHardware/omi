@@ -1995,9 +1995,9 @@ class AppState: ObservableObject {
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
-  /// Refresh conversations silently (for auto-refresh timer and app-activate).
+  /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
   /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
-  func refreshConversations(skipCount: Bool = false) async {
+  func refreshConversations() async {
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if in auth backoff period (recent 401 errors)
@@ -2057,16 +2057,13 @@ class AppState: ObservableObject {
       }
     }
 
-    // Update total count (skipped during periodic background refreshes to halve traffic)
-    if !skipCount {
-      do {
-        let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
-        if totalConversationsCount != count {
-          totalConversationsCount = count
-        }
-      } catch {
-        // Keep existing count
+    do {
+      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
+      if totalConversationsCount != count {
+        totalConversationsCount = count
       }
+    } catch {
+      // Keep existing count
     }
   }
 
