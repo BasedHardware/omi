@@ -311,7 +311,7 @@ export function inspectToolCall(event: ToolCallEvent): DenyDecision | null {
 // Audit log
 // ---------------------------------------------------------------------------
 
-interface AuditEntry {
+export interface AuditEntry {
   ts: string;
   phase: "before" | "after";
   tool: string;
@@ -373,9 +373,18 @@ function auditLogPath(): string {
 }
 
 let auditWarned = false;
+
+/** Test-only: reset the `auditWarned` one-shot so tests can assert the
+ *  stderr warning fires exactly once per process. Not called from
+ *  production code. */
+export function __resetAuditWarnedForTest(): void {
+  auditWarned = false;
+}
+
 /** Append a single JSONL line to the audit log. Never throws; on failure,
- *  logs to stderr once per process so we don't flood on disk-full. */
-async function appendAudit(entry: AuditEntry): Promise<void> {
+ *  logs to stderr once per process so we don't flood on disk-full. Exported
+ *  so the fail-safe (EACCES / ENOTDIR / disk-full) can be unit tested. */
+export async function appendAudit(entry: AuditEntry): Promise<void> {
   const path = auditLogPath();
   const line = JSON.stringify(entry) + "\n";
   try {
