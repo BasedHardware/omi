@@ -344,7 +344,7 @@ export default function AnalyticsPage() {
     useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", token] : null, authFetcher, swrOpts);
 
   const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } =
-    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=540", token] : null, authFetcher, swrOpts);
+    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=all", token] : null, authFetcher, swrOpts);
 
   const { data: dauTrends, isLoading: dauLoading } =
     useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", token] : null, authFetcher, swrOpts);
@@ -1322,10 +1322,10 @@ export default function AnalyticsPage() {
                   <YAxis
                     className="text-xs"
                     tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={(v: number) => v.toLocaleString()}
-                    domain={["dataMin", "dataMax"]}
+                    tickFormatter={formatCompact}
+                    domain={[0, "dataMax"]}
                     allowDataOverflow={false}
-                    width={64}
+                    width={48}
                   />
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
@@ -1419,9 +1419,9 @@ export default function AnalyticsPage() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold">Daily New Users</h2>
-          {dailyNewUsers?.totalUsers != null && (
+          {dailyWithRollingAvg.length > 0 && (
             <span className="text-sm text-muted-foreground">
-              {dailyNewUsers.totalUsers.toLocaleString()} in last {dailyNewUsers.days}d
+              {dailyWithRollingAvg.reduce((s, p) => s + p.users, 0).toLocaleString()} in last 30d
             </span>
           )}
         </div>
