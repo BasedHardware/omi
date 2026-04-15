@@ -712,19 +712,20 @@ class TestTranscribeStreamWebSocket:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
-                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
-                    with client.websocket_connect(
-                        '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
-                    ) as ws:
-                        # Send enough audio to trigger a 30ms flush (16000 * 2 * 0.03 = 960 bytes)
-                        ws.send_bytes(b'\x00' * 960)
-                        # Receive the transcript segment
-                        data = ws.receive_json()
-                        assert isinstance(data, list)
-                        assert len(data) == 1
-                        assert data[0]['text'] == 'Hello'
-                        assert data[0]['speaker'] == 'SPEAKER_00'
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with client.websocket_connect(
+                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
+                        ) as ws:
+                            # Send enough audio to trigger a 30ms flush (16000 * 2 * 0.03 = 960 bytes)
+                            ws.send_bytes(b'\x00' * 960)
+                            # Receive the transcript segment
+                            data = ws.receive_json()
+                            assert isinstance(data, list)
+                            assert len(data) == 1
+                            assert data[0]['text'] == 'Hello'
+                            assert data[0]['speaker'] == 'SPEAKER_00'
         finally:
             _cleanup_chat_client(saved)
 
@@ -793,19 +794,20 @@ class TestTranscribeStreamWebSocket:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
-                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
-                    with client.websocket_connect(
-                        '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
-                    ) as ws:
-                        # Send sub-threshold audio (less than 960 bytes = 30ms at 16kHz)
-                        ws.send_bytes(b'\x00' * 500)
-                        # Send finalize — should flush the sub-threshold buffer
-                        ws.send_text('finalize')
-                        # Receive the transcript from flushed audio
-                        data = ws.receive_json()
-                        assert isinstance(data, list)
-                        assert data[0]['text'] == 'Final'
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with client.websocket_connect(
+                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000'
+                        ) as ws:
+                            # Send sub-threshold audio (less than 960 bytes = 30ms at 16kHz)
+                            ws.send_bytes(b'\x00' * 500)
+                            # Send finalize — should flush the sub-threshold buffer
+                            ws.send_text('finalize')
+                            # Receive the transcript from flushed audio
+                            data = ws.receive_json()
+                            assert isinstance(data, list)
+                            assert data[0]['text'] == 'Final'
 
             # Verify finalize was called
             mock_dg_socket.finalize.assert_called()
@@ -842,19 +844,20 @@ class TestTranscribeStreamWebSocket:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
-                with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
-                    with client.websocket_connect(
-                        '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000&channels=2'
-                    ) as ws:
-                        # Stereo 30ms flush = 16000 * 2 * 2 * 0.03 = 1920 bytes
-                        # Send 960 bytes — should NOT flush (mono threshold, but stereo needs 1920)
-                        ws.send_bytes(b'\x00' * 960)
-                        # Send remaining to reach stereo threshold
-                        ws.send_bytes(b'\x00' * 960)
-                        data = ws.receive_json()
-                        assert isinstance(data, list)
-                        assert data[0]['text'] == 'Stereo'
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with client.websocket_connect(
+                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000&channels=2'
+                        ) as ws:
+                            # Stereo 30ms flush = 16000 * 2 * 2 * 0.03 = 1920 bytes
+                            # Send 960 bytes — should NOT flush (mono threshold, but stereo needs 1920)
+                            ws.send_bytes(b'\x00' * 960)
+                            # Send remaining to reach stereo threshold
+                            ws.send_bytes(b'\x00' * 960)
+                            data = ws.receive_json()
+                            assert isinstance(data, list)
+                            assert data[0]['text'] == 'Stereo'
         finally:
             _cleanup_chat_client(saved)
 
@@ -1319,5 +1322,67 @@ class TestMultipartBudgetAggregation:
                         call_args = mock_budget.call_args[0]
                         assert call_args[0] == 'test-uid'
                         assert call_args[1] == 3000
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestWsMidSessionBudgetEnforcement:
+    """Test that WS closes mid-session when cumulative audio exceeds remaining budget."""
+
+    def test_ws_closes_when_budget_exceeded_mid_session(self):
+        """WS should close with 1008 when cumulative audio exceeds remaining daily budget."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # User has only 500ms of budget remaining
+            with patch.object(module, 'check_budget', return_value=(True, 7199500, 500)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration') as mock_record:
+                            with pytest.raises(Exception):
+                                with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                    # Send 32000 bytes = 1000ms at 16kHz mono — exceeds 500ms remaining
+                                    ws.send_bytes(b'\x00' * 32000)
+                                    import time
+
+                                    time.sleep(0.1)
+                                    ws.receive_json()  # should fail — WS closed due to budget
+                            # Duration should still be recorded for the audio that was sent
+                            mock_record.assert_called_once()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_allows_audio_within_remaining_budget(self):
+        """WS should accept audio that fits within remaining budget."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # User has 60s of budget remaining
+            with patch.object(module, 'check_budget', return_value=(True, 7140000, 60000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration'):
+                            with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                # Send 32000 bytes = 1000ms at 16kHz mono — well within 60s remaining
+                                ws.send_bytes(b'\x00' * 32000)
+                                # Connection should stay open — no 1008 close
         finally:
             _cleanup_chat_client(saved)
