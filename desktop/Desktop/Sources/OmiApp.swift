@@ -280,11 +280,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     _ = UpdaterViewModel.shared
     UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
-    // Initialize Sentry for crash reporting and error tracking (including dev builds)
+    // Initialize Sentry for crash reporting and error tracking (including dev builds).
+    //
+    // DSN points at the `mediar-n5/omi-computer` project — we control this org,
+    // `desktop/.env` has a valid SENTRY_AUTH_TOKEN for it, and `sentry-monitor.sh`
+    // / the `sentry-release` and `user-logs` skills all query this project.
+    //
+    // Do NOT swap this DSN without also (a) confirming we have admin access to the
+    // new org, (b) enabling the new project's Default key, (c) updating
+    // desktop/.env + SENTRY_ORG / SENTRY_PROJECT, and (d) repointing every script
+    // under desktop/scripts/ that reads those env vars. Commit 377295cbe swapped
+    // this DSN to an org we didn't have access to and every event was silently
+    // dropped for ~3 weeks.
     let isDev = AnalyticsManager.isDevBuild
     SentrySDK.start { options in
       options.dsn =
-        "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
+        "https://8f700584deda57b26041ff015539c8c1@o4507617161314304.ingest.us.sentry.io/4510790686277632"
       options.debug = false
       options.enableAutoSessionTracking = true
       options.environment = isDev ? "development" : "production"
