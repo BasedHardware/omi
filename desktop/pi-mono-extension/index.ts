@@ -45,6 +45,13 @@ interface DenyRule {
  *  `/` but `/` alone or `/ foo` does. */
 const TARGET_END = `(?=\\s|$|[;&|'"])`;
 
+/** Optional leading shell-quote absorber used before a DANGEROUS_TARGET.
+ *  Handles bare, `"`, `'`, ANSI-C quoting (`$'...'`), and locale strings
+ *  (`$"..."`), so all of `rm /etc/hosts`, `rm "/etc/hosts"`, `rm '/etc/hosts'`,
+ *  `rm $'/etc/hosts'`, and `rm $"/etc/hosts"` match the same way. Closing
+ *  quote is handled by TARGET_END which already accepts `'` and `"`. */
+const TARGET_QUOTE = `(?:\\$['"]|['"])?`;
+
 /** Composed pattern for "a shell argument that names a root or system-owned
  *  path, or the whole user home". Used by rm / chmod / chown rules. */
 const DANGEROUS_TARGET =
@@ -83,12 +90,27 @@ const BASH_DENY_RULES: DenyRule[] = [
     // (short `-rf` / `-fr` / `-r -f`, long `--recursive --force`, or no flags
     // at all). A single-file `rm /etc/hosts` is just as destructive as
     // `rm -rf /etc`, so the rule blocks on target, not on flag cluster.
-    // `['"]?` absorbs an optional leading shell quote so that
-    // `rm "/etc/hosts"`, `rm '/etc/hosts'`, and `rm "$HOME"` are all caught.
-    pattern: new RegExp(`\\brm\\b[^\\n]*?\\s['"]?${DANGEROUS_TARGET}`),
+    // `TARGET_QUOTE` absorbs an optional leading shell quote (`"`, `'`, `$'`,
+    // `$"`) so `rm "/etc/hosts"`, `rm '/etc/hosts'`, `rm $'/etc/hosts'`, and
+    // `rm "$HOME"` are all caught.
+    pattern: new RegExp(`\\brm\\b[^\\n]*?\\s${TARGET_QUOTE}${DANGEROUS_TARGET}`),
     reason:
       "Deleting a root or system path with `rm` is blocked. Use a specific " +
       "subdirectory under the working tree, or delete the exact file by path.",
+  },
+  {
+    // Destructive command with command/process substitution. We cannot
+    // statically evaluate `$(...)`, backticks, or `<(...)` so their target
+    // is unknowable to the classifier — block them outright for rm/chmod/
+    // chown so `chmod 000 "$(echo /)"` and `rm $(find / -name hosts)` cannot
+    // slip past the DANGEROUS_TARGET matcher. The model is instructed to
+    // resolve the substitution itself and pass a literal path instead.
+    pattern: /\b(?:rm|chmod|chown)\b[^\n]*?(?:\$\(|`|<\()/,
+    reason:
+      "Command or process substitution ($(...), `...`, <(...)) with " +
+      "rm/chmod/chown is blocked — the classifier cannot statically verify " +
+      "the target is safe. Resolve the substitution yourself and pass a " +
+      "literal path.",
   },
   {
     // mkfs.*, dd of=/dev/disk..., fork bomb, shred -fuv /...
@@ -101,14 +123,25 @@ const BASH_DENY_RULES: DenyRule[] = [
   {
     // Shell redirect into OS paths: `> /etc/hosts`, `>> /System/...`, `> /dev/disk2`.
     // `\d*` suffixes let us match `/dev/disk2`, `/dev/sda1`, `/dev/nvme0n1`, etc.
-    // `['"]?` absorbs an optional leading shell quote so `> "/etc/hosts"` and
-    // `>> '/dev/disk2'` are blocked just like their unquoted forms.
+    // `(?:\$['"]|['"])?` absorbs an optional leading shell quote (`"`, `'`,
+    // `$'`, `$"`) so `> "/etc/hosts"`, `> '/etc/hosts'`, and `> $'/etc/hosts'`
+    // are all blocked just like their unquoted forms.
     pattern:
-      />>?\s*['"]?\/(?:System|Library(?!\/Caches|\/Application Support\/com\.omi)|usr(?!\/local)|etc|bin|sbin|dev\/(?:disk\d*|sd[a-z]\d*|nvme\d*(?:n\d+)?|rdisk\d*|hd[a-z]\d*))\b/,
+      />>?\s*(?:\$['"]|['"])?\/(?:System|Library(?!\/Caches|\/Application Support\/com\.omi)|usr(?!\/local)|etc|bin|sbin|dev\/(?:disk\d*|sd[a-z]\d*|nvme\d*(?:n\d+)?|rdisk\d*|hd[a-z]\d*))\b/,
     reason:
       "Redirecting shell output into a system path (/System, /Library, " +
       "/usr, /etc, /bin, /sbin, /dev/disk*) is blocked. Use the write tool " +
       "with a path under the project or $HOME instead.",
+  },
+  {
+    // Redirect target uses command/process substitution. `>"$(...)"`,
+    // `> \`...\``, and `> <(...)` cannot be statically verified so we block
+    // them outright rather than try to evaluate the substitution.
+    pattern: />>?\s*['"]?(?:\$\(|`|<\()/,
+    reason:
+      "Redirect target uses command or process substitution — the " +
+      "classifier cannot statically verify the destination is safe. Use a " +
+      "literal path under the project or $HOME.",
   },
   {
     // shutdown/reboot/halt/poweroff.
@@ -149,11 +182,12 @@ const BASH_DENY_RULES: DenyRule[] = [
   },
   {
     // chmod/chown on root or system-owned trees — ANY flags (`-R -v`, long
-    // form, or none) before the dangerous target. `['"]?` absorbs an optional
-    // leading shell quote so `chmod 000 "/"` and `chown root "$HOME"` are
-    // caught just like their unquoted forms.
+    // form, or none) before the dangerous target. `TARGET_QUOTE` absorbs an
+    // optional leading shell quote (`"`, `'`, `$'`, `$"`) so
+    // `chmod 000 "/"`, `chmod 000 '/'`, `chmod 000 $'/'`, and
+    // `chown root "$HOME"` are all caught.
     pattern: new RegExp(
-      `\\b(?:chmod|chown)\\b[^\\n]*?\\s['"]?${DANGEROUS_TARGET}`
+      `\\b(?:chmod|chown)\\b[^\\n]*?\\s${TARGET_QUOTE}${DANGEROUS_TARGET}`
     ),
     reason:
       "Changing permissions or ownership of a root or system path is " +
@@ -220,11 +254,23 @@ export interface DenyDecision {
   reason: string;
 }
 
+/** Collapse purely syntactic bash noise so multi-line or line-continued
+ *  commands classify the same as their canonical single-line form. Currently
+ *  this folds `\<newline>` (bash line continuation) into a single space so the
+ *  redirect / target rules see `echo bad > "/etc/hosts"` whether the user
+ *  wrote it on one line or split it across two. Line continuations have no
+ *  semantic meaning in bash — they are purely a source-code layout tool —
+ *  so this normalization cannot produce a false positive. */
+function normalizeBashCommand(command: string): string {
+  return command.replace(/\\\n/g, " ");
+}
+
 /** Classify a bash command. Returns null when allowed. */
 export function classifyBash(command: string): DenyDecision | null {
   if (typeof command !== "string" || command.length === 0) return null;
+  const normalized = normalizeBashCommand(command);
   for (const rule of BASH_DENY_RULES) {
-    if (rule.pattern.test(command)) {
+    if (rule.pattern.test(normalized)) {
       return { blocked: true, reason: rule.reason };
     }
   }
