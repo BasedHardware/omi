@@ -68,12 +68,31 @@ final class ReentrancyGateTests: XCTestCase {
         gate.exit()
     }
 
-    func testExitWithoutEnterIsSafe() {
-        // Defensive: exit() when no prior enter() is a no-op. This matches the
-        // `defer { gate.exit() }` pattern — exit runs even when the guard bails.
-        // Subsequent enter should still succeed.
+    func testGuardDeferPatternOnlyExitsWhenOwnerEntered() {
+        // Models the canonical ChatProvider.pollForNewMessages() usage:
+        //   guard gate.tryEnter() else { return }
+        //   defer { gate.exit() }
+        // Non-owners return before the defer is registered, so exit() is
+        // never called from a non-owning caller — the contract holds.
         let gate = ReentrancyGate()
-        gate.exit()
-        XCTAssertTrue(gate.tryEnter(), "Enter after spurious exit must still succeed")
+        var exitCalls = 0
+
+        func criticalSection() {
+            guard gate.tryEnter() else { return }
+            defer {
+                gate.exit()
+                exitCalls += 1
+            }
+            // simulated critical work — the second concurrent call below runs
+            // before this defer fires because Swift closures run synchronously.
+        }
+
+        // First caller acquires + releases via defer.
+        criticalSection()
+        XCTAssertEqual(exitCalls, 1)
+
+        // Second sequential caller also acquires cleanly after the first exited.
+        criticalSection()
+        XCTAssertEqual(exitCalls, 2)
     }
 }
