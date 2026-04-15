@@ -204,12 +204,18 @@ class TestBudgetConsumeLogic:
         assert used == 7200000
         assert remaining == 0
 
-    def test_consume_zero_duration_always_allowed(self):
-        from utils.voice_duration_limiter import try_consume_budget, DAILY_BUDGET_MS
+    def test_consume_zero_duration_probes_budget(self, mock_redis):
+        """Zero-duration consume probes budget status without recording."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [1, 0, 7200000]
 
-        allowed, used, remaining = try_consume_budget('uid123', 0)
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import try_consume_budget
+
+            allowed, used, remaining = try_consume_budget('uid123', 0)
+
         assert allowed is True
-        assert remaining == DAILY_BUDGET_MS
+        assert remaining == 7200000
 
     def test_consume_redis_error_fails_open(self, mock_redis):
         _, mock_script = mock_redis
@@ -274,6 +280,9 @@ class TestRecordActualDuration:
 
         assert result is True
         mock_script.assert_called_once()
+        # Verify force=1 is passed as 5th arg
+        call_args = mock_script.call_args
+        assert call_args[1]['args'][4] == 1
 
     def test_record_zero_skips_redis(self, mock_redis):
         _, mock_script = mock_redis
@@ -303,6 +312,69 @@ class TestGetBudgetStatus:
         assert status['used_ms'] == 3600000
         assert status['remaining_ms'] == 3600000
         assert status['exhausted'] is False
+
+
+# ===========================================================================
+# Boundary tests: used == DAILY_BUDGET_MS
+# ===========================================================================
+
+
+class TestBudgetBoundary:
+    """Test exact budget boundary behavior."""
+
+    def test_consume_at_exact_budget_rejected(self, mock_redis):
+        """When used==budget, a non-zero consume should be rejected."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [0, 7200000, 0]
+
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import try_consume_budget
+
+            allowed, used, remaining = try_consume_budget('uid123', 1000)
+
+        assert allowed is False
+        assert remaining == 0
+
+    def test_check_budget_at_exact_limit_exhausted(self, mock_redis):
+        """check_budget should report exhausted when used==budget."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [0, 7200000, 0]
+
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import check_budget
+
+            has_budget, used, remaining = check_budget('uid123')
+
+        assert has_budget is False
+        assert remaining == 0
+
+    def test_consume_just_under_budget_allowed(self, mock_redis):
+        """When used + request < budget, should be allowed."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [1, 7199999, 1]
+
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import try_consume_budget
+
+            allowed, used, remaining = try_consume_budget('uid123', 999)
+
+        assert allowed is True
+        assert remaining == 1
+
+    def test_record_actual_duration_force_records(self, mock_redis):
+        """record_actual_duration should always record (force=1), even over budget."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [1, 7260000, 0]  # force-recorded over budget
+
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import record_actual_duration
+
+            result = record_actual_duration('uid123', 60000)
+
+        assert result is True
+        # Verify force=1 was passed as 5th arg
+        call_args = mock_script.call_args
+        assert call_args[1]['args'][4] == 1  # force flag
 
 
 # ===========================================================================
