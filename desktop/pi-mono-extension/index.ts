@@ -83,7 +83,9 @@ const BASH_DENY_RULES: DenyRule[] = [
     // (short `-rf` / `-fr` / `-r -f`, long `--recursive --force`, or no flags
     // at all). A single-file `rm /etc/hosts` is just as destructive as
     // `rm -rf /etc`, so the rule blocks on target, not on flag cluster.
-    pattern: new RegExp(`\\brm\\b[^\\n]*?\\s${DANGEROUS_TARGET}`),
+    // `['"]?` absorbs an optional leading shell quote so that
+    // `rm "/etc/hosts"`, `rm '/etc/hosts'`, and `rm "$HOME"` are all caught.
+    pattern: new RegExp(`\\brm\\b[^\\n]*?\\s['"]?${DANGEROUS_TARGET}`),
     reason:
       "Deleting a root or system path with `rm` is blocked. Use a specific " +
       "subdirectory under the working tree, or delete the exact file by path.",
@@ -99,8 +101,10 @@ const BASH_DENY_RULES: DenyRule[] = [
   {
     // Shell redirect into OS paths: `> /etc/hosts`, `>> /System/...`, `> /dev/disk2`.
     // `\d*` suffixes let us match `/dev/disk2`, `/dev/sda1`, `/dev/nvme0n1`, etc.
+    // `['"]?` absorbs an optional leading shell quote so `> "/etc/hosts"` and
+    // `>> '/dev/disk2'` are blocked just like their unquoted forms.
     pattern:
-      />>?\s*\/(?:System|Library(?!\/Caches|\/Application Support\/com\.omi)|usr(?!\/local)|etc|bin|sbin|dev\/(?:disk\d*|sd[a-z]\d*|nvme\d*(?:n\d+)?|rdisk\d*|hd[a-z]\d*))\b/,
+      />>?\s*['"]?\/(?:System|Library(?!\/Caches|\/Application Support\/com\.omi)|usr(?!\/local)|etc|bin|sbin|dev\/(?:disk\d*|sd[a-z]\d*|nvme\d*(?:n\d+)?|rdisk\d*|hd[a-z]\d*))\b/,
     reason:
       "Redirecting shell output into a system path (/System, /Library, " +
       "/usr, /etc, /bin, /sbin, /dev/disk*) is blocked. Use the write tool " +
@@ -145,9 +149,11 @@ const BASH_DENY_RULES: DenyRule[] = [
   },
   {
     // chmod/chown on root or system-owned trees — ANY flags (`-R -v`, long
-    // form, or none) before the dangerous target.
+    // form, or none) before the dangerous target. `['"]?` absorbs an optional
+    // leading shell quote so `chmod 000 "/"` and `chown root "$HOME"` are
+    // caught just like their unquoted forms.
     pattern: new RegExp(
-      `\\b(?:chmod|chown)\\b[^\\n]*?\\s${DANGEROUS_TARGET}`
+      `\\b(?:chmod|chown)\\b[^\\n]*?\\s['"]?${DANGEROUS_TARGET}`
     ),
     reason:
       "Changing permissions or ownership of a root or system path is " +
