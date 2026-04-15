@@ -18,11 +18,24 @@ export async function GET(request: NextRequest) {
     startDate.setDate(startDate.getDate() - days);
     startDate.setHours(0, 0, 0, 0);
 
-    const snapshot = await db
-      .collection("users")
-      .where("created_at", ">=", admin.firestore.Timestamp.fromDate(startDate))
-      .orderBy("created_at", "asc")
-      .get();
+    const startTimestamp = admin.firestore.Timestamp.fromDate(startDate);
+
+    // Query the window (new users in the last `days` days) and the baseline
+    // (total users that existed before the window) in parallel.
+    const [windowSnapshot, baselineAgg] = await Promise.all([
+      db
+        .collection("users")
+        .where("created_at", ">=", startTimestamp)
+        .orderBy("created_at", "asc")
+        .get(),
+      db
+        .collection("users")
+        .where("created_at", "<", startTimestamp)
+        .count()
+        .get(),
+    ]);
+
+    const baseline = baselineAgg.data().count;
 
     // Group by date
     const countsByDate: Record<string, number> = {};
@@ -35,7 +48,7 @@ export async function GET(request: NextRequest) {
       countsByDate[key] = 0;
     }
 
-    snapshot.docs.forEach((doc) => {
+    windowSnapshot.docs.forEach((doc) => {
       const data = doc.data();
       if (data.created_at) {
         const ts = data.created_at.toDate();
@@ -46,9 +59,13 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    let running = baseline;
     const data = Object.entries(countsByDate)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, users]) => ({ date, users }));
+      .map(([date, users]) => {
+        running += users;
+        return { date, users, cumulative: running };
+      });
 
     const totalUsers = data.reduce((sum, d) => sum + d.users, 0);
 
