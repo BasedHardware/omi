@@ -94,12 +94,14 @@ substep() {
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
+IS_NAMED_BUNDLE=false
+[ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
 
 slugify_identifier() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
 }
 
-if [ "$APP_NAME" = "Omi Dev" ]; then
+if [ "$IS_NAMED_BUNDLE" = false ]; then
     EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
     EXPECTED_URL_SCHEME="omi-computer-dev"
 else
@@ -552,21 +554,19 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null ||
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
-# Embed provisioning profile (required for Sign In with Apple entitlement)
-# Use dev profile for dev builds, production profile for release builds.
-# Named test bundles (anything other than "Omi Dev") skip the profile because
-# embedded-dev.provisionprofile is only valid for com.omi.desktop-dev —
+# Embed provisioning profile (required for Sign In with Apple entitlement).
+# Named bundles skip this — the profile is bundle-specific to com.omi.desktop-dev,
 # embedding it in a different bundle ID causes RBSRequestErrorDomain Code=5.
-if [ "$APP_NAME" = "Omi Dev" ]; then
+if [ "$IS_NAMED_BUNDLE" = false ]; then
     if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
-        substep "Copying dev provisioning profile"
+        substep "Embedding dev provisioning profile"
         cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
     elif [ -f "Desktop/embedded.provisionprofile" ]; then
-        substep "Copying provisioning profile"
+        substep "Embedding provisioning profile"
         cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
     fi
 else
-    substep "Named bundle ($BUNDLE_ID) — skipping provisioning profile (not covered)"
+    substep "Named bundle ($BUNDLE_ID) — skipping provisioning profile"
 fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
@@ -619,8 +619,8 @@ if [ -n "$SIGN_IDENTITY" ]; then
     PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
     USE_FALLBACK_ENTITLEMENTS=false
 
-    if [ "$APP_NAME" != "Omi Dev" ]; then
-        substep "Named bundle — using local entitlements (no applesignin)"
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        substep "Named bundle — stripping applesignin entitlement"
         USE_FALLBACK_ENTITLEMENTS=true
     elif [ -f "$PROFILE_PATH" ]; then
         IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
