@@ -102,16 +102,51 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     return profile
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
-def delete_account(uid: str = Depends(auth.get_current_user_uid)):
+class DeleteAccountRequest(BaseModel):
+    reason: Optional[str] = None
+    reason_details: Optional[str] = None
+
+
+def _background_wipe_user_data(uid: str):
     try:
         delete_user_data(uid)
-        # delete user from firebase auth
-        auth.delete_account(uid)
-        return {'status': 'ok', 'message': 'Account deleted successfully'}
+        logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
-        logger.info(f'delete_account {str(e)}')
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.info(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
+
+
+@router.delete('/v1/users/delete-account', tags=['v1'])
+def delete_account(
+    request: DeleteAccountRequest = DeleteAccountRequest(),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    try:
+        # 1. Persist deletion feedback first (top-level collection survives wipe).
+        if request.reason or request.reason_details:
+            try:
+                users_db.set_user_deletion_feedback(uid, request.reason, request.reason_details)
+            except Exception as e:
+                logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
+
+        # 2. Revoke Firebase auth immediately so tokens are useless and the
+        #    account cannot be logged back into while the data wipe runs.
+        try:
+            auth.delete_account(uid)
+        except Exception as e:
+            err = str(e).upper()
+            if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
+                logger.info(f'delete_account firebase user already gone for {uid}')
+            else:
+                raise
+
+        # 3. Wipe Firestore subcollections in the background — can take minutes
+        #    for heavy users and would otherwise time out at the load balancer.
+        threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
+
+        return {'status': 'ok', 'message': 'Account deletion started'}
+    except Exception as e:
+        logger.info(f'delete_account {sanitize(str(e))}')
+        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'])
