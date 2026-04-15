@@ -1216,3 +1216,108 @@ class TestWsIdleTimeout:
                                         ws.receive_json()  # should fail — WS closed
         finally:
             _cleanup_chat_client(saved)
+
+    def test_ws_idle_timeout_fires_despite_text_frames(self):
+        """WS should still close for audio-idle even if text frames (finalize) are sent."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # Set idle timeout very short for test
+            with patch.object(module, '_WS_IDLE_TIMEOUT_S', 0.2):
+                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                    with patch.object(
+                        module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')
+                    ):
+                        with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                            with patch.object(module, 'record_actual_duration'):
+                                with pytest.raises(Exception):
+                                    with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                        import time
+
+                                        # Send finalize text frame — should NOT reset audio-idle timer
+                                        time.sleep(0.1)
+                                        ws.send_text('finalize')
+                                        time.sleep(0.2)
+                                        # Audio-idle timeout should have fired despite the text frame
+                                        ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestVoiceMessagesBudgetHappyPath:
+    """Test /v2/voice-messages budget consumption on the happy path."""
+
+    def test_voice_messages_budget_consumed_on_success(self):
+        """Budget should be consumed with first WAV duration on successful stream."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+
+            async def mock_stream(*args, **kwargs):
+                yield 'data: {"text": "hello"}\n\n'
+
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=45_000):
+                        with patch.object(
+                            module, 'try_consume_budget', return_value=(True, 45000, 7155000)
+                        ) as mock_budget:
+                            with patch.object(module, 'resolve_voice_message_language', return_value='en'):
+                                with patch.object(
+                                    module, 'process_voice_message_segment_stream', side_effect=mock_stream
+                                ):
+                                    resp = client.post(
+                                        '/v2/voice-messages',
+                                        files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                                    )
+                                    assert resp.status_code == 200
+                                    # Budget consumed with first WAV duration only
+                                    mock_budget.assert_called_once()
+                                    call_args = mock_budget.call_args[0]
+                                    assert call_args[0] == 'test-uid'
+                                    assert call_args[1] == 45000
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestMultipartBudgetAggregation:
+    """Test that multipart multi-file uploads sum WAV durations correctly."""
+
+    def test_multipart_multi_file_budget_sums_durations(self):
+        """Budget should be consumed with sum of all WAV durations."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            # Simulate 3 files: 1000ms, None (unreadable), 2000ms → budget call with 3000
+            duration_values = iter([1000, None, 2000])
+
+            with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
+                with patch.object(module, 'try_consume_budget', return_value=(True, 3000, 7197000)) as mock_budget:
+                    with patch.object(module, 'transcribe_voice_message_segment', return_value=('hello', 'en')):
+                        resp = client.post(
+                            '/v2/voice-message/transcribe',
+                            files=[
+                                ('files', ('a.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                                ('files', ('b.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                                ('files', ('c.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                            ],
+                        )
+                        assert resp.status_code == 200
+                        # Budget consumed with sum: 1000 + 2000 = 3000 (None skipped)
+                        mock_budget.assert_called_once()
+                        call_args = mock_budget.call_args[0]
+                        assert call_args[0] == 'test-uid'
+                        assert call_args[1] == 3000
+        finally:
+            _cleanup_chat_client(saved)
