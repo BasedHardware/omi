@@ -505,8 +505,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
     // not always defaulting to Omi mode on cold start.
     private lazy var acpBridge: ACPBridge = {
-        let isOmi = (UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue) != BridgeMode.userClaude.rawValue
-        return ACPBridge(passApiKey: isOmi)
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue
+        return ACPBridge(passApiKey: mode == BridgeMode.omiAI.rawValue)
     }()
     private var acpBridgeStarted = false
 
@@ -515,6 +515,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         case userClaude = "claudeCode"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.omiAI.rawValue
+
+    var isUsingOmiAccountProvider: Bool {
+        bridgeMode == BridgeMode.omiAI.rawValue
+    }
 
     /// Whether the ACP bridge requires authentication (shown as sheet in UI)
     @Published var isClaudeAuthRequired = false
@@ -2135,17 +2139,19 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
         // Block the send, surface the popup, and let the user upgrade.
         let usageLimiter = FloatingBarUsageLimiter.shared
-        if usageLimiter.isLimitReached {
-            log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
-            errorMessage = "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting."
-            NotificationCenter.default.post(
-                name: .showUsageLimitPopup,
-                object: nil,
-                userInfo: ["reason": "chat"]
-            )
-            return
+        if isUsingOmiAccountProvider {
+            if usageLimiter.isLimitReached {
+                log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
+                errorMessage = "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting."
+                NotificationCenter.default.post(
+                    name: .showUsageLimitPopup,
+                    object: nil,
+                    userInfo: ["reason": "chat"]
+                )
+                return
+            }
+            usageLimiter.recordQuery()
         }
-        usageLimiter.recordQuery()
 
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {

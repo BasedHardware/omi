@@ -103,7 +103,14 @@ struct DesktopHomeView: View {
           mainContent
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
             .overlay {
-              if appState.showUsageLimitPopup {
+              let bridgeMode = UserDefaults.standard.string(forKey: "chatBridgeMode")
+                ?? ChatProvider.BridgeMode.omiAI.rawValue
+              let isOmiChatPopup =
+                appState.usageLimitReason == "chat" || appState.usageLimitReason == "floating_bar"
+
+              if appState.showUsageLimitPopup
+                && !(isOmiChatPopup && bridgeMode != ChatProvider.BridgeMode.omiAI.rawValue)
+              {
                 UsageLimitPopupView(
                   reason: appState.usageLimitReason,
                   onUpgrade: {

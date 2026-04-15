@@ -187,20 +187,10 @@ struct ChatPage: View {
     .sheet(isPresented: $chatProvider.isClaudeAuthRequired) {
       ClaudeAuthSheet(
         onConnect: {
-          if let url = URL(string: "https://omi.me/pricing") {
-            NSWorkspace.shared.open(url)
-          }
-          chatProvider.isClaudeAuthRequired = false
-          Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
-          }
+          chatProvider.startClaudeAuth()
         },
         onCancel: {
           chatProvider.isClaudeAuthRequired = false
-          // Switch back to Mode A if auth cancelled
-          Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
-          }
         }
       )
     }
