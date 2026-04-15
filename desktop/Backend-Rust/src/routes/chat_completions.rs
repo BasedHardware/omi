@@ -85,7 +85,10 @@ fn translate_request(
 
     for msg in &req.messages {
         match msg.role.as_str() {
-            "system" => {
+            // OpenAI uses "developer" as a drop-in replacement for "system" for
+            // o1+/reasoning models. Pi's openai-completions client sends this
+            // role when reasoning is enabled; treat it identically to "system".
+            "system" | "developer" => {
                 let text = extract_text_content(&msg.content);
                 system_prompt = Some(text);
             }
@@ -179,7 +182,8 @@ fn translate_request(
     });
 
     let max_tokens = req
-        .max_tokens
+        .max_completion_tokens
+        .or(req.max_tokens)
         .unwrap_or(DEFAULT_MAX_TOKENS)
         .min(MAX_TOKENS_CAP);
 
@@ -957,6 +961,7 @@ mod tests {
             stream: false,
             temperature: Some(0.7),
             max_tokens: Some(1024),
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
@@ -985,6 +990,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: Some(999999),
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
@@ -1007,12 +1013,127 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
 
         let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
         assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
+    }
+
+    #[test]
+    fn test_translate_request_developer_role_treated_as_system() {
+        // OpenAI reasoning models (and pi-mono) send role="developer" as a
+        // drop-in replacement for role="system". The translator must accept
+        // both and fold the message into the top-level Anthropic `system`
+        // field. Without this support the request fails validation with a
+        // bare 400 (no body), which is invisible to the user.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "developer".to_string(),
+                    content: Some(json!("You are terse.")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("hi")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.system, Some("You are terse.".to_string()));
+        assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
+        assert_eq!(result.messages[0].role, "user");
+    }
+
+    #[test]
+    fn test_translate_request_max_completion_tokens_preferred() {
+        // OpenAI renamed `max_tokens` → `max_completion_tokens` for reasoning
+        // models. Pi sends the new field. Accept both, and prefer
+        // max_completion_tokens when both are present (matches OpenAI docs).
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: Some(100),
+            max_completion_tokens: Some(2048),
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.max_tokens, 2048);
+    }
+
+    #[test]
+    fn test_translate_request_max_completion_tokens_only() {
+        // Pi only sends max_completion_tokens; max_tokens is absent.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: Some(4096),
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.max_tokens, 4096);
+    }
+
+    #[test]
+    fn test_translate_request_max_completion_tokens_cap() {
+        // max_completion_tokens must also respect MAX_TOKENS_CAP to prevent
+        // abuse of the hardened cap via the new field name.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: Some(999_999),
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        assert_eq!(result.max_tokens, MAX_TOKENS_CAP);
     }
 
     #[test]
@@ -1052,6 +1173,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
@@ -1077,6 +1199,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: Some(vec![ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
@@ -1301,6 +1424,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: Some(vec![ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
@@ -1332,6 +1456,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
@@ -1423,6 +1548,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             tools: None,
             tool_choice: Some(json!("bogus")),
         };
@@ -1446,6 +1572,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: Some(0),
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
@@ -1467,6 +1594,7 @@ mod tests {
             stream: false,
             temperature: None,
             max_tokens: Some(MAX_TOKENS_CAP),
+            max_completion_tokens: None,
             tools: None,
             tool_choice: None,
         };
