@@ -608,11 +608,13 @@ async def transcribe_voice_message_stream(
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
     # Daily budget check — reject if already exhausted before opening DG connection
+    budget_remaining_ms = None  # None = fail-open (no enforcement)
     try:
         has_budget, used_ms, remaining_ms = check_budget(uid)
         if not has_budget:
             await websocket.close(code=1008, reason='Daily transcription budget exhausted')
             return
+        budget_remaining_ms = remaining_ms
     except Exception:
         pass  # Fail-open
 
@@ -726,6 +728,18 @@ async def transcribe_voice_message_stream(
                 continue
 
             total_audio_bytes += len(data)
+
+            # In-session budget enforcement: close if cumulative audio exceeds
+            # the remaining daily budget captured at connect time.
+            if budget_remaining_ms is not None and bytes_per_second > 0:
+                elapsed_ms = compute_pcm_duration_ms(total_audio_bytes, sample_rate, channels)
+                if elapsed_ms > budget_remaining_ms:
+                    logger.info(
+                        f'transcribe-stream: budget exhausted mid-session uid={uid} elapsed={elapsed_ms}ms remaining={budget_remaining_ms}ms'
+                    )
+                    await websocket.close(code=1008, reason='Daily transcription budget exhausted')
+                    break
+
             stt_audio_buffer.extend(data)
 
             # Flush to Deepgram in 30ms chunks
