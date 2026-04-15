@@ -24,14 +24,16 @@ class CrispManager: ObservableObject {
     /// Timestamp of the most recent operator message we've already notified about.
     /// Persisted to UserDefaults so unread messages survive app restarts.
     /// Stored as Double because UserDefaults can't round-trip UInt64.
-    private var lastSeenTimestamp: UInt64 {
+    /// Non-`private` so `CrispManagerLifecycleTests` can assert `markAsRead()` advances it.
+    var lastSeenTimestamp: UInt64 {
         get { UInt64(UserDefaults.standard.double(forKey: "crisp_lastSeenTimestamp")) }
         set { UserDefaults.standard.set(Double(newValue), forKey: "crisp_lastSeenTimestamp") }
     }
 
     /// Track the latest operator message timestamp from any poll.
     /// Persisted to UserDefaults so we don't re-notify after restart.
-    private var latestOperatorTimestamp: UInt64 {
+    /// Non-`private` so `CrispManagerLifecycleTests` can seed it before `markAsRead()`.
+    var latestOperatorTimestamp: UInt64 {
         get { UInt64(UserDefaults.standard.double(forKey: "crisp_latestOperatorTimestamp")) }
         set { UserDefaults.standard.set(Double(newValue), forKey: "crisp_latestOperatorTimestamp") }
     }
@@ -39,11 +41,13 @@ class CrispManager: ObservableObject {
     /// Track message texts we've already sent notifications for (to avoid duplicates)
     private var notifiedMessages = Set<String>()
 
-    /// Whether start() has been called
-    private var isStarted = false
+    /// Whether start() has been called. Non-`private` so lifecycle tests can
+    /// assert idempotency after calling `start()` twice.
+    var isStarted = false
 
-    private var activationObserver: NSObjectProtocol?
-    private var refreshAllObserver: NSObjectProtocol?
+    /// Non-`private` so lifecycle tests can assert `stop()` clears both observers.
+    var activationObserver: NSObjectProtocol?
+    var refreshAllObserver: NSObjectProtocol?
 
     private init() {}
 
