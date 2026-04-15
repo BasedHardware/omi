@@ -537,12 +537,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
+    private var activationObserver: AnyCancellable?
 
-    // MARK: - Cross-Platform Message Polling
-    /// Polls for new messages from other platforms (mobile) every 15 seconds.
-    /// Similar to TasksStore's 30-second polling pattern.
-    private var messagePollTimer: AnyCancellable?
-    private static let messagePollInterval: TimeInterval = 15.0
+    private var refreshAllObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -638,9 +635,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 }
             }
 
-        // Poll for new messages from other platforms (mobile) every 15 seconds
-        messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
-            .autoconnect()
+        // Refresh messages when app becomes active
+        activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    await self?.pollForNewMessages()
+                }
+            }
+
+        // Cmd+R: refresh messages on demand
+        refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await self?.pollForNewMessages()
@@ -1920,11 +1924,17 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         isLoading = false
     }
 
-    // MARK: - Cross-Platform Message Polling
+    // MARK: - Cross-Platform Message Sync
 
-    /// Poll for new messages from other platforms (e.g. mobile).
+    /// Prevents overlapping fetches when activation + Cmd+R fire back-to-back.
+    private let pollGate = ReentrancyGate()
+
+    /// Fetch new messages from other platforms (e.g. mobile).
     /// Merges new messages into the existing array without disrupting the UI.
     private func pollForNewMessages() async {
+        // Prevent overlapping fetches from activation + Cmd+R firing together
+        guard pollGate.tryEnter() else { return }
+        defer { pollGate.exit() }
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
         // Skip if in auth backoff period (recent 401 errors)

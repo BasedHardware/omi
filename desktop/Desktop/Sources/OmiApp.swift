@@ -191,6 +191,13 @@ struct OMIApp: App {
         }
         .keyboardShortcut(",", modifiers: .command)
       }
+
+      CommandGroup(after: .toolbar) {
+        Button("Refresh") {
+          NotificationCenter.default.post(name: .refreshAllData, object: nil)
+        }
+        .keyboardShortcut("r", modifiers: .command)
+      }
     }
 
     // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
