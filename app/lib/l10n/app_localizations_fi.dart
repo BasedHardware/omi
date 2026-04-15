@@ -8946,65 +8946,65 @@ class AppLocalizationsFi extends AppLocalizations {
       'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'Miksi lähdet?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'Palautteesi auttaa meitä parantamaan Omia kaikille.';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'Yksityisyyteen liittyvät huolet';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'En käytä sitä tarpeeksi';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'Tarvitsemiani ominaisuuksia puuttuu';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'Liian monta teknistä ongelmaa';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'Käytän jotain muuta';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'Pidän vain tauon';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'Muu';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'Kerro lisää';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'Mikä olisi saanut Omin toimimaan sinulle?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'Tämä on lopullista';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'Kun poistat tilisi, sitä ei voi enää palauttaa.';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'Mahdolliset aktiiviset tilaukset peruutetaan.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'Tiliäsi ei voi palauttaa — ei edes tuki voi tehdä sitä.';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'Kirjoita DELETE vahvistaaksesi';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'Poista tili pysyvästi';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'Säilytä tilini';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'Tiliäsi ei voitu poistaa. Yritä uudelleen.';
 }

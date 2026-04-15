@@ -8955,65 +8955,65 @@ class AppLocalizationsLt extends AppLocalizations {
       'Omi neturi leidimo skaityti jūsų Apple Health duomenis. Įjunkite: iOS Nustatymai → Privatumas ir sauga → Health → Omi.';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'Kodėl išeini?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'Tavo atsiliepimai padeda mums tobulinti Omi visiems.';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'Privatumo problemos';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'Naudoju nepakankamai dažnai';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'Trūksta funkcijų, kurių man reikia';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'Per daug techninių problemų';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'Naudoju kažką kita';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'Tiesiog darau pertrauką';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'Kita';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'Papasakok daugiau';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'Kas būtų padarę Omi tinkamą tau?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'Neprivaloma — tavo mintys padeda mums sukurti geresnį produktą.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'Tai negrįžtama';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'Ištrynus paskyrą jos nebus galima atkurti.';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'Bet kokia aktyvi prenumerata bus atšaukta.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'Tavo paskyros negalima atkurti — net ir palaikymo komandai.';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'Norėdami patvirtinti, įveskite DELETE';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'Visam laikui ištrinti paskyrą';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'Palikti mano paskyrą';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'Nepavyko ištrinti tavo paskyros. Bandyk dar kartą.';
 }

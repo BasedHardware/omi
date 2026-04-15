@@ -8798,65 +8798,65 @@ class AppLocalizationsJa extends AppLocalizations {
       'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'どうして離れるのですか?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'あなたのフィードバックは、みんなのためにOmiを改善するのに役立ちます。';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'プライバシーへの懸念';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'あまり使っていない';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => '必要な機能が足りない';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => '技術的な問題が多すぎる';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => '他のものを使っている';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => '少し休みたいだけ';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'その他';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'もう少し聞かせてください';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => '何があればOmiはあなたに合っていましたか?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => '任意 — あなたの声がより良い製品づくりに役立ちます。';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'この操作は取り消せません';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'アカウントを削除すると、復元することはできません。';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => '有効なサブスクリプションはキャンセルされます。';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'アカウントは復元できません — サポートでも対応できません。';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => '確認のためにDELETEと入力してください';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'アカウントを完全に削除';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'アカウントを残す';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'アカウントを削除できませんでした。もう一度お試しください。';
 }

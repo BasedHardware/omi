@@ -8986,65 +8986,65 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Ominak nincs engedélye az Apple Health-adataid olvasására. Engedélyezd: iOS Beállítások → Adatvédelem és biztonság → Health → Omi.';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'Miért távozol?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'A visszajelzésed segít nekünk, hogy az Omi mindenki számára jobb legyen.';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'Adatvédelmi aggályok';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'Nem használom elég gyakran';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'Hiányoznak a funkciók, amikre szükségem van';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'Túl sok műszaki probléma';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'Mást használok';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'Csak szünetet tartok';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'Egyéb';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'Mesélj többet';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'Mi tette volna használhatóvá az Omit számodra?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'Nem kötelező — a gondolataid segítenek nekünk jobb terméket építeni.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'Ez végleges';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'Miután törölted a fiókodat, nincs mód a visszaállítására.';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'Minden aktív előfizetés megszűnik.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'A fiókod nem állítható vissza — még az ügyfélszolgálat által sem.';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'Írd be a DELETE szót a megerősítéshez';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'Fiók végleges törlése';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'Fiókom megtartása';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'Nem sikerült törölni a fiókodat. Próbáld újra.';
 }

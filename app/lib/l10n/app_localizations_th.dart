@@ -8901,65 +8901,65 @@ class AppLocalizationsTh extends AppLocalizations {
       'Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'ทำไมคุณถึงจะไป?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'ความคิดเห็นของคุณช่วยให้เราปรับปรุง Omi ให้ดีขึ้นสำหรับทุกคน';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'ความกังวลด้านความเป็นส่วนตัว';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'ใช้งานไม่มากพอ';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'ขาดฟีเจอร์ที่ต้องการ';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'มีปัญหาทางเทคนิคมากเกินไป';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'กำลังใช้สิ่งอื่น';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'แค่หยุดพักสักครู่';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'อื่นๆ';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'อะไรจะทำให้ Omi ใช้งานได้ดีสำหรับคุณ?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'การกระทำนี้ถาวร';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'เมื่อคุณลบบัญชีของคุณแล้ว จะไม่สามารถกู้คืนได้';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'ลบบัญชีถาวร';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'เก็บบัญชีของฉันไว้';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
 }

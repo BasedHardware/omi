@@ -8947,65 +8947,65 @@ class AppLocalizationsVi extends AppLocalizations {
       'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'Vì sao bạn rời đi?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'Phản hồi của bạn giúp chúng tôi cải thiện Omi cho mọi người.';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'Lo ngại về quyền riêng tư';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'Không sử dụng đủ nhiều';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'Thiếu các tính năng tôi cần';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'Quá nhiều vấn đề kỹ thuật';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'Đang dùng thứ khác';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'Chỉ nghỉ một thời gian';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'Khác';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'Điều gì sẽ khiến Omi phù hợp với bạn?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'Đây là vĩnh viễn';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'Khi bạn xóa tài khoản, không có cách nào để khôi phục.';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'Mọi gói đăng ký đang hoạt động sẽ bị hủy.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'Nhập DELETE để xác nhận';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'Xóa tài khoản vĩnh viễn';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'Giữ tài khoản của tôi';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'Không thể xóa tài khoản của bạn. Vui lòng thử lại.';
 }

@@ -8998,65 +8998,65 @@ class AppLocalizationsTe extends AppLocalizations {
       'Omi కి మీ Apple Health డేటాను చదవడానికి అనుమతి లేదు. iOS సెట్టింగ్‌లు → గోప్యత & భద్రత → Health → Omi లో దీన్ని ప్రారంభించండి.';
 
   @override
-  String get deleteFlowReasonTitle => 'Why are you leaving?';
+  String get deleteFlowReasonTitle => 'మీరు ఎందుకు వెళ్తున్నారు?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+  String get deleteFlowReasonSubtitle => 'మీ అభిప్రాయం అందరికీ Omi-ని మెరుగుపరచడంలో మాకు సహాయపడుతుంది.';
 
   @override
-  String get deleteReasonPrivacy => 'Privacy concerns';
+  String get deleteReasonPrivacy => 'గోప్యత ఆందోళనలు';
 
   @override
-  String get deleteReasonNotUsing => 'Not using it enough';
+  String get deleteReasonNotUsing => 'తగినంతగా ఉపయోగించడం లేదు';
 
   @override
-  String get deleteReasonMissingFeatures => 'Missing features I need';
+  String get deleteReasonMissingFeatures => 'నాకు కావలసిన ఫీచర్లు లేవు';
 
   @override
-  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+  String get deleteReasonTechnicalIssues => 'చాలా సాంకేతిక సమస్యలు';
 
   @override
-  String get deleteReasonFoundAlternative => 'Using something else';
+  String get deleteReasonFoundAlternative => 'మరొకటి ఉపయోగిస్తున్నాను';
 
   @override
-  String get deleteReasonTakingBreak => 'Just taking a break';
+  String get deleteReasonTakingBreak => 'కేవలం విరామం తీసుకుంటున్నాను';
 
   @override
-  String get deleteReasonOther => 'Other';
+  String get deleteReasonOther => 'ఇతరత్రా';
 
   @override
-  String get deleteFlowFeedbackTitle => 'Tell us more';
+  String get deleteFlowFeedbackTitle => 'మరింత చెప్పండి';
 
   @override
-  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+  String get deleteFlowFeedbackSubtitle => 'Omi మీకు ఎలా పని చేసేది?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+  String get deleteFlowFeedbackHint => 'ఐచ్ఛికం — మీ ఆలోచనలు మెరుగైన ఉత్పత్తిని తయారు చేయడంలో మాకు సహాయపడతాయి.';
 
   @override
-  String get deleteFlowConfirmTitle => 'This is permanent';
+  String get deleteFlowConfirmTitle => 'ఇది శాశ్వతం';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+  String get deleteFlowConfirmSubtitle => 'మీరు ఖాతాను తొలగించిన తర్వాత, దాన్ని పునరుద్ధరించే మార్గం లేదు.';
 
   @override
-  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+  String get deleteConsequenceSubscription => 'ఏదైనా క్రియాశీల సబ్‌స్క్రిప్షన్ రద్దు చేయబడుతుంది.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+  String get deleteConsequenceNoRecovery => 'మీ ఖాతాను పునరుద్ధరించలేరు — సపోర్ట్ కూడా చేయలేదు.';
 
   @override
-  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+  String get deleteTypeToConfirm => 'నిర్ధారించడానికి DELETE టైప్ చేయండి';
 
   @override
   String get deleteConfirmationWord => 'DELETE';
 
   @override
-  String get deleteAccountPermanently => 'Delete account permanently';
+  String get deleteAccountPermanently => 'ఖాతాను శాశ్వతంగా తొలగించండి';
 
   @override
-  String get keepMyAccount => 'Keep my account';
+  String get keepMyAccount => 'నా ఖాతాను ఉంచండి';
 
   @override
-  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+  String get deleteAccountFailed => 'మీ ఖాతాను తొలగించలేకపోయాము. దయచేసి మళ్ళీ ప్రయత్నించండి.';
 }
