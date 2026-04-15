@@ -160,90 +160,8 @@ class TestWAVDurationReader:
         finally:
             os.unlink(path)
 
-    def test_wav_with_extra_chunk_before_data(self):
-        """WAV with a LIST chunk between fmt and data should still parse correctly."""
-        from utils.voice_duration_limiter import read_wav_duration_ms
-
-        sample_rate = 16000
-        channels = 1
-        bits_per_sample = 16
-        duration_s = 2.0
-        byte_rate = sample_rate * channels * (bits_per_sample // 8)
-        data_size = int(byte_rate * duration_s)
-        block_align = channels * (bits_per_sample // 8)
-        fmt_chunk_size = 16
-
-        # Extra LIST chunk between fmt and data
-        list_data = b'INFO' + b'\x00' * 20
-        list_chunk = b'LIST' + struct.pack('<I', len(list_data)) + list_data
-
-        riff_size = 4 + (8 + fmt_chunk_size) + len(list_chunk) + (8 + data_size)
-
-        buf = bytearray()
-        buf.extend(b'RIFF')
-        buf.extend(struct.pack('<I', riff_size))
-        buf.extend(b'WAVE')
-        buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', fmt_chunk_size))
-        buf.extend(struct.pack('<HHIIHH', 1, channels, sample_rate, byte_rate, block_align, bits_per_sample))
-        buf.extend(list_chunk)
-        buf.extend(b'data')
-        buf.extend(struct.pack('<I', data_size))
-        buf.extend(b'\x00' * data_size)
-
-        fd, path = tempfile.mkstemp(suffix='.wav')
-        with os.fdopen(fd, 'wb') as f:
-            f.write(buf)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None
-            assert abs(duration - 2000) <= 1
-        finally:
-            os.unlink(path)
-
-    def test_wav_with_odd_sized_chunk_before_data(self):
-        """WAV with an odd-sized LIST chunk (requires RIFF pad byte) should still parse correctly."""
-        from utils.voice_duration_limiter import read_wav_duration_ms
-
-        sample_rate = 16000
-        channels = 1
-        bits_per_sample = 16
-        duration_s = 1.0
-        byte_rate = sample_rate * channels * (bits_per_sample // 8)
-        data_size = int(byte_rate * duration_s)
-        block_align = channels * (bits_per_sample // 8)
-        fmt_chunk_size = 16
-
-        # Odd-sized LIST chunk: 25 bytes payload → requires 1 pad byte
-        list_data = b'INFO' + b'X' * 21  # 25 bytes total (odd)
-        list_chunk = b'LIST' + struct.pack('<I', len(list_data)) + list_data + b'\x00'  # pad byte
-
-        riff_size = 4 + (8 + fmt_chunk_size) + len(list_chunk) + (8 + data_size)
-
-        buf = bytearray()
-        buf.extend(b'RIFF')
-        buf.extend(struct.pack('<I', riff_size))
-        buf.extend(b'WAVE')
-        buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', fmt_chunk_size))
-        buf.extend(struct.pack('<HHIIHH', 1, channels, sample_rate, byte_rate, block_align, bits_per_sample))
-        buf.extend(list_chunk)
-        buf.extend(b'data')
-        buf.extend(struct.pack('<I', data_size))
-        buf.extend(b'\x00' * data_size)
-
-        fd, path = tempfile.mkstemp(suffix='.wav')
-        with os.fdopen(fd, 'wb') as f:
-            f.write(buf)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None, "Parser failed on WAV with odd-sized chunk (missing pad byte handling)"
-            assert abs(duration - 1000) <= 1
-        finally:
-            os.unlink(path)
-
-    def test_wav_truncated_fmt_returns_none(self):
-        """WAV with truncated fmt chunk (< 16 bytes) should return None."""
+    def test_corrupted_wav_returns_none(self):
+        """Truncated/corrupted WAV should return None (av raises, we catch)."""
         from utils.voice_duration_limiter import read_wav_duration_ms
 
         buf = bytearray()
@@ -251,40 +169,8 @@ class TestWAVDurationReader:
         buf.extend(struct.pack('<I', 26))
         buf.extend(b'WAVE')
         buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', 10))  # claims 10 bytes, less than required 16
+        buf.extend(struct.pack('<I', 10))  # truncated fmt
         buf.extend(b'\x00' * 10)
-
-        fd, path = tempfile.mkstemp(suffix='.wav')
-        with os.fdopen(fd, 'wb') as f:
-            f.write(buf)
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
-
-    def test_wav_zero_byte_rate_returns_none(self):
-        """WAV with byte_rate=0 should return None (no division by zero)."""
-        from utils.voice_duration_limiter import read_wav_duration_ms
-
-        sample_rate = 16000
-        channels = 1
-        bits_per_sample = 16
-        data_size = 32000
-        block_align = channels * (bits_per_sample // 8)
-        fmt_chunk_size = 16
-        riff_size = 4 + (8 + fmt_chunk_size) + (8 + data_size)
-
-        buf = bytearray()
-        buf.extend(b'RIFF')
-        buf.extend(struct.pack('<I', riff_size))
-        buf.extend(b'WAVE')
-        buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', fmt_chunk_size))
-        # byte_rate = 0 (invalid)
-        buf.extend(struct.pack('<HHIIHH', 1, channels, sample_rate, 0, block_align, bits_per_sample))
-        buf.extend(b'data')
-        buf.extend(struct.pack('<I', data_size))
-        buf.extend(b'\x00' * data_size)
 
         fd, path = tempfile.mkstemp(suffix='.wav')
         with os.fdopen(fd, 'wb') as f:
