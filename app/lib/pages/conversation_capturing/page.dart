@@ -198,20 +198,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         ? "📸"
                         : _isMuted
                         ? "🔇"
-                        : provider.transcriptServiceReady
-                        ? "🎙️"
-                        : "🎙️⚡",
+                        : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted
-                                ? context.l10n.muted
-                                : provider.transcriptServiceReady
-                                ? context.l10n.listening
-                                : context.l10n.transcriptionPaused),
+                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -690,10 +684,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               Container(
                 width: 7,
                 height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4CAF50),
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(
@@ -705,10 +696,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 const SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Color(0xFF6C6C80),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
                 ),
               ],
             ],
