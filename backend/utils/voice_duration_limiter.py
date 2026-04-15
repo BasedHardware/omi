@@ -48,6 +48,7 @@ local now       = tonumber(ARGV[1])
 local window    = tonumber(ARGV[2])
 local budget    = tonumber(ARGV[3])
 local request   = tonumber(ARGV[4])
+local force     = tonumber(ARGV[5] or 0)  -- 1 = force-record (skip budget check)
 
 -- 1. Prune entries older than the rolling window
 local cutoff = now - window
@@ -57,24 +58,42 @@ redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
 local entries = redis.call('ZRANGE', key, 0, -1)
 local used = 0
 for _, member in ipairs(entries) do
-    -- member format: "timestamp_ms:duration_ms"
-    local sep = string.find(member, ':', 1, true)
-    if sep then
-        used = used + tonumber(string.sub(member, sep + 1))
+    -- member format: "timestamp_ms:duration_ms:nonce"
+    local sep1 = string.find(member, ':', 1, true)
+    if sep1 then
+        local sep2 = string.find(member, ':', sep1 + 1, true)
+        local dur_str
+        if sep2 then
+            dur_str = string.sub(member, sep1 + 1, sep2 - 1)
+        else
+            dur_str = string.sub(member, sep1 + 1)
+        end
+        used = used + tonumber(dur_str)
     end
 end
 
--- 3. Check budget
-if used + request > budget then
-    return {0, used, math.max(0, budget - used)}
+-- 3. Check budget (>= so used==budget is rejected too)
+-- Skip check when force=1 (post-session recording must always succeed)
+if force ~= 1 then
+    if used + request >= budget and request > 0 then
+        return {0, used, math.max(0, budget - used)}
+    end
+    -- Probe-only (request==0): reject only when already at or over budget
+    if request == 0 and used >= budget then
+        return {0, used, 0}
+    end
 end
 
 -- 4. Record consumption (skip if request is zero — probe-only call)
 if request > 0 then
-    local member = tostring(math.floor(now * 1000)) .. ':' .. tostring(request)
+    -- Use INCR counter as nonce to guarantee unique members even within
+    -- the same millisecond (prevents ZADD overwrite under concurrency).
+    local counter = redis.call('INCR', key .. ':seq')
+    local member = tostring(math.floor(now * 1000)) .. ':' .. tostring(request) .. ':' .. tostring(counter)
     redis.call('ZADD', key, now, member)
     -- Set TTL = window + 1h buffer so the key self-cleans
     redis.call('EXPIRE', key, window + 3600)
+    redis.call('EXPIRE', key .. ':seq', window + 3600)
 end
 
 return {1, used + request, math.max(0, budget - used - request)}
@@ -137,14 +156,26 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
 
     For WebSocket sessions where the exact duration isn't known upfront,
     call this after the session ends with the actual duration.
+    Uses force-record to always persist the usage even if over budget,
+    so the overspend is tracked for subsequent requests.
 
     Returns True on success, False on error (but still fail-open).
     """
     if duration_ms <= 0:
         return True
 
-    allowed, _, _ = try_consume_budget(uid, duration_ms)
-    return allowed
+    if _CONSUME_LUA is None:
+        return True
+
+    try:
+        _CONSUME_LUA(
+            keys=[_budget_key(uid)],
+            args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms, 1],  # force=1
+        )
+        return True
+    except Exception as e:
+        logger.error(f'voice_duration_limiter: Redis error recording duration for uid={uid}: {e}')
+        return True  # Fail-open
 
 
 def get_budget_status(uid: str) -> dict:
