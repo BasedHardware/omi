@@ -1311,7 +1311,13 @@ export default function AnalyticsPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} />
+                  <YAxis
+                    className="text-xs"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={formatCompact}
+                    domain={["dataMin", "dataMax"]}
+                    allowDataOverflow={false}
+                  />
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
                 </AreaChart>
