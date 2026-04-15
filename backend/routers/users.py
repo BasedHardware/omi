@@ -112,7 +112,7 @@ def _background_wipe_user_data(uid: str):
         delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
-        logger.info(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
+        logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
 
 
 @router.delete('/v1/users/delete-account', tags=['v1'])

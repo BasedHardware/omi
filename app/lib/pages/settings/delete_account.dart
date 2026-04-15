@@ -79,7 +79,8 @@ class _DeleteAccountState extends State<DeleteAccount> {
       _pageController.previousPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       setState(() => _page--);
     } else {
-      MixpanelManager().deleteAccountAbandoned(step: _page + 1, reason: _selectedReason);
+      // Tracking happens in onPopInvokedWithResult so AppBar back and
+      // system back/swipe go through the same code path.
       Navigator.of(context).pop();
     }
   }
@@ -89,9 +90,6 @@ class _DeleteAccountState extends State<DeleteAccount> {
     setState(() => _isDeleting = true);
     final details = _detailsController.text.trim().isNotEmpty ? _detailsController.text.trim() : null;
 
-    MixpanelManager().deleteAccountConfirmed();
-    MixpanelManager().deleteAccountFeedbackSubmitted(reason: _selectedReason ?? 'unspecified', details: details);
-
     try {
       final ok = await deleteAccount(reason: _selectedReason, reasonDetails: details);
       if (!mounted) return;
@@ -100,6 +98,8 @@ class _DeleteAccountState extends State<DeleteAccount> {
         setState(() => _isDeleting = false);
         return;
       }
+      MixpanelManager().deleteAccountConfirmed();
+      MixpanelManager().deleteAccountFeedbackSubmitted(reason: _selectedReason ?? 'unspecified', details: details);
       MixpanelManager().deleteUser();
       await WalFileManager.clearAll();
       await SharedPreferencesUtil().clear();
@@ -118,7 +118,12 @@ class _DeleteAccountState extends State<DeleteAccount> {
     return PopScope(
       canPop: _page == 0 && !_isDeleting,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_isDeleting) _back();
+        if (didPop) {
+          // Native swipe/back on page 0 still counts as an abandon.
+          MixpanelManager().deleteAccountAbandoned(step: _page + 1, reason: _selectedReason);
+          return;
+        }
+        if (!_isDeleting) _back();
       },
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
