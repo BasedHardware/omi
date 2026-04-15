@@ -22,15 +22,7 @@ class ApiClient {
   }
 }
 
-const _devAuthBypassEnabled = bool.fromEnvironment('DEV_AUTH_BYPASS_ENABLED');
-const _devAdminKey = String.fromEnvironment('DEV_ADMIN_KEY');
-const _devAuthBypassUid = String.fromEnvironment('DEV_AUTH_BYPASS_UID');
-
 Future<String> getAuthHeader() async {
-  if (_devAuthBypassEnabled && _devAdminKey.isNotEmpty) {
-    return 'Bearer $_devAdminKey$_devAuthBypassUid';
-  }
-
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 

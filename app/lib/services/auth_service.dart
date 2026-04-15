@@ -23,16 +23,9 @@ class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
 
-  static const _devAuthBypassEnabled = bool.fromEnvironment('DEV_AUTH_BYPASS_ENABLED');
-
   AuthService._internal();
 
-  bool isSignedIn() {
-    if (_devAuthBypassEnabled) {
-      return FirebaseAuth.instance.currentUser != null;
-    }
-    return FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
-  }
+  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
