@@ -2059,7 +2059,7 @@ class AppState: ObservableObject {
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
-  /// Refresh conversations silently (for auto-refresh timer and app-activate).
+  /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
   /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
   func refreshConversations() async {
     // Skip if user is signed out (tokens are cleared)
@@ -2121,7 +2121,6 @@ class AppState: ObservableObject {
       }
     }
 
-    // Update total count
     do {
       let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
       if totalConversationsCount != count {
@@ -3132,6 +3131,8 @@ extension Notification.Name {
   static let navigateToTasks = Notification.Name("navigateToTasks")
   /// Posted by keyboard shortcuts to navigate sidebar. userInfo: ["rawValue": Int]
   static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
+  /// Posted by Cmd+R to refresh all data (conversations, chat, tasks, memories)
+  static let refreshAllData = Notification.Name("refreshAllData")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")

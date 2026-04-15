@@ -139,6 +139,17 @@ class MemoriesViewModel: ObservableObject {
   /// Memories loaded from SQLite with filters applied
   @Published private(set) var filteredFromDatabase: [ServerMemory] = []
   @Published private(set) var isLoadingFiltered = false
+
+  /// Counter bumped at the top of `refreshMemoriesIfNeeded()`, before any of
+  /// the early-exit guards. Lets `MemoriesViewModelObserverTests` prove that
+  /// posting `didBecomeActive` / `.refreshAllData` actually reaches the refresh
+  /// method — if the observer rewire regresses, the counter stays flat and the
+  /// test fails.
+  /// Deliberately **not** `@Published` — publishing on every activation/Cmd+R
+  /// refresh would emit `objectWillChange` and invalidate any SwiftUI view
+  /// observing `MemoriesViewModel`, which is a pure production cost for a
+  /// value nothing drives UI from.
+  private(set) var refreshInvocations: Int = 0
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
@@ -206,9 +217,15 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   init() {
-    // Auto-refresh memories every 30 seconds
-    Timer.publish(every: 30.0, on: .main, in: .common)
-      .autoconnect()
+    // Refresh memories when app becomes active
+    NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+      .sink { [weak self] _ in
+        Task { await self?.refreshMemoriesIfNeeded() }
+      }
+      .store(in: &cancellables)
+
+    // Cmd+R: refresh memories on demand
+    NotificationCenter.default.publisher(for: .refreshAllData)
       .sink { [weak self] _ in
         Task { await self?.refreshMemoriesIfNeeded() }
       }
@@ -217,6 +234,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Refresh memories if already loaded (for auto-refresh)
   private func refreshMemoriesIfNeeded() async {
+    refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if in auth backoff period (recent 401 errors)
