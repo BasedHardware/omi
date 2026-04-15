@@ -135,6 +135,7 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.delete()
+    redis_db.remove_daily_summary_to_uid(summary_id)
     return True
 
 
