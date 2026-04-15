@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { PiMonoAdapter } from "../src/adapters/pi-mono.js";
 import type { HarnessConfig } from "../src/adapters/interface.js";
@@ -122,5 +124,32 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     expect(events).toEqual([]);
     expect((adapter as any).pendingRequests.size).toBe(0);
+  });
+});
+
+describe("PiMonoAdapter OMI_API_KEY header invariant", () => {
+  // Regression guard for the double-Bearer header bug discovered in live
+  // testing: pi's openai-completions client prepends `Authorization: Bearer `
+  // to whatever `apiKey` the extension registers, so the adapter MUST pass
+  // the raw Firebase ID token — never `Bearer <token>`. Double-Bearer
+  // produces a backend 401 "invalid_token" with no visible stack trace.
+  //
+  // We assert on the source file rather than spawning pi: the env mutation
+  // sits in start(), which launches a real subprocess and is awkward to mock.
+  // A source-level assertion is enough to catch regressions at review time.
+  const piMonoSrc = readFileSync(
+    fileURLToPath(new URL("../src/adapters/pi-mono.ts", import.meta.url)),
+    "utf8"
+  );
+
+  it("passes the raw authToken as OMI_API_KEY (no `Bearer ` prefix)", () => {
+    // Must assign the raw token, not a "Bearer ${...}" wrapper.
+    expect(piMonoSrc).toMatch(/env\.OMI_API_KEY\s*=\s*this\.config\.authToken\s*;?/);
+    // And must NOT reintroduce the old Bearer-prefixed assignment.
+    expect(piMonoSrc).not.toMatch(/env\.OMI_API_KEY\s*=\s*`Bearer \$\{/);
+  });
+
+  it("always scrubs ANTHROPIC_API_KEY from the child env", () => {
+    expect(piMonoSrc).toMatch(/delete\s+env\.ANTHROPIC_API_KEY\s*;?/);
   });
 });
