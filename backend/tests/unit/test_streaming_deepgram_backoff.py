@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -39,7 +40,7 @@ if 'deepgram' in _mock_modules:
     sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
     sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 
-from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
+from utils.stt.streaming import connect_to_deepgram, connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
 from utils.stt.streaming import get_stt_service_for_language, STTService  # noqa: E402
 
@@ -360,6 +361,54 @@ def test_deepgram_options_no_keepalive():
         # DeepgramClientOptions stores options dict — keepalive key must be absent
         if hasattr(opts, 'options') and isinstance(opts.options, dict):
             assert 'keepalive' not in opts.options, f'{name} must not contain "keepalive" key'
+
+
+def test_connect_to_deepgram_preserves_filler_words_in_multi_language():
+    """Multi-language STT must preserve tokens like Portuguese 'um' (#6575)."""
+    mock_dg_conn = MagicMock()
+    mock_dg_conn.start.return_value = True
+    mock_deepgram = MagicMock()
+    mock_deepgram.listen.websocket.v.return_value = mock_dg_conn
+
+    with patch('utils.stt.streaming.deepgram', mock_deepgram), patch(
+        'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: SimpleNamespace(**kwargs)
+    ):
+        result = connect_to_deepgram(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='multi',
+            sample_rate=16000,
+            channels=1,
+            model='nova-3',
+        )
+
+    assert result is mock_dg_conn
+    options = mock_dg_conn.start.call_args.args[0]
+    assert options.filler_words is True
+
+
+def test_connect_to_deepgram_keeps_filler_stripping_for_english_only():
+    """English-only STT keeps the existing filler-stripping behavior (#6575)."""
+    mock_dg_conn = MagicMock()
+    mock_dg_conn.start.return_value = True
+    mock_deepgram = MagicMock()
+    mock_deepgram.listen.websocket.v.return_value = mock_dg_conn
+
+    with patch('utils.stt.streaming.deepgram', mock_deepgram), patch(
+        'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: SimpleNamespace(**kwargs)
+    ):
+        result = connect_to_deepgram(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-3',
+        )
+
+    assert result is mock_dg_conn
+    options = mock_dg_conn.start.call_args.args[0]
+    assert options.filler_words is False
 
 
 @pytest.mark.asyncio
