@@ -110,4 +110,56 @@ final class CrispManagerLifecycleTests: XCTestCase {
         XCTAssertEqual(manager.lastSeenTimestamp, 0)
         XCTAssertEqual(manager.unreadCount, 0)
     }
+
+    func testDidBecomeActiveNotificationTriggersPoll() async {
+        let manager = CrispManager.shared
+        manager.start(performInitialPoll: false)
+        let baseline = manager.pollInvocations
+
+        NotificationCenter.default.post(
+            name: NSApplication.didBecomeActiveNotification, object: nil
+        )
+        // Observer posts on main queue; yield so the block runs.
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            manager.pollInvocations, baseline + 1,
+            "didBecomeActive must route to pollForMessages() via the activation observer"
+        )
+    }
+
+    func testRefreshAllDataNotificationTriggersPoll() async {
+        let manager = CrispManager.shared
+        manager.start(performInitialPoll: false)
+        let baseline = manager.pollInvocations
+
+        NotificationCenter.default.post(name: .refreshAllData, object: nil)
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            manager.pollInvocations, baseline + 1,
+            ".refreshAllData (Cmd+R) must route to pollForMessages() via the refresh observer"
+        )
+    }
+
+    func testStoppedManagerDoesNotRespondToNotifications() async {
+        let manager = CrispManager.shared
+        manager.start(performInitialPoll: false)
+        manager.stop()
+        let baseline = manager.pollInvocations
+
+        NotificationCenter.default.post(
+            name: NSApplication.didBecomeActiveNotification, object: nil
+        )
+        NotificationCenter.default.post(name: .refreshAllData, object: nil)
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            manager.pollInvocations, baseline,
+            "After stop(), neither notification should reach pollForMessages()"
+        )
+    }
 }
