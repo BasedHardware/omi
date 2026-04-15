@@ -344,7 +344,7 @@ export default function AnalyticsPage() {
     useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", token] : null, authFetcher, swrOpts);
 
   const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } =
-    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=60", token] : null, authFetcher, swrOpts);
+    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=540", token] : null, authFetcher, swrOpts);
 
   const { data: dauTrends, isLoading: dauLoading } =
     useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", token] : null, authFetcher, swrOpts);
@@ -409,8 +409,10 @@ export default function AnalyticsPage() {
     if (c.data.length > cohortMaxDays) cohortMaxDays = c.data.length;
   }
 
+  // Cumulative Users chart fetches the full history window so the growth
+  // curve is meaningful; use the whole series rather than the last 30 days.
   const allDailyData = dailyNewUsers?.data ?? [];
-  const dailyData = allDailyData.slice(-30);
+  const dailyData = allDailyData;
   const dauData = dauTrends?.data?.slice(-30) ?? [];
   const ratingsData = messageRatings?.data ?? [];
   const totalThumbsUp = ratingsData.reduce((s, d) => s + d.thumbs_up, 0);
@@ -1310,13 +1312,20 @@ export default function AnalyticsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                  <XAxis
+                    dataKey="date"
+                    className="text-xs"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={shortDate}
+                    minTickGap={40}
+                  />
                   <YAxis
                     className="text-xs"
                     tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={formatCompact}
+                    tickFormatter={(v: number) => v.toLocaleString()}
                     domain={["dataMin", "dataMax"]}
                     allowDataOverflow={false}
+                    width={64}
                   />
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
