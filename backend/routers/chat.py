@@ -736,8 +736,8 @@ async def transcribe_voice_message_stream(
                 continue
 
             # Per-session duration cap: close WS at 120s of cumulative audio
-            total_audio_bytes += len(data)
-            if total_audio_bytes > max_session_bytes:
+            # Check BEFORE incrementing so rejected frames don't inflate the budget charge
+            if total_audio_bytes + len(data) > max_session_bytes:
                 logger.info(f'transcribe-stream: session duration cap reached uid={uid}')
                 # Finalize DG to get last transcript, then close
                 if dg_socket and not dg_socket.is_connection_dead:
@@ -752,6 +752,7 @@ async def transcribe_voice_message_stream(
                 await websocket.close(code=1008, reason=f'Audio duration exceeds {MAX_SESSION_DURATION_S}s limit')
                 break
 
+            total_audio_bytes += len(data)
             stt_audio_buffer.extend(data)
 
             # Flush to Deepgram in 30ms chunks
