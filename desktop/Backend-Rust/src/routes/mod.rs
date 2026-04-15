@@ -29,6 +29,7 @@ pub mod webhooks;
 pub mod proxy;
 pub mod rate_limit;
 pub mod screen_activity;
+pub mod tts;
 
 pub use action_items::action_items_routes;
 pub use advice::advice_routes;
@@ -58,3 +59,4 @@ pub use users::users_routes;
 pub use webhooks::webhook_routes;
 pub use proxy::proxy_routes;
 pub use screen_activity::screen_activity_routes;
+pub use tts::tts_routes;
