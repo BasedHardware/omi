@@ -1138,3 +1138,81 @@ class TestWsBudgetAndSessionCap:
                             assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
         finally:
             _cleanup_chat_client(saved)
+
+
+class TestNoPerSessionCap:
+    """Verify that audio >120s is accepted when daily budget remains (no per-session cap)."""
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_over_120s_accepted(self, mock_transcribe):
+        """Octet-stream with >120s audio should be accepted if budget allows."""
+        mock_transcribe.return_value = ('long message', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            # 300s at 16kHz mono = 9,600,000 bytes → well over 120s
+            audio_300s = b'\x00' * (16000 * 1 * 2 * 300)
+            with patch.object(module, 'try_consume_budget', return_value=(True, 300000, 6900000)):
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    content=audio_300s,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 200
+                assert resp.json()['transcript'] == 'long message'
+        finally:
+            del audio_300s
+            _cleanup_chat_client(saved)
+
+    def test_multipart_over_120s_accepted(self):
+        """Multipart WAV with >120s duration should be accepted if budget allows."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            # WAV reports 300s (5 minutes) — should NOT be rejected
+            with patch.object(module, 'read_wav_duration_ms', return_value=300_000):
+                with patch.object(module, 'try_consume_budget', return_value=(True, 300000, 6900000)):
+                    with patch.object(module, 'transcribe_voice_message_segment', return_value=('long msg', 'en')):
+                        resp = client.post(
+                            '/v2/voice-message/transcribe',
+                            files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                        )
+                        assert resp.status_code == 200
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestWsIdleTimeout:
+    """Test that WS idle timeout is based on audio frames, not all messages."""
+
+    def test_ws_idle_timeout_fires(self):
+        """WS should close after idle timeout when no audio is sent."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # Set idle timeout very short for test
+            with patch.object(module, '_WS_IDLE_TIMEOUT_S', 0.1):
+                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                    with patch.object(
+                        module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')
+                    ):
+                        with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                            with patch.object(module, 'record_actual_duration'):
+                                with pytest.raises(Exception):
+                                    with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                        # Don't send any audio — idle timeout should fire
+                                        import time
+
+                                        time.sleep(0.3)
+                                        ws.receive_json()  # should fail — WS closed
+        finally:
+            _cleanup_chat_client(saved)
