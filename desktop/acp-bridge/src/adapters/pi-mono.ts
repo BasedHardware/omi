@@ -7,6 +7,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 import { ChildProcess, spawn } from "child_process";
+import { existsSync } from "fs";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import {
   HarnessAdapter,
@@ -110,6 +111,36 @@ function mapModel(model: string): string {
   return MODEL_MAP[model] ?? model;
 }
 
+/** Resolve the pi binary bundled inside the Mac app.
+ *
+ *  Resolution order:
+ *  1. $PI_MONO_PATH (test/dev override)
+ *  2. acp-bridge/node_modules/.bin/pi relative to this compiled file
+ *     (= <App>.app/Contents/Resources/acp-bridge/node_modules/.bin/pi when
+ *     shipped, or <repo>/desktop/acp-bridge/node_modules/.bin/pi in dev)
+ *  3. Fall back to "pi" on PATH (dev machines only; the shipped app never
+ *     reaches this branch because node_modules is bundled by run.sh/build.sh)
+ */
+function resolveBundledPi(): string {
+  // this file compiles to acp-bridge/dist/adapters/pi-mono.js
+  const bundled = new URL("../../node_modules/.bin/pi", import.meta.url)
+    .pathname;
+  if (existsSync(bundled)) return bundled;
+  return "pi";
+}
+
+/** Resolve the omi-provider extension file bundled alongside the app.
+ *
+ *  Dev: <repo>/desktop/acp-bridge/dist/adapters/../../.. → <repo>/desktop/pi-mono-extension/index.ts
+ *  Shipped: <App>.app/Contents/Resources/acp-bridge/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
+ */
+function resolveBundledExtension(): string {
+  return new URL(
+    "../../../pi-mono-extension/index.ts",
+    import.meta.url
+  ).pathname;
+}
+
 export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
@@ -143,16 +174,21 @@ export class PiMonoAdapter implements HarnessAdapter {
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
+  /** Current system prompt baked into the spawned pi process via --system-prompt.
+   *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
+  private currentSystemPrompt: string | undefined;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
+  /** True when a system-prompt change was deferred because a prompt was active */
+  private pendingSystemPromptRefresh = false;
 
   constructor(config: HarnessConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
-    this.piPath = piPath || process.env.PI_MONO_PATH || "pi";
+    this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
       extensionPath ||
       process.env.PI_EXTENSION_PATH ||
-      new URL("../../pi-mono-extension/index.ts", import.meta.url).pathname;
+      resolveBundledExtension();
   }
 
   async start(): Promise<void> {
@@ -171,6 +207,11 @@ export class PiMonoAdapter implements HarnessAdapter {
       "omi-sonnet",
       "--no-extensions", // disable auto-discovered extensions
     ];
+    // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
+    // time via the --system-prompt CLI flag. To change it, restart the process.
+    if (this.currentSystemPrompt) {
+      args.push("--system-prompt", this.currentSystemPrompt);
+    }
 
     // SECURITY: require a Firebase ID token. We MUST NOT fall back to
     // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
@@ -189,7 +230,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     };
     delete env.ANTHROPIC_API_KEY;
 
-    env.OMI_API_KEY = `Bearer ${this.config.authToken}`;
+    // Pass the raw Firebase ID token. pi's openai-completions client already
+    // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
+    // prefix here would produce a malformed `Bearer Bearer <token>` header.
+    env.OMI_API_KEY = this.config.authToken;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
@@ -246,6 +290,16 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
+
+    // Pi bakes the system prompt at spawn time via --system-prompt. If the
+    // caller requested a different prompt than the currently-running process,
+    // restart the subprocess with the new flag. Callers that want this handled
+    // eagerly across session switches should call setSystemPrompt() before
+    // createSession().
+    if (opts.systemPrompt && opts.systemPrompt !== this.currentSystemPrompt) {
+      await this.setSystemPrompt(opts.systemPrompt);
+    }
+
     const sessionId = `pi-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
       cwd: opts.cwd,
@@ -259,14 +313,6 @@ export class PiMonoAdapter implements HarnessAdapter {
         type: "set_model",
         provider: "omi",
         modelId: mapped,
-      });
-    }
-
-    // Set system prompt if specified
-    if (opts.systemPrompt) {
-      this.sendCommand({
-        type: "set_system_prompt",
-        systemPrompt: opts.systemPrompt,
       });
     }
 
@@ -400,12 +446,38 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.delete(sessionKey);
   }
 
-  /** Re-send the system prompt to pi-mono RPC (global state, not per-session) */
-  restoreSystemPrompt(systemPrompt: string): void {
-    this.sendCommand({
-      type: "set_system_prompt",
-      systemPrompt,
-    });
+  /** Update the system prompt baked into the pi subprocess.
+   *
+   *  Pi's RPC protocol has no set_system_prompt command — the system prompt
+   *  is a startup-only CLI flag (--system-prompt). To change it, we must
+   *  restart the subprocess. If a prompt is currently in flight, we stash the
+   *  new value and restart after turn_end via the same pending-refresh path
+   *  used by auth token rotation.
+   *
+   *  Returns true if the restart happened immediately, false if deferred. */
+  async setSystemPrompt(systemPrompt: string | undefined): Promise<boolean> {
+    if (systemPrompt === this.currentSystemPrompt) {
+      return true; // no-op
+    }
+    this.currentSystemPrompt = systemPrompt;
+    if (!this.process) {
+      // Not started yet — nothing to restart; start() will bake the new value.
+      return true;
+    }
+    if (this.pendingRequests.size > 0) {
+      this.pendingSystemPromptRefresh = true;
+      process.stderr.write(
+        "[pi-mono] system prompt stored (restart deferred, prompt active)\n"
+      );
+      return false;
+    }
+    await this.stop();
+    await this.start();
+    this.pendingSystemPromptRefresh = false;
+    process.stderr.write(
+      "[pi-mono] subprocess restarted with new system prompt\n"
+    );
+    return true;
   }
 
   /** Update auth token by restarting the subprocess when idle.
@@ -432,18 +504,26 @@ export class PiMonoAdapter implements HarnessAdapter {
     return this.pendingRequests.size === 0;
   }
 
-  /** Whether a deferred token restart is pending */
+  /** Whether a deferred restart is pending (token or system prompt) */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh;
+    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh;
   }
 
-  /** Execute the deferred token restart (call after prompt completes) */
+  /** Execute the deferred restart (call after prompt completes).
+   *  Handles both token refresh and system-prompt change — both baked at
+   *  spawn time, both requiring a restart. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh) return;
+    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return;
+    const reasons: string[] = [];
+    if (this.pendingTokenRefresh) reasons.push("token");
+    if (this.pendingSystemPromptRefresh) reasons.push("systemPrompt");
     this.pendingTokenRefresh = false;
+    this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
-    process.stderr.write("[pi-mono] deferred token refresh executed (subprocess restarted)\n");
+    process.stderr.write(
+      `[pi-mono] deferred restart executed (${reasons.join("+")}; subprocess restarted)\n`
+    );
   }
 
   supportsFeature(feature: HarnessFeature): boolean {
@@ -507,11 +587,16 @@ export class PiMonoAdapter implements HarnessAdapter {
         break;
 
       case "agent_start":
-        // Agent started — no action needed
-        break;
-
       case "agent_end":
-        // Agent ended — no action needed
+      case "turn_start":
+      case "message_start":
+      case "message_end":
+      case "response":
+      case "compaction_start":
+      case "compaction_end":
+        // Protocol control events the adapter observes but does not act on.
+        // Turn boundaries and streaming state are already tracked via
+        // message_update / turn_end; no action needed here.
         break;
 
       default:
