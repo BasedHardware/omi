@@ -65,31 +65,28 @@ const DANGEROUS_TARGET =
   `|\\.\\.\\/\\.\\.` +
   `)`;
 
-/** `rm` flag cluster that includes both `-r` (recursive) and `-f` (force),
- *  in any order. Accepts `-rf`, `-fr`, `-Rf`, `-RFv`, `-r -f`, etc. */
-const RM_RF_FLAGS =
-  `(?:-[a-zA-Z]*[rR][a-zA-Z]*[fF][a-zA-Z]*|-[a-zA-Z]*[fF][a-zA-Z]*[rR][a-zA-Z]*|-[rR]\\s+-[fF]|-[fF]\\s+-[rR])`;
-
 /** Bash command denylist. Allow-by-default: only block on explicit match. */
 const BASH_DENY_RULES: DenyRule[] = [
   {
-    // sudo / doas / pkexec / su — at start, after a shell operator, inside
-    // $(...) or backticks. `echo sudo` is intentionally not blocked.
-    pattern: /(?:^|[;&|`]|\$\()\s*(?:sudo|doas|pkexec|su\s)/,
+    // sudo / doas / pkexec / su — at start of line, after a newline, after a
+    // shell operator (`;`, `&`, `|`, backtick), or as the head of a subshell
+    // (`(cmd)` or `$(cmd)`). `echo "sudo is fun"` is intentionally not blocked
+    // because the `"` is not a shell-command separator.
+    pattern: /(?:^|[\n;&|`(]|\$\()\s*(?:sudo|doas|pkexec|su\s)/,
     reason:
       "Privilege escalation (sudo/doas/pkexec/su) is blocked by the Omi " +
       "pi-mono denylist. Perform the operation as your current user or ask " +
       "the user to run the command manually.",
   },
   {
-    // rm -rf / rm -fr / rm -r -f targeting root, home, or OS dirs.
-    pattern: new RegExp(
-      `\\brm\\s+${RM_RF_FLAGS}\\b[^\\n]*?\\s${DANGEROUS_TARGET}`
-    ),
+    // `rm` targeting a root, system, or home path — ANY flag combination
+    // (short `-rf` / `-fr` / `-r -f`, long `--recursive --force`, or no flags
+    // at all). A single-file `rm /etc/hosts` is just as destructive as
+    // `rm -rf /etc`, so the rule blocks on target, not on flag cluster.
+    pattern: new RegExp(`\\brm\\b[^\\n]*?\\s${DANGEROUS_TARGET}`),
     reason:
-      "Recursive force-delete targeting a root or system path is blocked. " +
-      "Use a specific subdirectory under the working tree, or delete the " +
-      "exact file by path.",
+      "Deleting a root or system path with `rm` is blocked. Use a specific " +
+      "subdirectory under the working tree, or delete the exact file by path.",
   },
   {
     // mkfs.*, dd of=/dev/disk..., fork bomb, shred -fuv /...
@@ -117,37 +114,55 @@ const BASH_DENY_RULES: DenyRule[] = [
       "restart manually if that is really what they want.",
   },
   {
-    // Destructive git: force push, hard reset to a remote ref.
+    // Destructive git: force push (with any positional args before the force
+    // flag, e.g. `git push origin HEAD --force`), hard reset to a remote ref.
     pattern:
-      /\bgit\s+push\s+(?:-f\b|--force\b|--force-with-lease\b)|\bgit\s+reset\s+--hard\s+(?:origin\/|upstream\/|remotes\/)/,
+      /\bgit\s+push\b[^\n]*?\s(?:-f\b|--force\b|--force-with-lease\b)|\bgit\s+reset\s+--hard\s+(?:origin\/|upstream\/|remotes\/)/,
     reason:
       "Destructive git operation (force-push, hard reset to remote) is " +
       "blocked. Create a new commit on a feature branch instead.",
   },
   {
-    // curl/wget/fetch piped directly into a shell. Still allows writing the
-    // script to a file for review first.
-    pattern: /\b(?:curl|wget|fetch|aria2c)\b[^\n|]*\|\s*(?:bash|sh|zsh|fish|dash|ksh)\b/,
+    // curl/wget/fetch piped directly into a shell — allow an optional path
+    // prefix on the shell target (`/bin/sh`, `/usr/bin/bash`, `~/bin/zsh`).
+    // Still allows writing the script to a file for review first.
+    pattern:
+      /\b(?:curl|wget|fetch|aria2c)\b[^\n|]*\|\s*(?:[^\s|;&<>]*\/)?(?:bash|sh|zsh|fish|dash|ksh)\b/,
     reason:
       "Piping a downloaded script straight into a shell is blocked. " +
       "Download the script to a file, review it, then run it.",
   },
   {
-    // launchctl touching system domain.
+    // launchctl touching system domain. Covers both legacy positional syntax
+    // `launchctl unload system/com.x` (system/<id>) and the newer
+    // `launchctl bootstrap system /Library/LaunchDaemons/x.plist` (system as
+    // its own domain token followed by a service path).
     pattern:
-      /\blaunchctl\s+(?:bootout|kickstart|unload|load|enable|disable)\s+system\//,
+      /\blaunchctl\s+(?:bootout|bootstrap|kickstart|unload|load|enable|disable)\s+system\b/,
     reason:
       "Modifying system launchd services is blocked. Use `launchctl ... " +
       "gui/$(id -u)/...` for the user domain if you need a LaunchAgent.",
   },
   {
-    // chmod/chown on root or system-owned trees.
+    // chmod/chown on root or system-owned trees — ANY flags (`-R -v`, long
+    // form, or none) before the dangerous target.
     pattern: new RegExp(
-      `\\b(?:chmod|chown)\\s+(?:-R\\s+)?[^\\s\\n]+\\s${DANGEROUS_TARGET}`
+      `\\b(?:chmod|chown)\\b[^\\n]*?\\s${DANGEROUS_TARGET}`
     ),
     reason:
-      "Recursive chmod/chown targeting a root or system path is blocked. " +
-      "Apply permissions to specific files under the project tree.",
+      "Changing permissions or ownership of a root or system path is " +
+      "blocked. Apply permissions to specific files under the project tree.",
+  },
+  {
+    // Shell redirect into SSH or cloud credential files. Mirrors the
+    // WRITE_PATH_DENY_RULES entries but catches `echo ... > ~/.ssh/id_rsa`
+    // style bash-only attacks that the write/edit tool denylist does not see.
+    pattern:
+      />>?\s*(?:[^\s|;&<>()`]*\/)?(?:\.ssh\/(?:authorized_keys|id_[^\s/;&|'"`]+)|\.aws\/credentials|\.config\/gcloud\/application_default_credentials\.json|\.kube\/config)\b/,
+    reason:
+      "Redirecting shell output into SSH keys (authorized_keys, id_*) or " +
+      "cloud credential files (~/.aws/credentials, gcloud ADC, ~/.kube/" +
+      "config) is blocked.",
   },
 ];
 
