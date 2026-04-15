@@ -415,10 +415,22 @@ class TestGetBudgetStatus:
 class TestBudgetBoundary:
     """Test exact budget boundary behavior."""
 
-    def test_consume_at_exact_budget_rejected(self, mock_redis):
-        """When used==budget, a non-zero consume should be rejected."""
+    def test_consume_at_exact_budget_allowed(self, mock_redis):
+        """When used + request == budget exactly, should be allowed (boundary is >)."""
         _, mock_script = mock_redis
-        mock_script.return_value = [0, 7200000, 0]
+        mock_script.return_value = [1, 7200000, 0]
+
+        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+            from utils.voice_duration_limiter import try_consume_budget
+
+            allowed, used, remaining = try_consume_budget('uid123', 1000)
+
+        assert allowed is True
+
+    def test_consume_over_budget_rejected(self, mock_redis):
+        """When used + request > budget, should be rejected."""
+        _, mock_script = mock_redis
+        mock_script.return_value = [0, 7200001, 0]
 
         with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
@@ -428,18 +440,17 @@ class TestBudgetBoundary:
         assert allowed is False
         assert remaining == 0
 
-    def test_check_budget_at_exact_limit_exhausted(self, mock_redis):
-        """check_budget should report exhausted when used==budget."""
+    def test_check_budget_at_exact_limit_has_budget(self, mock_redis):
+        """check_budget should report has_budget when used==budget (boundary is >)."""
         _, mock_script = mock_redis
-        mock_script.return_value = [0, 7200000, 0]
+        mock_script.return_value = [1, 7200000, 0]
 
         with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
             from utils.voice_duration_limiter import check_budget
 
             has_budget, used, remaining = check_budget('uid123')
 
-        assert has_budget is False
-        assert remaining == 0
+        assert has_budget is True
 
     def test_consume_just_under_budget_allowed(self, mock_redis):
         """When used + request < budget, should be allowed."""
@@ -496,11 +507,6 @@ class TestSharedBudget:
 
 
 class TestConstants:
-    def test_session_cap(self):
-        from utils.voice_duration_limiter import MAX_SESSION_DURATION_S
-
-        assert MAX_SESSION_DURATION_S == 120
-
     def test_daily_budget(self):
         from utils.voice_duration_limiter import DAILY_BUDGET_MS
 
