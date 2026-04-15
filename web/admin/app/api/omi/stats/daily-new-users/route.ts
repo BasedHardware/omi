@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
+import { getJsonCache, setJsonCache } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,16 @@ export const dynamic = "force-dynamic";
 // `metadata.creationTime` is set by the Auth service on account creation
 // and is the authoritative signup timestamp.
 //
-// Scanning every user via `listUsers()` pages 1000 at a time (112K ≈ 25s),
-// so the full series is cached in module scope for 10 minutes. A pending
-// rebuild is shared across concurrent requests so we don't fan out.
+// Scanning every user via `listUsers()` pages 1000 at a time (112K ≈ 25s)
+// and keeping UserRecord objects live is enough to OOM a 512Mi Cloud Run
+// container. The fix is threefold:
+//   1. Persist the computed series to Redis so only one instance pays
+//      the scan cost per TTL window, even across cold starts.
+//   2. Keep an in-memory shadow of the Redis value so warm instances
+//      skip the round-trip.
+//   3. Iterate pages one at a time, only retaining the date bucket map
+//      (~700 string keys + ints) and dropping each UserRecord batch to
+//      GC as soon as the loop moves on.
 
 type DailyPoint = { date: string; users: number; cumulative: number };
 type CachedSeries = {
@@ -21,7 +29,9 @@ type CachedSeries = {
   generatedAt: number;
 };
 
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const REDIS_KEY = "admin:stats:daily-new-users:v1";
+const REDIS_TTL_SECONDS = 30 * 60; // 30 min — matches the in-memory shadow
+const LOCAL_TTL_MS = 30 * 60 * 1000;
 
 let cachedSeries: CachedSeries | null = null;
 let pendingBuild: Promise<CachedSeries> | null = null;
@@ -37,10 +47,10 @@ async function buildDailySeries(): Promise<CachedSeries> {
   do {
     const page = await auth.listUsers(1000, pageToken);
     for (const user of page.users) {
-      const ct = user.metadata?.creationTime
-        ? new Date(user.metadata.creationTime)
-        : null;
-      if (!ct || Number.isNaN(ct.getTime())) continue;
+      const rawCt = user.metadata?.creationTime;
+      if (!rawCt) continue;
+      const ct = new Date(rawCt);
+      if (Number.isNaN(ct.getTime())) continue;
       const key = ct.toISOString().slice(0, 10);
       countsByDate[key] = (countsByDate[key] || 0) + 1;
       if (!earliest || ct < earliest) earliest = ct;
@@ -48,6 +58,9 @@ async function buildDailySeries(): Promise<CachedSeries> {
       total++;
     }
     pageToken = page.pageToken || undefined;
+    // Yield to the event loop between pages so V8 can collect the
+    // previous page's UserRecord objects before we request the next.
+    await new Promise((r) => setImmediate(r));
   } while (pageToken);
 
   if (!earliest || !latest) {
@@ -80,13 +93,25 @@ async function buildDailySeries(): Promise<CachedSeries> {
 
 async function getSeries(): Promise<CachedSeries> {
   const now = Date.now();
-  if (cachedSeries && now - cachedSeries.generatedAt < CACHE_TTL_MS) {
+
+  // 1. Warm in-memory shadow.
+  if (cachedSeries && now - cachedSeries.generatedAt < LOCAL_TTL_MS) {
     return cachedSeries;
   }
+
+  // 2. Shared Redis cache — survives cold starts and cross-instance.
+  const fromRedis = await getJsonCache<CachedSeries>(REDIS_KEY);
+  if (fromRedis && now - fromRedis.generatedAt < LOCAL_TTL_MS) {
+    cachedSeries = fromRedis;
+    return fromRedis;
+  }
+
+  // 3. De-duplicate concurrent rebuilds inside the same instance.
   if (pendingBuild) return pendingBuild;
   pendingBuild = buildDailySeries()
-    .then((series) => {
+    .then(async (series) => {
       cachedSeries = series;
+      await setJsonCache(REDIS_KEY, series, REDIS_TTL_SECONDS);
       return series;
     })
     .finally(() => {
