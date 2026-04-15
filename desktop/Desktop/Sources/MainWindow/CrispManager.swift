@@ -51,8 +51,13 @@ class CrispManager: ObservableObject {
 
     private init() {}
 
-    /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R
-    func start() {
+    /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R.
+    ///
+    /// - Parameter performInitialPoll: If `true` (default), kicks off an immediate
+    ///   `pollForMessages()` call that hits `APIClient.shared`. Pass `false` only
+    ///   from lifecycle unit tests that want to exercise observer registration
+    ///   without touching the network, auth state, or firing real notifications.
+    func start(performInitialPoll: Bool = true) {
         guard !isStarted else { return }
         isStarted = true
 
@@ -63,8 +68,9 @@ class CrispManager: ObservableObject {
             lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
         }
 
-        // Fetch immediately on start
-        pollForMessages()
+        if performInitialPoll {
+            pollForMessages()
+        }
 
         // Refresh on app activation and Cmd+R (no periodic timer)
         activationObserver = NotificationCenter.default.addObserver(
