@@ -161,7 +161,10 @@ utils_storage.precache_conversation_audio = MagicMock()
 from models.conversation import CreateConversation
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.process_conversation import _get_conversation_obj
+from utils.conversations.process_conversation import (
+    _fallback_title_for_empty_llm_response,
+    _get_conversation_obj,
+)
 
 
 def _make_create_conversation(transcript_text: str = "Some real content.") -> CreateConversation:
@@ -212,3 +215,49 @@ class TestGetConversationObjRespectsDiscardedParam:
         result = _get_conversation_obj('uid_1', structured, conv)
 
         assert result.discarded is False
+
+
+class TestFallbackTitleForEmptyLlmResponse:
+    """Unit tests for the deterministic fallback title helper."""
+
+    def test_fallback_prefers_overview_first_sentence(self):
+        structured = Structured(title='', overview='Budget meeting notes. Discussed Q2 goals and budget cuts.')
+        started_at = datetime(2026, 4, 15, tzinfo=timezone.utc)
+
+        result = _fallback_title_for_empty_llm_response(structured, started_at)
+
+        assert result == 'Budget meeting notes'
+
+    def test_fallback_uses_date_when_overview_empty(self):
+        structured = Structured(title='', overview='')
+        started_at = datetime(2026, 4, 15, tzinfo=timezone.utc)
+
+        result = _fallback_title_for_empty_llm_response(structured, started_at)
+
+        assert result == 'Conversation on Apr 15, 2026'
+
+    def test_fallback_skips_overly_long_overview_first_sentence(self):
+        """Long overview first sentence should fall through to date fallback rather than becoming a noisy title."""
+        long_sentence = 'This is an unusually long first sentence of the overview that exceeds sixty characters of text'
+        structured = Structured(title='', overview=f"{long_sentence}. Rest.")
+        started_at = datetime(2026, 4, 15, tzinfo=timezone.utc)
+
+        result = _fallback_title_for_empty_llm_response(structured, started_at)
+
+        assert result == 'Conversation on Apr 15, 2026'
+
+    def test_fallback_handles_missing_started_at(self):
+        structured = Structured(title='', overview='')
+
+        result = _fallback_title_for_empty_llm_response(structured, None)
+
+        assert result == 'Untitled Conversation'
+
+    def test_fallback_skips_single_word_first_sentence(self):
+        """Avoid noisy one-word titles from abbreviations ('Dr. Smith...') or decimals ('Scored 3.5...')."""
+        structured = Structured(title='', overview='Dr. Smith met with the team.')
+        started_at = datetime(2026, 4, 15, tzinfo=timezone.utc)
+
+        result = _fallback_title_for_empty_llm_response(structured, started_at)
+
+        assert result == 'Conversation on Apr 15, 2026'
