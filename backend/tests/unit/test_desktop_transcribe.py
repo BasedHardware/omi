@@ -1023,3 +1023,175 @@ class TestVoiceMessageTranscribeBoundary:
             assert resp.status_code == 200
         finally:
             _cleanup_chat_client(saved)
+
+
+# ---------------------------------------------------------------------------
+# Duration budget enforcement: octet-stream, multipart, and WebSocket
+# ---------------------------------------------------------------------------
+
+
+class TestDurationBudgetEnforcement:
+    """Test per-session duration cap and daily budget across all three endpoints."""
+
+    def test_octet_stream_budget_exhausted_429(self):
+        """Octet-stream request with exhausted budget should return 429."""
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)):
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    content=b'\x00' * 3200,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 429
+                assert 'budget exhausted' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_budget_consumed_with_correct_duration(self, mock_transcribe):
+        """Successful octet-stream request should consume budget with correct duration_ms."""
+        mock_transcribe.return_value = ('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)) as mock_budget:
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    # 32000 bytes at 16kHz mono = 1 second = 1000ms
+                    content=b'\x00' * 32000,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 200
+                mock_budget.assert_called_once()
+                call_args = mock_budget.call_args[0]
+                assert call_args[0] == 'test-uid'
+                assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_wav_over_120s_rejected_413(self):
+        """Multipart WAV exceeding 120s total should return 413."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'read_wav_duration_ms', return_value=130_000):
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                )
+                assert resp.status_code == 413
+                assert 'duration exceeds' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_budget_exhausted_429(self):
+        """Multipart upload with exhausted budget should return 429."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'read_wav_duration_ms', return_value=60_000):
+                with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)):
+                    resp = client.post(
+                        '/v2/voice-message/transcribe',
+                        files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                    )
+                    assert resp.status_code == 429
+                    assert 'budget exhausted' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_multi_file_duration_sum_413(self):
+        """Multiple WAV files whose summed duration exceeds 120s should return 413."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            # Each file reports 70s → 2 files = 140s > 120s cap
+            with patch.object(module, 'read_wav_duration_ms', return_value=70_000):
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    files=[
+                        ('files', ('a.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                        ('files', ('b.wav', io.BytesIO(b'\x00' * 100), 'audio/wav')),
+                    ],
+                )
+                assert resp.status_code == 413
+                assert 'duration exceeds' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestWsBudgetAndSessionCap:
+    """Test WS budget gate, per-session cap, and actual duration recording."""
+
+    def test_ws_budget_exhausted_rejects_at_connect(self):
+        """WS should close with 1008 if daily budget is exhausted at connect."""
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'check_budget', return_value=(False, 7200000, 0)):
+                with pytest.raises(Exception):
+                    with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                        ws.receive_json()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_session_cap_closes_connection(self):
+        """WS should close when cumulative audio exceeds session duration cap."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # Patch session cap to 1s → max_session_bytes = 32000 at 16kHz mono
+            with patch.object(module, 'MAX_SESSION_DURATION_S', 1):
+                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                    with patch.object(
+                        module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')
+                    ):
+                        with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                            with patch.object(module, 'record_actual_duration'):
+                                with pytest.raises(Exception):
+                                    with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                        # 33000 bytes > 32000 (1s at 16kHz mono) → cap hit
+                                        ws.send_bytes(b'\x00' * 33000)
+                                        ws.receive_json()  # should fail — WS closed by server
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_records_actual_duration_on_close(self):
+        """WS should call record_actual_duration with correct ms after session ends."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration') as mock_record:
+                            with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                # Send 32000 bytes = 1s at 16kHz mono
+                                ws.send_bytes(b'\x00' * 32000)
+                            # After WS close, finally block should have called record_actual_duration
+                            mock_record.assert_called_once()
+                            call_args = mock_record.call_args[0]
+                            assert call_args[0] == 'test-uid'
+                            assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+        finally:
+            _cleanup_chat_client(saved)
