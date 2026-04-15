@@ -145,7 +145,11 @@ class MemoriesViewModel: ObservableObject {
   /// posting `didBecomeActive` / `.refreshAllData` actually reaches the refresh
   /// method — if the observer rewire regresses, the counter stays flat and the
   /// test fails.
-  @Published private(set) var refreshInvocations: Int = 0
+  /// Deliberately **not** `@Published` — publishing on every activation/Cmd+R
+  /// refresh would emit `objectWillChange` and invalidate any SwiftUI view
+  /// observing `MemoriesViewModel`, which is a pure production cost for a
+  /// value nothing drives UI from.
+  private(set) var refreshInvocations: Int = 0
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
