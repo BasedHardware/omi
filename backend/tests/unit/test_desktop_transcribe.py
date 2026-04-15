@@ -1123,6 +1123,47 @@ class TestDurationBudgetEnforcement:
             _cleanup_chat_client(saved)
 
 
+class TestVoiceMessagesEndpointBudget:
+    """Test /v2/voice-messages duration cap and budget enforcement."""
+
+    def test_voice_messages_over_120s_rejected_413(self):
+        """WAV exceeding 120s on /v2/voice-messages should return 413."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=130_000):
+                        resp = client.post(
+                            '/v2/voice-messages',
+                            files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                        )
+                        assert resp.status_code == 413
+                        assert 'duration exceeds' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_voice_messages_budget_exhausted_429(self):
+        """Exhausted budget on /v2/voice-messages should return 429."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=60_000):
+                        with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)):
+                            resp = client.post(
+                                '/v2/voice-messages',
+                                files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                            )
+                            assert resp.status_code == 429
+                            assert 'budget exhausted' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+
 class TestWsBudgetAndSessionCap:
     """Test WS budget gate, per-session cap, and actual duration recording."""
 
@@ -1164,6 +1205,44 @@ class TestWsBudgetAndSessionCap:
                                         # 33000 bytes > 32000 (1s at 16kHz mono) → cap hit
                                         ws.send_bytes(b'\x00' * 33000)
                                         ws.receive_json()  # should fail — WS closed by server
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_session_cap_overflow_frame_not_billed(self):
+        """Overflow frame that triggers cap should not inflate the billed duration."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # Cap to 1s → 32000 bytes at 16kHz mono
+            with patch.object(module, 'MAX_SESSION_DURATION_S', 1):
+                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                    with patch.object(
+                        module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')
+                    ):
+                        with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                            with patch.object(module, 'record_actual_duration') as mock_record:
+                                with pytest.raises(Exception):
+                                    with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                        # Frame 1: 20000 bytes (accepted, under 32000 cap)
+                                        ws.send_bytes(b'\x00' * 20000)
+                                        # Frame 2: 15000 bytes → 20000+15000=35000 > 32000 → cap
+                                        ws.send_bytes(b'\x00' * 15000)
+                                        ws.receive_json()
+                                # Only the accepted 20000 bytes should be billed
+                                mock_record.assert_called_once()
+                                call_args = mock_record.call_args[0]
+                                assert call_args[0] == 'test-uid'
+                                # 20000 / (16000*1*2) * 1000 = 625ms
+                                assert call_args[1] == 625
         finally:
             _cleanup_chat_client(saved)
 
