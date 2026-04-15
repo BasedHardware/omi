@@ -58,7 +58,12 @@ async function getSharedRecap(id: string): Promise<DailySummary | null> {
 function formatDate(dateStr: string): string {
   const [year, month, day] = dateStr.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function formatDuration(minutes: number): string {
@@ -117,15 +122,21 @@ export default async function RecapPage({ params }: { params: ParamsTypes }) {
         {/* Stats */}
         <div className="mb-8 grid grid-cols-3 gap-3">
           <div className="rounded-2xl bg-zinc-900/70 p-4 text-center ring-1 ring-zinc-800">
-            <p className="text-xl font-semibold text-white">{recap.stats.total_conversations}</p>
+            <p className="text-xl font-semibold text-white">
+              {recap.stats.total_conversations}
+            </p>
             <p className="mt-1 text-xs text-zinc-500">Conversations</p>
           </div>
           <div className="rounded-2xl bg-zinc-900/70 p-4 text-center ring-1 ring-zinc-800">
-            <p className="text-xl font-semibold text-white">{formatDuration(recap.stats.total_duration_minutes)}</p>
+            <p className="text-xl font-semibold text-white">
+              {formatDuration(recap.stats.total_duration_minutes)}
+            </p>
             <p className="mt-1 text-xs text-zinc-500">Duration</p>
           </div>
           <div className="rounded-2xl bg-zinc-900/70 p-4 text-center ring-1 ring-zinc-800">
-            <p className="text-xl font-semibold text-white">{recap.stats.action_items_count}</p>
+            <p className="text-xl font-semibold text-white">
+              {recap.stats.action_items_count}
+            </p>
             <p className="mt-1 text-xs text-zinc-500">Tasks</p>
           </div>
         </div>
@@ -139,7 +150,10 @@ export default async function RecapPage({ params }: { params: ParamsTypes }) {
             <h2 className="mb-4 text-lg font-semibold text-white">Highlights</h2>
             <div className="space-y-3">
               {recap.highlights.map((h, i) => (
-                <div key={i} className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800">
+                <div
+                  key={i}
+                  className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800"
+                >
                   <div className="flex gap-3">
                     <span className="text-xl">{h.emoji}</span>
                     <div>
@@ -159,7 +173,10 @@ export default async function RecapPage({ params }: { params: ParamsTypes }) {
             <h2 className="mb-4 text-lg font-semibold text-white">Tasks</h2>
             <div className="space-y-2">
               {pendingTasks.map((item, i) => (
-                <div key={i} className="flex items-start gap-3 rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800">
+                <div
+                  key={i}
+                  className="flex items-start gap-3 rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800"
+                >
                   <div className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-zinc-600" />
                   <p className="text-sm text-white">{item.description}</p>
                 </div>
@@ -174,7 +191,10 @@ export default async function RecapPage({ params }: { params: ParamsTypes }) {
             <h2 className="mb-4 text-lg font-semibold text-white">Decisions</h2>
             <div className="space-y-2">
               {recap.decisions_made.map((d, i) => (
-                <div key={i} className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800">
+                <div
+                  key={i}
+                  className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800"
+                >
                   <p className="text-sm text-white">{d.decision}</p>
                 </div>
               ))}
@@ -188,7 +208,10 @@ export default async function RecapPage({ params }: { params: ParamsTypes }) {
             <h2 className="mb-4 text-lg font-semibold text-white">Learnings</h2>
             <div className="space-y-2">
               {recap.knowledge_nuggets.map((k, i) => (
-                <div key={i} className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800">
+                <div
+                  key={i}
+                  className="rounded-2xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800"
+                >
                   <p className="text-sm text-white">{k.insight}</p>
                 </div>
               ))}
