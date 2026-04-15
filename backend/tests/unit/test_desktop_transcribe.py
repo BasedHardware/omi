@@ -1330,7 +1330,11 @@ class TestWsMidSessionBudgetEnforcement:
     """Test that WS closes mid-session when cumulative audio exceeds remaining budget."""
 
     def test_ws_closes_when_budget_exceeded_mid_session(self):
-        """WS should close with 1008 when cumulative audio exceeds remaining daily budget."""
+        """WS should close with 1008 when cumulative audio exceeds remaining daily budget.
+
+        The triggering frame should NOT be counted — total_audio_bytes is only
+        incremented for frames that pass the budget check and reach Deepgram.
+        """
         client, module, saved = _make_chat_client()
         try:
             mock_dg_socket = MagicMock()
@@ -1356,8 +1360,9 @@ class TestWsMidSessionBudgetEnforcement:
 
                                     time.sleep(0.1)
                                     ws.receive_json()  # should fail — WS closed due to budget
-                            # Duration should still be recorded for the audio that was sent
-                            mock_record.assert_called_once()
+                            # The triggering frame is NOT counted (check happens before increment),
+                            # so record_actual_duration should NOT be called (0 bytes processed)
+                            mock_record.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 
@@ -1384,5 +1389,61 @@ class TestWsMidSessionBudgetEnforcement:
                                 # Send 32000 bytes = 1000ms at 16kHz mono — well within 60s remaining
                                 ws.send_bytes(b'\x00' * 32000)
                                 # Connection should stay open — no 1008 close
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_mid_session_records_only_processed_audio(self):
+        """WS should only record audio that was processed, not the triggering frame."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.finalize = MagicMock()
+                mock_dg_socket.finish = MagicMock()
+                return mock_dg_socket
+
+            # User has 1500ms of budget remaining
+            with patch.object(module, 'check_budget', return_value=(True, 7198500, 1500)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration') as mock_record:
+                            with pytest.raises(Exception):
+                                with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                    # Frame 1: 32000 bytes = 1000ms — within 1500ms budget
+                                    ws.send_bytes(b'\x00' * 32000)
+                                    # Frame 2: 32000 bytes = would be 2000ms total — exceeds 1500ms
+                                    ws.send_bytes(b'\x00' * 32000)
+                                    import time
+
+                                    time.sleep(0.1)
+                                    ws.receive_json()
+                            # Only frame 1 was processed (1000ms), frame 2 was rejected
+                            mock_record.assert_called_once()
+                            call_args = mock_record.call_args[0]
+                            assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+        finally:
+            _cleanup_chat_client(saved)
+
+
+class TestOctetStreamBodySizeGuard:
+    """Test that octet-stream rejects oversized payloads before buffering."""
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_oversized_body_rejected_413(self, mock_transcribe):
+        """Body exceeding _MAX_PCM_BODY_BYTES should be rejected with 413."""
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, '_MAX_PCM_BODY_BYTES', 1000):
+                resp = client.post(
+                    '/v2/voice-message/transcribe',
+                    content=b'\x00' * 1500,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 413
+                mock_transcribe.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
