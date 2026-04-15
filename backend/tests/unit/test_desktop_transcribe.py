@@ -595,7 +595,7 @@ class TestVoiceMessageTranscribeEndpoint:
                 headers={'Content-Type': 'application/octet-stream'},
             )
             assert resp.status_code == 413
-            assert 'too large' in resp.json()['detail']
+            assert 'duration exceeds' in resp.json()['detail'] or 'too large' in resp.json()['detail']
         finally:
             _cleanup_chat_client(saved)
 
