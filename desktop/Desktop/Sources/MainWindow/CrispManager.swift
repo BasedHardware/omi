@@ -54,7 +54,11 @@ class CrispManager: ObservableObject {
     /// posting `didBecomeActive` / `.refreshAllData` actually reaches the poll
     /// method — if an observer subscribes to the wrong notification name or a
     /// future edit drops the wiring, the counter stays flat and the test fails.
-    @Published private(set) var pollInvocations: Int = 0
+    /// Deliberately **not** `@Published` — publishing on every activation/Cmd+R
+    /// refresh would emit `objectWillChange` and invalidate any SwiftUI view
+    /// observing `CrispManager`, which is a pure production cost for a value
+    /// nothing drives UI from.
+    private(set) var pollInvocations: Int = 0
 
     /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R.
     ///
