@@ -322,6 +322,7 @@ export default function AnalyticsPage() {
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
+  const [cumulativeWindow, setCumulativeWindow] = useState<"7d" | "30d" | "all">("all");
 
   const swrOpts = { revalidateOnFocus: false };
 
@@ -344,7 +345,7 @@ export default function AnalyticsPage() {
     useSWR<ConversationCount>(token ? ["/api/omi/stats/conversation-count", token] : null, authFetcher, swrOpts);
 
   const { data: dailyNewUsers, isLoading: dailyNewUsersLoading } =
-    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=60", token] : null, authFetcher, swrOpts);
+    useSWR<DailyNewUsersData>(token ? ["/api/omi/stats/daily-new-users?days=all", token] : null, authFetcher, swrOpts);
 
   const { data: dauTrends, isLoading: dauLoading } =
     useSWR<DauTrendsData>(token ? ["/api/omi/stats/dau-trends?days=60", token] : null, authFetcher, swrOpts);
@@ -409,8 +410,9 @@ export default function AnalyticsPage() {
     if (c.data.length > cohortMaxDays) cohortMaxDays = c.data.length;
   }
 
+  // Cumulative Users chart fetches the full history since the first
+  // signup so the growth curve is meaningful.
   const allDailyData = dailyNewUsers?.data ?? [];
-  const dailyData = allDailyData.slice(-30);
   const dauData = dauTrends?.data?.slice(-30) ?? [];
   const ratingsData = messageRatings?.data ?? [];
   const totalThumbsUp = ratingsData.reduce((s, d) => s + d.thumbs_up, 0);
@@ -462,6 +464,22 @@ export default function AnalyticsPage() {
         };
       });
   }, [ratingsData]);
+
+  // Slice the all-time daily series to the selected window for the
+  // Cumulative Users chart. Granularity stays daily; only the visible
+  // range changes.
+  const cumulativeSeries = useMemo(() => {
+    if (allDailyData.length === 0) return allDailyData;
+    if (cumulativeWindow === "all") return allDailyData;
+    const days = cumulativeWindow === "7d" ? 7 : 30;
+    return allDailyData.slice(-days);
+  }, [allDailyData, cumulativeWindow]);
+
+  // On a tight window the cumulative values barely move relative to the
+  // absolute total, so pin the y-axis to the window's min/max. For the
+  // full history we anchor at zero so the curve sweeps from 0 → total.
+  const cumulativeYDomain: [number | "dataMin", number | "dataMax"] =
+    cumulativeWindow === "all" ? [0, "dataMax"] : ["dataMin", "dataMax"];
 
   // 7-day rolling average for daily new users
   const dailyWithRollingAvg = useMemo(() => {
@@ -1293,16 +1311,35 @@ export default function AnalyticsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Cumulative Total Users */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Cumulative Users</h2>
-          <p className="text-sm text-muted-foreground mb-4">Total macOS users over time</p>
-          <div className="h-[300px]">
+          <div className="flex items-start justify-between mb-1">
+            <div>
+              <h2 className="text-lg font-semibold">Cumulative Users</h2>
+              <p className="text-sm text-muted-foreground">Total users across all platforms</p>
+            </div>
+            <div className="flex rounded-md border border-input overflow-hidden">
+              {(["7d", "30d", "all"] as const).map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setCumulativeWindow(w)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    cumulativeWindow === w
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {w === "7d" ? "Last week" : w === "30d" ? "Last month" : "All time"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-[300px] mt-4">
             {dailyNewUsersLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : dailyData.length > 0 ? (
+            ) : cumulativeSeries.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyData}>
+                <AreaChart data={cumulativeSeries}>
                   <defs>
                     <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
@@ -1310,8 +1347,21 @@ export default function AnalyticsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} />
+                  <XAxis
+                    dataKey="date"
+                    className="text-xs"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={shortDate}
+                    minTickGap={40}
+                  />
+                  <YAxis
+                    className="text-xs"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={formatCompact}
+                    domain={cumulativeYDomain}
+                    allowDataOverflow={false}
+                    width={56}
+                  />
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
                 </AreaChart>
@@ -1404,9 +1454,9 @@ export default function AnalyticsPage() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold">Daily New Users</h2>
-          {dailyNewUsers?.totalUsers != null && (
+          {dailyWithRollingAvg.length > 0 && (
             <span className="text-sm text-muted-foreground">
-              {dailyNewUsers.totalUsers.toLocaleString()} in last {dailyNewUsers.days}d
+              {dailyWithRollingAvg.reduce((s, p) => s + p.users, 0).toLocaleString()} in last 30d
             </span>
           )}
         </div>

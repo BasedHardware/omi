@@ -1,8 +1,99 @@
 import { NextRequest, NextResponse } from "next/server";
-import admin, { getDb } from "@/lib/firebase/admin";
+import { getAdminAuth } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+// The Firestore `users` collection has a `created_at` field that was
+// backfilled for ~63K existing users on a single day in late 2024, so it
+// can't be used to derive signup history. Firebase Auth's
+// `metadata.creationTime` is set by the Auth service on account creation
+// and is the authoritative signup timestamp.
+//
+// Scanning every user via `listUsers()` pages 1000 at a time (112K ≈ 25s),
+// so the full series is cached in module scope for 10 minutes. A pending
+// rebuild is shared across concurrent requests so we don't fan out.
+
+type DailyPoint = { date: string; users: number; cumulative: number };
+type CachedSeries = {
+  data: DailyPoint[];
+  totalUsers: number;
+  generatedAt: number;
+};
+
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+let cachedSeries: CachedSeries | null = null;
+let pendingBuild: Promise<CachedSeries> | null = null;
+
+async function buildDailySeries(): Promise<CachedSeries> {
+  const auth = getAdminAuth();
+  const countsByDate: Record<string, number> = {};
+  let pageToken: string | undefined = undefined;
+  let total = 0;
+  let earliest: Date | null = null;
+  let latest: Date | null = null;
+
+  do {
+    const page = await auth.listUsers(1000, pageToken);
+    for (const user of page.users) {
+      const ct = user.metadata?.creationTime
+        ? new Date(user.metadata.creationTime)
+        : null;
+      if (!ct || Number.isNaN(ct.getTime())) continue;
+      const key = ct.toISOString().slice(0, 10);
+      countsByDate[key] = (countsByDate[key] || 0) + 1;
+      if (!earliest || ct < earliest) earliest = ct;
+      if (!latest || ct > latest) latest = ct;
+      total++;
+    }
+    pageToken = page.pageToken || undefined;
+  } while (pageToken);
+
+  if (!earliest || !latest) {
+    return { data: [], totalUsers: 0, generatedAt: Date.now() };
+  }
+
+  // Fill every day from the earliest signup to today so the curve is
+  // continuous (no gaps) and ends on the current date.
+  const endDate = new Date();
+  endDate.setUTCHours(0, 0, 0, 0);
+  const startDate = new Date(
+    Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), earliest.getUTCDate()),
+  );
+
+  const data: DailyPoint[] = [];
+  let running = 0;
+  for (
+    const d = new Date(startDate);
+    d <= endDate;
+    d.setUTCDate(d.getUTCDate() + 1)
+  ) {
+    const key = d.toISOString().slice(0, 10);
+    const users = countsByDate[key] || 0;
+    running += users;
+    data.push({ date: key, users, cumulative: running });
+  }
+
+  return { data, totalUsers: total, generatedAt: Date.now() };
+}
+
+async function getSeries(): Promise<CachedSeries> {
+  const now = Date.now();
+  if (cachedSeries && now - cachedSeries.generatedAt < CACHE_TTL_MS) {
+    return cachedSeries;
+  }
+  if (pendingBuild) return pendingBuild;
+  pendingBuild = buildDailySeries()
+    .then((series) => {
+      cachedSeries = series;
+      return series;
+    })
+    .finally(() => {
+      pendingBuild = null;
+    });
+  return pendingBuild;
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
@@ -10,54 +101,32 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const days = Math.min(parseInt(searchParams.get("days") || "30", 10), 90);
+    const daysParam = searchParams.get("days");
+    const wantsAll =
+      !daysParam || daysParam === "all" || daysParam === "0";
+    const days = wantsAll ? null : Math.max(1, parseInt(daysParam!, 10));
 
-    const db = getDb();
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setDate(startDate.getDate() - days);
-    startDate.setHours(0, 0, 0, 0);
+    const series = await getSeries();
 
-    const snapshot = await db
-      .collection("users")
-      .where("created_at", ">=", admin.firestore.Timestamp.fromDate(startDate))
-      .orderBy("created_at", "asc")
-      .get();
-
-    // Group by date
-    const countsByDate: Record<string, number> = {};
-
-    // Pre-fill all dates with 0
-    for (let i = 0; i < days; i++) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().split("T")[0];
-      countsByDate[key] = 0;
+    let data = series.data;
+    if (days != null) {
+      const start = new Date();
+      start.setUTCDate(start.getUTCDate() - days);
+      const startKey = start.toISOString().slice(0, 10);
+      data = series.data.filter((p) => p.date >= startKey);
     }
 
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data();
-      if (data.created_at) {
-        const ts = data.created_at.toDate();
-        const key = ts.toISOString().split("T")[0];
-        if (countsByDate[key] !== undefined) {
-          countsByDate[key]++;
-        }
-      }
+    return NextResponse.json({
+      data,
+      totalUsers: series.totalUsers,
+      days: days ?? series.data.length,
+      generatedAt: series.generatedAt,
     });
-
-    const data = Object.entries(countsByDate)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, users]) => ({ date, users }));
-
-    const totalUsers = data.reduce((sum, d) => sum + d.users, 0);
-
-    return NextResponse.json({ data, totalUsers, days });
   } catch (error: any) {
     console.error("Daily new users error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch daily new users" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
