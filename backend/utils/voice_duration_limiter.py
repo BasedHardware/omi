@@ -238,6 +238,9 @@ def read_wav_duration_ms(file_path: str) -> int | None:
                 chunk_id = chunk_header[:4]
                 chunk_size = struct.unpack('<I', chunk_header[4:8])[0]
 
+                # RIFF chunks are padded to even byte boundaries
+                pad = chunk_size % 2
+
                 if chunk_id == b'fmt ':
                     if chunk_size < 16:
                         return None
@@ -246,15 +249,15 @@ def read_wav_duration_ms(file_path: str) -> int | None:
                         return None
                     sample_rate = struct.unpack('<I', fmt_data[4:8])[0]
                     byte_rate = struct.unpack('<I', fmt_data[8:12])[0]
-                    # Skip remaining fmt data if any
-                    remaining = chunk_size - len(fmt_data)
+                    # Skip remaining fmt data + pad byte if any
+                    remaining = chunk_size - len(fmt_data) + pad
                     if remaining > 0:
                         f.seek(remaining, 1)
                 elif chunk_id == b'data':
                     data_size = chunk_size
                     break
                 else:
-                    f.seek(chunk_size, 1)
+                    f.seek(chunk_size + pad, 1)
 
             if sample_rate and byte_rate and data_size and byte_rate > 0:
                 duration_s = data_size / byte_rate
