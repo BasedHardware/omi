@@ -29,7 +29,7 @@ import type {
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -278,11 +278,15 @@ export function classifyBash(command: string): DenyDecision | null {
   return null;
 }
 
-/** Classify a write/edit target path. Returns null when allowed. */
-export function classifyFileWrite(path: string): DenyDecision | null {
-  if (typeof path !== "string" || path.length === 0) return null;
+/** Classify a write/edit target path. Returns null when allowed.
+ *  Resolves relative and `..` segments before matching so that
+ *  `../../../../etc/hosts` is caught the same way as `/etc/hosts`. */
+export function classifyFileWrite(filePath: string): DenyDecision | null {
+  if (typeof filePath !== "string" || filePath.length === 0) return null;
+  // Resolve to absolute to prevent ../../../etc/hosts traversal bypass
+  const resolved = resolve(filePath);
   for (const rule of WRITE_PATH_DENY_RULES) {
-    if (rule.pattern.test(path)) {
+    if (rule.pattern.test(resolved)) {
       return { blocked: true, reason: rule.reason };
     }
   }
