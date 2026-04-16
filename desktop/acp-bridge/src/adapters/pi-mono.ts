@@ -243,6 +243,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
+    // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
+    // (execute_sql, semantic_search, etc.) that forward to Swift.
+    // The pipe is already set in process.env by runPiMonoMode().
 
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
