@@ -94,6 +94,8 @@ class _AppShellState extends State<AppShell> {
       }
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
+        // Skip the upgrade deep link while subscription UI is gated for App Store review.
+        if (!context.read<UsageProvider>().showSubscriptionUI) return;
         PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
       }
