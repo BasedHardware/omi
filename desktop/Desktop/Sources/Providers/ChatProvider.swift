@@ -517,7 +517,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.omiAI.rawValue
 
     var isUsingOmiAccountProvider: Bool {
-        bridgeMode == BridgeMode.omiAI.rawValue
+        bridgeMode != BridgeMode.userClaude.rawValue
     }
 
     /// Whether the ACP bridge requires authentication (shown as sheet in UI)
