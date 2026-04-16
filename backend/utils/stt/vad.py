@@ -82,10 +82,11 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
     """Uses hosted pyannote VAD (best quality) with local ONNX Silero fallback."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
-        if exists := redis_db.get_generic_cache(caching_key):
+        cached = redis_db.get_generic_cache(caching_key)
+        if cached is not None:
             if return_segments:
-                return exists
-            return len(exists) == 0
+                return cached
+            return len(cached) == 0
 
     segments = None
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
