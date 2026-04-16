@@ -866,6 +866,24 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_model_claude_aliases() {
+        let route = resolve_model("claude-opus-4-6").unwrap();
+        assert_eq!(route.upstream_model, "claude-opus-4-20250514");
+
+        let route = resolve_model("claude-sonnet-4-6").unwrap();
+        assert_eq!(route.upstream_model, "claude-sonnet-4-20250514");
+    }
+
+    #[test]
+    fn test_resolve_model_full_upstream_ids() {
+        let route = resolve_model("claude-opus-4-20250514").unwrap();
+        assert_eq!(route.upstream_model, "claude-opus-4-20250514");
+
+        let route = resolve_model("claude-sonnet-4-20250514").unwrap();
+        assert_eq!(route.upstream_model, "claude-sonnet-4-20250514");
+    }
+
+    #[test]
     fn test_resolve_model_unknown() {
         assert!(resolve_model("gpt-4").is_none());
         assert!(resolve_model("").is_none());
