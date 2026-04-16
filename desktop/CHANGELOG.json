@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+  ],
   "releases": [
     {
       "version": "0.11.318",
