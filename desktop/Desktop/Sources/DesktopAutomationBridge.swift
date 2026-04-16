@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Network
+import Security
 
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
@@ -101,16 +102,34 @@ final class DesktopAutomationBridge {
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
   private var listener: NWListener?
+  private var sessionToken: String?
 
   private init() {}
+
+  /// Path where the per-launch bearer token is written so automation clients
+  /// (agent-swift, test scripts) can read it. File is created with mode 0600
+  /// and rewritten on every app launch.
+  static var tokenFileURL: URL {
+    let fm = FileManager.default
+    let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+    return base.appendingPathComponent("Omi").appendingPathComponent("automation-bridge.token")
+  }
 
   func startIfNeeded() {
     guard DesktopAutomationLaunchOptions.isEnabled else { return }
     guard listener == nil else { return }
 
     do {
+      let token = try Self.generateSessionToken()
+      try Self.writeTokenFile(token)
+      self.sessionToken = token
+
       let parameters = NWParameters.tcp
       parameters.allowLocalEndpointReuse = true
+      // Bind to loopback only. Without this, NWListener binds to all interfaces,
+      // exposing unauthenticated automation to the local network.
+      parameters.requiredInterfaceType = .loopback
       guard let port = NWEndpoint.Port(rawValue: DesktopAutomationLaunchOptions.port) else {
         log("DesktopAutomationBridge: invalid port \(DesktopAutomationLaunchOptions.port)")
         return
@@ -125,7 +144,7 @@ final class DesktopAutomationBridge {
       listener.start(queue: queue)
       self.listener = listener
       log(
-        "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
+        "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port) (token at \(Self.tokenFileURL.path))"
       )
     } catch {
       logError("DesktopAutomationBridge: failed to start listener", error: error)
@@ -133,8 +152,65 @@ final class DesktopAutomationBridge {
   }
 
   private func handleConnection(_ connection: NWConnection) {
+    // Defense in depth: even with requiredInterfaceType = .loopback, verify the
+    // remote endpoint is a loopback address before processing any data.
+    if !Self.isLoopbackEndpoint(connection.endpoint) {
+      log("DesktopAutomationBridge: rejected non-loopback connection from \(connection.endpoint)")
+      connection.cancel()
+      return
+    }
     connection.start(queue: queue)
     receiveRequest(on: connection, buffer: Data())
+  }
+
+  private static func isLoopbackEndpoint(_ endpoint: NWEndpoint) -> Bool {
+    switch endpoint {
+    case .hostPort(let host, _):
+      switch host {
+      case .ipv4(let addr):
+        return addr.isLoopback
+      case .ipv6(let addr):
+        return addr.isLoopback
+      case .name(let name, _):
+        return name == "localhost" || name == "127.0.0.1" || name == "::1"
+      @unknown default:
+        return false
+      }
+    default:
+      return false
+    }
+  }
+
+  private static func generateSessionToken() throws -> String {
+    var bytes = [UInt8](repeating: 0, count: 32)
+    let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    guard status == errSecSuccess else {
+      throw NSError(
+        domain: "DesktopAutomationBridge", code: Int(status),
+        userInfo: [NSLocalizedDescriptionKey: "SecRandomCopyBytes failed"])
+    }
+    return Data(bytes).base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+  }
+
+  private static func writeTokenFile(_ token: String) throws {
+    let url = tokenFileURL
+    let fm = FileManager.default
+    try fm.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+    try token.write(to: url, atomically: true, encoding: .utf8)
+    try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+  }
+
+  private func extractBearerToken(from headers: [String: String]) -> String? {
+    guard let raw = headers["authorization"] else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespaces)
+    let prefix = "bearer "
+    guard trimmed.lowercased().hasPrefix(prefix) else { return nil }
+    return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
   }
 
   private func receiveRequest(on connection: NWConnection, buffer: Data) {
@@ -189,11 +265,15 @@ final class DesktopAutomationBridge {
     let path = String(requestParts[1])
 
     var contentLength = 0
+    var headers: [String: String] = [:]
     for line in lines.dropFirst() {
       let pieces = line.split(separator: ":", maxSplits: 1)
       guard pieces.count == 2 else { continue }
-      if pieces[0].lowercased() == "content-length" {
-        contentLength = Int(pieces[1].trimmingCharacters(in: .whitespaces)) ?? 0
+      let name = pieces[0].lowercased()
+      let value = pieces[1].trimmingCharacters(in: .whitespaces)
+      headers[name] = value
+      if name == "content-length" {
+        contentLength = Int(value) ?? 0
       }
     }
 
@@ -204,10 +284,38 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, body: body)
+    return HTTPRequest(method: method, path: path, headers: headers, body: body)
+  }
+
+  private static func secureCompare(_ a: String, _ b: String) -> Bool {
+    let ab = Array(a.utf8)
+    let bb = Array(b.utf8)
+    if ab.count != bb.count { return false }
+    var diff: UInt8 = 0
+    for i in 0..<ab.count { diff |= ab[i] ^ bb[i] }
+    return diff == 0
   }
 
   private func route(request: HTTPRequest) async -> HTTPResponse {
+    // Every route (including /health) requires the per-launch bearer token.
+    // Without this any local process — or any LAN host if the listener ever
+    // falls back to all-interfaces — could trigger /gmail-read on the
+    // currently signed-in user and walk away with their inbox.
+    guard let expected = sessionToken else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "bridge_not_ready"),
+        statusCode: 503)
+    }
+    guard let provided = extractBearerToken(from: request.headers),
+      Self.secureCompare(provided, expected)
+    else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "unauthorized"),
+        statusCode: 401)
+    }
+
     switch (request.method, request.path) {
     case ("GET", "/health"):
       let snapshot = await DesktopAutomationStateStore.shared.current()
@@ -370,7 +478,9 @@ final class DesktopAutomationBridge {
     switch response.statusCode {
     case 200: statusText = "OK"
     case 400: statusText = "Bad Request"
+    case 401: statusText = "Unauthorized"
     case 404: statusText = "Not Found"
+    case 503: statusText = "Service Unavailable"
     default: statusText = "Internal Server Error"
     }
 
@@ -399,6 +509,7 @@ final class DesktopAutomationBridge {
 private struct HTTPRequest {
   let method: String
   let path: String
+  let headers: [String: String]
   let body: Data
 }
 
