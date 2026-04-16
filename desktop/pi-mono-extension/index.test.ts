@@ -12,6 +12,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile, unlink } from "node:fs/promises";
 
+import { createServer, type Server } from "node:net";
+import { tmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import {
   classifyBash,
   classifyFileWrite,
@@ -19,6 +22,12 @@ import {
   summarizeInput,
   appendAudit,
   __resetAuditWarnedForTest,
+  OMI_TOOL_SPECS,
+  OMI_TOOL_TIMEOUT_MS,
+  __connectOmiPipeForTest,
+  __callSwiftToolForTest,
+  __omiPendingCallsForTest,
+  __resetOmiPipeForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
 
@@ -905,4 +914,151 @@ test("summarizeInput: write path preserved", () => {
 
 test("summarizeInput: read path preserved", () => {
   assert.equal(summarizeInput(readEvent("/tmp/foo.txt")), "/tmp/foo.txt");
+});
+
+// ---------------------------------------------------------------------------
+// Omi tool relay — pipe connection, timeout, disconnect
+// ---------------------------------------------------------------------------
+
+/** Helper: create a Unix socket server on a temp path. */
+function createMockBridge(): { server: Server; sockPath: string } {
+  const sockPath = pathJoin(tmpdir(), `omi-test-${process.pid}-${Date.now()}.sock`);
+  const server = createServer();
+  return { server, sockPath };
+}
+
+test("OMI_TOOL_SPECS: exactly 13 tools defined", () => {
+  assert.equal(OMI_TOOL_SPECS.length, 13);
+});
+
+test("OMI_TOOL_SPECS: all tools have name, description, properties, required", () => {
+  for (const tool of OMI_TOOL_SPECS) {
+    assert.ok(tool.name, `tool missing name`);
+    assert.ok(tool.description, `${tool.name} missing description`);
+    assert.ok(typeof tool.properties === "object", `${tool.name} missing properties`);
+    assert.ok(Array.isArray(tool.required), `${tool.name} missing required array`);
+  }
+});
+
+test("OMI_TOOL_SPECS: unique tool names", () => {
+  const names = OMI_TOOL_SPECS.map(t => t.name);
+  assert.equal(new Set(names).size, names.length, "duplicate tool names");
+});
+
+test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {
+  assert.equal(OMI_TOOL_TIMEOUT_MS, 30_000);
+});
+
+test("callSwiftTool: returns error when not connected", async () => {
+  __resetOmiPipeForTest();
+  const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+  assert.equal(result, "Error: not connected to Omi bridge");
+});
+
+test("callSwiftTool: receives result via pipe", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+
+    // When a client connects, echo back a tool_result for any tool_use
+    server.on("connection", (socket) => {
+      let buf = "";
+      socket.on("data", (data) => {
+        buf += data.toString();
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          if (line.trim()) {
+            const msg = JSON.parse(line);
+            if (msg.type === "tool_use") {
+              socket.write(JSON.stringify({
+                type: "tool_result",
+                callId: msg.callId,
+                result: `result-for-${msg.name}`,
+              }) + "\n");
+            }
+          }
+        }
+      });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "result-for-execute_sql");
+    assert.equal(__omiPendingCallsForTest.size, 0, "pending calls should be cleared");
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: disconnect resolves pending calls with error", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+
+    // Server accepts but never responds — just closes after a short delay
+    server.on("connection", (socket) => {
+      setTimeout(() => socket.destroy(), 50);
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+
+    // Start a call that will be pending when the socket closes
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "Error: Omi bridge disconnected");
+    assert.equal(__omiPendingCallsForTest.size, 0, "pending calls should be cleared");
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: malformed messages don't wedge pending map", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+
+    server.on("connection", (socket) => {
+      let buf = "";
+      socket.on("data", (data) => {
+        buf += data.toString();
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          if (line.trim()) {
+            const msg = JSON.parse(line);
+            // Send malformed message first (wrong type, missing callId)
+            socket.write('{"type":"garbage","foo":"bar"}\n');
+            socket.write('not json at all\n');
+            // Then send correct result
+            socket.write(JSON.stringify({
+              type: "tool_result",
+              callId: msg.callId,
+              result: "ok",
+            }) + "\n");
+          }
+        }
+      });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "ok");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
 });
