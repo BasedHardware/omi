@@ -48,6 +48,11 @@ final class OmiBleManager: NSObject {
     /// apart from disconnects with healthy signal.
     private var lastRssi: [String: Int64] = [:]
 
+    /// Sliding window of recent (timestamp_ms, rssi) samples per peripheral, used
+    /// to classify the trajectory before a disconnect (fading vs. sudden vs. gap).
+    /// Capped at rssiHistoryLimit — beyond that we drop the oldest.
+    private var rssiHistory: [String: [(ts: Int64, rssi: Int64)]] = [:]
+
     /// Timestamp of the most recently persisted unexpected disconnect per peripheral.
     /// On the next successful didConnect we backfill `timeToReconnectMs` on that event.
     private var pendingReconnectForEvent: [String: Int64] = [:]
@@ -303,6 +308,27 @@ final class OmiBleManager: NSObject {
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
     private static let maxDisconnectHistory = 20
+    private static let rssiHistoryLimit = 10
+    private static let rssiTrendWindowMs: Int64 = 15_000
+    private static let rssiTrendFadingDropDb: Int64 = 10
+
+    /// Classify the RSSI trajectory in the window before `nowMs`. See `rssiTrend`
+    /// on BleDisconnectEvent for the semantics of each label.
+    private static func classifyRssiTrend(samples: [(ts: Int64, rssi: Int64)], nowMs: Int64) -> String {
+        let windowStart = nowMs - rssiTrendWindowMs
+        let recent = samples.filter { $0.ts >= windowStart }
+        // No recent samples — keep-alive wasn't running, so we can't say.
+        if recent.isEmpty { return "gap" }
+        if recent.count < 3 { return "unknown" }
+        // Compare the average of the oldest third to the newest third. A drop of
+        // ≥rssiTrendFadingDropDb dB indicates a fading signal (walk-away).
+        let third = max(1, recent.count / 3)
+        let oldestAvg = recent.prefix(third).map { $0.rssi }.reduce(0, +) / Int64(third)
+        let newestAvg = recent.suffix(third).map { $0.rssi }.reduce(0, +) / Int64(third)
+        let dropDb = oldestAvg - newestAvg // RSSI is negative; larger drop = more negative newer value
+        if dropDb >= rssiTrendFadingDropDb { return "fading" }
+        return "sudden"
+    }
 
     private static func historyKey(_ uuid: String) -> String { "\(diagnosticsKeyPrefix)\(uuid)" }
     private static func reconnectKey(_ uuid: String) -> String { "\(reconnectCountKeyPrefix)\(uuid)" }
@@ -354,6 +380,7 @@ final class OmiBleManager: NSObject {
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
+        let trend = OmiBleManager.classifyRssiTrend(samples: rssiHistory[uuid] ?? [], nowMs: now)
         let event: [String: Any] = [
             "timestamp": now,
             "reason": isManual ? "manual" : (reason ?? "unknown"),
@@ -364,6 +391,7 @@ final class OmiBleManager: NSObject {
             "connectionDurationMs": durationMs,
             "appState": currentAppState(),
             "timeToReconnectMs": 0,
+            "rssiTrend": trend,
         ]
         history.append(event)
 
@@ -431,7 +459,8 @@ final class OmiBleManager: NSObject {
                 lastRssi: obj["lastRssi"] as? Int64 ?? 0,
                 connectionDurationMs: obj["connectionDurationMs"] as? Int64 ?? 0,
                 appState: obj["appState"] as? String ?? "",
-                timeToReconnectMs: obj["timeToReconnectMs"] as? Int64 ?? 0
+                timeToReconnectMs: obj["timeToReconnectMs"] as? Int64 ?? 0,
+                rssiTrend: obj["rssiTrend"] as? String ?? ""
             )
         }
 
@@ -570,11 +599,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let isManual = manuallyDisconnected.contains(uuid)
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
-        connectionStartTimes.removeValue(forKey: uuid)
 
         if !isManual {
             let reason = Self.bleReasonString(from: error)
             let code = (error as? CBError)?.code.rawValue ?? -1
+            // Persist BEFORE clearing connectionStartTimes — the persist step reads
+            // it to compute connection_duration_ms.
             persistDisconnectEvent(
                 uuid: uuid,
                 reason: reason,
@@ -583,6 +613,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 eventType: "disconnect"
             )
         }
+        connectionStartTimes.removeValue(forKey: uuid)
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: error?.localizedDescription) { _ in }
 
@@ -636,13 +667,23 @@ extension OmiBleManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
         guard error == nil else { return }
         let uuid = peripheralUuidString(peripheral)
+        let value = Int64(RSSI.intValue)
         // Always remember the latest sample — used to annotate disconnect events
         // so we can tell signal-driven drops apart from drops with healthy RSSI.
-        lastRssi[uuid] = Int64(RSSI.intValue)
+        lastRssi[uuid] = value
+
+        // Append to the trajectory window used by rssiTrend classification.
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var samples = rssiHistory[uuid] ?? []
+        samples.append((ts: now, rssi: value))
+        if samples.count > OmiBleManager.rssiHistoryLimit {
+            samples.removeFirst(samples.count - OmiBleManager.rssiHistoryLimit)
+        }
+        rssiHistory[uuid] = samples
 
         // Forward to Flutter only while the diagnostics screen has subscribed.
         if isRssiStreamingEnabled {
-            flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: Int64(RSSI.intValue)) { _ in }
+            flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: value) { _ in }
         }
     }
 
