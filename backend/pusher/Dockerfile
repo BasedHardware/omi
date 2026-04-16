@@ -58,6 +58,7 @@ COPY backend/models/ ./models/
 COPY backend/routers/ ./routers/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
+# CI writes google-credentials.json to backend/ before build (gcp_backend_pusher.yml)
 COPY backend/google-credentials.json ./google-credentials.json
 
 EXPOSE 8080
