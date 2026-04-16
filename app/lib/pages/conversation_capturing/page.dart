@@ -197,21 +197,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     provider.photos.isNotEmpty
                         ? "📸"
                         : _isMuted
-                        ? "🔇"
-                        : provider.transcriptServiceReady
-                        ? "🎙️"
-                        : "🎙️⚡",
+                            ? "🔇"
+                            : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted
-                                ? context.l10n.muted
-                                : provider.transcriptServiceReady
-                                ? context.l10n.listening
-                                : context.l10n.transcriptionPaused),
+                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -238,62 +232,63 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                  ? _buildChronologicalTimeline(provider)
-                                  : getTranscriptWidget(
-                                      false,
-                                      provider.segments,
-                                      provider.photos,
-                                      deviceProvider.connectedDevice,
-                                      bottomMargin: 150,
-                                      suggestions: provider.suggestionsBySegmentId,
-                                      taggingSegmentIds: provider.taggingSegmentIds,
-                                      onAcceptSuggestion: (suggestion) {
-                                        provider.assignSpeakerToConversation(
-                                          suggestion.speakerId,
-                                          suggestion.personId,
-                                          suggestion.personName,
-                                          [suggestion.segmentId],
-                                        );
-                                      },
-                                      editSegment: (segmentId, speakerId) {
-                                        final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                          context,
-                                          listen: false,
-                                        );
-                                        if (!connectivityProvider.isConnected) {
-                                          ConnectivityProvider.showNoInternetDialog(context);
-                                          return;
-                                        }
-                                        showModalBottomSheet(
-                                          context: context,
-                                          isScrollControlled: true,
-                                          backgroundColor: Colors.black,
-                                          shape: const RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                          ),
-                                          builder: (context) {
-                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                              (s) => s.speakerId == speakerId,
-                                              orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                      ? _buildChronologicalTimeline(provider)
+                                      : getTranscriptWidget(
+                                          false,
+                                          provider.segments,
+                                          provider.photos,
+                                          deviceProvider.connectedDevice,
+                                          bottomMargin: 150,
+                                          suggestions: provider.suggestionsBySegmentId,
+                                          taggingSegmentIds: provider.taggingSegmentIds,
+                                          onAcceptSuggestion: (suggestion) {
+                                            provider.assignSpeakerToConversation(
+                                              suggestion.speakerId,
+                                              suggestion.personId,
+                                              suggestion.personName,
+                                              [suggestion.segmentId],
                                             );
-                                            return NameSpeakerBottomSheet(
-                                              speakerId: speakerId,
-                                              segmentId: segmentId,
-                                              segments: provider.segments,
-                                              suggestion: suggestion,
-                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                                await provider.assignSpeakerToConversation(
-                                                  speakerId,
-                                                  personId,
-                                                  personName,
-                                                  segmentIds,
+                                          },
+                                          editSegment: (segmentId, speakerId) {
+                                            final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                              context,
+                                              listen: false,
+                                            );
+                                            if (!connectivityProvider.isConnected) {
+                                              ConnectivityProvider.showNoInternetDialog(context);
+                                              return;
+                                            }
+                                            showModalBottomSheet(
+                                              context: context,
+                                              isScrollControlled: true,
+                                              backgroundColor: Colors.black,
+                                              shape: const RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                              ),
+                                              builder: (context) {
+                                                final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                                  (s) => s.speakerId == speakerId,
+                                                  orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                                );
+                                                return NameSpeakerBottomSheet(
+                                                  speakerId: speakerId,
+                                                  segmentId: segmentId,
+                                                  segments: provider.segments,
+                                                  suggestion: suggestion,
+                                                  onSpeakerAssigned:
+                                                      (speakerId, personId, personName, segmentIds) async {
+                                                    await provider.assignSpeakerToConversation(
+                                                      speakerId,
+                                                      personId,
+                                                      personName,
+                                                      segmentIds,
+                                                    );
+                                                  },
                                                 );
                                               },
                                             );
                                           },
-                                        );
-                                      },
-                                    ),
+                                        ),
                             ),
                             _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                           ],
@@ -668,7 +663,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
   Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
-    if (totalSeconds <= 0) return const SizedBox.shrink();
+    if (totalSeconds <= 5) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
@@ -690,10 +685,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               Container(
                 width: 7,
                 height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4CAF50),
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(
@@ -705,10 +697,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 const SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Color(0xFF6C6C80),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
                 ),
               ],
             ],
