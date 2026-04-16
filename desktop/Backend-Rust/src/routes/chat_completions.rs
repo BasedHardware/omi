@@ -93,11 +93,9 @@ fn translate_request(
                 system_prompt = Some(text);
             }
             "user" => {
-                let content = msg
-                    .content
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or(json!(""));
+                let content = convert_user_content(
+                    msg.content.as_ref().cloned().unwrap_or(json!("")),
+                );
                 anthropic_messages.push(AnthropicMessage {
                     role: "user".to_string(),
                     content,
@@ -264,6 +262,54 @@ fn translate_tool_choice(
                 _ => "unknown",
             }
         )),
+    }
+}
+
+/// Convert OpenAI user content to Anthropic format.
+///
+/// Handles three cases:
+/// - String → passed through as-is
+/// - Array with `image_url` blocks → converted to Anthropic `image` blocks
+///   (data:mime;base64,DATA → { type: "image", source: { type: "base64", media_type, data } })
+/// - Everything else → passed through
+fn convert_user_content(content: serde_json::Value) -> serde_json::Value {
+    match &content {
+        serde_json::Value::Array(parts) => {
+            let converted: Vec<serde_json::Value> = parts
+                .iter()
+                .map(|part| {
+                    let part_type = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    if part_type == "image_url" {
+                        // OpenAI format: { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
+                        if let Some(url) = part
+                            .get("image_url")
+                            .and_then(|iu| iu.get("url"))
+                            .and_then(|u| u.as_str())
+                        {
+                            if let Some(rest) = url.strip_prefix("data:") {
+                                if let Some(semi_pos) = rest.find(";base64,") {
+                                    let media_type = &rest[..semi_pos];
+                                    let data = &rest[semi_pos + 8..];
+                                    return json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": media_type,
+                                            "data": data
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        part.clone()
+                    } else {
+                        part.clone()
+                    }
+                })
+                .collect();
+            json!(converted)
+        }
+        _ => content,
     }
 }
 
