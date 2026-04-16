@@ -4923,6 +4923,45 @@ extension APIClient {
     }
   }
 
+  // MARK: - Chat Usage Quota
+
+  /// Current-month chat usage + the plan's cap. Backed by Python backend
+  /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
+  struct ChatUsageQuota: Decodable {
+    let plan: String       // display name: "Free" | "Plus" | "Pro"
+    let planType: String   // internal id: "basic" | "unlimited" | "pro"
+    let unit: String       // "questions" | "cost_usd"
+    let used: Double
+    let limit: Double?     // nil means unlimited
+    let percent: Double
+    let allowed: Bool
+    let resetAt: Int?      // unix seconds — start of next UTC month
+
+    enum CodingKeys: String, CodingKey {
+      case plan
+      case planType = "plan_type"
+      case unit
+      case used
+      case limit
+      case percent
+      case allowed
+      case resetAt = "reset_at"
+    }
+  }
+
+  func fetchChatUsageQuota() async -> ChatUsageQuota? {
+    do {
+      let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
+      log(
+        "APIClient: Quota plan=\(res.plan) unit=\(res.unit) used=\(res.used) limit=\(res.limit ?? -1) allowed=\(res.allowed)"
+      )
+      return res
+    } catch {
+      log("APIClient: Chat quota fetch failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   // MARK: - API Keys
 
   struct ApiKeysResponse: Decodable {

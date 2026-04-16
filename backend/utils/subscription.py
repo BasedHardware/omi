@@ -23,7 +23,7 @@ def get_paid_plan_definitions() -> list[dict]:
         {
             "plan_type": PlanType.unlimited,
             "plan_id": "unlimited",
-            "title": "Unlimited Plan",
+            "title": "Plus",
             "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
             "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
             "annual_description": "Save 20% with annual billing.",
@@ -69,14 +69,31 @@ BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_T
 BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH', '0'))
 
+# Chat caps per plan. Env-overridable for ops.
+FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
+PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
+PRO_CHAT_COST_USD_PER_MONTH = float(os.getenv('PRO_CHAT_COST_USD_PER_MONTH', '400.0'))
+
+# Display names shown to users. Internal PlanType stays the same for Stripe compat.
+PLAN_DISPLAY_NAMES = {
+    PlanType.basic: 'Free',
+    PlanType.unlimited: 'Plus',
+    PlanType.pro: 'Pro',
+}
+
+
+def get_plan_display_name(plan: PlanType) -> str:
+    return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
+
 
 def get_basic_plan_limits() -> PlanLimits:
-    """Returns the PlanLimits object for the basic tier."""
+    """Returns the PlanLimits object for the basic (Free) tier."""
     return PlanLimits(
         transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
         words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
         insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
         memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+        chat_questions_per_month=FREE_CHAT_QUESTIONS_PER_MONTH,
     )
 
 
@@ -86,13 +103,26 @@ def get_default_basic_subscription() -> Subscription:
 
 
 def get_plan_limits(plan: PlanType) -> PlanLimits:
-    """Returns the PlanLimits object for the given plan."""
-    if is_paid_plan(plan):
+    """Returns the PlanLimits object for the given plan.
+
+    Plan display names: basic=Free, unlimited=Plus, pro=Pro.
+    Chat caps: Free/Plus count questions, Pro caps dollar spend.
+    """
+    if plan == PlanType.unlimited:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
             memories_created=None,
+            chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
+        )
+    if plan == PlanType.pro:
+        return PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+            chat_cost_usd_per_month=PRO_CHAT_COST_USD_PER_MONTH,
         )
     return get_basic_plan_limits()
 
@@ -101,18 +131,18 @@ def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
     if plan == PlanType.pro:
         return [
-            "Automations",
-            "Vibe coding",
-            "Unlimited actions",
+            f"Up to ${int(PRO_CHAT_COST_USD_PER_MONTH)} of chat usage per month",
+            "Automations and vibe coding",
+            "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
         ]
 
     if plan == PlanType.unlimited:
         return [
-            "Unlimited listening time",
-            "Unlimited words transcribed",
-            "Unlimited insights",
-            "Unlimited memories",
+            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
+            "Shared with mobile and web",
         ]
 
     # Basic plan
