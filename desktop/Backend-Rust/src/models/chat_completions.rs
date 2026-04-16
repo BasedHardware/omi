@@ -305,37 +305,38 @@ pub enum Provider {
 }
 
 /// Model allowlist — maps public model names to upstream provider models.
+/// All models resolve to Claude 4.6 (sonnet/opus).
 pub const MODEL_ROUTES: &[ModelRoute] = &[
     ModelRoute {
         public_model: "omi-sonnet",
-        upstream_model: "claude-sonnet-4-20250514",
+        upstream_model: "claude-sonnet-4-6",
         provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "omi-opus",
-        upstream_model: "claude-opus-4-20250514",
+        upstream_model: "claude-opus-4-6",
         provider: Provider::Anthropic,
     },
     // Pass-through aliases used by onboarding chat and other app components
     ModelRoute {
         public_model: "claude-opus-4-6",
-        upstream_model: "claude-opus-4-20250514",
+        upstream_model: "claude-opus-4-6",
         provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-6",
-        upstream_model: "claude-sonnet-4-20250514",
+        upstream_model: "claude-sonnet-4-6",
         provider: Provider::Anthropic,
     },
-    // Full upstream IDs (used by ChatProvider floating bar queries)
+    // Legacy dated IDs — redirect to 4.6
     ModelRoute {
         public_model: "claude-opus-4-20250514",
-        upstream_model: "claude-opus-4-20250514",
+        upstream_model: "claude-opus-4-6",
         provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-20250514",
-        upstream_model: "claude-sonnet-4-20250514",
+        upstream_model: "claude-sonnet-4-6",
         provider: Provider::Anthropic,
     },
 ];
