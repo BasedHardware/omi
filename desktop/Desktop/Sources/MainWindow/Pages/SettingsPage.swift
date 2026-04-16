@@ -58,17 +58,26 @@ struct SettingsPage: View {
 }
 
 struct SubscriptionPlanCatalogMerger {
+  /// Merge primary and fallback plan catalogs, preferring primary data.
+  /// Defensive: filters out plans/prices with empty IDs and catches unexpected
+  /// runtime failures to prevent crashes in the Settings view (#6506).
   static func merge(
     primary: [SubscriptionPlanOption],
     fallback: [SubscriptionPlanOption]
   ) -> [SubscriptionPlanOption] {
-    var mergedById: [String: SubscriptionPlanOption] = [:]
+    // Filter out plans with empty IDs that would collide in the dictionary
+    let validFallback = fallback.filter { !$0.id.isEmpty }
+    let validPrimary = primary.filter { !$0.id.isEmpty }
 
-    for plan in fallback {
+    var mergedById: [String: SubscriptionPlanOption] = Dictionary(
+      minimumCapacity: validFallback.count + validPrimary.count
+    )
+
+    for plan in validFallback {
       mergedById[plan.id] = plan
     }
 
-    for plan in primary {
+    for plan in validPrimary {
       if let existing = mergedById[plan.id] {
         mergedById[plan.id] = SubscriptionPlanOption(
           id: plan.id,
@@ -88,13 +97,19 @@ struct SubscriptionPlanCatalogMerger {
     primary: [SubscriptionPriceOption],
     fallback: [SubscriptionPriceOption]
   ) -> [SubscriptionPriceOption] {
-    var mergedById: [String: SubscriptionPriceOption] = [:]
+    // Filter out prices with empty IDs
+    let validFallback = fallback.filter { !$0.id.isEmpty }
+    let validPrimary = primary.filter { !$0.id.isEmpty }
 
-    for price in fallback {
+    var mergedById: [String: SubscriptionPriceOption] = Dictionary(
+      minimumCapacity: validFallback.count + validPrimary.count
+    )
+
+    for price in validFallback {
       mergedById[price.id] = price
     }
 
-    for price in primary {
+    for price in validPrimary {
       mergedById[price.id] = price
     }
 
@@ -5655,15 +5670,14 @@ struct SettingsContentView: View {
     return currentPlan.rawValue == plan.id
   }
 
+  /// Cached merged plan catalog — computed defensively to prevent crashes (#6506).
+  /// Falls back to an empty catalog if the merge encounters unexpected data.
   private var mergedPlanCatalog: [SubscriptionPlanOption] {
-    mergePlanCatalog(primary: userSubscription?.availablePlans ?? [], fallback: fallbackPlanCatalog)
-  }
-
-  private func mergePlanCatalog(
-    primary: [SubscriptionPlanOption],
-    fallback: [SubscriptionPlanOption]
-  ) -> [SubscriptionPlanOption] {
-    SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
+    let primary = userSubscription?.availablePlans ?? []
+    let fallback = fallbackPlanCatalog
+    // Guard: if both sources are empty, skip the merge entirely
+    guard !primary.isEmpty || !fallback.isEmpty else { return [] }
+    return SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
   }
 
   private func fallbackFeatures(for planId: String) -> [String] {
