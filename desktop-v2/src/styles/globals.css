@@ -42,6 +42,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-serif: "Lora", Georgia, serif;
 }
 
 :root {
@@ -662,3 +663,16 @@
 .animate-orb-pulse { animation: orb-pulse 2.4s ease-in-out infinite; }
 .animate-orb-breathe { animation: orb-breathe 2.8s ease-in-out infinite; }
 .animate-orb-drift { animation: orb-drift 12s ease-in-out infinite; }
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+.animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+.animate-accordion-up { animation: accordion-up 0.2s ease-out; }
