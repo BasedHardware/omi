@@ -1550,7 +1550,7 @@ class FloatingControlBarManager {
             }
 
         let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? "claude-sonnet-4-6"
+            ? "claude-haiku-4-5-20251001"
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         await provider.sendMessage(
