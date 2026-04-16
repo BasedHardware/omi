@@ -166,7 +166,29 @@ data class BleDisconnectEvent (
   val timestamp: Long,
   val reason: String,
   val reasonCode: Long,
-  val isManual: Boolean
+  val isManual: Boolean,
+  /**
+   * Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+   * (connect attempt never established). Defaults to "disconnect" for legacy records.
+   */
+  val eventType: String,
+  /** Last RSSI sample captured before this event (dBm). 0 if unknown. */
+  val lastRssi: Long,
+  /**
+   * How long the link was established before this event (ms). 0 if unknown
+   * or for fail_to_connect events.
+   */
+  val connectionDurationMs: Long,
+  /**
+   * App lifecycle state at the moment of the event: "foreground", "background",
+   * or "inactive" (iOS transitioning). Empty string if unknown.
+   */
+  val appState: String,
+  /**
+   * ms between this disconnect and the subsequent successful reconnect.
+   * 0 while the device has not yet reconnected.
+   */
+  val timeToReconnectMs: Long
 )
  {
   companion object {
@@ -175,7 +197,12 @@ data class BleDisconnectEvent (
       val reason = pigeonVar_list[1] as String
       val reasonCode = pigeonVar_list[2] as Long
       val isManual = pigeonVar_list[3] as Boolean
-      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual)
+      val eventType = pigeonVar_list[4] as String
+      val lastRssi = pigeonVar_list[5] as Long
+      val connectionDurationMs = pigeonVar_list[6] as Long
+      val appState = pigeonVar_list[7] as String
+      val timeToReconnectMs = pigeonVar_list[8] as Long
+      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual, eventType, lastRssi, connectionDurationMs, appState, timeToReconnectMs)
     }
   }
   fun toList(): List<Any?> {
@@ -184,6 +211,11 @@ data class BleDisconnectEvent (
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -206,7 +238,12 @@ data class BleDisconnectEvent (
 data class BleDeviceDiagnostics (
   val disconnectHistory: List<BleDisconnectEvent>,
   val reconnectionCount: Long,
-  val connectedAt: Long
+  val connectedAt: Long,
+  /**
+   * Count of connect attempts that never reached didConnect. Surfaces the
+   * silent-failure path separately from established-then-dropped disconnects.
+   */
+  val failToConnectCount: Long
 )
  {
   companion object {
@@ -214,7 +251,8 @@ data class BleDeviceDiagnostics (
       val disconnectHistory = pigeonVar_list[0] as List<BleDisconnectEvent>
       val reconnectionCount = pigeonVar_list[1] as Long
       val connectedAt = pigeonVar_list[2] as Long
-      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt)
+      val failToConnectCount = pigeonVar_list[3] as Long
+      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt, failToConnectCount)
     }
   }
   fun toList(): List<Any?> {
@@ -222,6 +260,7 @@ data class BleDeviceDiagnostics (
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     )
   }
   override fun equals(other: Any?): Boolean {
