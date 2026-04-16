@@ -804,6 +804,18 @@ test("classifyFileWrite: blocks cloud credential files", () => {
   assert.ok(classifyFileWrite("/Users/x/.kube/config"));
 });
 
+test("classifyFileWrite: blocks relative path traversal to system paths", () => {
+  // Use enough ../ segments to always escape to root regardless of CWD depth.
+  // path.resolve() stops at / so excess ../ segments are harmless.
+  const esc = "../".repeat(20);
+  assert.ok(classifyFileWrite(`${esc}etc/hosts`));
+  assert.ok(classifyFileWrite(`${esc}System/Library/x`));
+  assert.ok(classifyFileWrite(`${esc}private/etc/hosts`));
+  assert.ok(classifyFileWrite(`${esc}usr/bin/python3`));
+  assert.ok(classifyFileWrite(`${esc}bin/ls`));
+  assert.ok(classifyFileWrite(`${esc}Library/LaunchDaemons/evil.plist`));
+});
+
 // ---------------------------------------------------------------------------
 // inspectToolCall — routing by tool name
 // ---------------------------------------------------------------------------
