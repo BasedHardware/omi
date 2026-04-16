@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+    "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from",
+    "Floating bar voice picker now plays a short sample when you switch voices"
   ],
   "releases": [
     {
