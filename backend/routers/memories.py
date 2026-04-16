@@ -115,7 +115,8 @@ async def create_memories_batch(
     await asyncio.to_thread(_persist)
 
     if has_public:
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(critical_executor, update_personas_async, uid)
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
