@@ -236,6 +236,17 @@ export class PiMonoAdapter implements HarnessAdapter {
     };
     delete env.ANTHROPIC_API_KEY;
 
+    // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
+    // Scrub it from the subprocess env, then only re-inject when explicitly
+    // set in the parent. Production (Omi Beta via Codemagic) launches from
+    // Finder without custom env vars so this is a safety net against
+    // ambient shell leakage. Log when active so usage is auditable.
+    delete env.OMI_YOLO_MODE;
+    if (process.env.OMI_YOLO_MODE === "1") {
+      env.OMI_YOLO_MODE = "1";
+      process.stderr.write("[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n");
+    }
+
     // Pass the raw Firebase ID token. pi's openai-completions client already
     // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
     // prefix here would produce a malformed `Bearer Bearer <token>` header.
