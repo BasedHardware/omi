@@ -2,6 +2,8 @@ from typing import List, Dict, Any, Optional
 import uuid
 import logging
 import json
+
+logger = logging.getLogger(__name__)
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -96,7 +98,12 @@ def extract_knowledge_from_memory(
 
         with track_usage(uid, Features.KNOWLEDGE_GRAPH):
             response = llm_mini.invoke(prompt)
-        extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+
+        try:
+            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+        except Exception as e:
+            logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+            extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
         label_to_node_id = {}
         for existing in existing_nodes:
@@ -188,7 +195,12 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
 
             with track_usage(uid, Features.KNOWLEDGE_GRAPH):
                 response = llm_mini.invoke(prompt)
-            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+
+            try:
+                extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+            except Exception as e:
+                logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+                extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
             created_nodes = []
             created_edges = []

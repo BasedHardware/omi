@@ -20,7 +20,7 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 _usage_callback = get_usage_callback()
 
 # Base models for general use
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', max_retries=3, callbacks=[_usage_callback])
 llm_mini_stream = ChatOpenAI(
     model='gpt-4.1-mini',
     streaming=True,
