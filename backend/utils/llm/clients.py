@@ -19,6 +19,44 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()
 
+# MiniMax provider configuration
+# Set MINIMAX_API_KEY to use MiniMax models (https://api.minimax.io)
+_minimax_api_key = os.environ.get('MINIMAX_API_KEY')
+_minimax_base_url = os.environ.get('MINIMAX_BASE_URL', 'https://api.minimax.io/v1')
+
+if _minimax_api_key:
+    # MiniMax-M2.7: Peak Performance. Ultimate Value. Master the Complex.
+    llm_minimax = ChatOpenAI(
+        model='MiniMax-M2.7',
+        api_key=_minimax_api_key,
+        base_url=_minimax_base_url,
+        temperature=1.0,  # MiniMax requires temperature in (0.0, 1.0], not 0
+        callbacks=[_usage_callback],
+    )
+    llm_minimax_stream = ChatOpenAI(
+        model='MiniMax-M2.7',
+        api_key=_minimax_api_key,
+        base_url=_minimax_base_url,
+        temperature=1.0,
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
+    # MiniMax-M2.7-highspeed: Same performance, faster and more agile
+    llm_minimax_fast_stream = ChatOpenAI(
+        model='MiniMax-M2.7-highspeed',
+        api_key=_minimax_api_key,
+        base_url=_minimax_base_url,
+        temperature=1.0,
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
+else:
+    llm_minimax = None
+    llm_minimax_stream = None
+    llm_minimax_fast_stream = None
+
 # Base models for general use
 llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
 llm_mini_stream = ChatOpenAI(
@@ -76,26 +114,47 @@ llm_agent_stream = ChatOpenAI(
     callbacks=[_usage_callback],
     model_kwargs=_agent_cache_kwargs,
 )
-llm_persona_mini_stream = ChatOpenAI(
-    temperature=0.8,
-    model="google/gemini-flash-1.5-8b",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Chat"},
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
-llm_persona_medium_stream = ChatOpenAI(
-    temperature=0.8,
-    model="anthropic/claude-3.5-sonnet",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Chat"},
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
+if _minimax_api_key:
+    # Use MiniMax models directly for persona chat when MINIMAX_API_KEY is configured
+    llm_persona_mini_stream = ChatOpenAI(
+        model='MiniMax-M2.7-highspeed',
+        api_key=_minimax_api_key,
+        base_url=_minimax_base_url,
+        temperature=1.0,  # MiniMax requires temperature in (0.0, 1.0], not 0
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
+    llm_persona_medium_stream = ChatOpenAI(
+        model='MiniMax-M2.7',
+        api_key=_minimax_api_key,
+        base_url=_minimax_base_url,
+        temperature=1.0,
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
+else:
+    llm_persona_mini_stream = ChatOpenAI(
+        temperature=0.8,
+        model="google/gemini-flash-1.5-8b",
+        api_key=os.environ.get('OPENROUTER_API_KEY'),
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={"X-Title": "Omi Chat"},
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
+    llm_persona_medium_stream = ChatOpenAI(
+        temperature=0.8,
+        model="anthropic/claude-3.5-sonnet",
+        api_key=os.environ.get('OPENROUTER_API_KEY'),
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={"X-Title": "Omi Chat"},
+        streaming=True,
+        stream_options={"include_usage": True},
+        callbacks=[_usage_callback],
+    )
 
 # Gemini models for large context analysis
 llm_gemini_flash = ChatOpenAI(
