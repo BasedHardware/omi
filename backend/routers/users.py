@@ -734,6 +734,12 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
 # **************************************
 
 
+@router.get('/v1/users/me/stats', tags=['v1'])
+def get_user_stats_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Gets all-time stats and streak data for the authenticated user."""
+    return user_usage_db.get_user_stats(uid)
+
+
 @router.get('/v1/users/me/usage', tags=['v1'], response_model=UserUsageResponse)
 def get_user_usage_stats_endpoint(
     uid: str = Depends(auth.get_current_user_uid),

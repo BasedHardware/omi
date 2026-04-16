@@ -38,9 +38,11 @@ from routers import (
     task_integrations,
     integrations,
     other,
+    health,
     developer,
     updates,
     calendar_meetings,
+    google_calendar,
     calendar_onboarding,
     imports,
     knowledge_graph,
@@ -97,6 +99,7 @@ app.include_router(users.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
+app.include_router(health.router)
 
 app.include_router(firmware.router)
 app.include_router(updates.router)
@@ -105,6 +108,7 @@ app.include_router(sync.router)
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
 app.include_router(calendar_meetings.router)
+app.include_router(google_calendar.router)
 app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
