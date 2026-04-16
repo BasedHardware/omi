@@ -87,3 +87,9 @@ typesense==0.21.0
 # Locale
 pycountry==24.6.1
 langdetect==1.0.9
+
+# Speaker embedding (via speaker_identification -> speaker_embedding -> scipy)
+scipy==1.14.0
+
+# Audio transcription (via speaker_sample -> pre_recorded -> fal_client)
+fal_client==0.4.1
