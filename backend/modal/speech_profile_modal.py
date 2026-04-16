@@ -135,9 +135,9 @@ def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(
     people = []
     try:
         result = classify_segments(audio_file.filename, profile_path, people, transcript_segments)
-        # print(result)
         return result
-    except:
+    except Exception as e:
+        logger.error(f"Error classifying speech segments: {e}")
         return default
     finally:
         os.remove(profile_path)

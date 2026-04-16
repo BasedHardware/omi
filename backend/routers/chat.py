@@ -523,7 +523,7 @@ async def transcribe_voice_message(
                 if p.startswith(f"/tmp/{uid}_"):
                     try:
                         Path(p).unlink()
-                    except:
+                    except OSError:
                         pass
             raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
         finally:
@@ -531,7 +531,7 @@ async def transcribe_voice_message(
             if wav_path.startswith(f"/tmp/{uid}_"):
                 try:
                     Path(wav_path).unlink()
-                except:
+                except OSError:
                     pass
 
     if is_multi:
