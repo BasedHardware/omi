@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed Rewind screen capture contending with other screenshot apps (e.g. CleanShot) and causing brief UI stalls"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.322",
+      "date": "2026-04-16",
+      "changes": [
+        "Fixed Rewind screen capture contending with other screenshot apps (e.g. CleanShot) and causing brief UI stalls"
+      ]
+    },
     {
       "version": "0.11.321",
       "date": "2026-04-16",
