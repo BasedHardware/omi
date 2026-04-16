@@ -548,7 +548,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var streamingThinkingBuffer: String = ""
     private var streamingBufferMessageId: String?
     private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.1
+    private let streamingFlushInterval: TimeInterval = 0.033
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
@@ -772,7 +772,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
             let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
+                ? "claude-haiku-4-5-20251001"
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
