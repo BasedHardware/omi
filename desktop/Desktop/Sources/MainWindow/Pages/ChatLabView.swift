@@ -73,14 +73,19 @@ class ChatLabViewModel: ObservableObject {
 
     let chatProvider: ChatProvider
 
+    /// User must provide their own Anthropic API key for ChatLab.
+    /// Persisted in UserDefaults so they don't have to re-enter each session.
+    @Published var userApiKey: String {
+        didSet { UserDefaults.standard.set(userApiKey, forKey: "chatlab_anthropic_api_key") }
+    }
+
     private var anthropicKey: String {
-        let devKey = UserDefaults.standard.string(forKey: "dev_anthropic_api_key") ?? ""
-        if !devKey.isEmpty { return devKey }
-        return ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
+        userApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     init(chatProvider: ChatProvider) {
         self.chatProvider = chatProvider
+        self.userApiKey = UserDefaults.standard.string(forKey: "chatlab_anthropic_api_key") ?? ""
         loadDefaultQuestions()
         loadCurrentPrompt()
         // Load history in background — don't block the UI
@@ -735,6 +740,26 @@ struct ChatLabView: View {
                         vm.editingFloatingPrefix = vm.versions[idx].floatingPrefix
                         vm.editingMainPrompt = vm.versions[idx].mainPrompt
                     }
+                }
+            }
+
+            // Anthropic API key (user must provide their own)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Anthropic API Key")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
+
+                SecureField("sk-ant-...", text: $vm.userApiKey)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, design: .monospaced))
+                    .padding(8)
+                    .background(OmiColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                if vm.userApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Enter your own Anthropic API key to use ChatLab evaluation features.")
+                        .scaledFont(size: 11)
+                        .foregroundColor(.orange)
                 }
             }
 
