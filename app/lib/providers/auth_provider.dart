@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -119,7 +121,15 @@ class AuthenticationProvider extends BaseProvider {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
+        // Android: always use the backend OAuth web flow. The
+        // sign_in_with_apple plugin's Android impl requires the backend's
+        // Apple callback to redirect with a `signinwithapple://callback`
+        // intent URL; the existing /v1/auth/callback/apple endpoint
+        // redirects to `omi://auth/callback` instead, which the plugin
+        // wouldn't catch. Routing Android through authenticateWithProvider
+        // reuses the OAuth flow that already powers iOS web auth and
+        // requires zero backend changes.
+        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');
