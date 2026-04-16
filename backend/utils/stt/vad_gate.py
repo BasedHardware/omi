@@ -217,8 +217,9 @@ class VADStreamingGate:
             self._pre_roll.clear()
             self._pre_roll_total_ms = 0.0
             self._hangover_finalized = False
-            # Reset VAD recurrent state for clean active-mode start
+            # Reset VAD recurrent state and buffer for clean active-mode start
             self._vad_state, self._vad_context = make_fresh_state()
+            self._vad_buffer = np.array([], dtype=np.float32)
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._dg_cursor_sec = self._audio_cursor_ms / 1000.0
             logger.info(
