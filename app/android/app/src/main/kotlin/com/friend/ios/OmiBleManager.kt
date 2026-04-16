@@ -30,6 +30,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     companion object {
         private const val TAG = "OmiBle"
+        private const val RSSI_HISTORY_LIMIT = 10
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
 
         @Volatile
@@ -108,6 +109,11 @@ class OmiBleManager private constructor(private val application: Application) {
     /// Most recent RSSI per device (uppercase MAC). Used by the foreground service
     /// to annotate disconnect events so we can tell range-driven drops from healthy-signal drops.
     val lastRssi = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /// Sliding window of recent (timestamp_ms, rssi_dbm) samples per device, used
+    /// by the foreground service to classify RSSI trajectory at disconnect time.
+    /// Synchronized on the deque itself for reader/writer safety.
+    val rssiHistory = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Pair<Long, Int>>>()
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -668,6 +674,11 @@ class OmiBleManager private constructor(private val application: Application) {
             }
             val address = gatt.device.address.uppercase()
             lastRssi[address] = rssi
+            val deque = rssiHistory.getOrPut(address) { java.util.ArrayDeque() }
+            synchronized(deque) {
+                deque.addLast(Pair(System.currentTimeMillis(), rssi))
+                while (deque.size > RSSI_HISTORY_LIMIT) deque.removeFirst()
+            }
             if (isRssiStreamingEnabled) {
                 mainHandler.post {
                     flutterApi?.onRssiUpdate(address, rssi.toLong()) {}
