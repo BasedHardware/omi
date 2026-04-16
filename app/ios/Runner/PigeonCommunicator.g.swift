@@ -210,6 +210,20 @@ struct BleDisconnectEvent: Hashable {
   var reason: String
   var reasonCode: Int64
   var isManual: Bool
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  var eventType: String
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  var lastRssi: Int64
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  var connectionDurationMs: Int64
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  var appState: String
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  var timeToReconnectMs: Int64
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -218,12 +232,22 @@ struct BleDisconnectEvent: Hashable {
     let reason = pigeonVar_list[1] as! String
     let reasonCode = pigeonVar_list[2] as! Int64
     let isManual = pigeonVar_list[3] as! Bool
+    let eventType = pigeonVar_list[4] as! String
+    let lastRssi = pigeonVar_list[5] as! Int64
+    let connectionDurationMs = pigeonVar_list[6] as! Int64
+    let appState = pigeonVar_list[7] as! String
+    let timeToReconnectMs = pigeonVar_list[8] as! Int64
 
     return BleDisconnectEvent(
       timestamp: timestamp,
       reason: reason,
       reasonCode: reasonCode,
-      isManual: isManual
+      isManual: isManual,
+      eventType: eventType,
+      lastRssi: lastRssi,
+      connectionDurationMs: connectionDurationMs,
+      appState: appState,
+      timeToReconnectMs: timeToReconnectMs
     )
   }
   func toList() -> [Any?] {
@@ -232,6 +256,11 @@ struct BleDisconnectEvent: Hashable {
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
     ]
   }
   static func == (lhs: BleDisconnectEvent, rhs: BleDisconnectEvent) -> Bool {
@@ -248,6 +277,9 @@ struct BleDeviceDiagnostics: Hashable {
   var disconnectHistory: [BleDisconnectEvent]
   var reconnectionCount: Int64
   var connectedAt: Int64
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  var failToConnectCount: Int64
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -255,11 +287,13 @@ struct BleDeviceDiagnostics: Hashable {
     let disconnectHistory = pigeonVar_list[0] as! [BleDisconnectEvent]
     let reconnectionCount = pigeonVar_list[1] as! Int64
     let connectedAt = pigeonVar_list[2] as! Int64
+    let failToConnectCount = pigeonVar_list[3] as! Int64
 
     return BleDeviceDiagnostics(
       disconnectHistory: disconnectHistory,
       reconnectionCount: reconnectionCount,
-      connectedAt: connectedAt
+      connectedAt: connectedAt,
+      failToConnectCount: failToConnectCount
     )
   }
   func toList() -> [Any?] {
@@ -267,6 +301,7 @@ struct BleDeviceDiagnostics: Hashable {
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     ]
   }
   static func == (lhs: BleDeviceDiagnostics, rhs: BleDeviceDiagnostics) -> Bool {
