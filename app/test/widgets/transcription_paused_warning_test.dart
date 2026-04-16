@@ -85,6 +85,8 @@ void main() {
 
       // Should show "Listening" instead of "Recording, reconnecting"
       expect(find.text(listeningText), findsWidgets);
+      // RecordingStatusIndicator (red dot) must be present
+      expect(find.byType(RecordingStatusIndicator), findsWidgets);
       // Reconnect-specific UI must be absent
       expect(find.text(reconnectText), findsNothing);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
