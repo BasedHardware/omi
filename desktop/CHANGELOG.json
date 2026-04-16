@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Dropped floating bar first-query latency by defaulting to Haiku and pre-warming the Anthropic prompt cache at launch",
+    "Fixed silent first-PTT press by pre-warming coreaudiod and buffering mic audio until the transcription socket connects",
+    "Stopped audio from restarting at the end of a response and unblocked the first voice query after app launch"
+  ],
   "releases": [
     {
       "version": "0.11.324",
