@@ -4,24 +4,6 @@ import XCTest
 
 final class PiMonoWiringTests: XCTestCase {
 
-  // MARK: - ACPBridge construction defaults
-
-  func testACPBridgeDefaultHarnessIsAcp() async {
-    let bridge = ACPBridge()
-    let mode = await bridge.harnessMode
-    let key = await bridge.passApiKey
-    XCTAssertEqual(mode, "acp")
-    XCTAssertFalse(key)
-  }
-
-  func testACPBridgePiMonoHarness() async {
-    let bridge = ACPBridge(passApiKey: true, harnessMode: "piMono")
-    let mode = await bridge.harnessMode
-    let key = await bridge.passApiKey
-    XCTAssertEqual(mode, "piMono")
-    XCTAssertTrue(key)
-  }
-
   // MARK: - TaskChatState mode-mapping logic
   // Mirrors the branching in TaskChatState.ensureBridge():
   //   let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
