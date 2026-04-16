@@ -430,8 +430,9 @@ class ShortcutSettings: ObservableObject {
     /// Selected ElevenLabs voice ID for floating-bar TTS replies.
     @Published var selectedVoiceID: String {
         didSet {
+            guard selectedVoiceID != oldValue else { return }
             UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
-            FloatingBarVoicePlaybackService.shared.stop()
+            FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
         }
     }
 

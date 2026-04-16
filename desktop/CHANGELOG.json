@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Floating bar voice picker now plays a short sample when you switch voices"
+  ],
   "releases": [
     {
       "version": "0.11.319",

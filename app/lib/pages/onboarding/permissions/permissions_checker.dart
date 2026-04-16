@@ -27,10 +27,9 @@ class PermissionsInterstitialPage extends StatelessWidget {
 
   void _goHome(BuildContext context) {
     SharedPreferencesUtil().permissionsCompleted = true;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomePageWrapper()),
-      (route) => false,
-    );
+    Navigator.of(
+      context,
+    ).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const HomePageWrapper()), (route) => false);
   }
 
   @override
@@ -45,11 +44,7 @@ class PermissionsInterstitialPage extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: const Alignment(0, 0.4),
-                  child: Image.asset(
-                    Assets.images.logoTransparent.path,
-                    width: 120,
-                    height: 120,
-                  ),
+                  child: Image.asset(Assets.images.logoTransparent.path, width: 120, height: 120),
                 ),
               ),
 
@@ -235,12 +230,7 @@ class _PermissionTile extends StatelessWidget {
   final String subtitle;
   final Function(bool?) onChanged;
 
-  const _PermissionTile({
-    required this.value,
-    required this.title,
-    required this.subtitle,
-    required this.onChanged,
-  });
+  const _PermissionTile({required this.value, required this.title, required this.subtitle, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
