@@ -148,7 +148,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     guard getenv("OMI_API_URL") != nil else {
       return .systemFallback
     }
-    return .elevenLabs(voiceID: Self.defaultVoiceID)
+    let voiceID = ShortcutSettings.shared.selectedVoiceID
+    let resolvedVoiceID = voiceID.isEmpty ? Self.defaultVoiceID : voiceID
+    return .elevenLabs(voiceID: resolvedVoiceID)
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
