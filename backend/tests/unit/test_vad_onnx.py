@@ -287,6 +287,18 @@ class TestVadIsEmptyCache:
 
     @patch.object(vad, 'redis_db')
     @patch('utils.stt.vad._run_file_vad')
+    def test_cache_hit_empty_list_honored(self, mock_local, mock_redis):
+        """Cached empty list [] is a valid cache hit (audio was empty), not a miss."""
+        os.environ.pop('HOSTED_VAD_API_URL', None)
+
+        mock_redis.get_generic_cache.return_value = []
+
+        result = vad_is_empty('/fake/path.wav', cache=True)
+        assert result is True  # empty segments → audio is empty
+        mock_local.assert_not_called()  # should NOT recompute
+
+    @patch.object(vad, 'redis_db')
+    @patch('utils.stt.vad._run_file_vad')
     def test_cache_miss_runs_vad_and_stores(self, mock_local, mock_redis):
         """Cache miss runs VAD and stores result in cache."""
         os.environ.pop('HOSTED_VAD_API_URL', None)
