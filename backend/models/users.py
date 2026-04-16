@@ -28,6 +28,26 @@ class PlanLimits(BaseModel):
     words_transcribed: Optional[int] = None
     insights_gained: Optional[int] = None
     memories_created: Optional[int] = None
+    # Chat caps. Exactly one of these is set per plan: `free` and `unlimited`
+    # (displayed as "Plus") cap by question count; `pro` caps by cost_usd.
+    chat_questions_per_month: Optional[int] = None
+    chat_cost_usd_per_month: Optional[float] = None
+
+
+class ChatQuotaUnit(str, Enum):
+    questions = 'questions'
+    cost_usd = 'cost_usd'
+
+
+class ChatUsageQuota(BaseModel):
+    plan: str  # display name: "Free", "Plus", "Pro"
+    plan_type: str  # internal id: "basic" | "unlimited" | "pro"
+    unit: ChatQuotaUnit
+    used: float
+    limit: Optional[float] = None  # None = unlimited (fallback)
+    percent: float = 0.0
+    allowed: bool = True
+    reset_at: Optional[int] = None  # unix seconds — start of next month UTC
 
 
 class Subscription(BaseModel):
