@@ -32,14 +32,26 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
-class DeveloperSettingsPage extends StatefulWidget {
+class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
   @override
-  State<DeveloperSettingsPage> createState() => _DeveloperSettingsPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => DeveloperModeProvider()..initialize(),
+      child: const _DeveloperSettingsPageView(),
+    );
+  }
 }
 
-class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+class _DeveloperSettingsPageView extends StatefulWidget {
+  const _DeveloperSettingsPageView();
+
+  @override
+  State<_DeveloperSettingsPageView> createState() => _DeveloperSettingsPageState();
+}
+
+class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {

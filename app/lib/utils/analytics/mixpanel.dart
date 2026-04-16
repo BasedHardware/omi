@@ -247,8 +247,6 @@ class MixpanelManager {
 
   void calendarModePressed(String mode) => track('Calendar Mode $mode Pressed');
 
-  void calendarTypeChanged(String type) => track('Calendar Type Changed', properties: {'type': type});
-
   void calendarSelected() => track('Calendar Selected');
 
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
