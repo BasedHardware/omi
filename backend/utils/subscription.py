@@ -234,11 +234,12 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
     if plan == PlanType.pro:
+        # Lead with what you GET, keep the $400 as a soft fair-use line at the bottom.
         return [
-            f"Up to ${int(PRO_CHAT_COST_USD_PER_MONTH)} of chat usage per month",
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
+            f"~${int(PRO_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
         ]
 
     if plan in (PlanType.unlimited, PlanType.operator):

@@ -5675,12 +5675,35 @@ struct SettingsContentView: View {
     case .basic:
       return "Free"
     case .unlimited:
+      // Backend serializes Operator subscribers as plan="unlimited" for
+      // backward compat with old mobile builds that don't know the
+      // `operator` enum. Distinguish by matching current_price_id against
+      // an Operator-titled plan in the catalog.
+      if isCurrentSubscriptionOperator() {
+        return "Operator"
+      }
       return "Unlimited (legacy)"
     case .pro:
       return "Architect"
     case .operator:
       return "Operator"
     }
+  }
+
+  /// Returns true when the user's current Stripe price maps to a plan the
+  /// backend is calling "Operator". Protects against the wire-level
+  /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
+  private func isCurrentSubscriptionOperator() -> Bool {
+    guard let subscription = userSubscription?.subscription,
+          let currentPriceId = subscription.currentPriceId
+    else { return false }
+    for plan in subscriptionPlansForDisplay {
+      guard plan.title == "Operator" else { continue }
+      if plan.prices.contains(where: { $0.id == currentPriceId }) {
+        return true
+      }
+    }
+    return false
   }
 
   private var currentPlanSubtitle: String {
@@ -5729,7 +5752,7 @@ struct SettingsContentView: View {
     case "operator", "unlimited":
       return "500 questions per month"
     case "pro":
-      return "Up to $400 of monthly chat usage"
+      return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
     }
@@ -5773,7 +5796,7 @@ struct SettingsContentView: View {
     case "operator", "unlimited":
       return "500 chat questions per month. Shared with mobile and web."
     case "pro":
-      return "Automations, vibe coding, and up to $400 of chat usage per month."
+      return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
     }
@@ -5812,10 +5835,10 @@ struct SettingsContentView: View {
     switch planId {
     case "pro":
       return [
-        "Up to $400 of chat usage per month",
         "Automations and vibe coding",
         "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
+        "~$400 of monthly AI compute included (fair-use cap)",
       ]
     case "operator", "unlimited":
       return [

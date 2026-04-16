@@ -812,6 +812,16 @@ def get_user_subscription_endpoint(
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
+    # Backward-compat guard: old mobile builds (Flutter PlanType in
+    # app/lib/models/subscription.dart is a fixed {basic, unlimited, pro})
+    # will throw a Dart decoding exception on any new plan enum value. Map
+    # Operator subscribers -> "unlimited" for wire serialization so existing
+    # deployed clients keep working. Desktop/web clients distinguish Operator
+    # from Unlimited by matching current_price_id against Operator price IDs,
+    # which is unchanged.
+    if subscription.plan == PlanType.operator:
+        subscription.plan = PlanType.unlimited
+
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
 
