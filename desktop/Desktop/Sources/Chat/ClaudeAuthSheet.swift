@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Sheet shown when Claude chat access requires the user to complete Claude sign-in.
+/// Sheet shown when chat access requires a paid upgrade.
 struct ClaudeAuthSheet: View {
     let onConnect: () -> Void
     let onCancel: () -> Void
@@ -11,7 +11,7 @@ struct ClaudeAuthSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Connect Claude")
+                Text("Upgrade to Omi Pro")
                     .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -44,12 +44,12 @@ struct ClaudeAuthSheet: View {
 
                 // Description
                 VStack(spacing: 8) {
-                    Text("Sign in with your Claude account")
+                    Text("Unlock Omi Pro for $199/month")
                         .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Your browser will open Claude's login flow. After you finish authentication, return to omi and send your message again.")
+                    Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
@@ -62,7 +62,7 @@ struct ClaudeAuthSheet: View {
                         ProgressView()
                             .controlSize(.small)
 
-                        Text("Opening Claude sign-in in your browser...")
+                        Text("Complete sign-in in your browser...")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -85,7 +85,7 @@ struct ClaudeAuthSheet: View {
                             ProgressView()
                                 .controlSize(.mini)
                         }
-                        Text(isConnecting ? "Opening Claude sign-in..." : "Open Claude Sign-In")
+                        Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
                             .scaledFont(size: 14, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
