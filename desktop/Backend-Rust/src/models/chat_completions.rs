@@ -316,6 +316,28 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
         upstream_model: "claude-opus-4-20250514",
         provider: Provider::Anthropic,
     },
+    // Pass-through aliases used by onboarding chat and other app components
+    ModelRoute {
+        public_model: "claude-opus-4-6",
+        upstream_model: "claude-opus-4-20250514",
+        provider: Provider::Anthropic,
+    },
+    ModelRoute {
+        public_model: "claude-sonnet-4-6",
+        upstream_model: "claude-sonnet-4-20250514",
+        provider: Provider::Anthropic,
+    },
+    // Full upstream IDs (used by ChatProvider floating bar queries)
+    ModelRoute {
+        public_model: "claude-opus-4-20250514",
+        upstream_model: "claude-opus-4-20250514",
+        provider: Provider::Anthropic,
+    },
+    ModelRoute {
+        public_model: "claude-sonnet-4-20250514",
+        upstream_model: "claude-sonnet-4-20250514",
+        provider: Provider::Anthropic,
+    },
 ];
 
 pub fn resolve_model(model: &str) -> Option<&'static ModelRoute> {
