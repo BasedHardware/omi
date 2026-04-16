@@ -15,6 +15,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -97,6 +98,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
 
             if (widget.conversation.isLocked) {
+              // Subscription UI is gated for App Store review — no upgrade routing.
+              if (!context.read<UsageProvider>().showSubscriptionUI) return;
               MixpanelManager().paywallOpened('Conversation List Item');
               routeToPage(context, const UsagePage(showUpgradeDialog: true));
               return;
