@@ -168,7 +168,11 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
-def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_available_plans_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
         # Get user's current subscription to determine which plan is active
@@ -214,13 +218,23 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
-        # Legacy plans (Unlimited, old Pro) only show up if the user is
-        # currently subscribed to one of them; new users see only Oracle + Architect.
-        from utils.subscription import filter_plans_for_user
+        # Version-gate the new Operator + Architect catalog. Mobile and older
+        # desktop builds see the pre-rollout plan shape. Then legacy-filter so
+        # existing subscribers still see their current plan.
+        from utils.subscription import (
+            filter_plans_for_user,
+            should_show_new_plans,
+            adapt_plans_for_legacy_client,
+        )
+
+        new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+        all_definitions = get_paid_plan_definitions()
+        if not new_plans_enabled:
+            all_definitions = adapt_plans_for_legacy_client(all_definitions)
 
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
-        for definition in filter_plans_for_user(get_paid_plan_definitions(), current_plan):
+        for definition in filter_plans_for_user(all_definitions, current_plan):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:

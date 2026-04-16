@@ -67,6 +67,9 @@ from utils.subscription import (
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
+    legacy_plan_features,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -837,11 +840,19 @@ def get_user_subscription_endpoint(
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading. Legacy plans (Unlimited, old Pro)
-    # only appear if the user is already on that plan — new users see only
-    # Oracle + Architect.
+    # Build available plans for upgrading. Two gates applied in order:
+    #   1. Version-gate: only macOS desktop clients at NEW_PLANS_MIN_DESKTOP_VERSION
+    #      or newer see the new Operator + Architect catalog. Everyone else
+    #      (mobile, older desktop builds) gets the pre-v0.11.324 plan shape
+    #      so we don't break them while the beta rollout bakes.
+    #   2. Legacy-filter: existing Unlimited subscribers still see their plan;
+    #      brand-new users don't.
+    new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+    all_definitions = get_paid_plan_definitions()
+    if not new_plans_enabled:
+        all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    definitions_for_user = filter_plans_for_user(get_paid_plan_definitions(), subscription.plan)
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -892,11 +903,16 @@ def get_user_subscription_endpoint(
                 )
 
         if plan_prices:
+            features = (
+                get_plan_features(definition["plan_type"])
+                if new_plans_enabled
+                else legacy_plan_features(definition["plan_type"])
+            )
             available_plans.append(
                 SubscriptionPlan(
                     id=definition["plan_id"],
                     title=definition["title"],
-                    features=get_plan_features(definition["plan_type"]),
+                    features=features,
                     prices=plan_prices,
                     legacy=bool(definition.get("legacy")),
                 )
