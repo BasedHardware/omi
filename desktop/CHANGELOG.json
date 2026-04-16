@@ -1,9 +1,15 @@
 {
   "unreleased": [
-    "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from",
     "Floating bar voice picker now plays a short sample when you switch voices"
   ],
   "releases": [
+    {
+      "version": "0.11.319",
+      "date": "2026-04-16",
+      "changes": [
+        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+      ]
+    },
     {
       "version": "0.11.318",
       "date": "2026-04-15",

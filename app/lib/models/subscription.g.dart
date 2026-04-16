@@ -98,7 +98,7 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               ?.map((e) => SubscriptionPlan.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      showSubscriptionUi: json['show_subscription_ui'] as bool? ?? false,
+      showSubscriptionUi: json['show_subscription_ui'] as bool? ?? true,
     );
 
 Map<String, dynamic> _$UserSubscriptionResponseToJson(

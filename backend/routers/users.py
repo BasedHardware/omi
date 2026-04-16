@@ -6,7 +6,7 @@ import hashlib
 import os
 
 import pytz
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.app_review_config import should_hide_subscription_ui
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -42,6 +43,7 @@ from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
+from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
@@ -416,7 +418,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
-    memory = Conversation(**memory)
+    memory = deserialize_conversation(memory)
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
 
@@ -744,7 +746,11 @@ def get_user_usage_stats_endpoint(
 
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
-def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_subscription_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Gets the user's subscription plan and usage."""
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
     if uid in marketplace_reviewers:
@@ -871,6 +877,8 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
             )
 
+    show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -882,6 +890,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_used=memories_created_used,
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
+        show_subscription_ui=show_subscription_ui,
     )
 
 
@@ -1022,7 +1031,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
     if not conversations_data or len(conversations_data) == 0:
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    conversations = deserialize_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)

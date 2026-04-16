@@ -73,7 +73,7 @@ class UserSubscriptionResponse {
   final int memoriesCreatedLimit;
   @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
-  @JsonKey(defaultValue: false)
+  @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
 
   UserSubscriptionResponse({
