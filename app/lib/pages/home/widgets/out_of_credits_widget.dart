@@ -18,8 +18,6 @@ class OutOfCreditsWidget extends StatelessWidget {
         if (!usageProvider.isOutOfCredits) {
           return const SizedBox.shrink();
         }
-        // Subscription UI is gated for App Store review — hide the limit-reached
-        // banner since it directs users toward upgrading.
         if (!usageProvider.showSubscriptionUI) {
           return const SizedBox.shrink();
         }
