@@ -1710,7 +1710,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -8937,4 +8942,105 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Отбелязано като завършено';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi осъществява достъп до Apple Health чрез рамката HealthKit на Apple. Можете да отмените достъпа по всяко време от Настройките на iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Свързване с Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Прекратяване на връзката с Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Свързано';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Разговаряйте за здравето си';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Питайте Omi за стъпките, съня, сърдечния ритъм и тренировките.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Достъп само за четене';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi никога не записва в Apple Health и не променя данните ви.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Сигурна синхронизация';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Данните от Apple Health се синхронизират поверително с акаунта ви.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Достъпът до Apple Health е отказан';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi няма разрешение да чете данните ви от Apple Health. Активирайте го в Настройки на iOS → Поверителност и сигурност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Защо си тръгвате?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Вашата обратна връзка ни помага да направим Omi по-добър за всички.';
+
+  @override
+  String get deleteReasonPrivacy => 'Притеснения за поверителността';
+
+  @override
+  String get deleteReasonNotUsing => 'Не го използвам достатъчно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Липсват функции, които са ми нужни';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Твърде много технически проблеми';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Използвам нещо друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Просто правя почивка';
+
+  @override
+  String get deleteReasonOther => 'Друго';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Разкажете ни повече';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Какво би накарало Omi да работи за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'По избор — вашите мисли ни помагат да изградим по-добър продукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Това е окончателно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'След като изтриете акаунта си, той не може да бъде възстановен.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Всеки активен абонамент ще бъде отменен.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Акаунтът ви не може да бъде възстановен — дори от поддръжката.';
+
+  @override
+  String get deleteTypeToConfirm => 'Въведете DELETE за потвърждение';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Изтрий акаунта окончателно';
+
+  @override
+  String get keepMyAccount => 'Запази акаунта ми';
+
+  @override
+  String get deleteAccountFailed => 'Акаунтът ви не може да бъде изтрит. Моля, опитайте отново.';
 }

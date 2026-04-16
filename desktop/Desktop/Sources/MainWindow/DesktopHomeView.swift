@@ -32,6 +32,7 @@ struct DesktopHomeView: View {
   @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
+  @State private var lastActivationRefresh = Date.distantPast
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -101,6 +102,27 @@ struct DesktopHomeView: View {
             }
           mainContent
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
+            .overlay {
+              if appState.showUsageLimitPopup {
+                UsageLimitPopupView(
+                  reason: appState.usageLimitReason,
+                  onUpgrade: {
+                    appState.showUsageLimitPopup = false
+                    selectedSettingsSection = .planUsage
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                      selectedIndex = SidebarNavItem.settings.rawValue
+                    }
+                  },
+                  onDismiss: {
+                    appState.showUsageLimitPopup = false
+                  }
+                )
+              }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
+              let reason = notification.userInfo?["reason"] as? String ?? ""
+              appState.triggerUsageLimitPopup(reason: reason)
+            }
             .onAppear {
               log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
               // Check all permissions on launch
@@ -199,7 +221,12 @@ struct DesktopHomeView: View {
             .onReceive(
               NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             ) { _ in
-              Task { await appState.refreshConversations() }
+              // Cooldown: only refresh conversations if last activation was 60+ seconds ago
+              let now = Date()
+              if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
+                lastActivationRefresh = now
+                Task { await appState.refreshConversations() }
+              }
               // Auto-start monitoring when returning to app if screen analysis is enabled
               // but monitoring is not running. Handles the case where the user granted
               // screen recording permission in System Settings and switched back.
@@ -234,8 +261,8 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
-            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            // Cmd+R: refresh all data (conversations, chat, tasks, memories)
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
               Task { await appState.refreshConversations() }
             }
             // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.

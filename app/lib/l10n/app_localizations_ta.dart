@@ -1715,7 +1715,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8620,7 +8625,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8963,4 +8973,108 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'முடிந்தது என குறிக்கப்பட்டது';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi, Apple இன் HealthKit கட்டமைப்பின் மூலம் Apple Health-ஐ அணுகுகிறது. iOS அமைப்புகளில் எந்த நேரத்திலும் அணுகலை ரத்து செய்யலாம்.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health-உடன் இணை';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health-ஐ துண்டி';
+
+  @override
+  String get appleHealthConnectedBadge => 'இணைக்கப்பட்டது';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'உங்கள் ஆரோக்கியம் பற்றி அரட்டை';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Omi இடம் உங்கள் படிகள், தூக்கம், இதயத் துடிப்பு, உடற்பயிற்சிகள் பற்றி கேளுங்கள்.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'படிக்க மட்டுமே அணுகல்';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ஒருபோதும் Apple Health-இல் எழுதாது அல்லது உங்கள் தரவை மாற்றாது.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'பாதுகாப்பான ஒத்திசைவு';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'உங்கள் Apple Health தரவு உங்கள் Omi கணக்குடன் தனிப்பட்ட முறையில் ஒத்திசைக்கப்படுகிறது.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health அணுகல் மறுக்கப்பட்டது';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'உங்கள் Apple Health தரவைப் படிக்க Omi க்கு அனுமதி இல்லை. iOS அமைப்புகள் → தனியுரிமை & பாதுகாப்பு → Health → Omi இல் இதை இயக்கவும்.';
+
+  @override
+  String get deleteFlowReasonTitle => 'நீங்கள் ஏன் வெளியேறுகிறீர்கள்?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'உங்கள் கருத்து அனைவருக்கும் Omi-ஐ சிறப்பாக்க எங்களுக்கு உதவுகிறது.';
+
+  @override
+  String get deleteReasonPrivacy => 'தனியுரிமை கவலைகள்';
+
+  @override
+  String get deleteReasonNotUsing => 'போதுமான அளவு பயன்படுத்தவில்லை';
+
+  @override
+  String get deleteReasonMissingFeatures => 'எனக்குத் தேவையான அம்சங்கள் இல்லை';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'பல தொழில்நுட்பச் சிக்கல்கள்';
+
+  @override
+  String get deleteReasonFoundAlternative => 'வேறு ஒன்றைப் பயன்படுத்துகிறேன்';
+
+  @override
+  String get deleteReasonTakingBreak => 'சற்று இடைவேளை எடுக்கிறேன்';
+
+  @override
+  String get deleteReasonOther => 'மற்றவை';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'மேலும் சொல்லுங்கள்';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Omi உங்களுக்கு எவ்வாறு பயனுள்ளதாக இருந்திருக்கும்?';
+
+  @override
+  String get deleteFlowFeedbackHint =>
+      'விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'இது நிரந்தரமானது';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.';
+
+  @override
+  String get deleteConsequenceSubscription => 'செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'உங்கள் கணக்கை மீட்டெடுக்க முடியாது — ஆதரவுக் குழுவாலும் முடியாது.';
+
+  @override
+  String get deleteTypeToConfirm => 'உறுதிப்படுத்த DELETE என தட்டச்சு செய்யவும்';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'கணக்கை நிரந்தரமாக நீக்கு';
+
+  @override
+  String get keepMyAccount => 'என் கணக்கை வைத்திரு';
+
+  @override
+  String get deleteAccountFailed => 'உங்கள் கணக்கை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 }

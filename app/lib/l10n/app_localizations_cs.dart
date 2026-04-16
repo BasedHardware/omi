@@ -1707,7 +1707,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZAŘÍZENÍ',
+      one: 'ZAŘÍZENÍ',
+    );
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -8898,4 +8903,105 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Označeno jako dokončené';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi přistupuje k Apple Health prostřednictvím frameworku HealthKit od Applu. Přístup můžete kdykoli odvolat v Nastavení iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Připojit k Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Odpojit Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Připojeno';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Mluvte o svém zdraví';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Zeptejte se Omi na své kroky, spánek, tepovou frekvenci a tréninky.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Přístup pouze pro čtení';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nikdy nezapisuje do Apple Health ani neupravuje vaše data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Bezpečná synchronizace';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Vaše data z Apple Health se soukromě synchronizují s účtem Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Přístup k Apple Health zamítnut';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nemá oprávnění číst vaše data z Apple Health. Povolte ho v Nastavení iOS → Soukromí a zabezpečení → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Proč odcházíte?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vaše zpětná vazba nám pomáhá zlepšovat Omi pro všechny.';
+
+  @override
+  String get deleteReasonPrivacy => 'Obavy o soukromí';
+
+  @override
+  String get deleteReasonNotUsing => 'Nepoužívám to dost často';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Chybí funkce, které potřebuji';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Příliš mnoho technických problémů';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Používám něco jiného';
+
+  @override
+  String get deleteReasonTakingBreak => 'Jen si dávám pauzu';
+
+  @override
+  String get deleteReasonOther => 'Jiné';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Řekněte nám více';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Co by udělalo Omi pro vás použitelným?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlenky nám pomáhají vytvořit lepší produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Po smazání účtu jej nelze obnovit.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Jakékoli aktivní předplatné bude zrušeno.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Váš účet nelze obnovit — ani podporou.';
+
+  @override
+  String get deleteTypeToConfirm => 'Pro potvrzení napište DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Trvale smazat účet';
+
+  @override
+  String get keepMyAccount => 'Ponechat můj účet';
+
+  @override
+  String get deleteAccountFailed => 'Váš účet se nepodařilo smazat. Zkuste to znovu.';
 }

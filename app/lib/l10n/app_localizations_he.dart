@@ -1696,7 +1696,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -8488,7 +8493,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8825,4 +8835,105 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'סומן כהושלם';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi ניגש ל-Apple Health דרך מסגרת העבודה HealthKit של Apple. ניתן לבטל את הגישה בכל עת בהגדרות iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'התחבר ל-Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'נתק את Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'מחובר';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'צ\'אט על הבריאות שלך';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'גישת קריאה בלבד';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'סנכרון מאובטח';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'הגישה ל-Apple Health נדחתה';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'ל-Omi אין הרשאה לקרוא את נתוני Apple Health שלך. הפעל אותה בהגדרות iOS ← פרטיות ואבטחה ← Health ← Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'למה אתה עוזב?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'המשוב שלך עוזר לנו לשפר את Omi עבור כולם.';
+
+  @override
+  String get deleteReasonPrivacy => 'חששות פרטיות';
+
+  @override
+  String get deleteReasonNotUsing => 'לא משתמש בו מספיק';
+
+  @override
+  String get deleteReasonMissingFeatures => 'חסרות תכונות שאני צריך';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'יותר מדי בעיות טכניות';
+
+  @override
+  String get deleteReasonFoundAlternative => 'משתמש במשהו אחר';
+
+  @override
+  String get deleteReasonTakingBreak => 'סתם לוקח הפסקה';
+
+  @override
+  String get deleteReasonOther => 'אחר';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'ספר לנו עוד';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'מה היה גורם ל-Omi לעבוד עבורך?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'זה לצמיתות';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'לאחר מחיקת החשבון, אין דרך לשחזר אותו.';
+
+  @override
+  String get deleteConsequenceSubscription => 'כל מנוי פעיל יבוטל.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.';
+
+  @override
+  String get deleteTypeToConfirm => 'הקלד DELETE לאישור';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'מחק חשבון לצמיתות';
+
+  @override
+  String get keepMyAccount => 'שמור על החשבון שלי';
+
+  @override
+  String get deleteAccountFailed => 'לא ניתן היה למחוק את החשבון שלך. נסה שוב.';
 }

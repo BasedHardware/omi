@@ -28,6 +28,9 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_conversations_to_string.py -v
+pytest tests/unit/test_conversation_render_factory.py -v
+pytest tests/unit/test_conversation_redact_enrich.py -v
+pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
@@ -84,6 +87,7 @@ pytest tests/unit/test_desktop_migration.py -v
 pytest tests/unit/test_staged_tasks_batch_scores.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 pytest tests/unit/test_available_plans_resilience.py -v
+pytest tests/unit/test_voice_duration_limiter.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

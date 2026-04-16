@@ -139,9 +139,9 @@
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Omi uses your health data to answer questions about your fitness, sleep, and activity through chat.</string>
+	<string>Omi reads your steps, walking and running distance, active energy, heart rate, sleep, and workouts from Apple Health so you can ask about your fitness, sleep, and activity in Omi Chat. Omi never writes to Apple Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Omi needs permission to access your health data.</string>
+	<string>Omi does not write any data to Apple Health. This string is only present because iOS requires it when the HealthKit framework is linked.</string>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>NSCameraUsageDescription</key>

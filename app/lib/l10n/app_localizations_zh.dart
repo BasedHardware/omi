@@ -8407,7 +8407,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -8741,4 +8746,103 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => '已标记为完成';
+
+  @override
+  String get appleHealthManageNote => 'Omi 通过 Apple 的 HealthKit 框架访问 Apple Health。您可以随时在 iOS 设置中撤销访问权限。';
+
+  @override
+  String get appleHealthConnectCta => '连接 Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => '断开 Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => '已连接';
+
+  @override
+  String get appleHealthFeatureChatTitle => '聊聊你的健康';
+
+  @override
+  String get appleHealthFeatureChatDesc => '向 Omi 询问你的步数、睡眠、心率和锻炼。';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '仅限读取访问';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi 永远不会写入 Apple Health 或修改您的数据。';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '安全同步';
+
+  @override
+  String get appleHealthFeatureSecureDesc => '您的 Apple Health 数据私密同步到您的 Omi 账户。';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health 访问被拒绝';
+
+  @override
+  String get appleHealthDeniedBody => 'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
+
+  @override
+  String get deleteFlowReasonTitle => '您为何离开?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '您的反馈有助于我们为所有人改进 Omi。';
+
+  @override
+  String get deleteReasonPrivacy => '隐私方面的顾虑';
+
+  @override
+  String get deleteReasonNotUsing => '使用得不够多';
+
+  @override
+  String get deleteReasonMissingFeatures => '缺少我需要的功能';
+
+  @override
+  String get deleteReasonTechnicalIssues => '技术问题太多';
+
+  @override
+  String get deleteReasonFoundAlternative => '在使用其他产品';
+
+  @override
+  String get deleteReasonTakingBreak => '只是休息一下';
+
+  @override
+  String get deleteReasonOther => '其他';
+
+  @override
+  String get deleteFlowFeedbackTitle => '告诉我们更多';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '怎样才能让 Omi 对您有用?';
+
+  @override
+  String get deleteFlowFeedbackHint => '可选 — 您的想法有助于我们打造更好的产品。';
+
+  @override
+  String get deleteFlowConfirmTitle => '此操作不可撤销';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '一旦删除账户,将无法恢复。';
+
+  @override
+  String get deleteConsequenceSubscription => '任何有效的订阅都将被取消。';
+
+  @override
+  String get deleteConsequenceNoRecovery => '您的账户无法恢复 — 即使是客服也无法处理。';
+
+  @override
+  String get deleteTypeToConfirm => '输入 DELETE 以确认';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '永久删除账户';
+
+  @override
+  String get keepMyAccount => '保留我的账户';
+
+  @override
+  String get deleteAccountFailed => '无法删除您的账户。请重试。';
 }

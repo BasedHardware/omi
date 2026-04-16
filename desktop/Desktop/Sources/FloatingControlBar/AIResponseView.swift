@@ -201,17 +201,22 @@ struct AIResponseView: View {
 
     // MARK: - Per-Message Hover Action Overlay
 
-    /// Wraps an AI message's content with a hover-triggered action bar
+    /// Wraps an AI message's content with a hover-triggered action bar.
+    /// The `.id(message.id)` is load-bearing: without it SwiftUI can reuse an
+    /// overlay view instance (and its Button action closures) across different
+    /// messages in the same structural slot, which caused clicking Copy on an
+    /// older message to read the current message's text.
     private func messageWithHoverActions(message: ChatMessage) -> some View {
         MessageHoverOverlay(
             message: message,
-            onRate: { rating in
-                onRate?(message.id, rating)
+            onRate: { [id = message.id] rating in
+                onRate?(id, rating)
             }
         )
         {
             contentBlocksView(for: message)
         }
+        .id(message.id)
     }
 
     // MARK: - Chat History
@@ -535,40 +540,47 @@ struct MessageHoverOverlay<Content: View>: View {
     }
 
     private var actionBar: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        // Capture the message's value-type fields once per body evaluation so every
+        // button action operates on the exact message the user sees — not whatever
+        // `self.message` happens to point to when the click is dispatched.
+        let messageText = message.text
+        let currentRating = message.rating
+        return VStack(alignment: .trailing, spacing: 2) {
             HStack(spacing: 6) {
                 // Thumbs up
-                Button(action: {
-                    let newRating = message.rating == 1 ? nil : 1
+                Button(action: { [currentRating] in
+                    let newRating = currentRating == 1 ? nil : 1
                     guard newRating != lastSubmittedRating else { return }
                     lastSubmittedRating = newRating
                     onRate(newRating)
                     if newRating != nil { showRatingFeedbackBriefly() }
                 }) {
-                    Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                         .scaledFont(size: 11)
-                        .foregroundColor(message.rating == 1 ? .green : .secondary)
+                        .foregroundColor(currentRating == 1 ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Helpful response")
 
                 // Thumbs down
-                Button(action: {
-                    let newRating = message.rating == -1 ? nil : -1
+                Button(action: { [currentRating] in
+                    let newRating = currentRating == -1 ? nil : -1
                     guard newRating != lastSubmittedRating else { return }
                     lastSubmittedRating = newRating
                     onRate(newRating)
                     if newRating != nil { showRatingFeedbackBriefly() }
                 }) {
-                    Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
                         .scaledFont(size: 11)
-                        .foregroundColor(message.rating == -1 ? .red : .secondary)
+                        .foregroundColor(currentRating == -1 ? .red : .secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Not helpful")
 
-                // Copy
-                Button(action: { copyMessageText() }) {
+                // Copy — captures `messageText` explicitly so we always copy the
+                // message this button was drawn for, even if SwiftUI reuses the
+                // overlay view across re-renders.
+                Button(action: { [messageText] in copyText(messageText) }) {
                     Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                         .scaledFont(size: 11)
                         .foregroundColor(showCopied ? .green : .secondary)
@@ -621,10 +633,14 @@ struct MessageHoverOverlay<Content: View>: View {
         }
     }
 
-    private func copyMessageText() {
-        guard !message.text.isEmpty else { return }
+    /// Copy the exact text passed in — *not* `self.message.text`.
+    /// Callers must pass the captured text from the closure's capture list so
+    /// clicking Copy on a historical message writes the correct content to the
+    /// pasteboard even when SwiftUI has reused the overlay view across renders.
+    private func copyText(_ text: String) {
+        guard !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(message.text, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
         AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
         withAnimation { showCopied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

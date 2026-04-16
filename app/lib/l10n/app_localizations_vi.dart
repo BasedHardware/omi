@@ -1711,7 +1711,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8902,4 +8907,105 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Đã đánh dấu hoàn thành';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi truy cập Apple Health thông qua framework HealthKit của Apple. Bạn có thể thu hồi quyền truy cập bất cứ lúc nào trong Cài đặt iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Kết nối với Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Ngắt kết nối Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Đã kết nối';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Trò chuyện về sức khỏe của bạn';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Hỏi Omi về số bước, giấc ngủ, nhịp tim và bài tập của bạn.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Quyền chỉ đọc';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi không bao giờ ghi vào Apple Health hoặc thay đổi dữ liệu của bạn.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Đồng bộ an toàn';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Dữ liệu Apple Health của bạn được đồng bộ riêng tư vào tài khoản Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Truy cập Apple Health bị từ chối';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Vì sao bạn rời đi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Phản hồi của bạn giúp chúng tôi cải thiện Omi cho mọi người.';
+
+  @override
+  String get deleteReasonPrivacy => 'Lo ngại về quyền riêng tư';
+
+  @override
+  String get deleteReasonNotUsing => 'Không sử dụng đủ nhiều';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Thiếu các tính năng tôi cần';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Quá nhiều vấn đề kỹ thuật';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Đang dùng thứ khác';
+
+  @override
+  String get deleteReasonTakingBreak => 'Chỉ nghỉ một thời gian';
+
+  @override
+  String get deleteReasonOther => 'Khác';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Điều gì sẽ khiến Omi phù hợp với bạn?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Đây là vĩnh viễn';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Khi bạn xóa tài khoản, không có cách nào để khôi phục.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Mọi gói đăng ký đang hoạt động sẽ bị hủy.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.';
+
+  @override
+  String get deleteTypeToConfirm => 'Nhập DELETE để xác nhận';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Xóa tài khoản vĩnh viễn';
+
+  @override
+  String get keepMyAccount => 'Giữ tài khoản của tôi';
+
+  @override
+  String get deleteAccountFailed => 'Không thể xóa tài khoản của bạn. Vui lòng thử lại.';
 }

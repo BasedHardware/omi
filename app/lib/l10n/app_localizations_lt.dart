@@ -1704,7 +1704,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -8910,4 +8915,105 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Pažymėta kaip atlikta';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pasiekia Apple Health per Apple HealthKit sistemą. Prieigą galite bet kada atšaukti iOS nustatymuose.';
+
+  @override
+  String get appleHealthConnectCta => 'Prijungti Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Atjungti Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Prijungta';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Kalbėkitės apie savo sveikatą';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Klauskite Omi apie žingsnius, miegą, pulsą ir treniruotes.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Prieiga tik skaitymui';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi niekada nerašo į Apple Health ir nekeičia jūsų duomenų.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Saugus sinchronizavimas';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Jūsų Apple Health duomenys privačiai sinchronizuojami su Omi paskyra.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Prieiga prie Apple Health atmesta';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi neturi leidimo skaityti jūsų Apple Health duomenis. Įjunkite: iOS Nustatymai → Privatumas ir sauga → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Kodėl išeini?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tavo atsiliepimai padeda mums tobulinti Omi visiems.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privatumo problemos';
+
+  @override
+  String get deleteReasonNotUsing => 'Naudoju nepakankamai dažnai';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Trūksta funkcijų, kurių man reikia';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Per daug techninių problemų';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Naudoju kažką kita';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tiesiog darau pertrauką';
+
+  @override
+  String get deleteReasonOther => 'Kita';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Papasakok daugiau';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Kas būtų padarę Omi tinkamą tau?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Neprivaloma — tavo mintys padeda mums sukurti geresnį produktą.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tai negrįžtama';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Ištrynus paskyrą jos nebus galima atkurti.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Bet kokia aktyvi prenumerata bus atšaukta.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tavo paskyros negalima atkurti — net ir palaikymo komandai.';
+
+  @override
+  String get deleteTypeToConfirm => 'Norėdami patvirtinti, įveskite DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Visam laikui ištrinti paskyrą';
+
+  @override
+  String get keepMyAccount => 'Palikti mano paskyrą';
+
+  @override
+  String get deleteAccountFailed => 'Nepavyko ištrinti tavo paskyros. Bandyk dar kartą.';
 }

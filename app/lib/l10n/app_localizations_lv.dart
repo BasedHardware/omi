@@ -1709,7 +1709,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'IERĪCES',
+      one: 'IERĪCE',
+    );
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -8920,4 +8925,105 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Atzīmēts kā pabeigts';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi piekļūst Apple Health, izmantojot Apple HealthKit ietvaru. Piekļuvi varat atsaukt jebkurā laikā iOS iestatījumos.';
+
+  @override
+  String get appleHealthConnectCta => 'Pievienot Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Atvienot Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Pievienots';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Runājiet par savu veselību';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Jautājiet Omi par saviem soļiem, miegu, sirdsdarbību un treniņiem.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Tikai lasīšanas piekļuve';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nekad neraksta Apple Health un nemaina jūsu datus.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Droša sinhronizācija';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Jūsu Apple Health dati privāti sinhronizējas ar Omi kontu.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Piekļuve Apple Health liegta';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nav atļaujas lasīt jūsu Apple Health datus. Iespējojiet: iOS Iestatījumi → Privātums un drošība → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Kāpēc tu aizej?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tava atsauksme palīdz mums uzlabot Omi visiem.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privātuma bažas';
+
+  @override
+  String get deleteReasonNotUsing => 'Nelietoju pietiekami bieži';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Trūkst funkciju, kas man vajadzīgas';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Pārāk daudz tehnisku problēmu';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Lietoju kaut ko citu';
+
+  @override
+  String get deleteReasonTakingBreak => 'Vienkārši paņemu pārtraukumu';
+
+  @override
+  String get deleteReasonOther => 'Cits';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Pastāsti vairāk';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Kas būtu licis Omi strādāt tev?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Neobligāti — tavas domas palīdz mums veidot labāku produktu.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tas ir neatgriezenisks';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kad esi izdzēsis savu kontu, to nav iespējams atjaunot.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Visi aktīvie abonementi tiks atcelti.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tavu kontu nevar atjaunot — pat ne atbalsts.';
+
+  @override
+  String get deleteTypeToConfirm => 'Lai apstiprinātu, ieraksti DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Neatgriezeniski dzēst kontu';
+
+  @override
+  String get keepMyAccount => 'Paturēt manu kontu';
+
+  @override
+  String get deleteAccountFailed => 'Tavu kontu nevarēja izdzēst. Lūdzu, mēģini vēlreiz.';
 }

@@ -1698,7 +1698,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'อุปกรณ์',
+      one: 'อุปกรณ์',
+    );
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -8856,4 +8861,105 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'ทำเครื่องหมายว่าเสร็จสิ้น';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi เข้าถึง Apple Health ผ่านเฟรมเวิร์ก HealthKit ของ Apple คุณสามารถเพิกถอนการเข้าถึงได้ทุกเมื่อในการตั้งค่า iOS';
+
+  @override
+  String get appleHealthConnectCta => 'เชื่อมต่อ Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'ยกเลิกการเชื่อมต่อ Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'เชื่อมต่อแล้ว';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'สนทนาเกี่ยวกับสุขภาพของคุณ';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'ถาม Omi เกี่ยวกับก้าว การนอน อัตราการเต้นของหัวใจ และการออกกำลังกายของคุณ';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'สิทธิ์เข้าถึงแบบอ่านอย่างเดียว';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ไม่เคยเขียนไปยัง Apple Health หรือแก้ไขข้อมูลของคุณ';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'ซิงค์อย่างปลอดภัย';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'ข้อมูล Apple Health ของคุณซิงค์อย่างเป็นส่วนตัวกับบัญชี Omi';
+
+  @override
+  String get appleHealthDeniedTitle => 'การเข้าถึง Apple Health ถูกปฏิเสธ';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi';
+
+  @override
+  String get deleteFlowReasonTitle => 'ทำไมคุณถึงจะไป?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'ความคิดเห็นของคุณช่วยให้เราปรับปรุง Omi ให้ดีขึ้นสำหรับทุกคน';
+
+  @override
+  String get deleteReasonPrivacy => 'ความกังวลด้านความเป็นส่วนตัว';
+
+  @override
+  String get deleteReasonNotUsing => 'ใช้งานไม่มากพอ';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ขาดฟีเจอร์ที่ต้องการ';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'มีปัญหาทางเทคนิคมากเกินไป';
+
+  @override
+  String get deleteReasonFoundAlternative => 'กำลังใช้สิ่งอื่น';
+
+  @override
+  String get deleteReasonTakingBreak => 'แค่หยุดพักสักครู่';
+
+  @override
+  String get deleteReasonOther => 'อื่นๆ';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'อะไรจะทำให้ Omi ใช้งานได้ดีสำหรับคุณ?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น';
+
+  @override
+  String get deleteFlowConfirmTitle => 'การกระทำนี้ถาวร';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'เมื่อคุณลบบัญชีของคุณแล้ว จะไม่สามารถกู้คืนได้';
+
+  @override
+  String get deleteConsequenceSubscription => 'การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
+
+  @override
+  String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'ลบบัญชีถาวร';
+
+  @override
+  String get keepMyAccount => 'เก็บบัญชีของฉันไว้';
+
+  @override
+  String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
 }

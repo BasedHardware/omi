@@ -1706,7 +1706,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8571,7 +8576,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8910,4 +8920,105 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Означено као завршено';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi приступа Apple Health-у преко Apple-овог HealthKit оквира. Приступ можете опозвати у било ком тренутку у подешавањима iOS-а.';
+
+  @override
+  String get appleHealthConnectCta => 'Повежи са Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Прекини везу са Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Повезано';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Разговарајте о свом здрављу';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Питајте Omi о корацима, сну, откуцајима срца и тренинзима.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Приступ само за читање';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi никада не уписује у Apple Health и не мења ваше податке.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Безбедна синхронизација';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Ваши Apple Health подаци се приватно синхронизују са Omi налогом.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Приступ Apple Health-у одбијен';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi нема дозволу да чита ваше Apple Health податке. Омогућите га у iOS Подешавања → Приватност и безбедност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Зашто одлазите?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Ваше повратне информације помажу нам да побољшамо Omi за све.';
+
+  @override
+  String get deleteReasonPrivacy => 'Бриге о приватности';
+
+  @override
+  String get deleteReasonNotUsing => 'Не користим довољно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Недостају функције које су ми потребне';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Превише техничких проблема';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Користим нешто друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Само правим паузу';
+
+  @override
+  String get deleteReasonOther => 'Остало';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Реците нам више';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Шта би учинило да Omi ради за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Опционо — ваше мисли нам помажу да направимо бољи производ.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ово је трајно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Након брисања налога, његово враћање није могуће.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Свака активна претплата биће отказана.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ваш налог се не може вратити — чак ни путем подршке.';
+
+  @override
+  String get deleteTypeToConfirm => 'Унесите DELETE за потврду';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Трајно избриши налог';
+
+  @override
+  String get keepMyAccount => 'Задржи мој налог';
+
+  @override
+  String get deleteAccountFailed => 'Брисање вашег налога није успело. Покушајте поново.';
 }

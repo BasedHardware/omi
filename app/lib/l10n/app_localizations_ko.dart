@@ -8421,7 +8421,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
     return '$_temp0';
   }
 
@@ -8755,4 +8760,104 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => '완료로 표시됨';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi는 Apple의 HealthKit 프레임워크를 통해 Apple Health에 접근합니다. iOS 설정에서 언제든지 접근 권한을 철회할 수 있습니다.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health에 연결';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health 연결 해제';
+
+  @override
+  String get appleHealthConnectedBadge => '연결됨';
+
+  @override
+  String get appleHealthFeatureChatTitle => '건강에 대해 대화하기';
+
+  @override
+  String get appleHealthFeatureChatDesc => '걸음 수, 수면, 심박수, 운동에 대해 Omi에게 물어보세요.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '읽기 전용 접근';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi는 Apple Health에 쓰거나 데이터를 수정하지 않습니다.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '보안 동기화';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health 데이터는 비공개로 Omi 계정과 동기화됩니다.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health 접근이 거부됨';
+
+  @override
+  String get appleHealthDeniedBody => 'Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요.';
+
+  @override
+  String get deleteFlowReasonTitle => '왜 떠나시나요?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '여러분의 의견은 모두를 위한 Omi를 개선하는 데 도움이 됩니다.';
+
+  @override
+  String get deleteReasonPrivacy => '개인정보 보호에 대한 우려';
+
+  @override
+  String get deleteReasonNotUsing => '충분히 사용하지 않음';
+
+  @override
+  String get deleteReasonMissingFeatures => '필요한 기능이 없음';
+
+  @override
+  String get deleteReasonTechnicalIssues => '기술적인 문제가 너무 많음';
+
+  @override
+  String get deleteReasonFoundAlternative => '다른 것을 사용 중';
+
+  @override
+  String get deleteReasonTakingBreak => '잠시 쉬고 싶을 뿐';
+
+  @override
+  String get deleteReasonOther => '기타';
+
+  @override
+  String get deleteFlowFeedbackTitle => '더 자세히 알려주세요';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '무엇이 있었다면 Omi가 여러분께 도움이 되었을까요?';
+
+  @override
+  String get deleteFlowFeedbackHint => '선택 사항 — 여러분의 의견은 더 나은 제품을 만드는 데 도움이 됩니다.';
+
+  @override
+  String get deleteFlowConfirmTitle => '이 작업은 영구적입니다';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '계정을 삭제하면 복구할 방법이 없습니다.';
+
+  @override
+  String get deleteConsequenceSubscription => '활성 구독은 모두 취소됩니다.';
+
+  @override
+  String get deleteConsequenceNoRecovery => '계정은 복구할 수 없습니다 — 고객 지원으로도 불가능합니다.';
+
+  @override
+  String get deleteTypeToConfirm => '확인하려면 DELETE를 입력하세요';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '계정 영구 삭제';
+
+  @override
+  String get keepMyAccount => '내 계정 유지';
+
+  @override
+  String get deleteAccountFailed => '계정을 삭제할 수 없습니다. 다시 시도해 주세요.';
 }

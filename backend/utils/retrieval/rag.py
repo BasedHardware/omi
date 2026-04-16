@@ -8,6 +8,8 @@ from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.other import Person
+from utils.conversations.factory import deserialize_conversations
+from utils.conversations.render import conversations_to_string
 from utils.shared_profiles import get_local_person_ids, resolve_shared_people
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
@@ -60,7 +62,7 @@ def get_better_conversation_chunk(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
     if num_tokens_from_string(conversation) < 250:
-        return Conversation.conversations_to_string([memory], people=people, user_name=user_name)
+        return conversations_to_string([memory], people=people, user_name=user_name)
     chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
         return
@@ -82,7 +84,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
 
-    memories = [Conversation(**memory) for memory in memories]
+    memories = deserialize_conversations(memories)
     if len(memories) > 10:
         memories = memories[:10]
 
@@ -114,6 +116,6 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         [t.join() for t in threads]
         context_str = '\n'.join(context_data.values()).strip()
     else:
-        context_str = Conversation.conversations_to_string(memories, people=people, user_name=user_name)
+        context_str = conversations_to_string(memories, people=people, user_name=user_name)
 
     return context_str, (memories if context_str else [])

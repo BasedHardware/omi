@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
@@ -1011,6 +1012,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
+                        if (!context.read<UsageProvider>().showSubscriptionUI) return;
                         MixpanelManager().paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
@@ -1021,10 +1023,12 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                           color: Colors.black.withValues(alpha: 0.01),
                           borderRadius: const BorderRadius.all(Radius.circular(8)),
                         ),
-                        child: Text(
-                          context.l10n.upgradeToUnlimited,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        child: context.watch<UsageProvider>().showSubscriptionUI
+                            ? Text(
+                                context.l10n.upgradeToUnlimited,
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ),
                   ),

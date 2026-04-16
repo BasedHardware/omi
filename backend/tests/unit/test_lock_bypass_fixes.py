@@ -920,8 +920,8 @@ class TestMentorProactiveLockFilter:
                                             )
                                             conversations_db.get_conversations = MagicMock(return_value=[])
 
-                                            with patch('utils.app_integrations.Conversation') as mock_conv_cls:
-                                                mock_conv_cls.conversations_to_string = MagicMock(return_value='')
+                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
+                                                mock_render.return_value = ''
 
                                                 draft = MagicMock()
                                                 draft.notification_text = ''
@@ -938,10 +938,14 @@ class TestMentorProactiveLockFilter:
                                                     )
 
                                             # conversations_to_string called with only unlocked
-                                            mock_conv_cls.conversations_to_string.assert_called_once()
-                                            convos_passed = mock_conv_cls.conversations_to_string.call_args[0][0]
+                                            mock_render.assert_called_once()
+                                            convos_passed = mock_render.call_args[0][0]
                                             assert len(convos_passed) == 1
-                                            assert convos_passed[0].get('is_locked') is not True
+                                            conv = convos_passed[0]
+                                            is_locked = (
+                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
+                                            )
+                                            assert is_locked is not True
 
 
 # =============================================================================

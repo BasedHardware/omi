@@ -79,6 +79,18 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
     )
 
 
+def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
+    # Stored in a top-level collection so it survives the user record being deleted.
+    db.collection('account_deletions').document(uid).set(
+        {
+            'uid': uid,
+            'reason': reason or '',
+            'reason_details': reason_details or '',
+            'timestamp': datetime.now(timezone.utc),
+        }
+    )
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
@@ -475,38 +487,40 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     return True
 
 
+def _delete_collection_recursive(collection_ref, batch_size: int = 450):
+    """Delete every document under a collection, descending into nested subcollections first."""
+    while True:
+        docs = list(collection_ref.limit(batch_size).stream())
+        if not docs:
+            return
+
+        for doc in docs:
+            for sub in doc.reference.collections():
+                _delete_collection_recursive(sub, batch_size)
+
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+
+        if len(docs) < batch_size:
+            return
+
+
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:
         return {'status': 'error', 'message': 'User not found'}
 
-    subcollections_to_delete = ['conversations', 'messages', 'chat_sessions', 'people', 'memories', 'files']
-    batch_size = 450
+    # Enumerate subcollections live instead of hardcoding a list — picks up
+    # everything the user has written (conversations, memories, action_items,
+    # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
+    # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
+    # messages, and any future additions).
+    for sub in user_ref.collections():
+        logger.info(f"Deleting subcollection {sub.id} for user {uid}")
+        _delete_collection_recursive(sub)
 
-    for cname in subcollections_to_delete:
-        logger.info(f"Deleting subcollection: {cname} for user {uid}")
-        collection_ref = user_ref.collection(cname)
-
-        while True:
-            docs_query = collection_ref.limit(batch_size)
-            docs = list(docs_query.stream())
-
-            if not docs:
-                # docs might not exists, try using {parent path / id}
-                logger.info(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
-                break
-
-            batch = db.batch()
-            for doc in docs:
-                logger.info(f"Deleting document: {doc.reference.path}")
-                batch.delete(doc.reference)
-            batch.commit()
-
-            if len(docs) < batch_size:
-                logger.info(f"Processed all documents in {collection_ref.path}")
-                break
-
-    # delete the user document itself
     logger.info(f"Deleting user document: {uid}")
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}

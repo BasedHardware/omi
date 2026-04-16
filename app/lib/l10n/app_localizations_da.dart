@@ -8893,4 +8893,105 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Markeret som fuldført';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi tilgår Apple Health via Apples HealthKit-framework. Du kan til enhver tid tilbagekalde adgangen i iOS-indstillingerne.';
+
+  @override
+  String get appleHealthConnectCta => 'Forbind til Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Afbryd Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Forbundet';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat om dit helbred';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Spørg Omi om dine skridt, søvn, puls og træninger.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Kun læseadgang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi skriver aldrig til Apple Health eller ændrer dine data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sikker synkronisering';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Dine Apple Health-data synkroniseres privat til din Omi-konto.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Adgang til Apple Health nægtet';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi har ikke tilladelse til at læse dine Apple Health-data. Aktivér det i iOS-indstillinger → Anonymitet og sikkerhed → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Hvorfor forlader du os?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Din feedback hjælper os med at gøre Omi bedre for alle.';
+
+  @override
+  String get deleteReasonPrivacy => 'Bekymringer om privatliv';
+
+  @override
+  String get deleteReasonNotUsing => 'Bruger den ikke nok';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Mangler funktioner, jeg har brug for';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'For mange tekniske problemer';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Bruger noget andet';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tager bare en pause';
+
+  @override
+  String get deleteReasonOther => 'Andet';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Fortæl os mere';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Hvad ville have fået Omi til at fungere for dig?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valgfrit — dine tanker hjælper os med at bygge et bedre produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dette er permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Når du sletter din konto, kan den ikke gendannes.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Eventuelle aktive abonnementer annulleres.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Din konto kan ikke gendannes — ikke engang af supporten.';
+
+  @override
+  String get deleteTypeToConfirm => 'Skriv DELETE for at bekræfte';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Slet konto permanent';
+
+  @override
+  String get keepMyAccount => 'Behold min konto';
+
+  @override
+  String get deleteAccountFailed => 'Kunne ikke slette din konto. Prøv igen.';
 }

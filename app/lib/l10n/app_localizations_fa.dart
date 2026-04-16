@@ -1707,7 +1707,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8560,7 +8565,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8899,4 +8909,105 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'به عنوان تکمیل‌شده علامت‌گذاری شد';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi از طریق چارچوب HealthKit اپل به Apple Health دسترسی دارد. در هر زمان می‌توانید دسترسی را از تنظیمات iOS لغو کنید.';
+
+  @override
+  String get appleHealthConnectCta => 'اتصال به Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'قطع اتصال از Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'متصل';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'درباره سلامتی خود گفتگو کنید';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'از Omi درباره قدم‌ها، خواب، ضربان قلب و تمرین‌های خود بپرسید.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'دسترسی فقط خواندنی';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi هرگز در Apple Health نمی‌نویسد و داده‌های شما را تغییر نمی‌دهد.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'همگام‌سازی امن';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'داده‌های Apple Health شما به‌صورت خصوصی با حساب Omi همگام می‌شوند.';
+
+  @override
+  String get appleHealthDeniedTitle => 'دسترسی به Apple Health رد شد';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi مجوز خواندن داده‌های Apple Health شما را ندارد. آن را در تنظیمات iOS ← حریم خصوصی و امنیت ← Health ← Omi فعال کنید.';
+
+  @override
+  String get deleteFlowReasonTitle => 'چرا می‌روید؟';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'بازخورد شما به ما کمک می‌کند Omi را برای همه بهتر کنیم.';
+
+  @override
+  String get deleteReasonPrivacy => 'نگرانی‌های حریم خصوصی';
+
+  @override
+  String get deleteReasonNotUsing => 'به اندازه کافی استفاده نمی‌کنم';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ویژگی‌هایی که نیاز دارم وجود ندارد';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'مشکلات فنی زیاد';
+
+  @override
+  String get deleteReasonFoundAlternative => 'از چیز دیگری استفاده می‌کنم';
+
+  @override
+  String get deleteReasonTakingBreak => 'فقط کمی استراحت می‌کنم';
+
+  @override
+  String get deleteReasonOther => 'دیگر';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'بیشتر بگویید';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'چه چیزی باعث می‌شد Omi برای شما مفید باشد؟';
+
+  @override
+  String get deleteFlowFeedbackHint => 'اختیاری — نظرات شما به ما کمک می‌کند محصول بهتری بسازیم.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'این عمل برگشت‌ناپذیر است';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'پس از حذف حساب، راهی برای بازیابی آن وجود ندارد.';
+
+  @override
+  String get deleteConsequenceSubscription => 'هرگونه اشتراک فعال لغو خواهد شد.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'حساب شما قابل بازیابی نیست — حتی توسط پشتیبانی.';
+
+  @override
+  String get deleteTypeToConfirm => 'برای تأیید، DELETE را تایپ کنید';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'حذف دائمی حساب';
+
+  @override
+  String get keepMyAccount => 'حفظ حساب من';
+
+  @override
+  String get deleteAccountFailed => 'حذف حساب شما ممکن نشد. لطفاً دوباره تلاش کنید.';
 }

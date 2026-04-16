@@ -242,6 +242,11 @@ extension FlutterError: Error {}
       completionHandler(exportedMappings.isEmpty ? .noData : .newData)
   }
 
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    super.applicationWillEnterForeground(application)
+    OmiBleManager.shared.reconnectStalePeripherals()
+  }
+
   override func applicationWillTerminate(_ application: UIApplication) {
     OmiBleManager.shared.disconnectAllPeripherals()
 

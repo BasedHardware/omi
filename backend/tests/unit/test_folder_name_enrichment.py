@@ -98,12 +98,8 @@ _stub_module("utils.scopes")
 sys.modules["utils.scopes"].AVAILABLE_SCOPES = {}
 sys.modules["utils.scopes"].validate_scopes = MagicMock()
 
-_stub_module("utils.conversations")
-_stub_module("utils.conversations.process_conversation")
-sys.modules["utils.conversations.process_conversation"].process_conversation = MagicMock()
-
-_stub_module("utils.conversations.location")
-sys.modules["utils.conversations.location"].get_google_maps_location = MagicMock()
+# utils.conversations.render imports database.folders and database.users
+# which are already stubbed above — no additional stubs needed.
 
 _stub_module("utils.llm")
 _stub_module("utils.llm.memories")
@@ -124,8 +120,7 @@ sys.modules["dependencies"].get_uid_with_goals_write = MagicMock()
 # ---------------------------------------------------------------------------
 # Now import the actual functions under test
 # ---------------------------------------------------------------------------
-from routers.developer import _add_folder_names_to_conversations
-from utils.webhooks import _add_folder_name_to_payload
+from utils.conversations.render import populate_folder_names, populate_speaker_names
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -133,7 +128,7 @@ from utils.webhooks import _add_folder_name_to_payload
 
 
 class TestAddFolderNamesToConversations:
-    """Tests for _add_folder_names_to_conversations in developer API."""
+    """Tests for populate_folder_names in developer API."""
 
     def setup_method(self):
         _mock_get_folders.reset_mock()
@@ -147,7 +142,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv1', 'folder_id': 'folder1'},
             {'id': 'conv2', 'folder_id': 'folder2'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] == 'Work'
         assert conversations[1]['folder_name'] == 'Personal'
@@ -158,7 +153,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv1', 'folder_id': None},
             {'id': 'conv2'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] is None
         assert conversations[1]['folder_name'] is None
@@ -171,7 +166,7 @@ class TestAddFolderNamesToConversations:
         conversations = [
             {'id': 'conv1', 'folder_id': 'deleted_folder'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] is None
 
@@ -184,7 +179,7 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv2', 'folder_id': None},
             {'id': 'conv3'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert conversations[0]['folder_name'] == 'Work'
         assert conversations[1]['folder_name'] is None
@@ -192,7 +187,7 @@ class TestAddFolderNamesToConversations:
 
     def test_empty_conversations_list(self):
         conversations = []
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert conversations == []
         _mock_get_folders.assert_not_called()
@@ -208,46 +203,134 @@ class TestAddFolderNamesToConversations:
             {'id': 'conv2', 'folder_id': 'f2'},
             {'id': 'conv3', 'folder_id': 'f1'},
         ]
-        _add_folder_names_to_conversations('uid1', conversations)
+        populate_folder_names('uid1', conversations)
 
         assert _mock_get_folders.call_count == 1
 
 
-class TestAddFolderNameToPayload:
-    """Tests for _add_folder_name_to_payload in webhook."""
+class TestAddFolderNamesWebhookPayload:
+    """Tests for populate_folder_names with single-item webhook payloads."""
 
     def setup_method(self):
-        _mock_get_folder.reset_mock()
+        _mock_get_folders.reset_mock()
 
     def test_payload_with_folder_id_gets_folder_name(self):
-        _mock_get_folder.return_value = {'id': 'folder1', 'name': 'Work'}
+        _mock_get_folders.return_value = [{'id': 'folder1', 'name': 'Work'}]
         payload = {'folder_id': 'folder1'}
 
-        _add_folder_name_to_payload('uid1', payload)
+        populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] == 'Work'
-        _mock_get_folder.assert_called_once_with('uid1', 'folder1')
+        _mock_get_folders.assert_called_once_with('uid1')
 
     def test_payload_without_folder_id_gets_none(self):
         payload = {'folder_id': None}
 
-        _add_folder_name_to_payload('uid1', payload)
+        populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folder.assert_not_called()
+        _mock_get_folders.assert_not_called()
 
     def test_payload_missing_folder_id_key_gets_none(self):
         payload = {}
 
-        _add_folder_name_to_payload('uid1', payload)
+        populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folder.assert_not_called()
+        _mock_get_folders.assert_not_called()
 
     def test_folder_not_found_in_db_returns_none(self):
-        _mock_get_folder.return_value = None
+        _mock_get_folders.return_value = []
         payload = {'folder_id': 'deleted_folder'}
 
-        _add_folder_name_to_payload('uid1', payload)
+        populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
+
+
+# ---------------------------------------------------------------------------
+# Speaker name enrichment tests
+# ---------------------------------------------------------------------------
+_mock_get_user_profile = users_mod.get_user_profile
+_mock_get_people_by_ids = users_mod.get_people_by_ids
+
+
+class TestAddSpeakerNames:
+    """Tests for populate_speaker_names enrichment."""
+
+    def setup_method(self):
+        _mock_get_user_profile.reset_mock()
+        _mock_get_people_by_ids.reset_mock()
+        _mock_get_user_profile.return_value = {"name": "TestUser"}
+        _mock_get_people_by_ids.return_value = []
+
+    def test_user_segments_get_user_name(self):
+        conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'TestUser'
+
+    def test_known_person_id_gets_person_name(self):
+        _mock_get_people_by_ids.return_value = [{'id': 'p1', 'name': 'Alice'}]
+        conversations = [
+            {'transcript_segments': [{'text': 'hi', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1}]}
+        ]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Alice'
+
+    def test_unknown_person_id_falls_back_to_speaker_id(self):
+        _mock_get_people_by_ids.return_value = []
+        conversations = [
+            {'transcript_segments': [{'text': 'hi', 'is_user': False, 'person_id': 'unknown_p', 'speaker_id': 3}]}
+        ]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 3'
+
+    def test_no_person_id_no_is_user_falls_back_to_speaker_id(self):
+        conversations = [{'transcript_segments': [{'text': 'hi', 'speaker_id': 2}]}]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 2'
+
+    def test_missing_speaker_id_defaults_to_zero(self):
+        conversations = [{'transcript_segments': [{'text': 'hi'}]}]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 0'
+
+    def test_user_profile_missing_name_falls_back_to_user(self):
+        _mock_get_user_profile.return_value = {"name": None}
+        conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'User'
+
+    def test_empty_conversations_list(self):
+        populate_speaker_names('uid1', [])
+        _mock_get_user_profile.assert_called_once_with('uid1')
+        _mock_get_people_by_ids.assert_not_called()
+
+    def test_no_transcript_segments_key(self):
+        conversations = [{'id': 'conv1'}]
+        populate_speaker_names('uid1', conversations)
+        # Should not crash — no segments to enrich
+
+    def test_batch_loads_people_once(self):
+        _mock_get_people_by_ids.return_value = [
+            {'id': 'p1', 'name': 'Alice'},
+            {'id': 'p2', 'name': 'Bob'},
+        ]
+        conversations = [
+            {
+                'transcript_segments': [
+                    {'text': 'hi', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1},
+                ]
+            },
+            {
+                'transcript_segments': [
+                    {'text': 'hey', 'is_user': False, 'person_id': 'p2', 'speaker_id': 2},
+                    {'text': 'yo', 'is_user': False, 'person_id': 'p1', 'speaker_id': 1},
+                ]
+            },
+        ]
+        populate_speaker_names('uid1', conversations)
+        assert _mock_get_people_by_ids.call_count == 1
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Alice'
+        assert conversations[1]['transcript_segments'][0]['speaker_name'] == 'Bob'
+        assert conversations[1]['transcript_segments'][1]['speaker_name'] == 'Alice'

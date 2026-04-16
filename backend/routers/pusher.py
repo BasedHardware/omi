@@ -15,6 +15,7 @@ from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from utils.conversations.factory import deserialize_conversation
 from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
@@ -73,7 +74,7 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             await websocket.send_bytes(data)
             return
 
-        conversation = Conversation(**conversation_data)
+        conversation = deserialize_conversation(conversation_data)
 
         if conversation.status != ConversationStatus.processing:
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)

@@ -1703,7 +1703,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8554,7 +8559,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -8893,4 +8903,105 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marked as complete';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.';
+
+  @override
+  String get appleHealthConnectCta => 'Connect to Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Disconnect Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Connected';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat about your health';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Ask Omi about your steps, sleep, heart rate, and workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Read-only access';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi never writes to Apple Health or modifies your data.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Secure sync';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Your Apple Health data syncs privately to your Omi account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health access denied';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Why are you leaving?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privacy concerns';
+
+  @override
+  String get deleteReasonNotUsing => 'Not using it enough';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Missing features I need';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Using something else';
+
+  @override
+  String get deleteReasonTakingBreak => 'Just taking a break';
+
+  @override
+  String get deleteReasonOther => 'Other';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Tell us more';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'This is permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Delete account permanently';
+
+  @override
+  String get keepMyAccount => 'Keep my account';
+
+  @override
+  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
 }

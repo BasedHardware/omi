@@ -670,7 +670,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
   Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
-    if (totalSeconds <= 0) return const SizedBox.shrink();
+    if (totalSeconds <= 5) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
@@ -692,10 +692,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               Container(
                 width: 7,
                 height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4CAF50),
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(
@@ -707,10 +704,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 const SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Color(0xFF6C6C80),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
                 ),
               ],
             ],

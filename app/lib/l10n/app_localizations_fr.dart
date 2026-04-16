@@ -1718,7 +1718,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPAREILS', one: 'APPAREIL');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'APPAREILS',
+      one: 'APPAREIL',
+    );
     return '$count $_temp0 TROUVÉ(S) À PROXIMITÉ';
   }
 
@@ -8983,4 +8988,107 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Marqué comme terminé';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accède à Apple Health via le framework HealthKit d\'Apple. Vous pouvez révoquer l\'accès à tout moment dans les Réglages iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Connecter à Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Déconnecter Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Connecté';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Discutez de votre santé';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Demandez à Omi vos pas, votre sommeil, votre fréquence cardiaque et vos entraînements.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Accès en lecture seule';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi n\'écrit jamais dans Apple Health et ne modifie pas vos données.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Synchronisation sécurisée';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'Vos données Apple Health se synchronisent en privé avec votre compte Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Accès à Apple Health refusé';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi n\'a pas l\'autorisation de lire vos données Apple Health. Activez-la dans Réglages iOS → Confidentialité et sécurité → Santé → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Pourquoi partez-vous ?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vos commentaires nous aident à améliorer Omi pour tous.';
+
+  @override
+  String get deleteReasonPrivacy => 'Préoccupations liées à la confidentialité';
+
+  @override
+  String get deleteReasonNotUsing => 'Je ne l\'utilise pas assez';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Il manque des fonctionnalités dont j\'ai besoin';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Trop de problèmes techniques';
+
+  @override
+  String get deleteReasonFoundAlternative => 'J\'utilise autre chose';
+
+  @override
+  String get deleteReasonTakingBreak => 'Je fais juste une pause';
+
+  @override
+  String get deleteReasonOther => 'Autre';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Dites-nous-en plus';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Qu\'est-ce qui aurait fait fonctionner Omi pour vous ?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Facultatif — vos idées nous aident à créer un meilleur produit.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'C\'est définitif';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Une fois votre compte supprimé, il est impossible de le récupérer.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Tout abonnement actif sera annulé.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Votre compte ne peut pas être restauré — même pas par le support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Tapez DELETE pour confirmer';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Supprimer le compte définitivement';
+
+  @override
+  String get keepMyAccount => 'Conserver mon compte';
+
+  @override
+  String get deleteAccountFailed => 'Impossible de supprimer votre compte. Veuillez réessayer.';
 }

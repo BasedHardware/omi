@@ -1711,7 +1711,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -8912,4 +8917,105 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Ditandai selesai';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi mengakses Apple Health melalui framework HealthKit dari Apple. Anda dapat mencabut akses kapan saja di Pengaturan iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Hubungkan ke Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Putuskan Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Terhubung';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Bicarakan kesehatan Anda';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Tanyakan pada Omi tentang langkah, tidur, detak jantung, dan latihan Anda.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Akses hanya-baca';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi tidak pernah menulis ke Apple Health atau mengubah data Anda.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sinkronisasi aman';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Akses Apple Health ditolak';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Mengapa Anda pergi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Masukan Anda membantu kami meningkatkan Omi untuk semua orang.';
+
+  @override
+  String get deleteReasonPrivacy => 'Kekhawatiran privasi';
+
+  @override
+  String get deleteReasonNotUsing => 'Tidak cukup sering menggunakannya';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Fitur yang saya butuhkan tidak ada';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Terlalu banyak masalah teknis';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Menggunakan sesuatu yang lain';
+
+  @override
+  String get deleteReasonTakingBreak => 'Hanya sedang istirahat';
+
+  @override
+  String get deleteReasonOther => 'Lainnya';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Beri tahu kami lebih banyak';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Apa yang akan membuat Omi cocok untuk Anda?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opsional — pendapat Anda membantu kami membuat produk yang lebih baik.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ini bersifat permanen';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Setelah Anda menghapus akun, tidak ada cara untuk memulihkannya.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Langganan aktif apa pun akan dibatalkan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.';
+
+  @override
+  String get deleteTypeToConfirm => 'Ketik DELETE untuk konfirmasi';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Hapus akun secara permanen';
+
+  @override
+  String get keepMyAccount => 'Pertahankan akun saya';
+
+  @override
+  String get deleteAccountFailed => 'Tidak dapat menghapus akun Anda. Silakan coba lagi.';
 }

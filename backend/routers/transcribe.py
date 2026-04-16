@@ -42,6 +42,7 @@ from database import redis_db
 from database.redis_db import check_credits_invalidation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
+from utils.conversations.factory import deserialize_conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
@@ -704,13 +705,13 @@ async def _stream_handler(
     def on_conversation_processed(conversation_id: str):
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
-            conversation = Conversation(**conversation_data)
+            conversation = deserialize_conversation(conversation_data)
             _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=[]))
 
     def on_conversation_processing_started(conversation_id: str):
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
-            conversation = Conversation(**conversation_data)
+            conversation = deserialize_conversation(conversation_data)
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
 
     async def cleanup_processing_conversations():
@@ -2017,7 +2018,7 @@ async def _stream_handler(
             conversation_data = _get_cached_conversation(force_refresh=True)
             if not conversation_data:
                 return
-            conversation = Conversation(**conversation_data)
+            conversation = deserialize_conversation(conversation_data)
             if not conversation.transcript_segments:
                 return
             process_speaker_assigned_segments(
@@ -2109,7 +2110,7 @@ async def _stream_handler(
                 transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
-            conversation = Conversation(**conversation_data)
+            conversation = deserialize_conversation(conversation_data)
             result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue

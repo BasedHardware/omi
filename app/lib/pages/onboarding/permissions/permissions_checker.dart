@@ -217,25 +217,6 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                 ),
                               ),
                             ),
-
-                      const SizedBox(height: 16),
-
-                      // Skip for now
-                      GestureDetector(
-                        onTap: () {
-                          MixpanelManager().permissionsInterstitialSkipped();
-                          _goHome(context);
-                        },
-                        child: Text(
-                          context.l10n.skipForNow,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Manrope',
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),

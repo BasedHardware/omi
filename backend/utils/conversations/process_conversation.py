@@ -34,6 +34,7 @@ from models.conversation import (
     ExternalIntegrationCreateConversation,
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
+from utils.conversations.factory import deserialize_conversation
 from models.other import Person
 from models.structured import Structured
 from utils.notifications import send_important_conversation_message
@@ -912,7 +913,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
         return
 
-    conversation = Conversation(**conversation_data)
+    conversation = deserialize_conversation(conversation_data)
 
     # Get prediction
     predictions = callback.predictions

@@ -1713,7 +1713,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 NAHANAP SA MALAPIT';
   }
 
@@ -8636,7 +8641,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 na ginawa';
   }
 
@@ -8977,4 +8987,110 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tasksMarkComplete => 'Minarkahan bilang kumpleto';
+
+  @override
+  String get appleHealthManageNote =>
+      'Ina-access ng Omi ang Apple Health sa pamamagitan ng HealthKit framework ng Apple. Maaari mong bawiin ang access anumang oras sa iOS Settings.';
+
+  @override
+  String get appleHealthConnectCta => 'Ikonekta sa Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Idiskonekta ang Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Nakakonekta';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Kumustahin ang iyong kalusugan';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Tanungin ang Omi tungkol sa iyong hakbang, tulog, tibok ng puso, at mga ehersisyo.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Access na pambasa lamang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Hindi kailanman nagsusulat ang Omi sa Apple Health o nagbabago ng iyong datos.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Ligtas na sync';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'Ang iyong datos sa Apple Health ay pribadong sinisync sa iyong Omi account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Tinanggihan ang access sa Apple Health';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Walang pahintulot ang Omi na basahin ang iyong Apple Health data. I-enable ito sa iOS Settings → Privacy & Security → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Bakit ka aalis?';
+
+  @override
+  String get deleteFlowReasonSubtitle =>
+      'Ang iyong feedback ay tumutulong sa amin na pagbutihin ang Omi para sa lahat.';
+
+  @override
+  String get deleteReasonPrivacy => 'Mga alalahanin sa privacy';
+
+  @override
+  String get deleteReasonNotUsing => 'Hindi sapat ang paggamit';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Kulang sa mga feature na kailangan ko';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Masyadong maraming teknikal na problema';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Gumagamit ng iba';
+
+  @override
+  String get deleteReasonTakingBreak => 'Nagpapahinga lang';
+
+  @override
+  String get deleteReasonOther => 'Iba pa';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Sabihin mo sa amin ang higit pa';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Ano ang magiging dahilan para gumana ang Omi para sa iyo?';
+
+  @override
+  String get deleteFlowFeedbackHint =>
+      'Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ito ay permanente';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Ang anumang aktibong subscription ay ikakansela.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Hindi maibabalik ang iyong account — kahit ng support team.';
+
+  @override
+  String get deleteTypeToConfirm => 'I-type ang DELETE para kumpirmahin';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Tanggalin nang permanente ang account';
+
+  @override
+  String get keepMyAccount => 'Panatilihin ang aking account';
+
+  @override
+  String get deleteAccountFailed => 'Hindi ma-delete ang iyong account. Pakisubukan muli.';
 }
