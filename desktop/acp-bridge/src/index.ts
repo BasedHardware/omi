@@ -44,6 +44,7 @@ import type {
   AuthMethod,
 } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
+import type { PromptBlock } from "./adapters/interface.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1120,6 +1121,13 @@ async function runPiMonoMode(): Promise<void> {
     process.exit(1);
   }
 
+  // Start the omi-tools relay so pi-mono extension can forward tool calls
+  // back to Swift (execute_sql, semantic_search, etc.)
+  omiToolsPipePath = await startOmiToolsRelay();
+  // Set in process.env so it flows to the pi subprocess (which spreads process.env)
+  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
+  logErr("omi-tools relay started for pi-mono");
+
   const config = {
     passApiKey: false,
     apiKey: undefined,
@@ -1247,12 +1255,13 @@ async function runPiMonoMode(): Promise<void> {
           const abortController = new AbortController();
           piActiveAbort = abortController;
 
-          // Pi-mono provider is text-only — strip image blocks
-          const promptBlocks: Array<{ type: "text"; text: string }> = [];
+          // Build prompt blocks — include screenshot if available
+          const promptBlocks: PromptBlock[] = [];
           if (qm.imageBase64) {
-            logErr("Pi-mono: stripping image (text-only provider)");
+            promptBlocks.push({ type: "image" as const, data: qm.imageBase64, mimeType: "image/jpeg" });
+            logErr("Pi-mono: including screenshot image in prompt");
           }
-          promptBlocks.push({ type: "text", text: qm.prompt });
+          promptBlocks.push({ type: "text" as const, text: qm.prompt });
 
           // sendPrompt's onEvent callback already emits "result" via handleTurnEnd,
           // so we do NOT send a separate result here — that would duplicate it.
