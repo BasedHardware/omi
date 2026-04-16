@@ -137,7 +137,7 @@ def _send_summary_notification(user_data: tuple):
         return
 
     # Skip recap if no conversation captured any speech.
-    if not any(c.transcript_segments for c in conversations):
+    if not any(c.transcript_segments for c in conversations if not c.discarded):
         logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
         return
 
