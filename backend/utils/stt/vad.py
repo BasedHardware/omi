@@ -21,9 +21,9 @@ _MODEL_PATH = os.path.join(_ASSETS_DIR, 'silero_vad.onnx')
 _ort_session = None
 _ort_init_lock = threading.Lock()
 
-# ONNX model constants (Silero VAD 16kHz op15)
+# ONNX model constants (Silero VAD v6.2.1 16kHz op15)
 VAD_SAMPLE_RATE = 16000
-VAD_WINDOW_SAMPLES = 512  # 32ms at 16kHz
+VAD_WINDOW_SAMPLES = 256  # 16ms at 16kHz — v6 model requires 256 (not 512)
 _STATE_SHAPE = (2, 1, 128)
 
 
