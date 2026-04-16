@@ -4,7 +4,7 @@ import XCTest
 
 final class SubscriptionPlanCatalogMergerTests: XCTestCase {
 
-  func testMergeDeduplicatesDuplicatePriceIDsWithoutCrashing() {
+  func testMergeDeduplicatesDuplicatePriceIDsWithoutCrashing() throws {
     let fallback = [
       SubscriptionPlanOption(
         id: "pro",
