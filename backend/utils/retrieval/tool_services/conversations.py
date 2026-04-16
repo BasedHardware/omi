@@ -12,6 +12,8 @@ import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
+from utils.conversations.factory import deserialize_conversation
+from utils.conversations.render import conversations_to_string
 import logging
 
 logger = logging.getLogger(__name__)
@@ -113,7 +115,7 @@ def get_conversations_text(
     conversations = []
     for conv_data in conversations_data:
         try:
-            conversation = Conversation(**conv_data)
+            conversation = deserialize_conversation(conv_data)
             if (
                 max_transcript_segments != -1
                 and conversation.transcript_segments
@@ -125,7 +127,7 @@ def get_conversations_text(
             logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
             continue
 
-    return Conversation.conversations_to_string(
+    return conversations_to_string(
         conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
     )
 
@@ -208,7 +210,7 @@ def search_conversations_text(
         conversations = []
         for conv_data in conversations_data:
             try:
-                conversation = Conversation(**conv_data)
+                conversation = deserialize_conversation(conv_data)
                 if (
                     max_transcript_segments != -1
                     and conversation.transcript_segments
@@ -221,7 +223,7 @@ def search_conversations_text(
                 continue
 
         result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
-        result += Conversation.conversations_to_string(
+        result += conversations_to_string(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
         return result

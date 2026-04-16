@@ -11,6 +11,7 @@ import database.users as user_db
 from database.apps import record_app_usage
 from models.chat import ChatSession, Message, ResponseMessage, MessageConversation
 from models.notification_message import NotificationMessage
+from utils.conversations.factory import deserialize_conversation
 from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
 from utils.conversation_helpers import extract_memory_ids
@@ -313,7 +314,7 @@ async def process_voice_message_segment_stream(
             converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Conversation(**m))
+                    converted_memories.append(deserialize_conversation(m))
                 else:
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
