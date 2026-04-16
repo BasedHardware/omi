@@ -85,7 +85,7 @@ actor OnboardingMemoryLogImportService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = ACPBridge(passApiKey: true, harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
