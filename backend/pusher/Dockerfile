@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM python:3.11 AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -24,9 +24,9 @@ RUN git clone https://github.com/google/liblc3.git && \
     cd /tmp/liblc3 && \
     python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
-# Install Python requirements — pusher-specific (no torch/onnxruntime/pyannote)
+# Install Python requirements
 WORKDIR /opt/venv
-COPY backend/pusher/requirements.txt /tmp/requirements.txt
+COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -35,7 +35,7 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled liblc3 library and wheel from builder
 COPY --from=builder /usr/local/lib/liblc3.so* /usr/local/lib/
@@ -47,13 +47,7 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
-
-# Whitelist-copy only the modules pusher reaches
-COPY backend/database/ ./database/
-COPY backend/models/ ./models/
-COPY backend/routers/ ./routers/
-COPY backend/utils/ ./utils/
-COPY backend/pusher/ ./pusher/
+COPY backend/ .
 
 EXPOSE 8080
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20"]

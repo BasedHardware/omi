@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 import firebase_admin
 from fastapi import FastAPI
 
+from modal import Image, App, asgi_app, Secret
 from routers import (
     workflow,
     chat,
@@ -140,6 +141,26 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+
+
+modal_app = App(
+    name='backend',
+    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
+)
+image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_from_requirements('requirements.txt')
+
+
+@modal_app.function(
+    image=image,
+    keep_warm=0,
+    memory=(512, 1024),
+    cpu=2,
+    allow_concurrent_inputs=10,
+    timeout=60 * 10,
+)
+@asgi_app()
+def api():
+    return app
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
