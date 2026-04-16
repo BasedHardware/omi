@@ -13,7 +13,6 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
@@ -131,9 +130,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   Widget? _getConversationHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
-    var connectivityProvider = context.read<ConnectivityProvider>();
-
-    bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
