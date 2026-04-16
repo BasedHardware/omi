@@ -5806,17 +5806,17 @@ struct SettingsContentView: View {
     switch planId {
     case "pro":
       return [
-        "Automations",
-        "Vibe coding",
-        "Unlimited actions",
+        "Up to $400 of chat usage per month",
+        "Automations and vibe coding",
+        "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
       ]
     case "unlimited":
       return [
-        "Unlimited listening time",
-        "Unlimited words transcribed",
-        "Unlimited insights",
-        "Unlimited memories",
+        "200 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
       ]
     default:
       return []

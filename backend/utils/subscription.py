@@ -23,7 +23,7 @@ def get_paid_plan_definitions() -> list[dict]:
         {
             "plan_type": PlanType.unlimited,
             "plan_id": "unlimited",
-            "title": "Unlimited Plan",
+            "title": "Plus",
             "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
             "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
             "annual_description": "Save 20% with annual billing.",
@@ -131,18 +131,18 @@ def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
     if plan == PlanType.pro:
         return [
-            "Automations",
-            "Vibe coding",
-            "Unlimited actions",
+            f"Up to ${int(PRO_CHAT_COST_USD_PER_MONTH)} of chat usage per month",
+            "Automations and vibe coding",
+            "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
         ]
 
     if plan == PlanType.unlimited:
         return [
-            "Unlimited listening time",
-            "Unlimited words transcribed",
-            "Unlimited insights",
-            "Unlimited memories",
+            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
+            "Shared with mobile and web",
         ]
 
     # Basic plan
