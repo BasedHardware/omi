@@ -94,6 +94,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
                 'connection_duration_ms': e.connectionDurationMs,
                 'app_state': e.appState,
                 'time_to_reconnect_ms': e.timeToReconnectMs,
+                'rssi_trend': e.rssiTrend,
               })
           .toList(),
     };
@@ -453,6 +454,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final Color dot = isManual ? const Color(0xFF8E8E93) : (isFail ? const Color(0xFFFF9500) : const Color(0xFFF44336));
 
     final metaParts = <String>[];
+    if (event.rssiTrend.isNotEmpty) metaParts.add(event.rssiTrend);
     if (event.lastRssi != 0) metaParts.add('${event.lastRssi} dBm');
     if (event.connectionDurationMs > 0) metaParts.add(_formatDurationMs(event.connectionDurationMs));
     if (event.appState.isNotEmpty) metaParts.add(event.appState);
