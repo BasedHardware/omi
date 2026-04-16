@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence
 
+import database.folders as folders_db
+import database.users as users_db
 from models.other import Person
 
 if TYPE_CHECKING:
@@ -20,8 +22,6 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    import database.users as users_db
-
     user_profile = users_db.get_user_profile(uid)
     user_name = user_profile.get('name') or 'User'
 
@@ -51,8 +51,6 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
 
     Mutates conversation dicts in-place. Batch-loads all folder IDs in one query.
     """
-    import database.folders as folders_db
-
     folder_ids = set()
     for conv in conversations:
         if conv.get('folder_id'):

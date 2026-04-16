@@ -1,5 +1,34 @@
+import os
 import sys
+import types
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+
+def _ensure_stub(name):
+    existing = sys.modules.get(name)
+    if existing is not None and getattr(existing, "__file__", None):
+        return existing
+    if existing is None:
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    return sys.modules[name]
+
+
+# Stub database chain so render.py can import at module level without Firestore
+_ensure_stub("database")
+sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
+for _sub in ["_client", "redis_db", "users", "folders"]:
+    _ensure_stub(f"database.{_sub}")
+sys.modules["database._client"].db = MagicMock()
+sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
+sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 
 # When run via `pytest tests/unit/`, earlier test files may have stubbed these
 # packages with empty ModuleType objects. Force-reimport the real ones.
