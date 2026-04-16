@@ -81,9 +81,20 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'battery': deviceProvider.batteryLevel,
       'connected_at': _diagnostics?.connectedAt ?? 0,
       'reconnection_count': _diagnostics?.reconnectionCount ?? 0,
+      'fail_to_connect_count': _diagnostics?.failToConnectCount ?? 0,
       'rssi_samples': _rssiPoints.map((p) => {'ts': p.time.millisecondsSinceEpoch, 'rssi': p.rssi}).toList(),
       'disconnect_history': (_diagnostics?.disconnectHistory ?? [])
-          .map((e) => {'ts': e.timestamp, 'reason': e.reason, 'code': e.reasonCode, 'manual': e.isManual})
+          .map((e) => {
+                'ts': e.timestamp,
+                'reason': e.reason,
+                'code': e.reasonCode,
+                'manual': e.isManual,
+                'event_type': e.eventType,
+                'last_rssi': e.lastRssi,
+                'connection_duration_ms': e.connectionDurationMs,
+                'app_state': e.appState,
+                'time_to_reconnect_ms': e.timeToReconnectMs,
+              })
           .toList(),
     };
 
@@ -436,18 +447,28 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final time = DateTime.fromMillisecondsSinceEpoch(event.timestamp);
     final timeStr = DateFormat('MMM d, HH:mm:ss').format(time);
     final isManual = event.isManual;
+    final isFail = event.eventType == 'fail_to_connect';
     final reason = _formatReason(event.reason);
+
+    final Color dot = isManual ? const Color(0xFF8E8E93) : (isFail ? const Color(0xFFFF9500) : const Color(0xFFF44336));
+
+    final metaParts = <String>[];
+    if (event.lastRssi != 0) metaParts.add('${event.lastRssi} dBm');
+    if (event.connectionDurationMs > 0) metaParts.add(_formatDurationMs(event.connectionDurationMs));
+    if (event.appState.isNotEmpty) metaParts.add(event.appState);
+    if (event.timeToReconnectMs > 0) metaParts.add('reconn ${_formatDurationMs(event.timeToReconnectMs)}');
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isManual ? const Color(0xFF8E8E93) : const Color(0xFFF44336),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
             ),
           ),
           const SizedBox(width: 12),
@@ -461,10 +482,23 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
                 ),
                 const SizedBox(height: 2),
                 Text(timeStr, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                if (metaParts.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    metaParts.join(' · '),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                  ),
+                ],
               ],
             ),
           ),
-          if (isManual)
+          if (isFail)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: const Color(0xFF3A2A10), borderRadius: BorderRadius.circular(8)),
+              child: const Text('fail', style: TextStyle(color: Color(0xFFFF9500), fontSize: 11)),
+            )
+          else if (isManual)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(8)),
@@ -473,6 +507,13 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         ],
       ),
     );
+  }
+
+  String _formatDurationMs(int ms) {
+    if (ms < 1000) return '${ms}ms';
+    if (ms < 60000) return '${(ms / 1000).toStringAsFixed(1)}s';
+    if (ms < 3600000) return '${(ms / 60000).toStringAsFixed(1)}m';
+    return '${(ms / 3600000).toStringAsFixed(1)}h';
   }
 
   String _formatReason(String reason) {
