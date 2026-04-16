@@ -10,9 +10,10 @@ import database.conversations as conversations_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
+import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
-from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
+from utils.conversations.render import populate_speaker_names, redact_conversation_for_list, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -170,6 +171,39 @@ def get_conversations(
     )
 
     redact_conversations_for_list(conversations)
+    return conversations
+
+
+@router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
+def search_conversations(
+    query: str,
+    limit: int = 10,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"search_conversations {uid} query={query} limit={limit}")
+
+    starts_at = None
+    ends_at = None
+    if start_date:
+        try:
+            starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+    if end_date:
+        try:
+            ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+
+    conversation_ids = vector_db.query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+    if not conversation_ids:
+        return []
+
+    conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+    for conv in conversations:
+        redact_conversation_for_list(conv)
     return conversations
 
 
