@@ -188,7 +188,16 @@ data class BleDisconnectEvent (
    * ms between this disconnect and the subsequent successful reconnect.
    * 0 while the device has not yet reconnected.
    */
-  val timeToReconnectMs: Long
+  val timeToReconnectMs: Long,
+  /**
+   * RSSI trajectory over the ~15s before this event. One of:
+   *   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+   *   "sudden"  — signal stable then link died (interference/stall/device off)
+   *   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+   *   "unknown" — insufficient samples to classify
+   * Empty string on legacy records written before this field existed.
+   */
+  val rssiTrend: String
 )
  {
   companion object {
@@ -202,7 +211,8 @@ data class BleDisconnectEvent (
       val connectionDurationMs = pigeonVar_list[6] as Long
       val appState = pigeonVar_list[7] as String
       val timeToReconnectMs = pigeonVar_list[8] as Long
-      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual, eventType, lastRssi, connectionDurationMs, appState, timeToReconnectMs)
+      val rssiTrend = pigeonVar_list[9] as String
+      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual, eventType, lastRssi, connectionDurationMs, appState, timeToReconnectMs, rssiTrend)
     }
   }
   fun toList(): List<Any?> {
@@ -216,6 +226,7 @@ data class BleDisconnectEvent (
       connectionDurationMs,
       appState,
       timeToReconnectMs,
+      rssiTrend,
     )
   }
   override fun equals(other: Any?): Boolean {
