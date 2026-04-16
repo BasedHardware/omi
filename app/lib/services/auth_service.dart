@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -95,31 +94,10 @@ class AuthService {
       final rawNonce = generateNonce();
       final nonce = sha256ofString(rawNonce);
 
-      // Android has no native Apple SDK — the package falls back to a Custom
-      // Tab + OAuth web flow that requires the Services ID and an
-      // Apple-registered redirect URI. iOS leaves these null and uses the
-      // native modal sheet.
-      WebAuthenticationOptions? webOptions;
-      if (Platform.isAndroid) {
-        final servicesId = Env.appleSignInServicesId;
-        final apiBaseUrl = Env.apiBaseUrl;
-        if (servicesId == null || servicesId.isEmpty || apiBaseUrl == null || apiBaseUrl.isEmpty) {
-          throw Exception(
-            'Sign in with Apple on Android requires APPLE_SIGN_IN_SERVICES_ID '
-            'and API_BASE_URL to be configured.',
-          );
-        }
-        webOptions = WebAuthenticationOptions(
-          clientId: servicesId,
-          redirectUri: Uri.parse('${apiBaseUrl}v1/auth/callback/apple'),
-        );
-      }
-
       Logger.debug('Requesting Apple credential...');
       final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
         nonce: nonce,
-        webAuthenticationOptions: webOptions,
       );
 
       if (appleCredential.identityToken == null) {
@@ -235,7 +213,8 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl =
+          '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
@@ -521,13 +500,15 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user.updateProfile(displayName: fullName).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              Logger.debug('updateProfile timed out on web platform');
-              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-            },
-          );
+          await user
+              .updateProfile(displayName: fullName)
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  Logger.debug('updateProfile timed out on web platform');
+                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+                },
+              );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -573,7 +554,8 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl =
+          '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
