@@ -124,6 +124,7 @@ numpy==1.26.4
 omegaconf==2.3.0
 onnxruntime==1.19.0
 openai==1.104.2
+scipy==1.14.0
 optuna==3.6.1
 opuslib==3.0.1
 orjson==3.10.6
