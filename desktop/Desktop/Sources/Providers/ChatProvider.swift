@@ -1638,7 +1638,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 prompt: question,
                 systemPrompt: systemPrompt,
                 sessionKey: sessionKey,
-                model: "claude-sonnet-4-20250514",
+                model: "claude-sonnet-4-6",
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
