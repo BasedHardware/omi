@@ -13,11 +13,12 @@ import database.conversations as conversations_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
-from utils.conversations.render import populate_speaker_names, redact_conversation_for_list, redact_conversations_for_list
+from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
+from utils.log_sanitizer import sanitize_pii
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
@@ -182,7 +183,7 @@ def search_conversations(
     end_date: Optional[str] = None,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
-    logger.info(f"search_conversations {uid} query={query} limit={limit}")
+    logger.info(f"search_conversations {uid} query={sanitize_pii(query)} limit={limit}")
 
     starts_at = None
     ends_at = None
@@ -202,8 +203,7 @@ def search_conversations(
         return []
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
-    for conv in conversations:
-        redact_conversation_for_list(conv)
+    redact_conversations_for_list(conversations)
     return conversations
 
 

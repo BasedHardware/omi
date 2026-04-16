@@ -247,12 +247,13 @@ def search_conversations(
     if end_date:
         params["end_date"] = end_date
 
-    logger.info(f"Searching conversations with params: {params}")
+    logger.info(f"Searching conversations with limit={limit}")
     response = requests.get(
         f"{base_url}conversations/search",
         params=params,
         headers={"Authorization": f"Bearer {api_key}"},
     )
+    response.raise_for_status()
     return response.json()
 
 
