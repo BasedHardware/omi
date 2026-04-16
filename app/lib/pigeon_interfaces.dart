@@ -89,7 +89,36 @@ class BleDisconnectEvent {
   final int reasonCode;
   final bool isManual;
 
-  BleDisconnectEvent({required this.timestamp, required this.reason, required this.reasonCode, required this.isManual});
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  final String eventType;
+
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  final int lastRssi;
+
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  final int connectionDurationMs;
+
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  final String appState;
+
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  final int timeToReconnectMs;
+
+  BleDisconnectEvent({
+    required this.timestamp,
+    required this.reason,
+    required this.reasonCode,
+    required this.isManual,
+    required this.eventType,
+    required this.lastRssi,
+    required this.connectionDurationMs,
+    required this.appState,
+    required this.timeToReconnectMs,
+  });
 }
 
 /// Diagnostics data read from native preferences on demand.
@@ -98,7 +127,16 @@ class BleDeviceDiagnostics {
   final int reconnectionCount;
   final int connectedAt;
 
-  BleDeviceDiagnostics({required this.disconnectHistory, required this.reconnectionCount, required this.connectedAt});
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  final int failToConnectCount;
+
+  BleDeviceDiagnostics({
+    required this.disconnectHistory,
+    required this.reconnectionCount,
+    required this.connectedAt,
+    required this.failToConnectCount,
+  });
 }
 
 /// Dart → Native: commands sent from Flutter to the native BLE module.
