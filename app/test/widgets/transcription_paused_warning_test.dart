@@ -46,7 +46,14 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<void> _pumpLocalizedApp(WidgetTester tester, Widget child) async {
+  Future<void> pumpCaptureWidget(WidgetTester tester, CaptureProvider captureProvider) async {
+    final deviceProvider = _StubDeviceProvider();
+    final connectivityProvider = _StubConnectivityProvider();
+    final phoneCallProvider = _StubPhoneCallProvider();
+    addTearDown(deviceProvider.dispose);
+    addTearDown(connectivityProvider.dispose);
+    addTearDown(phoneCallProvider.dispose);
+
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: const [
@@ -56,40 +63,29 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: child),
+        home: Scaffold(
+          body: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<CaptureProvider>.value(value: captureProvider),
+              ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivityProvider),
+              ChangeNotifierProvider<DeviceProvider>.value(value: deviceProvider),
+              ChangeNotifierProvider<PhoneCallProvider>.value(value: phoneCallProvider),
+            ],
+            child: const ConversationCaptureWidget(),
+          ),
+        ),
       ),
     );
     await tester.pump();
   }
 
   group('simplified status indicators (#6672)', () {
-    testWidgets(
-        'shows Listening with recording indicator when transcription service is down during phone mic recording',
-        (tester) async {
+    testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {
       final captureProvider = CaptureProvider();
-      final deviceProvider = _StubDeviceProvider();
-      final connectivityProvider = _StubConnectivityProvider();
-      final phoneCallProvider = _StubPhoneCallProvider();
       addTearDown(captureProvider.dispose);
-      addTearDown(deviceProvider.dispose);
-      addTearDown(connectivityProvider.dispose);
-      addTearDown(phoneCallProvider.dispose);
-      // Set recording state directly — avoid onConnectionStateChanged which
-      // triggers ServiceManager (not available in widget tests).
       captureProvider.updateRecordingState(RecordingState.record);
 
-      await _pumpLocalizedApp(
-        tester,
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<CaptureProvider>.value(value: captureProvider),
-            ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivityProvider),
-            ChangeNotifierProvider<DeviceProvider>.value(value: deviceProvider),
-            ChangeNotifierProvider<PhoneCallProvider>.value(value: phoneCallProvider),
-          ],
-          child: const ConversationCaptureWidget(),
-        ),
-      );
+      await pumpCaptureWidget(tester, captureProvider);
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
@@ -101,5 +97,25 @@ void main() {
       expect(find.text(reconnectText), findsNothing);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
+
+    testWidgets('shows Listening during initialising state', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      captureProvider.updateRecordingState(RecordingState.initialising);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      final listeningText = AppLocalizations.of(context).listening;
+
+      // Initialising should also show "Listening" instead of "Connecting"
+      expect(find.text(listeningText), findsWidgets);
+      expect(find.byIcon(Icons.cloud_off), findsNothing);
+    });
+
+    // Note: Device recording, pause-overrides-Listening, and ConversationCapturingPage
+    // tests require ServiceManager or private _recordingDevice access which are not
+    // available in widget tests without platform channel mocking. These behaviors are
+    // verified via live testing (CP9).
   });
 }
