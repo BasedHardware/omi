@@ -13,6 +13,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
@@ -44,6 +45,11 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    try {
+      await ServiceManager.init();
+    } catch (_) {
+      // Ignore if already initialized or platform channels unavailable
+    }
   });
 
   Future<void> pumpCaptureWidget(WidgetTester tester, CaptureProvider captureProvider) async {
@@ -91,9 +97,7 @@ void main() {
       final listeningText = AppLocalizations.of(context).listening;
       final reconnectText = AppLocalizations.of(context).transcriptionPaused;
 
-      // Should show "Listening" instead of "Recording, reconnecting"
       expect(find.text(listeningText), findsWidgets);
-      // Reconnect-specific UI must be absent
       expect(find.text(reconnectText), findsNothing);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
@@ -108,14 +112,58 @@ void main() {
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
 
-      // Initialising should also show "Listening" instead of "Connecting"
       expect(find.text(listeningText), findsWidgets);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 
-    // Note: Device recording, pause-overrides-Listening, and ConversationCapturingPage
-    // tests require ServiceManager or private _recordingDevice access which are not
-    // available in widget tests without platform channel mocking. These behaviors are
-    // verified via live testing (CP9).
+    testWidgets('shows Listening during device recording when transcription is down', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      // Set up a fake recording device to exercise the device recording path
+      captureProvider
+          .updateRecordingDevice(BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50));
+      captureProvider.updateRecordingState(RecordingState.deviceRecord);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      final listeningText = AppLocalizations.of(context).listening;
+      final reconnectText = AppLocalizations.of(context).transcriptionPaused;
+
+      expect(find.text(listeningText), findsWidgets);
+      expect(find.text(reconnectText), findsNothing);
+      expect(find.byIcon(Icons.cloud_off), findsNothing);
+    });
+
+    testWidgets('paused state overrides Listening during device recording', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      captureProvider
+          .updateRecordingDevice(BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50));
+      captureProvider.updateRecordingState(RecordingState.deviceRecord);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      final listeningText = AppLocalizations.of(context).listening;
+      final mutedText = AppLocalizations.of(context).muted;
+
+      // Initially should show Listening
+      expect(find.text(listeningText), findsWidgets);
+
+      // Simulate device pause: set isPaused and change to pause state
+      captureProvider.updateRecordingState(RecordingState.pause);
+      // isPaused is set via pauseDeviceRecording which needs BLE — set it directly
+      // by triggering the internal pause flow
+      try {
+        await captureProvider.pauseDeviceRecording();
+      } catch (_) {
+        // BLE operations fail in test — but isPaused flag is set before the throw
+      }
+      await tester.pump();
+
+      // Muted/Paused should override Listening for device recording
+      expect(find.text(mutedText), findsWidgets);
+    });
   });
 }
