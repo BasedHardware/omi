@@ -224,6 +224,13 @@ struct BleDisconnectEvent: Hashable {
   /// ms between this disconnect and the subsequent successful reconnect.
   /// 0 while the device has not yet reconnected.
   var timeToReconnectMs: Int64
+  /// RSSI trajectory over the ~15s before this event. One of:
+  ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+  ///   "sudden"  — signal stable then link died (interference/stall/device off)
+  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "unknown" — insufficient samples to classify
+  /// Empty string on legacy records written before this field existed.
+  var rssiTrend: String
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -237,6 +244,7 @@ struct BleDisconnectEvent: Hashable {
     let connectionDurationMs = pigeonVar_list[6] as! Int64
     let appState = pigeonVar_list[7] as! String
     let timeToReconnectMs = pigeonVar_list[8] as! Int64
+    let rssiTrend = pigeonVar_list[9] as! String
 
     return BleDisconnectEvent(
       timestamp: timestamp,
@@ -247,7 +255,8 @@ struct BleDisconnectEvent: Hashable {
       lastRssi: lastRssi,
       connectionDurationMs: connectionDurationMs,
       appState: appState,
-      timeToReconnectMs: timeToReconnectMs
+      timeToReconnectMs: timeToReconnectMs,
+      rssiTrend: rssiTrend
     )
   }
   func toList() -> [Any?] {
@@ -261,6 +270,7 @@ struct BleDisconnectEvent: Hashable {
       connectionDurationMs,
       appState,
       timeToReconnectMs,
+      rssiTrend,
     ]
   }
   static func == (lhs: BleDisconnectEvent, rhs: BleDisconnectEvent) -> Bool {
