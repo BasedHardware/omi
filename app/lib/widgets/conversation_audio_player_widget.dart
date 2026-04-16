@@ -49,18 +49,24 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   StreamSubscription<Object>? _errorSubscription;
 
   SyncProvider? _syncProvider;
+  bool _initialSetupDone = false;
 
   @override
   void initState() {
     super.initState();
     _calculateTotalDuration();
-    _setupAudioPlayer();
+    // _setupAudioPlayer() is deferred to didChangeDependencies so _syncProvider
+    // is guaranteed to be set before _buildLocalAudioSources() reads it.
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncProvider = context.read<SyncProvider>();
+    if (!_initialSetupDone) {
+      _initialSetupDone = true;
+      _setupAudioPlayer();
+    }
   }
 
   @override
@@ -104,11 +110,21 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
     try {
       // Prefer local WAL files when available (avoids cloud egress, works offline)
-      final localSources = await _buildLocalAudioSources();
+      final localResult = await _buildLocalAudioSources();
 
       ConcatenatingAudioSource playlist;
-      if (localSources != null) {
-        playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: localSources);
+      if (localResult != null) {
+        final (sources, wals) = localResult;
+        // Recalculate track offsets from WAL durations — WAL chunk count may
+        // differ from server audioFiles count, so server metadata is wrong here.
+        double offset = 0;
+        _trackStartOffsets = [];
+        for (final wal in wals) {
+          _trackStartOffsets.add(Duration(milliseconds: (offset * 1000).toInt()));
+          offset += wal.seconds;
+        }
+        _totalDuration = Duration(milliseconds: (offset * 1000).toInt());
+        playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: sources);
       } else {
         final headers = await getAudioHeaders();
         final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
@@ -171,9 +187,9 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   }
 
   /// Attempts to build audio sources from local WAL files stored on device.
-  /// Returns a list of AudioSource items (sorted by timerStart) when all WALs for
-  /// this conversation are available locally, or null to fall back to cloud streaming.
-  Future<List<AudioSource>?> _buildLocalAudioSources() async {
+  /// Returns (sources, wals) sorted by timerStart when all WALs for this
+  /// conversation are available locally, or null to fall back to cloud streaming.
+  Future<(List<AudioSource>, List<Wal>)?> _buildLocalAudioSources() async {
     try {
       final List<Wal> allWals = _syncProvider?.allWals ?? [];
       final conversationWals = allWals
@@ -202,7 +218,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       }
 
       Logger.debug('Using ${sources.length} local WAL file(s) for conversation ${widget.conversation.id}');
-      return sources;
+      return (sources, conversationWals);
     } catch (e) {
       Logger.debug('Error resolving local WAL audio sources: $e');
       return null;
