@@ -1,6 +1,5 @@
-# Modal GPU services requirements — extends backend deps with torch/pyannote/speechbrain
+# GPU services requirements — extends backend deps with torch/pyannote/speechbrain
 -r ../requirements.txt
-modal==0.63.94
 torch==2.3.1
 torchaudio==2.3.1
 pyannote.audio==3.3.1
