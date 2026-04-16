@@ -1224,8 +1224,9 @@ class TestOnnxStateAndConcurrency:
             patch('utils.stt.vad_gate.run_vad_window', _stateful_run_vad_window),
         ):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
-            out1 = gate.process_audio(_make_pcm(40), 1000.0)
-            out2 = gate.process_audio(_make_pcm(40), 1000.04)
+            # 16ms = exactly 1 VAD window (256 samples at 16kHz)
+            out1 = gate.process_audio(_make_pcm(16), 1000.0)
+            out2 = gate.process_audio(_make_pcm(16), 1000.016)
 
             assert not out1.is_speech
             assert out2.is_speech
@@ -1250,7 +1251,7 @@ class TestOnnxStateAndConcurrency:
             gate1 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u1', session_id='s1')
             gate2 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u2', session_id='s2')
             barrier = threading.Barrier(3)
-            chunk = _make_pcm(40)  # >= 1 VAD window at 16kHz
+            chunk = _make_pcm(16)  # exactly 1 VAD window (256 samples at 16kHz)
 
             def _run(gate, wall_time):
                 barrier.wait()
@@ -1290,7 +1291,7 @@ class TestOnnxStateAndConcurrency:
             barrier = threading.Barrier(num_callers + 1)
             results = [None] * num_callers
             errors = [None] * num_callers
-            chunk = _make_pcm(40)
+            chunk = _make_pcm(16)  # exactly 1 VAD window
 
             def _run(idx):
                 try:
