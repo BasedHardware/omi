@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals.dart';
+import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -43,11 +48,19 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   StreamSubscription<SequenceState?>? _sequenceSubscription;
   StreamSubscription<Object>? _errorSubscription;
 
+  SyncProvider? _syncProvider;
+
   @override
   void initState() {
     super.initState();
     _calculateTotalDuration();
     _setupAudioPlayer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncProvider = context.read<SyncProvider>();
   }
 
   @override
@@ -90,40 +103,41 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     });
 
     try {
-      final headers = await getAudioHeaders();
+      // Prefer local WAL files when available (avoids cloud egress, works offline)
+      final localSources = await _buildLocalAudioSources();
 
-      final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
-      final urls = getConversationAudioUrls(
-        conversationId: widget.conversation.id,
-        audioFileIds: audioFileIds,
-        format: 'wav',
-      );
-
-      // Create concatenating audio source for gapless playback
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: urls.map((url) {
-          return AudioSource.uri(Uri.parse(url), headers: headers);
-        }).toList(),
-      );
+      ConcatenatingAudioSource playlist;
+      if (localSources != null) {
+        playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: localSources);
+      } else {
+        final headers = await getAudioHeaders();
+        final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
+        final urls = getConversationAudioUrls(
+          conversationId: widget.conversation.id,
+          audioFileIds: audioFileIds,
+          format: 'wav',
+        );
+        playlist = ConcatenatingAudioSource(
+          useLazyPreparation: true,
+          children: urls.map((url) => AudioSource.uri(Uri.parse(url), headers: headers)).toList(),
+        );
+      }
 
       // Listen for playback errors
       _errorSubscription?.cancel();
-      _errorSubscription = _audioPlayer.playbackEventStream
-          .handleError((error) {
-            Logger.debug('Playback error: $error');
-            if (mounted && _retryCount < _maxRetries) {
-              _retryCount++;
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) _setupAudioPlayer();
-              });
-            } else if (mounted) {
-              setState(() {
-                _errorMessage = 'Playback error: ${error.toString()}';
-              });
-            }
-          })
-          .listen((_) {});
+      _errorSubscription = _audioPlayer.playbackEventStream.handleError((error) {
+        Logger.debug('Playback error: $error');
+        if (mounted && _retryCount < _maxRetries) {
+          _retryCount++;
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) _setupAudioPlayer();
+          });
+        } else if (mounted) {
+          setState(() {
+            _errorMessage = 'Playback error: ${error.toString()}';
+          });
+        }
+      }).listen((_) {});
 
       await _audioPlayer.setAudioSource(playlist, preload: true);
 
@@ -153,6 +167,45 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           _errorMessage = 'Failed to load audio. Please try again.';
         });
       }
+    }
+  }
+
+  /// Attempts to build audio sources from local WAL files stored on device.
+  /// Returns a list of AudioSource items (sorted by timerStart) when all WALs for
+  /// this conversation are available locally, or null to fall back to cloud streaming.
+  Future<List<AudioSource>?> _buildLocalAudioSources() async {
+    try {
+      final List<Wal> allWals = _syncProvider?.allWals ?? [];
+      final conversationWals = allWals
+          .where(
+            (w) =>
+                w.conversationId == widget.conversation.id &&
+                w.storage == WalStorage.disk &&
+                w.filePath != null &&
+                w.filePath!.isNotEmpty,
+          )
+          .toList()
+        ..sort((a, b) => a.timerStart.compareTo(b.timerStart));
+
+      if (conversationWals.isEmpty) return null;
+
+      final audioUtils = AudioPlayerUtils.instance;
+      final sources = <AudioSource>[];
+      for (final wal in conversationWals) {
+        final localPath = await audioUtils.ensureAudioFileExists(wal);
+        if (localPath == null || !File(localPath).existsSync()) {
+          // A WAL file is missing or unconvertible — fall back to cloud entirely
+          Logger.debug('Local WAL file missing for ${wal.id}, falling back to cloud');
+          return null;
+        }
+        sources.add(AudioSource.uri(Uri.file(localPath)));
+      }
+
+      Logger.debug('Using ${sources.length} local WAL file(s) for conversation ${widget.conversation.id}');
+      return sources;
+    } catch (e) {
+      Logger.debug('Error resolving local WAL audio sources: $e');
+      return null;
     }
   }
 
@@ -295,9 +348,9 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(
-                                  0,
-                                  _totalDuration.inMilliseconds.toDouble(),
-                                ),
+                                      0,
+                                      _totalDuration.inMilliseconds.toDouble(),
+                                    ),
                                 max: _totalDuration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
                                 activeColor: Colors.deepPurpleAccent,
                                 inactiveColor: Colors.grey.shade700,
