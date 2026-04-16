@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -63,6 +65,15 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Defensive guard: never load the Stripe checkout WebView when subscription
+    // UI is gated for App Store review, even if a stale entry point reached here.
+    if (!context.watch<UsageProvider>().showSubscriptionUI) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop(false);
+      });
+      return const SizedBox.shrink();
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
