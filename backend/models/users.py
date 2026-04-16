@@ -14,8 +14,10 @@ class WebhookType(str, Enum):
 
 class PlanType(str, Enum):
     basic = 'basic'
-    unlimited = 'unlimited'
-    pro = 'pro'
+    unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
+    pro = 'pro'  # LEGACY alias for Architect — kept so old Stripe price IDs still map
+    oracle = 'oracle'
+    architect = 'architect'
 
 
 class SubscriptionStatus(str, Enum):
@@ -69,10 +71,11 @@ class PricingOption(BaseModel):
 
 
 class SubscriptionPlan(BaseModel):
-    id: str  # e.g., 'unlimited'
+    id: str  # e.g., 'oracle'
     title: str
     features: List[str] = []
     prices: List[PricingOption] = []
+    legacy: bool = False  # hide from new users; keep visible if they're already subscribed
 
 
 class UserSubscriptionResponse(BaseModel):

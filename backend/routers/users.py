@@ -66,6 +66,7 @@ from utils.subscription import (
     get_plan_features,
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
+    filter_plans_for_user,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -826,9 +827,12 @@ def get_user_subscription_endpoint(
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading
+    # Build available plans for upgrading. Legacy plans (Unlimited, old Pro)
+    # only appear if the user is already on that plan — new users see only
+    # Oracle + Architect.
     available_plans: List[SubscriptionPlan] = []
-    for definition in get_paid_plan_definitions():
+    definitions_for_user = filter_plans_for_user(get_paid_plan_definitions(), subscription.plan)
+    for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
         annual_price_id = definition["annual_price_id"]
@@ -884,6 +888,7 @@ def get_user_subscription_endpoint(
                     title=definition["title"],
                     features=get_plan_features(definition["plan_type"]),
                     prices=plan_prices,
+                    legacy=bool(definition.get("legacy")),
                 )
             )
 
