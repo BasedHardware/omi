@@ -1392,6 +1392,10 @@ async function runPiMonoMode(): Promise<void> {
         process.exit(0);
         break;
 
+      case "tool_result":
+        resolveToolCall(msg as { callId: string; result: string });
+        break;
+
       default:
         logErr(`Unknown message type (pi-mono): ${(msg as any).type}`);
     }
