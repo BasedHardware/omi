@@ -106,6 +106,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  - name: HOSTED_VAD_API_URL
+    value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
     value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
