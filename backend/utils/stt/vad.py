@@ -3,6 +3,7 @@ import threading
 
 import numpy as np
 import onnxruntime as ort
+import requests
 from fastapi import HTTPException
 from pydub import AudioSegment
 
@@ -78,10 +79,7 @@ def run_vad_window(audio_window: np.ndarray, state: np.ndarray) -> tuple:
 
 
 def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
-    """Run VAD on an audio file, returning speech segments.
-
-    Uses in-process ONNX Silero-VAD (16kHz, 512-sample windows).
-    """
+    """Uses hosted pyannote VAD (best quality) with local ONNX Silero fallback."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
         if exists := redis_db.get_generic_cache(caching_key):
@@ -89,7 +87,20 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 return exists
             return len(exists) == 0
 
-    segments = _run_file_vad(file_path)
+    segments = None
+    hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
+    if hosted_vad_url:
+        try:
+            with open(file_path, 'rb') as file:
+                files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
+                response = requests.post(hosted_vad_url, files=files, timeout=300)
+                response.raise_for_status()
+                segments = response.json()
+        except Exception as e:
+            logger.warning(f'Hosted VAD unavailable, falling back to local ONNX VAD for {file_path}: {e}')
+
+    if segments is None:
+        segments = _run_file_vad(file_path)
 
     if cache:
         redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
