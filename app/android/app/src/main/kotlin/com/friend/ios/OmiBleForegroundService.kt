@@ -45,6 +45,23 @@ class OmiBleForegroundService : Service() {
         private const val KEY_RECONNECT_COUNT = "reconnect_count"
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
         private const val MAX_DISCONNECT_HISTORY = 20
+        private const val RSSI_TREND_WINDOW_MS = 15_000L
+        private const val RSSI_TREND_FADING_DROP_DB = 10
+
+        /** Classify the RSSI trajectory in the window before [nowMs]. See BleDisconnectEvent.rssiTrend
+         *  for the semantics of each label. */
+        private fun classifyRssiTrend(samples: List<Pair<Long, Int>>, nowMs: Long): String {
+            val windowStart = nowMs - RSSI_TREND_WINDOW_MS
+            val recent = samples.filter { it.first >= windowStart }
+            if (recent.isEmpty()) return "gap"
+            if (recent.size < 3) return "unknown"
+            val third = (recent.size / 3).coerceAtLeast(1)
+            val oldestAvg = recent.take(third).sumOf { it.second } / third
+            val newestAvg = recent.takeLast(third).sumOf { it.second } / third
+            // RSSI is negative; a larger drop = newestAvg more negative than oldestAvg.
+            val dropDb = oldestAvg - newestAvg
+            return if (dropDb >= RSSI_TREND_FADING_DROP_DB) "fading" else "sudden"
+        }
 
         @Volatile
         var instance: OmiBleForegroundService? = null
@@ -604,6 +621,11 @@ class OmiBleForegroundService : Service() {
             0L
         }
 
+        val rssiSnapshot = bleManager.rssiHistory[addr]?.let { deque ->
+            synchronized(deque) { deque.toList() }
+        } ?: emptyList()
+        val trend = classifyRssiTrend(rssiSnapshot, now)
+
         val event = JSONObject().apply {
             put("timestamp", now)
             put("reason", if (isManual) "manual" else hciStatusDescription(status))
@@ -614,6 +636,7 @@ class OmiBleForegroundService : Service() {
             put("connectionDurationMs", durationMs)
             put("appState", currentAppState())
             put("timeToReconnectMs", 0L)
+            put("rssiTrend", trend)
         }
         history.put(event)
 
@@ -685,7 +708,8 @@ class OmiBleForegroundService : Service() {
                 lastRssi = obj.optLong("lastRssi", 0L),
                 connectionDurationMs = obj.optLong("connectionDurationMs", 0L),
                 appState = obj.optString("appState", ""),
-                timeToReconnectMs = obj.optLong("timeToReconnectMs", 0L)
+                timeToReconnectMs = obj.optLong("timeToReconnectMs", 0L),
+                rssiTrend = obj.optString("rssiTrend", "")
             ))
         }
 
