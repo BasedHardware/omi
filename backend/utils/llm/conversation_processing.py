@@ -640,7 +640,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
 
     {format_instructions}'''.replace(
         '    ', ''
@@ -723,7 +723,7 @@ def get_reprocess_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
 
     Content:
     {full_context}
