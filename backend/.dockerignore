@@ -1,0 +1,15 @@
+charts/
+_temp/
+tests/
+scripts/
+testing/
+migrations/
+migration/
+.pytest_cache/
+.github/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+diarizer/
+agent-proxy/
