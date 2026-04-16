@@ -1,6 +1,6 @@
 """
-Backend-controlled config for hiding subscription UI in specific app versions
-(e.g. during App Store review, while we wait to ship full IAP).
+Server-driven config for toggling subscription-surface visibility per
+platform and app version.
 
 Stored in Firestore so the flag can be flipped without a redeploy:
 
@@ -8,7 +8,7 @@ Stored in Firestore so the flag can be flipped without a redeploy:
   Document ID: ios | android
   Fields:
     hidden_versions: list[str]   # e.g. ["1.0.531", "1.0.531+607"]
-    reviewer_uids:   list[str]   # demo accounts that should always be hidden
+    reviewer_uids:   list[str]   # specific UIDs to always hide for
 
 A version in `hidden_versions` matches the app version using the same
 semantic-vs-build comparison the announcements module already uses, so an
@@ -37,7 +37,7 @@ def get_review_config(platform: str) -> dict:
 
 
 def should_hide_subscription_ui(uid: str, platform: Optional[str], app_version: Optional[str]) -> bool:
-    """True when the iOS subscription UI must be hidden for this caller."""
+    """True when subscription surfaces should be hidden for this caller."""
     if not platform or platform.lower() != "ios":
         return False
 
