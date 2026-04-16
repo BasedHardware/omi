@@ -491,7 +491,7 @@ interface OmiToolSpec {
   required: string[];
 }
 
-const OMI_TOOL_SPECS: OmiToolSpec[] = [
+export const OMI_TOOL_SPECS: OmiToolSpec[] = [
   { name: "execute_sql", label: "Execute SQL", description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only (SELECT only). Key tables: screenshots, transcription_sessions, action_items, memories, staged_tasks, focus_sessions, observations, goals, indexed_files.", snippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)", properties: { query: { type: "string", description: "SQL query to execute" } }, required: ["query"] },
   { name: "semantic_search", label: "Semantic Search", description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.", snippet: "semantic_search - Search screen history by meaning", properties: { query: { type: "string", description: "Natural language search query" }, days: { type: "number", description: "Days to search back (default 7)" }, app_filter: { type: "string", description: "Filter to a specific app" } }, required: ["query"] },
   { name: "get_daily_recap", label: "Daily Recap", description: "Pre-formatted daily activity recap: app usage, conversations, tasks, focus, memories, observations.", snippet: "get_daily_recap - Get a daily activity summary", properties: { days_ago: { type: "number", description: "0=today, 1=yesterday, 7=past week" } }, required: [] },
@@ -507,7 +507,7 @@ const OMI_TOOL_SPECS: OmiToolSpec[] = [
   { name: "update_action_item", label: "Update Action Item", description: "Update task status, description, or due date.", snippet: "update_action_item - Update an existing task", properties: { action_item_id: { type: "string", description: "Task ID (required)" }, completed: { type: "boolean" }, description: { type: "string" }, due_at: { type: "string" } }, required: ["action_item_id"] },
 ];
 
-const OMI_TOOL_TIMEOUT_MS = 30_000;
+export const OMI_TOOL_TIMEOUT_MS = 30_000;
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -624,4 +624,28 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // Register Omi-specific tools (execute_sql, semantic_search, etc.)
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
   void registerOmiTools(pi);
+}
+
+// ---------------------------------------------------------------------------
+// Test-only exports — relay internals for unit tests
+// ---------------------------------------------------------------------------
+
+/** Test-only: connect the pipe relay to a socket path. */
+export const __connectOmiPipeForTest = connectOmiPipe;
+
+/** Test-only: call a Swift tool through the pipe relay. */
+export const __callSwiftToolForTest = callSwiftTool;
+
+/** Test-only: access to pending calls map for assertions. */
+export const __omiPendingCallsForTest = omiPendingCalls;
+
+/** Test-only: reset pipe state between tests. */
+export function __resetOmiPipeForTest(): void {
+  if (omiPipeConnection) {
+    omiPipeConnection.destroy();
+    omiPipeConnection = null;
+  }
+  omiPipeBuffer = "";
+  omiCallIdCounter = 0;
+  omiPendingCalls.clear();
 }
