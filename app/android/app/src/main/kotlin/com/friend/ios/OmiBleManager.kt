@@ -48,6 +48,11 @@ class OmiBleManager private constructor(private val application: Application) {
         @Volatile
         var isFlutterAlive: Boolean = false
 
+        /** True while MainActivity is resumed. Set from onResume/onPause. Used to tag
+         *  diagnostic disconnect events with the app lifecycle state at the moment of the event. */
+        @Volatile
+        var isAppForeground: Boolean = false
+
         fun initialize(application: Application) {
             if (_instance == null) {
                 synchronized(this) {
@@ -99,6 +104,10 @@ class OmiBleManager private constructor(private val application: Application) {
     private val rssiKeepAliveInterval = 3000L // ms
     @Volatile
     var isRssiStreamingEnabled = false
+
+    /// Most recent RSSI per device (uppercase MAC). Used by the foreground service
+    /// to annotate disconnect events so we can tell range-driven drops from healthy-signal drops.
+    val lastRssi = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -657,8 +666,9 @@ class OmiBleManager private constructor(private val application: Application) {
                 Log.w(TAG, "RSSI read failed: status=$status for ${gatt.device.address}")
                 return
             }
+            val address = gatt.device.address.uppercase()
+            lastRssi[address] = rssi
             if (isRssiStreamingEnabled) {
-                val address = gatt.device.address.uppercase()
                 mainHandler.post {
                     flutterApi?.onRssiUpdate(address, rssi.toLong()) {}
                 }
