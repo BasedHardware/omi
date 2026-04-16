@@ -3869,9 +3869,10 @@ struct NotificationSettingsResponse: Codable {
 }
 
 enum SubscriptionPlanType: String, Codable {
-  case basic
-  case unlimited
-  case pro
+  case basic      // display "Free"
+  case unlimited  // legacy — display "Unlimited (legacy)"
+  case pro        // display "Architect" — same Stripe IDs, pure rename
+  case `operator` // new — display "Operator"
 }
 
 enum SubscriptionStatusType: String, Codable {
