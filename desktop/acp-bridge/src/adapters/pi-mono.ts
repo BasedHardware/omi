@@ -115,17 +115,23 @@ function mapModel(model: string): string {
  *
  *  Resolution order:
  *  1. $PI_MONO_PATH (test/dev override)
- *  2. acp-bridge/node_modules/.bin/pi relative to this compiled file
- *     (= <App>.app/Contents/Resources/acp-bridge/node_modules/.bin/pi when
- *     shipped, or <repo>/desktop/acp-bridge/node_modules/.bin/pi in dev)
- *  3. Fall back to "pi" on PATH (dev machines only; the shipped app never
- *     reaches this branch because node_modules is bundled by run.sh/build.sh)
+ *  2. The actual pi-coding-agent dist/cli.js (bypasses .bin symlinks that
+ *     get resolved by ditto during app bundle install)
+ *  3. acp-bridge/node_modules/.bin/pi (fallback for dev where symlinks work)
+ *  4. Fall back to "pi" on PATH (dev machines only)
  */
 function resolveBundledPi(): string {
   // this file compiles to acp-bridge/dist/adapters/pi-mono.js
-  const bundled = new URL("../../node_modules/.bin/pi", import.meta.url)
+  // Prefer the direct package path — .bin/pi is a symlink that ditto resolves
+  // into a flat copy, breaking its relative import of ./main.js
+  const direct = new URL(
+    "../../node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
+    import.meta.url
+  ).pathname;
+  if (existsSync(direct)) return direct;
+  const binFallback = new URL("../../node_modules/.bin/pi", import.meta.url)
     .pathname;
-  if (existsSync(bundled)) return bundled;
+  if (existsSync(binFallback)) return binFallback;
   return "pi";
 }
 
