@@ -93,8 +93,19 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
     guard let message else { return }
 
+    // The AI message's id flips from a local UUID to the backend-assigned id
+    // when the response is persisted at the end of streaming. That's the SAME
+    // response, not a new one. When we've already streamed content for this
+    // response and the incoming text is a continuation (prefix-matches what
+    // we streamed), just adopt the new id — don't reset playback, otherwise
+    // the whole answer gets re-enqueued and replays from the top.
     if currentResponseID != message.id {
-      resetPlaybackPipeline(clearMode: false)
+      let incomingText = Self.cleanedPlaybackText(from: message)
+      let isBackendIdSwap =
+        !streamedText.isEmpty && incomingText.hasPrefix(streamedText)
+      if !isBackendIdSwap {
+        resetPlaybackPipeline(clearMode: false)
+      }
       currentResponseID = message.id
       interruptedResponseID = shouldInterruptNextResponse ? message.id : nil
       shouldInterruptNextResponse = false
@@ -272,12 +283,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   func interruptCurrentResponse() {
+    // Only flag the current response as interrupted if we actually have one.
+    // Previously this set shouldInterruptNextResponse=true even when nothing
+    // was playing — which poisoned the very next response (including the
+    // first voice query after app launch) so its chunks were swallowed and
+    // no audio ever played.
     if let currentResponseID {
       interruptedResponseID = currentResponseID
-      shouldInterruptNextResponse = false
-    } else {
-      shouldInterruptNextResponse = true
     }
+    shouldInterruptNextResponse = false
     resetPlaybackPipeline(clearMode: false)
   }
 
