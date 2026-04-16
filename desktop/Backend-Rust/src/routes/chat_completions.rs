@@ -45,13 +45,13 @@ struct ModelCost {
 
 fn model_cost(upstream_model: &str) -> ModelCost {
     match upstream_model {
-        "claude-sonnet-4-20250514" => ModelCost {
+        "claude-sonnet-4-6" => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
             cache_write_per_token: 3.75 / 1_000_000.0,
         },
-        "claude-opus-4-20250514" => ModelCost {
+        "claude-opus-4-6" => ModelCost {
             input_per_token: 15.0 / 1_000_000.0,
             output_per_token: 75.0 / 1_000_000.0,
             cache_read_per_token: 1.50 / 1_000_000.0,
@@ -900,7 +900,7 @@ mod tests {
     fn test_resolve_model_sonnet() {
         let route = resolve_model("omi-sonnet").unwrap();
         assert_eq!(route.public_model, "omi-sonnet");
-        assert_eq!(route.upstream_model, "claude-sonnet-4-20250514");
+        assert_eq!(route.upstream_model, "claude-sonnet-4-6");
         assert_eq!(route.provider, Provider::Anthropic);
     }
 
@@ -908,25 +908,25 @@ mod tests {
     fn test_resolve_model_opus() {
         let route = resolve_model("omi-opus").unwrap();
         assert_eq!(route.public_model, "omi-opus");
-        assert_eq!(route.upstream_model, "claude-opus-4-20250514");
+        assert_eq!(route.upstream_model, "claude-opus-4-6");
     }
 
     #[test]
     fn test_resolve_model_claude_aliases() {
         let route = resolve_model("claude-opus-4-6").unwrap();
-        assert_eq!(route.upstream_model, "claude-opus-4-20250514");
+        assert_eq!(route.upstream_model, "claude-opus-4-6");
 
         let route = resolve_model("claude-sonnet-4-6").unwrap();
-        assert_eq!(route.upstream_model, "claude-sonnet-4-20250514");
+        assert_eq!(route.upstream_model, "claude-sonnet-4-6");
     }
 
     #[test]
-    fn test_resolve_model_full_upstream_ids() {
+    fn test_resolve_model_legacy_dated_ids() {
         let route = resolve_model("claude-opus-4-20250514").unwrap();
-        assert_eq!(route.upstream_model, "claude-opus-4-20250514");
+        assert_eq!(route.upstream_model, "claude-opus-4-6");
 
         let route = resolve_model("claude-sonnet-4-20250514").unwrap();
-        assert_eq!(route.upstream_model, "claude-sonnet-4-20250514");
+        assert_eq!(route.upstream_model, "claude-sonnet-4-6");
     }
 
     #[test]
@@ -976,7 +976,7 @@ mod tests {
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: 0,
         };
-        let cost = compute_cost(&usage, "claude-sonnet-4-20250514");
+        let cost = compute_cost(&usage, "claude-sonnet-4-6");
         // input: 1000 * 3/1M = 0.003, output: 500 * 15/1M = 0.0075
         let expected = 0.003 + 0.0075;
         assert!((cost - expected).abs() < 1e-10);
@@ -1030,8 +1030,8 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
-        assert_eq!(result.model, "claude-sonnet-4-20250514");
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        assert_eq!(result.model, "claude-sonnet-4-6");
         assert_eq!(result.system, Some("You are helpful.".to_string()));
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
@@ -1059,7 +1059,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, MAX_TOKENS_CAP);
     }
 
@@ -1082,7 +1082,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
     }
 
@@ -1119,7 +1119,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.system, Some("You are terse.".to_string()));
         assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
@@ -1147,7 +1147,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, 2048);
     }
 
@@ -1171,7 +1171,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, 4096);
     }
 
@@ -1196,7 +1196,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, MAX_TOKENS_CAP);
     }
 
@@ -1242,7 +1242,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.messages.len(), 3);
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.messages[1].role, "assistant");
@@ -1281,7 +1281,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         let tools = result.tools.unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "get_weather");
@@ -1296,7 +1296,7 @@ mod tests {
         let resp = AnthropicResponse {
             id: "msg_123".to_string(),
             response_type: "message".to_string(),
-            model: "claude-sonnet-4-20250514".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
             role: "assistant".to_string(),
             content: vec![AnthropicContentBlock::Text {
                 text: "Hello!".to_string(),
@@ -1332,7 +1332,7 @@ mod tests {
         let resp = AnthropicResponse {
             id: "msg_456".to_string(),
             response_type: "message".to_string(),
-            model: "claude-sonnet-4-20250514".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
             role: "assistant".to_string(),
             content: vec![
                 AnthropicContentBlock::Text {
@@ -1373,7 +1373,7 @@ mod tests {
         let resp = AnthropicResponse {
             id: "msg_abc".to_string(),
             response_type: "message".to_string(),
-            model: "claude-sonnet-4-20250514".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
             role: "assistant".to_string(),
             content: vec![AnthropicContentBlock::ToolUse {
                 id: "toolu_def".to_string(),
@@ -1500,7 +1500,7 @@ mod tests {
             tool_choice: Some(json!("none")),
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         // tool_choice "none" must strip tools entirely
         assert!(result.tools.is_none(), "tools should be stripped when tool_choice is 'none'");
         assert!(result.tool_choice.is_none());
@@ -1525,7 +1525,7 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-20250514");
+        let result = translate_request(&req, "claude-sonnet-4-6");
         assert!(result.is_err());
     }
 
@@ -1616,7 +1616,7 @@ mod tests {
             tools: None,
             tool_choice: Some(json!("bogus")),
         };
-        let result = translate_request(&req, "claude-sonnet-4-20250514");
+        let result = translate_request(&req, "claude-sonnet-4-6");
         assert!(result.is_err(), "invalid tool_choice must propagate as Err");
     }
 
@@ -1640,7 +1640,7 @@ mod tests {
             tools: None,
             tool_choice: None,
         };
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, 0, "max_tokens=0 should be respected (capped at min)");
     }
 
@@ -1662,7 +1662,7 @@ mod tests {
             tools: None,
             tool_choice: None,
         };
-        let result = translate_request(&req, "claude-sonnet-4-20250514").unwrap();
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.max_tokens, MAX_TOKENS_CAP, "max_tokens at exactly the cap should be preserved");
     }
 
