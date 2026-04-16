@@ -1929,9 +1929,47 @@ struct SettingsContentView: View {
         }
       }
 
+      voicePicker(settingId: "floatingbar.voice")
+        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
+        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
         .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
         .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+    }
+  }
+
+  private func voicePicker(settingId: String) -> some View {
+    settingsCard(settingId: settingId) {
+      HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Voice")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
+          )
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textSecondary)
+        }
+        Spacer()
+        Picker("", selection: $shortcutSettings.selectedVoiceID) {
+          Section("Female") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+          Section("Male") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(width: 180)
+        .tint(OmiColors.purplePrimary)
+      }
     }
   }
 
