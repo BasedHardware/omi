@@ -103,10 +103,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQueryFromVoice: Bool = false
 
     // Model selection
-    @Published var selectedModel: String = "claude-sonnet-4-6"
+    @Published var selectedModel: String = "claude-haiku-4-5-20251001"
 
     /// Available models for the floating bar picker
     static let availableModels: [(id: String, label: String)] = [
+        ("claude-haiku-4-5-20251001", "Haiku (fastest)"),
         ("claude-sonnet-4-6", "Sonnet"),
         ("claude-opus-4-6", "Opus"),
     ]
