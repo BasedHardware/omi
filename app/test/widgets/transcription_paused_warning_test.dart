@@ -54,7 +54,8 @@ void main() {
   }
 
   group('simplified status indicators (#6672)', () {
-    testWidgets('shows Listening with recording indicator when transcription service is down during phone mic recording',
+    testWidgets(
+        'shows Listening with recording indicator when transcription service is down during phone mic recording',
         (tester) async {
       final captureProvider = CaptureProvider();
       final deviceProvider = _StubDeviceProvider();
@@ -63,7 +64,8 @@ void main() {
       addTearDown(deviceProvider.dispose);
       addTearDown(connectivityProvider.dispose);
       captureProvider.onConnectionStateChanged(true);
-      captureProvider.updateRecordingState(RecordingState.pause);
+      // Use RecordingState.record to exercise the actual active phone-mic path
+      captureProvider.updateRecordingState(RecordingState.record);
 
       await _pumpLocalizedApp(
         tester,
@@ -79,11 +81,13 @@ void main() {
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
+      final reconnectText = AppLocalizations.of(context).transcriptionPaused;
 
       // Should show "Listening" instead of "Recording, reconnecting"
       expect(find.text(listeningText), findsWidgets);
-      // RecordingStatusIndicator should be present (not ReconnectingStatusIndicator)
-      expect(find.byType(RecordingStatusIndicator), findsWidgets);
+      // Reconnect-specific UI must be absent
+      expect(find.text(reconnectText), findsNothing);
+      expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 
     testWidgets('shows Listening in capturing page app bar when transcript service is down', (tester) async {
