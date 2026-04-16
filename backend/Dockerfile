@@ -1,4 +1,4 @@
-FROM python:3.11 AS builder
+FROM python:3.11-slim AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -35,7 +35,7 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y install ffmpeg curl && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled liblc3 library and wheel from builder
 COPY --from=builder /usr/local/lib/liblc3.so* /usr/local/lib/

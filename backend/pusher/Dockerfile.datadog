@@ -1,9 +1,9 @@
-FROM python:3.11 AS builder
+FROM python:3.11-slim AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
-COPY backend/requirements.txt /tmp/requirements.txt
+COPY backend/pusher/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -11,12 +11,18 @@ FROM python:3.11-slim
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/* && \
+RUN apt-get update && apt-get -y install ffmpeg curl && rm -rf /var/lib/apt/lists/* && \
     pip install --target /dd_tracer/python/ ddtrace
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=gcr.io/datadoghq/serverless-init:1 /datadog-init /app/datadog-init
-COPY backend/ .
+
+# Whitelist-copy only the modules pusher reaches
+COPY backend/database/ ./database/
+COPY backend/models/ ./models/
+COPY backend/routers/ ./routers/
+COPY backend/utils/ ./utils/
+COPY backend/pusher/ ./pusher/
 
 EXPOSE 8080
 ENTRYPOINT ["/app/datadog-init"]

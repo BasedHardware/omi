@@ -1,7 +1,5 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from modal import App, mount
-from modal import Image, Secret, asgi_app
 
 # from _mem0 import router as mem0_router
 from _multion import router as multion_router
@@ -30,6 +28,7 @@ from basic import mentor as basic_realtime_mentor_router
 app = FastAPI(title="OMI Plugins API", version="1.0.0")
 app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
 
+
 @app.get("/")
 async def root():
     """Root endpoint - lists available plugin routes"""
@@ -39,31 +38,9 @@ async def root():
             "score": "/score/?uid=USER_ID",
             "subscription": "/subscription/?uid=USER_ID",
             "chatgpt": "/chatgpt/?uid=USER_ID",
-            "docs": "/docs"
-        }
+            "docs": "/docs",
+        },
     }
-
-modal_app = App(
-    name='plugins',
-    secrets=[Secret.from_dotenv('.env')],
-    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')],
-)
-
-
-@modal_app.function(
-    image=(
-        Image.debian_slim()
-        # .apt_install('libgl1-mesa-glx', 'libglib2.0-0')
-        .pip_install_from_requirements('requirements.txt')
-    ),
-    keep_warm=1,  # need 7 for 1rps
-    memory=(128, 512),
-    cpu=1,
-    allow_concurrent_inputs=10,
-)
-@asgi_app()
-def api():
-    return app
 
 
 app.include_router(basic_conversation_created_router.router)
