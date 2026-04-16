@@ -155,6 +155,7 @@ class BleDisconnectEvent {
     required this.connectionDurationMs,
     required this.appState,
     required this.timeToReconnectMs,
+    required this.rssiTrend,
   });
 
   int timestamp;
@@ -184,6 +185,14 @@ class BleDisconnectEvent {
   /// 0 while the device has not yet reconnected.
   int timeToReconnectMs;
 
+  /// RSSI trajectory over the ~15s before this event. One of:
+  ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+  ///   "sudden"  — signal stable then link died (interference/stall/device off)
+  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "unknown" — insufficient samples to classify
+  /// Empty string on legacy records written before this field existed.
+  String rssiTrend;
+
   List<Object?> _toList() {
     return <Object?>[
       timestamp,
@@ -195,6 +204,7 @@ class BleDisconnectEvent {
       connectionDurationMs,
       appState,
       timeToReconnectMs,
+      rssiTrend,
     ];
   }
 
@@ -213,6 +223,7 @@ class BleDisconnectEvent {
       connectionDurationMs: result[6]! as int,
       appState: result[7]! as String,
       timeToReconnectMs: result[8]! as int,
+      rssiTrend: result[9]! as String,
     );
   }
 
