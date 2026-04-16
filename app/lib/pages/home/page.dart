@@ -523,6 +523,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _onCaptureProviderChanged() {
     if (!mounted || _captureProvider == null) return;
 
+    // Skip the auto-paywall while subscription UI is gated for App Store review.
+    if (!context.read<UsageProvider>().showSubscriptionUI) return;
+
     _freemiumHandler.checkAndShowDialog(context, _captureProvider!).catchError((e) {
       Logger.debug('[Freemium] Error checking dialog: $e');
       return false;
@@ -678,8 +681,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
-                              // Phone calls button - bottom left
-                              if (home.selectedIndex == 0)
+                              // Phone calls button - bottom left.
+                              // Hidden on iOS while subscription UI is gated for App Store review,
+                              // since the upsell tap path advertises a paid feature.
+                              if (home.selectedIndex == 0 && context.watch<UsageProvider>().showSubscriptionUI)
                                 Positioned(
                                   left: 20,
                                   bottom: 100,
