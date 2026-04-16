@@ -131,7 +131,7 @@ class VADStreamingGate:
 
     Uses ONNX Silero-VAD model's speech probability (not start/end events)
     for robust per-chunk speech detection. Buffers VAD input samples to handle
-    chunk sizes smaller than the VAD window (e.g. 30ms at 8kHz = 240 < 512).
+    chunk sizes smaller than the VAD window (e.g. 16ms at 16kHz = 256 samples).
 
     The ONNX InferenceSession is shared process-wide (thread-safe).
     Per-connection recurrent state (h/c) is stored on this instance.
@@ -164,7 +164,7 @@ class VADStreamingGate:
         self._vad_sample_rate = 16000
         # Eagerly init the shared ONNX session (fail-fast at gate creation)
         _get_ort_session()
-        self._vad_window_samples = VAD_WINDOW_SAMPLES  # 512 for 16kHz
+        self._vad_window_samples = VAD_WINDOW_SAMPLES  # 256 for 16kHz (Silero v6)
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
         self._vad_state = make_fresh_state()  # Per-connection ONNX recurrent state
         self._vad_inference_lock = threading.Lock()
