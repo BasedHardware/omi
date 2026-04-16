@@ -18,7 +18,6 @@ class FreemiumSwitchHandler {
   Future<bool> checkAndShowPaywall(BuildContext context, CaptureProvider captureProvider) async {
     if (_freemiumService.dialogShownThisSession) return false;
 
-    // Subscription UI is gated for App Store review — never auto-show the paywall.
     if (!context.read<UsageProvider>().showSubscriptionUI) return false;
 
     if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
