@@ -1170,7 +1170,7 @@ def delete_calendar_event_tool(
                                     delete_google_calendar_event(new_token, event_id)
                                     deleted_count += 1
                                 except Exception as e:
-                                    logger.warning(f"Failed to delete event {event_id} after token refresh: {e}")
+                                    logger.warning(f"Failed to delete event {event_id} after token refresh: {sanitize(str(e))}")
 
                         if deleted_count > 0:
                             return f"✅ Successfully deleted {deleted_count} calendar event(s)"

@@ -326,7 +326,7 @@ def get_apple_health_workouts_tool(
                 try:
                     start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc).astimezone(user_tz)
                     date_str = f" - {start_dt.strftime('%m/%d %I:%M %p')}"
-                except (ValueError, TypeError, OSError):
+                except (ValueError, TypeError, OSError, OverflowError):
                     pass
 
             result += f"{i}. {workout_type}{date_str}\n"

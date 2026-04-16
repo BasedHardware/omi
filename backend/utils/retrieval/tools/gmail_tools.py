@@ -152,7 +152,7 @@ def parse_gmail_message(message: dict) -> dict:
 
             date_parsed = parsedate_to_datetime(date_str)
         except (ValueError, TypeError) as e:
-            logger.debug(f"Could not parse email date '{date_str}': {e}")
+            logger.debug(f"Could not parse email date: {e}")
             pass
 
     return {
