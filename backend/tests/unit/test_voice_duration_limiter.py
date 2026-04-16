@@ -12,7 +12,8 @@ import os
 import struct
 import tempfile
 import time
-from unittest.mock import MagicMock, patch
+from fractions import Fraction
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -179,6 +180,60 @@ class TestWAVDurationReader:
             assert read_wav_duration_ms(path) is None
         finally:
             os.unlink(path)
+
+    def test_container_duration_none_falls_back_to_stream(self):
+        """When container.duration is None, fall back to stream.duration * stream.time_base."""
+        from utils.voice_duration_limiter import read_wav_duration_ms
+
+        mock_stream = MagicMock()
+        mock_stream.duration = 48000  # 3 seconds at 16000 sample rate
+        mock_stream.time_base = Fraction(1, 16000)
+
+        mock_container = MagicMock()
+        mock_container.duration = None
+        mock_container.streams.audio = [mock_stream]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            duration = read_wav_duration_ms('/tmp/fake.wav')
+
+        assert duration is not None
+        assert duration == 3000  # 48000 * (1/16000) = 3s = 3000ms
+
+    def test_both_durations_none_returns_none(self):
+        """When both container.duration and stream.duration are None, returns None."""
+        from utils.voice_duration_limiter import read_wav_duration_ms
+
+        mock_stream = MagicMock()
+        mock_stream.duration = None
+        mock_stream.time_base = Fraction(1, 16000)
+
+        mock_container = MagicMock()
+        mock_container.duration = None
+        mock_container.streams.audio = [mock_stream]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            assert read_wav_duration_ms('/tmp/fake.wav') is None
+
+    def test_stream_time_base_none_returns_none(self):
+        """When stream.time_base is None, returns None (can't compute duration)."""
+        from utils.voice_duration_limiter import read_wav_duration_ms
+
+        mock_stream = MagicMock()
+        mock_stream.duration = 48000
+        mock_stream.time_base = None
+
+        mock_container = MagicMock()
+        mock_container.duration = None
+        mock_container.streams.audio = [mock_stream]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            assert read_wav_duration_ms('/tmp/fake.wav') is None
 
 
 # ===========================================================================
