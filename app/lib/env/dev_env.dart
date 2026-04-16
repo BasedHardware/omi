@@ -59,4 +59,8 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
   final String? stagingApiUrl = _DevEnv.stagingApiUrl;
+
+  @override
+  @EnviedField(varName: 'APPLE_SIGN_IN_SERVICES_ID', obfuscate: true)
+  final String? appleSignInServicesId = _DevEnv.appleSignInServicesId;
 }

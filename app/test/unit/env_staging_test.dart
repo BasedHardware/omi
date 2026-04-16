@@ -31,6 +31,8 @@ class _StagingEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
+  @override
+  String? get appleSignInServicesId => null;
 }
 
 void main() {

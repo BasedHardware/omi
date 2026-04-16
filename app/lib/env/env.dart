@@ -75,6 +75,11 @@ abstract class Env {
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
+
+  /// Apple Services ID for Sign in with Apple's web flow (used on Android,
+  /// where Apple does not provide a native SDK and the package falls back to
+  /// a Custom Tab + OAuth web exchange). Distinct from the iOS App ID.
+  static String? get appleSignInServicesId => _instance.appleSignInServicesId;
 }
 
 abstract class EnvFields {
@@ -103,4 +108,6 @@ abstract class EnvFields {
   bool? get useAuthCustomToken;
 
   String? get stagingApiUrl;
+
+  String? get appleSignInServicesId;
 }
