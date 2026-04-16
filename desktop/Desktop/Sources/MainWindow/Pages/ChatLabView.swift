@@ -441,7 +441,7 @@ class ChatLabViewModel: ObservableObject {
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
             let body: [String: Any] = [
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-sonnet-4-6",
                 "max_tokens": 1024,
                 "system": systemPrompt.prefix(50000),
                 "messages": [["role": "user", "content": userMessage]],
