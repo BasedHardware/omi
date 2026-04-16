@@ -362,7 +362,7 @@ class TestRunFileVad:
     def test_speech_silence_speech_produces_two_segments(self, mock_state, tmp_wav_dir):
         """Speech-silence-speech pattern produces two segments."""
         wav_path = str(tmp_wav_dir / 'pattern.wav')
-        # 0.2s = ~6 windows at 512 samples/16kHz (32ms each)
+        # 0.2s = ~12 windows at 256 samples/16kHz (16ms each)
         _write_wav_file(wav_path, 0.2, freq_hz=440.0)
 
         # Pattern: 2 speech, 2 silence, 2 speech
@@ -395,10 +395,10 @@ class TestRunFileVad:
     @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
     @patch('utils.stt.vad.make_fresh_state', return_value=np.zeros(_STATE_SHAPE, dtype=np.float32))
     def test_short_file_fewer_than_one_window(self, mock_state, mock_vad, tmp_wav_dir):
-        """File shorter than one 512-sample window produces no segments."""
+        """File shorter than one 256-sample window produces no segments."""
         wav_path = str(tmp_wav_dir / 'tiny.wav')
-        # 511 samples at 16kHz = ~31.9ms, just under one window
-        duration = 511 / 16000
+        # 255 samples at 16kHz = ~15.9ms, just under one window
+        duration = 255 / 16000
         _write_wav_file(wav_path, duration, freq_hz=440.0)
 
         segments = _run_file_vad(wav_path)
