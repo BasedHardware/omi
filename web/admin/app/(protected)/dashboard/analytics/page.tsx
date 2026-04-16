@@ -595,6 +595,69 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Cumulative Total Users — headline chart, right after the revenue KPIs */}
+      <Card className="p-6">
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <h2 className="text-lg font-semibold">Cumulative Users</h2>
+            <p className="text-sm text-muted-foreground">Total users across all platforms</p>
+          </div>
+          <div className="flex rounded-md border border-input overflow-hidden">
+            {(["7d", "30d", "all"] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setCumulativeWindow(w)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                  cumulativeWindow === w
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {w === "7d" ? "Last week" : w === "30d" ? "Last month" : "All time"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="h-[350px] mt-4">
+          {dailyNewUsersLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : cumulativeSeries.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumulativeSeries}>
+                <defs>
+                  <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={shortDate}
+                  minTickGap={40}
+                />
+                <YAxis
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={formatCompact}
+                  domain={cumulativeYDomain}
+                  allowDataOverflow={false}
+                  width={56}
+                />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )}
+        </div>
+      </Card>
+
       {/* MRR Trend */}
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-1">MRR Over Time</h2>
@@ -1307,96 +1370,30 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
-      {/* Two charts side by side: Cumulative Users + DAU */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Cumulative Total Users */}
-        <Card className="p-6">
-          <div className="flex items-start justify-between mb-1">
-            <div>
-              <h2 className="text-lg font-semibold">Cumulative Users</h2>
-              <p className="text-sm text-muted-foreground">Total users across all platforms</p>
+      {/* Daily Active Users */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-1">Daily Active Users</h2>
+        <p className="text-sm text-muted-foreground mb-4">Unique macOS users per day</p>
+        <div className="h-[300px]">
+          {dauLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-            <div className="flex rounded-md border border-input overflow-hidden">
-              {(["7d", "30d", "all"] as const).map((w) => (
-                <button
-                  key={w}
-                  onClick={() => setCumulativeWindow(w)}
-                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
-                    cumulativeWindow === w
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-accent"
-                  }`}
-                >
-                  {w === "7d" ? "Last week" : w === "30d" ? "Last month" : "All time"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="h-[300px] mt-4">
-            {dailyNewUsersLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : cumulativeSeries.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={cumulativeSeries}>
-                  <defs>
-                    <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={shortDate}
-                    minTickGap={40}
-                  />
-                  <YAxis
-                    className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={formatCompact}
-                    domain={cumulativeYDomain}
-                    allowDataOverflow={false}
-                    width={56}
-                  />
-                  <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-            )}
-          </div>
-        </Card>
-
-        {/* Daily Active Users */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Daily Active Users</h2>
-          <p className="text-sm text-muted-foreground mb-4">Unique macOS users per day</p>
-          <div className="h-[300px]">
-            {dauLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : dauData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dauData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip formatter={(value: number) => [value.toLocaleString(), "DAU"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
-                  <Bar dataKey="dau" name="DAU" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-            )}
-          </div>
-        </Card>
-      </div>
+          ) : dauData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dauData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), "DAU"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Bar dataKey="dau" name="DAU" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )}
+        </div>
+      </Card>
 
       {/* Crash Rate */}
       <Card className="p-6">
