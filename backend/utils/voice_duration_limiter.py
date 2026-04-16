@@ -224,6 +224,8 @@ def read_wav_duration_ms(file_path: str) -> int | None:
         with av.open(file_path) as container:
             if not container.streams.audio:
                 return None
+            if container.duration is None:
+                return None
             duration_s = float(container.duration) / av.time_base
             if duration_s <= 0:
                 return None
