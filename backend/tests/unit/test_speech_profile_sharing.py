@@ -274,17 +274,17 @@ def test_process_segments_with_shared_person_id():
     assert segment.is_user is False
 
 
-def _build_embedding_cache(people, shared_owners, get_user_profile_fn):
+def _build_embedding_cache(people, shared_owners, get_user_profiles_batch_fn, get_user_name_fn=None):
     """
     Replicates the embedding cache building logic from transcribe.py
-    speaker_identification_task (lines 1301-1337).
+    speaker_identification_task shared/local embedding loading.
     """
     person_embeddings_cache = {}
 
     # Load regular people embeddings
     for person in people:
         emb = person.get('speaker_embedding')
-        if emb:
+        if emb and person.get('speech_samples'):
             person_embeddings_cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],
@@ -292,15 +292,20 @@ def _build_embedding_cache(people, shared_owners, get_user_profile_fn):
 
     # Load shared profile embeddings
     uid = 'current_user'
-    for owner_uid in shared_owners:
-        if owner_uid == uid:
-            continue
-        profile = get_user_profile_fn(owner_uid)
+    owner_uids = [owner_uid for owner_uid in shared_owners if owner_uid != uid]
+    try:
+        profiles = get_user_profiles_batch_fn(owner_uids)
+    except Exception:
+        profiles = {}
+
+    for owner_uid in owner_uids:
+        profile = profiles.get(owner_uid)
         if not profile:
             continue
         emb = profile.get('speaker_embedding')
         if emb:
-            name = profile.get('name') or owner_uid[:8]
+            fallback_name = get_user_name_fn(owner_uid) if get_user_name_fn else None
+            name = profile.get('name') or fallback_name or owner_uid[:8]
             person_embeddings_cache[f"shared:{owner_uid}"] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': name,
@@ -313,15 +318,14 @@ def test_cache_loads_shared_profiles():
     """Test that shared profile embeddings are loaded into the speaker ID cache."""
     alice_embedding = [0.1, 0.2, 0.3, 0.4]
 
-    def mock_get_profile(uid):
-        if uid == 'alice_uid':
-            return {'name': 'Alice', 'speaker_embedding': alice_embedding}
-        return {}
+    def mock_get_profiles_batch(uids):
+        assert uids == ['alice_uid']
+        return {'alice_uid': {'name': 'Alice', 'speaker_embedding': alice_embedding}}
 
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['alice_uid'],
-        get_user_profile_fn=mock_get_profile,
+        get_user_profiles_batch_fn=mock_get_profiles_batch,
     )
 
     assert 'shared:alice_uid' in cache
@@ -333,12 +337,14 @@ def test_cache_loads_both_people_and_shared():
     """Test that both regular people and shared profiles coexist in the cache."""
     cache = _build_embedding_cache(
         people=[
-            {'id': 'person-bob', 'name': 'Bob', 'speaker_embedding': [0.5, 0.6, 0.7, 0.8]},
+            {'id': 'person-bob', 'name': 'Bob', 'speaker_embedding': [0.5, 0.6, 0.7, 0.8], 'speech_samples': [1]},
         ],
         shared_owners=['alice_uid'],
-        get_user_profile_fn=lambda uid: {
-            'name': 'Alice',
-            'speaker_embedding': [0.1, 0.2, 0.3, 0.4],
+        get_user_profiles_batch_fn=lambda uids: {
+            'alice_uid': {
+                'name': 'Alice',
+                'speaker_embedding': [0.1, 0.2, 0.3, 0.4],
+            },
         },
     )
 
@@ -353,7 +359,7 @@ def test_cache_skips_shared_without_embedding():
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['no_embed_uid'],
-        get_user_profile_fn=lambda uid: {'name': 'No Embed User'},
+        get_user_profiles_batch_fn=lambda uids: {'no_embed_uid': {'name': 'No Embed User'}},
     )
 
     assert len(cache) == 0
@@ -364,7 +370,7 @@ def test_cache_skips_shared_with_no_profile():
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['ghost_uid'],
-        get_user_profile_fn=lambda uid: {},
+        get_user_profiles_batch_fn=lambda uids: {},
     )
 
     assert len(cache) == 0
@@ -375,10 +381,22 @@ def test_cache_name_fallback_to_uid_prefix():
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['abcdef1234567890'],
-        get_user_profile_fn=lambda uid: {'speaker_embedding': [0.1, 0.2, 0.3]},
+        get_user_profiles_batch_fn=lambda uids: {'abcdef1234567890': {'speaker_embedding': [0.1, 0.2, 0.3]}},
     )
 
     assert cache['shared:abcdef1234567890']['name'] == 'abcdef12'
+
+
+def test_cache_name_fallback_to_user_name_lookup():
+    """Test that cache uses get_user_name fallback before uid prefix."""
+    cache = _build_embedding_cache(
+        people=[],
+        shared_owners=['alice_uid'],
+        get_user_profiles_batch_fn=lambda uids: {'alice_uid': {'speaker_embedding': [0.1, 0.2, 0.3]}},
+        get_user_name_fn=lambda uid: 'Alice From Lookup',
+    )
+
+    assert cache['shared:alice_uid']['name'] == 'Alice From Lookup'
 
 
 def test_cache_skips_self_sharing():
@@ -386,10 +404,34 @@ def test_cache_skips_self_sharing():
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['current_user'],  # same as uid in _build_embedding_cache
-        get_user_profile_fn=lambda uid: {'name': 'Me', 'speaker_embedding': [0.1]},
+        get_user_profiles_batch_fn=lambda uids: {'current_user': {'name': 'Me', 'speaker_embedding': [0.1]}},
     )
 
     assert len(cache) == 0
+
+
+def test_cache_skips_regular_people_without_speech_samples():
+    """Regular people need both embedding and speech_samples to match production behavior."""
+    cache = _build_embedding_cache(
+        people=[
+            {'id': 'person-bob', 'name': 'Bob', 'speaker_embedding': [0.5, 0.6, 0.7, 0.8]},
+        ],
+        shared_owners=[],
+        get_user_profiles_batch_fn=lambda uids: {},
+    )
+
+    assert len(cache) == 0
+
+
+def test_cache_batch_load_failure_falls_back_to_empty_shared_profiles():
+    """Batch-load errors should not crash cache building or add shared entries."""
+    cache = _build_embedding_cache(
+        people=[],
+        shared_owners=['alice_uid'],
+        get_user_profiles_batch_fn=lambda uids: (_ for _ in ()).throw(RuntimeError('boom')),
+    )
+
+    assert cache == {}
 
 
 def _find_best_match(query_embedding, person_embeddings_cache, threshold=0.45):
@@ -592,7 +634,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     person_embeddings_cache = _build_embedding_cache(
         people=[],
         shared_owners=['alice_uid'],
-        get_user_profile_fn=lambda uid: alice_profile if uid == 'alice_uid' else {},
+        get_user_profiles_batch_fn=lambda uids: {'alice_uid': alice_profile} if 'alice_uid' in uids else {},
     )
 
     assert 'shared:alice_uid' in person_embeddings_cache
@@ -666,7 +708,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     cache_after_revoke = _build_embedding_cache(
         people=[],
         shared_owners=[],  # revoked → empty list
-        get_user_profile_fn=lambda uid: alice_profile,
+        get_user_profiles_batch_fn=lambda uids: {'alice_uid': alice_profile} if 'alice_uid' in uids else {},
     )
     assert 'shared:alice_uid' not in cache_after_revoke
     assert len(cache_after_revoke) == 0
@@ -690,7 +732,7 @@ def test_full_pipeline_no_match_different_speaker(monkeypatch):
     cache = _build_embedding_cache(
         people=[],
         shared_owners=['alice_uid'],
-        get_user_profile_fn=lambda uid: alice_profile,
+        get_user_profiles_batch_fn=lambda uids: {'alice_uid': alice_profile} if 'alice_uid' in uids else {},
     )
 
     # User C speaks → completely different embedding
@@ -719,18 +761,18 @@ def test_full_pipeline_picks_correct_person_from_multiple(monkeypatch):
     bob_emb = rng.randn(512).astype(np.float32)
     charlie_emb = rng.randn(512).astype(np.float32)
 
-    def mock_profile(uid):
+    def mock_profiles_batch(uids):
         profiles = {
             'alice_uid': {'name': 'Alice', 'speaker_embedding': alice_emb.tolist()},
             'charlie_uid': {'name': 'Charlie', 'speaker_embedding': charlie_emb.tolist()},
         }
-        return profiles.get(uid, {})
+        return {uid: profiles[uid] for uid in uids if uid in profiles}
 
     # Bob is a regular "person" (manually named), Alice & Charlie are shared
     cache = _build_embedding_cache(
-        people=[{'id': 'person-bob', 'name': 'Bob', 'speaker_embedding': bob_emb.tolist()}],
+        people=[{'id': 'person-bob', 'name': 'Bob', 'speaker_embedding': bob_emb.tolist(), 'speech_samples': [1]}],
         shared_owners=['alice_uid', 'charlie_uid'],
-        get_user_profile_fn=mock_profile,
+        get_user_profiles_batch_fn=mock_profiles_batch,
     )
 
     assert len(cache) == 3  # Bob + Alice + Charlie
