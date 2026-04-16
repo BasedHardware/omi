@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Floating bar voice picker now plays a short sample when you switch voices"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.320",
+      "date": "2026-04-16",
+      "changes": [
+        "Floating bar voice picker now plays a short sample when you switch voices"
+      ]
+    },
     {
       "version": "0.11.319",
       "date": "2026-04-16",
