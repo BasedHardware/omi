@@ -49,15 +49,25 @@ from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
-from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
+from models.users import (
+    WebhookType,
+    UserSubscriptionResponse,
+    SubscriptionPlan,
+    PlanType,
+    PricingOption,
+    ChatUsageQuota,
+    ChatQuotaUnit,
+)
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
     get_paid_plan_definitions,
+    get_plan_display_name,
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
 )
+from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -897,6 +907,46 @@ def get_user_subscription_endpoint(
 # **************************************
 # ****** Daily Summary Settings ********
 # **************************************
+
+
+@router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
+def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+    """Current-month chat usage for the user, plus their plan's cap.
+
+    - Free / Plus: counted in questions (user-initiated chat turns)
+    - Pro: counted in dollar spend on desktop chat
+    - Resets at the start of each UTC month
+    """
+    subscription = get_user_valid_subscription(uid)
+    plan = subscription.plan if subscription else PlanType.basic
+    limits = get_plan_limits(plan)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
+
+    if limits.chat_cost_usd_per_month is not None:
+        unit = ChatQuotaUnit.cost_usd
+        used = float(usage['cost_usd'])
+        limit_value = float(limits.chat_cost_usd_per_month)
+    else:
+        unit = ChatQuotaUnit.questions
+        used = float(usage['questions'])
+        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+
+    percent = 0.0
+    allowed = True
+    if limit_value is not None and limit_value > 0:
+        percent = min(100.0, round(100.0 * used / limit_value, 2))
+        allowed = used < limit_value
+
+    return ChatUsageQuota(
+        plan=get_plan_display_name(plan),
+        plan_type=plan.value,
+        unit=unit,
+        used=round(used, 4),
+        limit=limit_value,
+        percent=percent,
+        allowed=allowed,
+        reset_at=usage['reset_at'],
+    )
 
 
 class DailySummarySettingsResponse(BaseModel):
