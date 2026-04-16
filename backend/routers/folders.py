@@ -12,7 +12,7 @@ from models.folder import (
     ReorderFoldersRequest,
 )
 from models.conversation import Conversation
-from utils.conversations.redact import redact_conversations_for_list
+from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
 
 router = APIRouter()

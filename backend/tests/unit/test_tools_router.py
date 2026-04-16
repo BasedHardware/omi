@@ -132,7 +132,7 @@ render_mod.conversations_to_string = MagicMock(
     side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
 )
 factory_mod = _stub_module("utils.conversations.factory")
-factory_mod.hydrate_conversation = MagicMock(
+factory_mod.deserialize_conversation = MagicMock(
     side_effect=lambda d: d if not isinstance(d, dict) else type('FakeConv', (), d)()
 )
 endpoints_mod = _stub_module("utils.other.endpoints")

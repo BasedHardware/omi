@@ -15,7 +15,7 @@ from database.redis_db import (
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
-from utils.conversations.enrich import add_speaker_names, add_folder_names
+from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.notifications import send_notification
 import logging
@@ -36,8 +36,8 @@ def conversation_created_webhook(uid, memory: Conversation):
         webhook_url += f'?uid={uid}'
         try:
             payload = conversation_to_dict(memory)
-            add_speaker_names(uid, [payload])
-            add_folder_names(uid, [payload])
+            populate_speaker_names(uid, [payload])
+            populate_folder_names(uid, [payload])
             response = requests.post(
                 webhook_url,
                 json=payload,

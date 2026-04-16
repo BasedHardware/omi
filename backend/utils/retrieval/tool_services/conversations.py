@@ -12,7 +12,7 @@ import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
-from utils.conversations.factory import hydrate_conversation
+from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
 import logging
 
@@ -115,7 +115,7 @@ def get_conversations_text(
     conversations = []
     for conv_data in conversations_data:
         try:
-            conversation = hydrate_conversation(conv_data)
+            conversation = deserialize_conversation(conv_data)
             if (
                 max_transcript_segments != -1
                 and conversation.transcript_segments
@@ -210,7 +210,7 @@ def search_conversations_text(
         conversations = []
         for conv_data in conversations_data:
             try:
-                conversation = hydrate_conversation(conv_data)
+                conversation = deserialize_conversation(conv_data)
                 if (
                     max_transcript_segments != -1
                     and conversation.transcript_segments

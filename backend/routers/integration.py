@@ -21,7 +21,7 @@ from models.conversation import SearchRequest
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.redact import redact_conversation_for_integration
+from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification

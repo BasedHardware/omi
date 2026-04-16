@@ -23,7 +23,7 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from models.geolocation import Geolocation
-from utils.conversations.enrich import add_speaker_names, add_folder_names
+from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.conversation import Conversation as ConversationModel
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
@@ -771,9 +771,9 @@ def get_conversations(
         for conv in unlocked_conversations:
             conv.pop('transcript_segments', None)
     else:
-        add_speaker_names(uid, unlocked_conversations)
+        populate_speaker_names(uid, unlocked_conversations)
 
-    add_folder_names(uid, unlocked_conversations)
+    populate_folder_names(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -880,9 +880,9 @@ def get_conversation_endpoint(
     if not include_transcript:
         conversation.pop('transcript_segments', None)
     else:
-        add_speaker_names(uid, [conversation])
+        populate_speaker_names(uid, [conversation])
 
-    add_folder_names(uid, [conversation])
+    populate_folder_names(uid, [conversation])
 
     return conversation
 
@@ -1076,7 +1076,7 @@ def update_conversation_endpoint(
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:
-        add_folder_names(uid, [conversation])
+        populate_folder_names(uid, [conversation])
     return conversation
 
 

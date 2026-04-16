@@ -12,8 +12,7 @@ import database.conversations as conversations_db
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
-from utils.conversations.enrich import add_speaker_names
-from utils.conversations.redact import redact_conversations_for_list
+from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -188,6 +187,6 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    add_speaker_names(uid, [conversation])
+    populate_speaker_names(uid, [conversation])
 
     return conversation

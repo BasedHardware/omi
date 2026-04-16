@@ -24,7 +24,7 @@ import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
-from utils.conversations.redact import redact_conversation_for_list
+from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 

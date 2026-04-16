@@ -11,7 +11,7 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
-from utils.conversations.factory import hydrate_conversation
+from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
@@ -131,7 +131,7 @@ def _send_summary_notification(user_data: tuple):
         return
 
     conversations = [
-        hydrate_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
+        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
     ]
     if not conversations:
         return

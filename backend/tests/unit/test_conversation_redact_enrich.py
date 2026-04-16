@@ -13,20 +13,20 @@ for _mod in [
     "models.structured",
     "utils",
     "utils.conversations",
-    "utils.conversations.redact",
     "utils.conversations.render",
 ]:
     _existing = sys.modules.get(_mod)
     if _existing is not None and not getattr(_existing, "__file__", None):
         del sys.modules[_mod]
 
-from utils.conversations.redact import (
+from utils.conversations.render import (
     redact_conversation_for_list,
     redact_conversation_for_integration,
     redact_conversations_for_list,
     redact_conversations_for_integration,
+    serialize_datetimes,
+    conversation_to_dict,
 )
-from utils.conversations.render import serialize_datetimes, conversation_to_dict
 from models.conversation import Conversation
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured

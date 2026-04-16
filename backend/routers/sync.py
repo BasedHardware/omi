@@ -34,7 +34,7 @@ from database.sync_jobs import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
-from utils.conversations.factory import hydrate_conversation
+from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
@@ -696,7 +696,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return
 
     # Convert to Conversation object
-    conversation = hydrate_conversation(conversation_data)
+    conversation = deserialize_conversation(conversation_data)
 
     process_conversation(
         uid=uid,

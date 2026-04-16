@@ -3,7 +3,7 @@ from typing import List, Mapping, Sequence, Union
 from models.conversation import Conversation
 
 
-def hydrate_conversation(data: Union[Conversation, Mapping]) -> Conversation:
+def deserialize_conversation(data: Union[Conversation, Mapping]) -> Conversation:
     """Convert a raw dict (e.g. from Firestore) into a Conversation object.
 
     If already a Conversation instance, returns it unchanged.
@@ -15,6 +15,6 @@ def hydrate_conversation(data: Union[Conversation, Mapping]) -> Conversation:
     return Conversation(**data)
 
 
-def hydrate_conversations(items: Sequence[Union[Conversation, Mapping]]) -> List[Conversation]:
-    """Batch-hydrate a sequence of dicts or Conversation objects."""
-    return [hydrate_conversation(item) for item in items]
+def deserialize_conversations(items: Sequence[Union[Conversation, Mapping]]) -> List[Conversation]:
+    """Batch-deserialize a sequence of dicts or Conversation objects."""
+    return [deserialize_conversation(item) for item in items]

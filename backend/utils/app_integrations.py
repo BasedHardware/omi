@@ -22,7 +22,7 @@ from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
-from utils.conversations.factory import hydrate_conversations
+from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
@@ -338,7 +338,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                     all_past.append(rc)
 
         if all_past:
-            past_conversations_str = conversations_to_string(hydrate_conversations(all_past[:5]))
+            past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
     except Exception as e:
         logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
 
@@ -444,7 +444,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = conversations_to_string(hydrate_conversations(memories))
+            context = conversations_to_string(deserialize_conversations(memories))
 
     chat_messages = []
     if 'user_chat' in filter_scopes:

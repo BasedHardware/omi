@@ -10,7 +10,7 @@ import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
 from models.conversation import Conversation
 from models.conversation_enums import PostProcessingStatus
-from utils.conversations.factory import hydrate_conversation
+from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
@@ -31,7 +31,7 @@ def postprocess_conversation(
     if not conversation_data:
         return 404, "Conversation not found"
 
-    conversation = hydrate_conversation(conversation_data)
+    conversation = deserialize_conversation(conversation_data)
     if conversation.discarded:
         logger.info('postprocess_conversation: Conversation is discarded')
         return 400, "Conversation is discarded"

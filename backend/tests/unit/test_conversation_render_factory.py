@@ -26,7 +26,7 @@ from models.conversation_enums import CategoryEnum
 from models.other import Person
 from models.structured import ActionItem, Event, Structured
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.factory import hydrate_conversation, hydrate_conversations
+from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from utils.conversations.render import conversations_to_string
 
 
@@ -43,7 +43,7 @@ def _make_conversation(**overrides):
 
 
 class TestFactory:
-    def test_hydrate_from_dict(self):
+    def test_deserialize_from_dict(self):
         data = {
             "id": "abc",
             "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -51,16 +51,16 @@ class TestFactory:
             "finished_at": None,
             "structured": {"title": "t", "overview": "o"},
         }
-        conv = hydrate_conversation(data)
+        conv = deserialize_conversation(data)
         assert isinstance(conv, Conversation)
         assert conv.id == "abc"
 
-    def test_hydrate_passthrough(self):
+    def test_deserialize_passthrough(self):
         conv = _make_conversation()
-        result = hydrate_conversation(conv)
+        result = deserialize_conversation(conv)
         assert result is conv  # same object, no re-construction
 
-    def test_hydrate_preserves_init_side_effects(self):
+    def test_deserialize_preserves_init_side_effects(self):
         data = {
             "id": "abc",
             "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -70,14 +70,14 @@ class TestFactory:
             "apps_results": [{"app_id": "app1", "content": "result"}],
             "processing_conversation_id": "proc-123",
         }
-        conv = hydrate_conversation(data)
+        conv = deserialize_conversation(data)
         # __init__ syncs plugins_results from apps_results
         assert len(conv.plugins_results) == 1
         assert conv.plugins_results[0].plugin_id == "app1"
         # __init__ syncs processing_memory_id from processing_conversation_id
         assert conv.processing_memory_id == "proc-123"
 
-    def test_hydrate_conversations_batch(self):
+    def test_deserialize_conversations_batch(self):
         items = [
             {
                 "id": f"id-{i}",
@@ -88,12 +88,12 @@ class TestFactory:
             }
             for i in range(3)
         ]
-        result = hydrate_conversations(items)
+        result = deserialize_conversations(items)
         assert len(result) == 3
         assert all(isinstance(c, Conversation) for c in result)
         assert [c.id for c in result] == ["id-0", "id-1", "id-2"]
 
-    def test_hydrate_conversations_mixed(self):
+    def test_deserialize_conversations_mixed(self):
         conv = _make_conversation(id="existing")
         data = {
             "id": "new",
@@ -102,7 +102,7 @@ class TestFactory:
             "finished_at": None,
             "structured": {"title": "t", "overview": "o"},
         }
-        result = hydrate_conversations([conv, data])
+        result = deserialize_conversations([conv, data])
         assert result[0] is conv
         assert result[1].id == "new"
 

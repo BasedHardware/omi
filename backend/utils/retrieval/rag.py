@@ -8,7 +8,7 @@ from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.other import Person
-from utils.conversations.factory import hydrate_conversations
+from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
@@ -83,7 +83,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
 
-    memories = hydrate_conversations(memories)
+    memories = deserialize_conversations(memories)
     if len(memories) > 10:
         memories = memories[:10]
 
