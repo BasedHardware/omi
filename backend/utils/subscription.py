@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 import stripe
 
 import database.users as users_db
@@ -65,6 +65,80 @@ def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> li
     A brand-new user on `basic` sees only non-legacy plans.
     """
     return [d for d in definitions if not d.get('legacy') or d['plan_type'] == current_plan]
+
+
+# Minimum desktop build that ships with the new plan catalog + quota UI.
+# Clients below this threshold — older desktop, or any mobile build — get the
+# pre-Operator plan shape. Once a stable release catches up, lower this.
+NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv('NEW_PLANS_MIN_DESKTOP_VERSION', '0.11.324')
+
+
+def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -> bool:
+    """True iff this caller's client has the Swift code that understands the new
+    Operator + Architect plan shape and the /v1/users/me/usage-quota endpoint.
+
+    Only macOS desktop builds on `NEW_PLANS_MIN_DESKTOP_VERSION` or newer
+    qualify. iOS / Android / older desktop builds get the legacy plan catalog
+    so the rollout is gated to the beta channel without cross-client breakage.
+    """
+    # Lazy import so we don't pull the database layer at module import time
+    # and to avoid turning this into another circular-import sinkhole.
+    from database.announcements import _compare_versions
+
+    if not platform or platform.lower() != 'macos':
+        return False
+    if not app_version:
+        return False
+    try:
+        return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+    except Exception:
+        return False
+
+
+def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
+    """Transform the new-shape plan catalog back into the pre-v0.11.324 shape
+    so older clients (mobile, stable desktop) keep showing the old plan titles
+    and don't see Operator in their purchase options.
+
+    Hides the Operator entry entirely, renames Architect back to "Omi Pro",
+    and drops the legacy suffix + flag from Unlimited so pre-rollout clients
+    still see it as a normal (non-legacy) Unlimited Plan.
+    """
+    out: list[dict] = []
+    for d in definitions:
+        if d['plan_id'] == 'operator':
+            continue
+        adapted = dict(d)
+        if d['plan_id'] == 'pro':
+            adapted['title'] = 'Omi Pro'
+        elif d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Unlimited Plan'
+            adapted['legacy'] = False
+        out.append(adapted)
+    return out
+
+
+def legacy_plan_features(plan: PlanType) -> List[str]:
+    """Feature strings matching the pre-v0.11.324 plan catalog.
+
+    Mirrors what `get_plan_features` used to return before the Operator /
+    Architect rename so older clients' UI doesn't change under them.
+    """
+    if plan == PlanType.pro:
+        return [
+            "Automations",
+            "Vibe coding",
+            "Unlimited actions",
+            "Priority desktop AI features",
+        ]
+    if plan in (PlanType.unlimited, PlanType.operator):
+        return [
+            "Unlimited listening time",
+            "Unlimited words transcribed",
+            "Unlimited insights",
+            "Unlimited memories",
+        ]
+    return get_plan_features(plan)
 
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
