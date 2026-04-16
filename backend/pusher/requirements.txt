@@ -74,6 +74,8 @@ python-dateutil==2.9.0.post0
 orjson==3.10.6
 tiktoken==0.7.0
 jiwer==3.0.4
+python-ulid==3.0.0
+pytz==2024.1
 
 # Payment & communication
 stripe==11.3.0
