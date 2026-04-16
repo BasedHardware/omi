@@ -971,10 +971,20 @@ async def _stream_handler(
             # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
             # (the "8"/"16" refers to sample rate kHz, not bit depth).
             # DG always receives mono (channels=1), so clamp gate channels to 1.
+            # Desktop source is excluded: mixed mic+system audio has high zero-crossing
+            # rates that the ONNX Silero VAD model classifies as silence (0% detection
+            # even at proper volume levels). See #6681 post-deploy investigation.
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
-            if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
+            is_desktop_source = source == 'desktop'
+            if is_desktop_source and not gate_enabled_by_override:
+                logger.info(
+                    'VAD gate skipped for desktop source (mixed audio incompatible with Silero VAD) uid=%s session=%s',
+                    uid,
+                    session_id,
+                )
+            elif not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
                 gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
                 try:
                     vad_gate = VADStreamingGate(
