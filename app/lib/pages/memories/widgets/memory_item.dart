@@ -82,7 +82,6 @@ class MemoryItem extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
-                        // Subscription UI is gated for App Store review — no upgrade routing.
                         if (!context.read<UsageProvider>().showSubscriptionUI) return;
                         MixpanelManager().paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
