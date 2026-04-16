@@ -10,6 +10,10 @@ import 'package:omi/utils/logger.dart';
 class UsageProvider with ChangeNotifier {
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
+
+  /// Defaults to true when the subscription response hasn't loaded yet, so a
+  /// network blip doesn't silently hide paid surfaces from real users.
+  bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
 

@@ -570,6 +570,15 @@ class _PlansSheetState extends State<PlansSheet> {
   Widget build(BuildContext context) {
     return Consumer<UsageProvider>(
       builder: (context, provider, child) {
+        // Pop on build if the server-driven visibility flag is off, in case any
+        // caller bypassed the call-site check.
+        if (!provider.showSubscriptionUI) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          });
+          return const SizedBox.shrink();
+        }
+
         final sub = provider.subscription?.subscription;
         final isUnlimited = sub?.plan == PlanType.unlimited;
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
