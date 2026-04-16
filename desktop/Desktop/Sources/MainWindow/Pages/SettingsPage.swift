@@ -224,6 +224,8 @@ struct SettingsContentView: View {
   @State private var userSubscription: UserSubscriptionResponse?
   @State private var isLoadingSubscription: Bool = false
   @State private var subscriptionError: String?
+  @State private var chatUsageQuota: APIClient.ChatUsageQuota?
+  @State private var isLoadingChatUsage: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
@@ -1797,6 +1799,8 @@ struct SettingsContentView: View {
         }
       }
 
+      chatUsageQuotaCard
+
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: 18) {
@@ -1819,6 +1823,100 @@ struct SettingsContentView: View {
         }
       }
     }
+  }
+
+  // MARK: - Chat Usage Quota Card
+
+  @ViewBuilder
+  private var chatUsageQuotaCard: some View {
+    if let quota = chatUsageQuota {
+      settingsCard(settingId: "planusage.current") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Text("Usage this month")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Text(chatUsageQuotaValueText(quota))
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(chatUsageBarColor(quota))
+              .monospacedDigit()
+          }
+
+          ProgressView(value: min(quota.percent / 100.0, 1.0))
+            .progressViewStyle(LinearProgressViewStyle(tint: chatUsageBarColor(quota)))
+            .frame(height: 6)
+
+          HStack {
+            Text(chatUsageQuotaDescription(quota))
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            if let resetText = chatUsageQuotaResetText(quota) {
+              Text(resetText)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
+
+          if !quota.allowed {
+            Text("You've reached this month's limit. Upgrade your plan or wait until the next reset.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          } else if quota.percent >= 80.0 {
+            Text("You're close to your monthly limit.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+      }
+    } else if isLoadingChatUsage {
+      settingsCard(settingId: "planusage.current") {
+        HStack {
+          ProgressView().controlSize(.small)
+          Text("Loading usage…")
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+    }
+  }
+
+  private func chatUsageQuotaValueText(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      let limit = q.limit.map { String(format: "$%.0f", $0) } ?? "—"
+      return String(format: "$%.2f / %@", q.used, limit)
+    }
+    let used = Int(q.used)
+    let limit = q.limit.map { "\(Int($0))" } ?? "∞"
+    return "\(used) / \(limit)"
+  }
+
+  private func chatUsageQuotaDescription(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      return "Chat spend on \(q.plan) plan"
+    }
+    return "Chat questions on \(q.plan) plan"
+  }
+
+  private func chatUsageQuotaResetText(_ q: APIClient.ChatUsageQuota) -> String? {
+    guard let resetAt = q.resetAt else { return nil }
+    let resetDate = Date(timeIntervalSince1970: TimeInterval(resetAt))
+    let now = Date()
+    let days = max(0, Int(resetDate.timeIntervalSince(now) / 86400))
+    if days <= 0 {
+      return "Resets today"
+    }
+    if days == 1 {
+      return "Resets tomorrow"
+    }
+    return "Resets in \(days) days"
+  }
+
+  private func chatUsageBarColor(_ q: APIClient.ChatUsageQuota) -> Color {
+    if !q.allowed || q.percent >= 100.0 { return OmiColors.warning }
+    if q.percent >= 80.0 { return OmiColors.warning }
+    return OmiColors.purplePrimary
   }
 
   // MARK: - AI Chat Section
@@ -5569,13 +5667,13 @@ struct SettingsContentView: View {
 
   private var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Basic"
+      return isLoadingSubscription ? "Loading plan..." : "Free"
     }
     switch subscription.plan {
     case .basic:
-      return "Basic"
+      return "Free"
     case .unlimited:
-      return "Unlimited Plan"
+      return "Plus"
     case .pro:
       return "Omi Pro"
     }
@@ -5625,9 +5723,9 @@ struct SettingsContentView: View {
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
     case "unlimited":
-      return "Current mobile and web subscription"
+      return "200 questions per month"
     case "pro":
-      return "Desktop power-user tier"
+      return "Up to $400 of monthly chat usage"
     default:
       return nil
     }
@@ -5667,9 +5765,9 @@ struct SettingsContentView: View {
   private func planDescription(for planId: String) -> String {
     switch planId {
     case "unlimited":
-      return "Uses the existing Unlimited subscription from mobile and web."
+      return "200 chat questions per month. Shared with mobile and web."
     case "pro":
-      return "Unlock automations, vibe coding, and unlimited actions on desktop."
+      return "Automations, vibe coding, and up to $400 of chat usage per month."
     default:
       return ""
     }
@@ -5747,7 +5845,7 @@ struct SettingsContentView: View {
       let title: String
       switch planId {
       case "unlimited":
-        title = "Unlimited Plan"
+        title = "Plus"
       case "pro":
         title = "Omi Pro"
       default:
@@ -6238,6 +6336,19 @@ struct SettingsContentView: View {
           subscriptionError = "Failed to load plan information."
           isLoadingSubscription = false
         }
+      }
+    }
+    loadChatUsageQuota()
+  }
+
+  private func loadChatUsageQuota() {
+    guard !isLoadingChatUsage else { return }
+    isLoadingChatUsage = true
+    Task {
+      let quota = await APIClient.shared.fetchChatUsageQuota()
+      await MainActor.run {
+        chatUsageQuota = quota
+        isLoadingChatUsage = false
       }
     }
   }
