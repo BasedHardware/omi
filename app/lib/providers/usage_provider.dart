@@ -11,9 +11,8 @@ class UsageProvider with ChangeNotifier {
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
 
-  /// Backend-controlled flag for hiding subscription/upgrade UI on iOS during
-  /// App Store review. Defaults to true if not loaded yet so the failure mode
-  /// is "show UI" rather than silently hiding it from real users.
+  /// Defaults to true when the subscription response hasn't loaded yet, so a
+  /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
