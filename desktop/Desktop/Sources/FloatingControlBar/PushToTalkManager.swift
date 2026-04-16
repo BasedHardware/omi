@@ -61,6 +61,10 @@ class PushToTalkManager: ObservableObject {
     self.barState = barState
     hasMicPermission = AudioCaptureService.checkPermission()
     installEventMonitors()
+    // Wake coreaudiod now so the first PTT press doesn't spend ~1 s on
+    // device-enumeration IPC while the user is already speaking — short
+    // holds would otherwise release before the mic actually started.
+    AudioCaptureService.warmupCoreAudio()
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 
