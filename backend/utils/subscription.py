@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.pro}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.pro, PlanType.operator}
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -19,24 +19,52 @@ def is_paid_plan(plan: PlanType) -> bool:
 
 
 def get_paid_plan_definitions() -> list[dict]:
+    """All plan definitions.
+
+    Pro is displayed as "Architect" — pure rename. Unlimited is kept as legacy
+    so existing subscribers keep their access and Stripe webhooks still resolve,
+    but it's filtered out of the "new user" purchase catalog via
+    `filter_plans_for_user`.
+    """
     return [
         {
-            "plan_type": PlanType.unlimited,
-            "plan_id": "unlimited",
-            "title": "Plus",
-            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
-            "annual_description": "Save 20% with annual billing.",
+            "plan_type": PlanType.operator,
+            "plan_id": "operator",
+            "title": "Operator",
+            "monthly_price_id": os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID'),
+            "annual_description": "Save ~17% with annual billing.",
+            "legacy": False,
         },
         {
             "plan_type": PlanType.pro,
             "plan_id": "pro",
-            "title": "Omi Pro",
+            "title": "Architect",
             "monthly_price_id": os.getenv('STRIPE_PRO_MONTHLY_PRICE_ID'),
             "annual_price_id": os.getenv('STRIPE_PRO_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
+            "legacy": False,
+        },
+        {
+            "plan_type": PlanType.unlimited,
+            "plan_id": "unlimited",
+            "title": "Unlimited (legacy)",
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
+            "annual_description": "Save 20% with annual billing.",
+            "legacy": True,
         },
     ]
+
+
+def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
+    """Drop legacy plans unless the user is currently subscribed to one.
+
+    A user on `unlimited` (legacy) still sees Unlimited in the catalog so the
+    "Manage" / current-plan card renders, but they don't see Pro-legacy.
+    A brand-new user on `basic` sees only non-legacy plans.
+    """
+    return [d for d in definitions if not d.get('legacy') or d['plan_type'] == current_plan]
 
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
@@ -71,19 +99,93 @@ BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
-PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
+PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '500'))
 PRO_CHAT_COST_USD_PER_MONTH = float(os.getenv('PRO_CHAT_COST_USD_PER_MONTH', '400.0'))
+
+# Hard kill-switch for the cap. Default OFF so we can deploy the backend to
+# prod without immediately blocking any existing over-cap user. Flip to "true"
+# via Cloud Run env var once beta has validated the UX.
+CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false').lower() in ('true', '1', 'yes', 'on')
 
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
-    PlanType.unlimited: 'Plus',
-    PlanType.pro: 'Pro',
+    PlanType.unlimited: 'Unlimited (legacy)',
+    PlanType.pro: 'Architect',
+    PlanType.operator: 'Operator',
 }
 
 
 def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
+
+
+def get_chat_quota_snapshot(uid: str) -> dict:
+    """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
+    between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
+
+    Imports are done locally to avoid the circular `utils.subscription` ↔
+    `database.users` cycle at module import time.
+    """
+    from database import user_usage as _user_usage
+    from database.users import get_user_valid_subscription as _get_sub
+
+    subscription = _get_sub(uid)
+    plan = subscription.plan if subscription else PlanType.basic
+    limits = get_plan_limits(plan)
+    usage = _user_usage.get_monthly_chat_usage(uid)
+
+    if limits.chat_cost_usd_per_month is not None:
+        unit = 'cost_usd'
+        used = float(usage['cost_usd'])
+        limit_value = float(limits.chat_cost_usd_per_month)
+    else:
+        unit = 'questions'
+        used = float(usage['questions'])
+        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+
+    allowed = True
+    if limit_value is not None and limit_value > 0:
+        allowed = used < limit_value
+
+    return {
+        'plan': plan,
+        'unit': unit,
+        'used': used,
+        'limit': limit_value,
+        'allowed': allowed,
+        'reset_at': usage['reset_at'],
+    }
+
+
+def enforce_chat_quota(uid: str) -> None:
+    """Raise HTTPException(402) if the user is past their monthly chat cap.
+
+    Guarded by CHAT_CAP_ENFORCEMENT_ENABLED so we can deploy the code first,
+    ship the UI to beta, validate, then flip the kill-switch from ops.
+    """
+    from fastapi import HTTPException
+
+    if not CHAT_CAP_ENFORCEMENT_ENABLED:
+        return
+
+    snapshot = get_chat_quota_snapshot(uid)
+    if snapshot['allowed']:
+        return
+
+    plan = snapshot['plan']
+    raise HTTPException(
+        status_code=402,
+        detail={
+            'error': 'quota_exceeded',
+            'plan': get_plan_display_name(plan),
+            'plan_type': plan.value,
+            'unit': snapshot['unit'],
+            'used': round(snapshot['used'], 4),
+            'limit': snapshot['limit'],
+            'reset_at': snapshot['reset_at'],
+        },
+    )
 
 
 def get_basic_plan_limits() -> PlanLimits:
@@ -105,10 +207,12 @@ def get_default_basic_subscription() -> Subscription:
 def get_plan_limits(plan: PlanType) -> PlanLimits:
     """Returns the PlanLimits object for the given plan.
 
-    Plan display names: basic=Free, unlimited=Plus, pro=Pro.
-    Chat caps: Free/Plus count questions, Pro caps dollar spend.
+    Chat caps:
+      - Free: question count
+      - Oracle + legacy Unlimited: question count (200/mo default)
+      - Pro (Architect): dollar cap ($400/mo default)
     """
-    if plan == PlanType.unlimited:
+    if plan in (PlanType.unlimited, PlanType.operator):
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
@@ -130,14 +234,15 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
     if plan == PlanType.pro:
+        # Lead with what you GET, keep the $400 as a soft fair-use line at the bottom.
         return [
-            f"Up to ${int(PRO_CHAT_COST_USD_PER_MONTH)} of chat usage per month",
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
+            f"~${int(PRO_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
         ]
 
-    if plan == PlanType.unlimited:
+    if plan in (PlanType.unlimited, PlanType.operator):
         return [
             f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",

@@ -1799,8 +1799,6 @@ struct SettingsContentView: View {
         }
       }
 
-      chatUsageQuotaCard
-
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: 18) {
@@ -1822,6 +1820,8 @@ struct SettingsContentView: View {
           }
         }
       }
+
+      chatUsageQuotaCard
     }
   }
 
@@ -5654,7 +5654,9 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    let order = ["unlimited": 0, "pro": 1]
+    // Oracle (mass-market, green) on the left, Architect/Pro (premium, purple)
+    // on the right, legacy Unlimited last if the user is still on it.
+    let order = ["operator": 0, "pro": 1, "unlimited": 2]
     return mergedPlanCatalog.sorted { lhs, rhs in
       let lhsOrder = order[lhs.id, default: Int.max]
       let rhsOrder = order[rhs.id, default: Int.max]
@@ -5673,10 +5675,35 @@ struct SettingsContentView: View {
     case .basic:
       return "Free"
     case .unlimited:
-      return "Plus"
+      // Backend serializes Operator subscribers as plan="unlimited" for
+      // backward compat with old mobile builds that don't know the
+      // `operator` enum. Distinguish by matching current_price_id against
+      // an Operator-titled plan in the catalog.
+      if isCurrentSubscriptionOperator() {
+        return "Operator"
+      }
+      return "Unlimited (legacy)"
     case .pro:
-      return "Omi Pro"
+      return "Architect"
+    case .operator:
+      return "Operator"
     }
+  }
+
+  /// Returns true when the user's current Stripe price maps to a plan the
+  /// backend is calling "Operator". Protects against the wire-level
+  /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
+  private func isCurrentSubscriptionOperator() -> Bool {
+    guard let subscription = userSubscription?.subscription,
+          let currentPriceId = subscription.currentPriceId
+    else { return false }
+    for plan in subscriptionPlansForDisplay {
+      guard plan.title == "Operator" else { continue }
+      if plan.prices.contains(where: { $0.id == currentPriceId }) {
+        return true
+      }
+    }
+    return false
   }
 
   private var currentPlanSubtitle: String {
@@ -5722,16 +5749,18 @@ struct SettingsContentView: View {
 
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
-    case "unlimited":
-      return "200 questions per month"
+    case "operator", "unlimited":
+      return "500 questions per month"
     case "pro":
-      return "Up to $400 of monthly chat usage"
+      return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
     }
   }
 
   private func planAccentColor(for planId: String) -> Color {
+    // Architect (pro) is the premium/purple tier; Oracle + legacy Unlimited
+    // are the mass-market green tier.
     planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
   }
 
@@ -5753,7 +5782,7 @@ struct SettingsContentView: View {
 
   private func planEyebrow(for planId: String) -> String {
     switch planId {
-    case "unlimited":
+    case "operator", "unlimited":
       return "Most popular"
     case "pro":
       return "Automation + coding"
@@ -5764,10 +5793,10 @@ struct SettingsContentView: View {
 
   private func planDescription(for planId: String) -> String {
     switch planId {
-    case "unlimited":
-      return "200 chat questions per month. Shared with mobile and web."
+    case "operator", "unlimited":
+      return "500 chat questions per month. Shared with mobile and web."
     case "pro":
-      return "Automations, vibe coding, and up to $400 of chat usage per month."
+      return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
     }
@@ -5806,14 +5835,14 @@ struct SettingsContentView: View {
     switch planId {
     case "pro":
       return [
-        "Up to $400 of chat usage per month",
         "Automations and vibe coding",
         "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
+        "~$400 of monthly AI compute included (fair-use cap)",
       ]
-    case "unlimited":
+    case "operator", "unlimited":
       return [
-        "200 chat questions per month",
+        "500 chat questions per month",
         "Unlimited listening and transcription",
         "Unlimited memories and insights",
         "Shared with mobile and web",

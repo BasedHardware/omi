@@ -214,8 +214,13 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
+        # Legacy plans (Unlimited, old Pro) only show up if the user is
+        # currently subscribed to one of them; new users see only Oracle + Architect.
+        from utils.subscription import filter_plans_for_user
+
+        current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
-        for definition in get_paid_plan_definitions():
+        for definition in filter_plans_for_user(get_paid_plan_definitions(), current_plan):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:

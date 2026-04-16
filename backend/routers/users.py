@@ -66,6 +66,7 @@ from utils.subscription import (
     get_plan_features,
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
+    filter_plans_for_user,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -811,6 +812,16 @@ def get_user_subscription_endpoint(
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
+    # Backward-compat guard: old mobile builds (Flutter PlanType in
+    # app/lib/models/subscription.dart is a fixed {basic, unlimited, pro})
+    # will throw a Dart decoding exception on any new plan enum value. Map
+    # Operator subscribers -> "unlimited" for wire serialization so existing
+    # deployed clients keep working. Desktop/web clients distinguish Operator
+    # from Unlimited by matching current_price_id against Operator price IDs,
+    # which is unchanged.
+    if subscription.plan == PlanType.operator:
+        subscription.plan = PlanType.unlimited
+
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
 
@@ -826,9 +837,12 @@ def get_user_subscription_endpoint(
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading
+    # Build available plans for upgrading. Legacy plans (Unlimited, old Pro)
+    # only appear if the user is already on that plan — new users see only
+    # Oracle + Architect.
     available_plans: List[SubscriptionPlan] = []
-    for definition in get_paid_plan_definitions():
+    definitions_for_user = filter_plans_for_user(get_paid_plan_definitions(), subscription.plan)
+    for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
         annual_price_id = definition["annual_price_id"]
@@ -884,6 +898,7 @@ def get_user_subscription_endpoint(
                     title=definition["title"],
                     features=get_plan_features(definition["plan_type"]),
                     prices=plan_prices,
+                    legacy=bool(definition.get("legacy")),
                 )
             )
 
