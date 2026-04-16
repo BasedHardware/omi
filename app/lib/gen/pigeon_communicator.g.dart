@@ -150,6 +150,11 @@ class BleDisconnectEvent {
     required this.reason,
     required this.reasonCode,
     required this.isManual,
+    required this.eventType,
+    required this.lastRssi,
+    required this.connectionDurationMs,
+    required this.appState,
+    required this.timeToReconnectMs,
   });
 
   int timestamp;
@@ -160,12 +165,36 @@ class BleDisconnectEvent {
 
   bool isManual;
 
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  String eventType;
+
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  int lastRssi;
+
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  int connectionDurationMs;
+
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  String appState;
+
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  int timeToReconnectMs;
+
   List<Object?> _toList() {
     return <Object?>[
       timestamp,
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
     ];
   }
 
@@ -179,6 +208,11 @@ class BleDisconnectEvent {
       reason: result[1]! as String,
       reasonCode: result[2]! as int,
       isManual: result[3]! as bool,
+      eventType: result[4]! as String,
+      lastRssi: result[5]! as int,
+      connectionDurationMs: result[6]! as int,
+      appState: result[7]! as String,
+      timeToReconnectMs: result[8]! as int,
     );
   }
 
@@ -206,6 +240,7 @@ class BleDeviceDiagnostics {
     required this.disconnectHistory,
     required this.reconnectionCount,
     required this.connectedAt,
+    required this.failToConnectCount,
   });
 
   List<BleDisconnectEvent> disconnectHistory;
@@ -214,11 +249,16 @@ class BleDeviceDiagnostics {
 
   int connectedAt;
 
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  int failToConnectCount;
+
   List<Object?> _toList() {
     return <Object?>[
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     ];
   }
 
@@ -231,6 +271,7 @@ class BleDeviceDiagnostics {
       disconnectHistory: (result[0] as List<Object?>?)!.cast<BleDisconnectEvent>(),
       reconnectionCount: result[1]! as int,
       connectedAt: result[2]! as int,
+      failToConnectCount: result[3]! as int,
     );
   }
 
