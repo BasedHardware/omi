@@ -63,8 +63,8 @@ void main() {
       addTearDown(captureProvider.dispose);
       addTearDown(deviceProvider.dispose);
       addTearDown(connectivityProvider.dispose);
-      captureProvider.onConnectionStateChanged(true);
-      // Use RecordingState.record to exercise the actual active phone-mic path
+      // Set recording state directly — avoid onConnectionStateChanged which
+      // triggers ServiceManager (not available in widget tests).
       captureProvider.updateRecordingState(RecordingState.record);
 
       await _pumpLocalizedApp(
@@ -97,7 +97,8 @@ void main() {
       final deviceProvider = _StubDeviceProvider();
       addTearDown(captureProvider.dispose);
       addTearDown(deviceProvider.dispose);
-      captureProvider.onConnectionStateChanged(true);
+      // Set recording state directly — avoid onConnectionStateChanged which
+      // triggers ServiceManager (not available in widget tests).
       captureProvider.updateRecordingState(RecordingState.record);
 
       await _pumpLocalizedApp(
