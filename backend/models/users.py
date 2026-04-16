@@ -13,11 +13,10 @@ class WebhookType(str, Enum):
 
 
 class PlanType(str, Enum):
-    basic = 'basic'
+    basic = 'basic'  # display "Free"
     unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
-    pro = 'pro'  # LEGACY alias for Architect — kept so old Stripe price IDs still map
-    oracle = 'oracle'
-    architect = 'architect'
+    pro = 'pro'  # display "Architect" — pure rename, same Stripe price IDs
+    operator = 'operator'  # new — display "Operator"
 
 
 class SubscriptionStatus(str, Enum):
