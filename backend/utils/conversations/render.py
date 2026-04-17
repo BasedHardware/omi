@@ -49,7 +49,9 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
 def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
     """Add folder_name to conversations based on folder_id mappings.
 
-    Mutates conversation dicts in-place. Batch-loads all folder IDs in one query.
+    Mutates conversation dicts in-place. Issues one folders_db.get_folder
+    lookup per distinct folder_id referenced by the input — bounded by the
+    number of distinct ids in the payload (typically 1 for webhooks).
     """
     folder_ids = set()
     for conv in conversations:
