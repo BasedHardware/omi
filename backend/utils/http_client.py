@@ -44,12 +44,13 @@ class WebhookCircuitBreaker:
     correctly across different event loops.
     """
 
-    __slots__ = ('_failures', '_last_failure_time', '_state', '_half_open_in_flight', '_url')
+    __slots__ = ('_failures', '_last_failure_time', '_last_access_time', '_state', '_half_open_in_flight', '_url')
 
     def __init__(self, url: str):
         self._url = url
         self._failures = 0
         self._last_failure_time = 0.0
+        self._last_access_time = time.monotonic()
         self._state = 'closed'
         self._half_open_in_flight = 0
 
@@ -62,6 +63,7 @@ class WebhookCircuitBreaker:
         return self._state
 
     def allow_request(self) -> bool:
+        self._last_access_time = time.monotonic()
         s = self.state
         if s == 'closed':
             return True
@@ -111,16 +113,14 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
 
 
 def _evict_stale_circuit_breakers():
-    """Remove circuit breaker entries idle for longer than _CIRCUIT_BREAKER_IDLE_TTL.
+    """Remove circuit breaker entries not accessed for longer than _CIRCUIT_BREAKER_IDLE_TTL.
 
-    Evicts all states (closed, open, half_open) — an open breaker for an
-    abandoned URL that hasn't been touched in an hour is just wasting memory.
+    Uses _last_access_time (updated on every allow_request call) so actively
+    used breakers are never evicted, regardless of failure state.
     """
     now = time.monotonic()
     stale_keys = [
-        k
-        for k, cb in _webhook_circuit_breakers.items()
-        if (now - cb._last_failure_time > _CIRCUIT_BREAKER_IDLE_TTL or cb._last_failure_time == 0.0)
+        k for k, cb in _webhook_circuit_breakers.items() if now - cb._last_access_time > _CIRCUIT_BREAKER_IDLE_TTL
     ]
     for k in stale_keys:
         del _webhook_circuit_breakers[k]
