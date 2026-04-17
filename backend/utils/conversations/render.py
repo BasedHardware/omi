@@ -61,8 +61,15 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
             conv['folder_name'] = None
         return
 
-    all_folders = folders_db.get_folders(uid)
-    folder_map = {f['id']: f['name'] for f in all_folders}
+    # Fetch only the folder docs we actually need. Webhook callers typically
+    # render 1 conversation with 1 folder_id — pulling the user's full folder
+    # list (folders_db.get_folders) was O(total folders) per webhook, even
+    # for a single-conversation payload.
+    folder_map = {}
+    for folder_id in folder_ids:
+        folder = folders_db.get_folder(uid, folder_id)
+        if folder:
+            folder_map[folder['id']] = folder['name']
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
