@@ -58,13 +58,14 @@ def get_paid_plan_definitions() -> list[dict]:
 
 
 def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
-    """Drop legacy plans unless the user is currently subscribed to one.
+    """Drop legacy plans from the purchase catalog — always.
 
-    A user on `unlimited` (legacy) still sees Unlimited in the catalog so the
-    "Manage" / current-plan card renders, but they don't see Pro-legacy.
-    A brand-new user on `basic` sees only non-legacy plans.
+    Legacy subscribers still see their current plan at the top of the Settings
+    → Plan and Usage screen (rendered from `subscription.plan`, not from the
+    purchase catalog) and can manage it via the Stripe customer portal, so
+    there's no need to offer it as a picker card too.
     """
-    return [d for d in definitions if not d.get('legacy') or d['plan_type'] == current_plan]
+    return [d for d in definitions if not d.get('legacy')]
 
 
 # Minimum desktop build that ships with the new plan catalog + quota UI.
