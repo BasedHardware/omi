@@ -379,7 +379,7 @@ class _PlansSheetState extends State<PlansSheet> {
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
     final isUpgradingFromMonthlyToAnnual =
-        (currentSub?.plan == PlanType.unlimited || currentSub?.plan == PlanType.operator) &&
+        (currentSub?.plan == PlanType.unlimited || currentSub?.plan == PlanType.operator || currentSub?.plan == PlanType.pro) &&
             currentSub?.status == SubscriptionStatus.active &&
             isYearly;
 
@@ -488,7 +488,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     final currentSub = provider.subscription!.subscription;
 
-    if (currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator) {
+    if (currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator || currentSub.plan == PlanType.pro) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => ConfirmationDialog(
@@ -511,7 +511,7 @@ class _PlansSheetState extends State<PlansSheet> {
       Map<String, dynamic>? result;
 
       // If user already has a paid plan and it's not canceled
-      if ((currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator) &&
+      if ((currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator || currentSub.plan == PlanType.pro) &&
           currentSub.status == SubscriptionStatus.active &&
           !currentSub.cancelAtPeriodEnd) {
         result = await provider.upgradeUserSubscription(priceId: priceId);
