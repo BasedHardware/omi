@@ -225,4 +225,50 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  group('disconnect notification rate-limiting (#6505)', () {
+    // Mirrors the rate-limit logic in DeviceProvider.onDeviceDisconnected:
+    //
+    //   final now = DateTime.now();
+    //   if (_lastDisconnectNotificationTime != null &&
+    //       now.difference(_lastDisconnectNotificationTime!) < rateLimit) {
+    //     return;  // suppressed
+    //   }
+    //   _lastDisconnectNotificationTime = now;  // on timer fire
+
+    const rateLimit = Duration(minutes: 60);
+
+    /// Returns true if the notification should fire, false if rate-limited.
+    bool shouldNotify(DateTime? lastNotificationTime, DateTime now) {
+      if (lastNotificationTime != null &&
+          now.difference(lastNotificationTime) < rateLimit) {
+        return false;
+      }
+      return true;
+    }
+
+    test('fires on first disconnect (no prior notification)', () {
+      expect(shouldNotify(null, DateTime.now()), true);
+    });
+
+    test('fires after 60+ minutes', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 60));
+      expect(shouldNotify(last, DateTime.now()), true);
+    });
+
+    test('rate-limited within 60 minutes', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 30));
+      expect(shouldNotify(last, DateTime.now()), false);
+    });
+
+    test('rate-limited after 10 minutes (typical BLE range-edge cycle)', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 10));
+      expect(shouldNotify(last, DateTime.now()), false);
+    });
+
+    test('fires again after full rate-limit period', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 61));
+      expect(shouldNotify(last, DateTime.now()), true);
+    });
+  });
 }

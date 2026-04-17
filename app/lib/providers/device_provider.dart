@@ -61,6 +61,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _disconnectNotificationTimer;
+  DateTime? _lastDisconnectNotificationTime;
+  static const _disconnectNotificationRateLimit = Duration(minutes: 60);
   Timer? _discoveryTimer;
   bool _manualDisconnect = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
@@ -358,9 +360,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    // Rate-limit: only notify once per _disconnectNotificationRateLimit
+    // to avoid spamming when device rapidly reconnects (e.g. BLE range edge).
+    final now = DateTime.now();
+    if (_lastDisconnectNotificationTime != null &&
+        now.difference(_lastDisconnectNotificationTime!) < _disconnectNotificationRateLimit) {
+      _disconnectNotificationTimer?.cancel();
+      return;
+    }
+
     // Show a notification if still disconnected after 30 seconds.
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+      _lastDisconnectNotificationTime = DateTime.now();
       final ctx = globalNavigatorKey.currentContext;
       NotificationService.instance.createNotification(
         title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
