@@ -1014,15 +1014,19 @@ test("OMI_TOOLS: execute_sql has 'query' as Type.String", () => {
   assert.ok(queryProp.description);
 });
 
-test("OMI_TOOLS: semantic_search optional fields are Type.Optional", () => {
+test("OMI_TOOLS: semantic_search optional fields exist and are not required", () => {
   const tool = OMI_TOOLS.find(t => t.name === "semantic_search")!;
   const props = (tool.parameters as any).properties;
-  // 'days' and 'app_filter' should be optional (TypeBox wraps in anyOf with undefined)
   const required = (tool.parameters as any).required ?? [];
+  // Verify optional properties exist in the schema
+  assert.ok(props.days, "days property must exist in schema");
+  assert.ok(props.app_filter, "app_filter property must exist in schema");
+  // Verify they are not in the required array
   assert.ok(!required.includes("days"), "days should be optional");
   assert.ok(!required.includes("app_filter"), "app_filter should be optional");
-  // 'query' should be required
+  // Verify required field
   assert.ok(required.includes("query"), "query should be required");
+  assert.ok(props.query, "query property must exist in schema");
 });
 
 // ---------------------------------------------------------------------------
