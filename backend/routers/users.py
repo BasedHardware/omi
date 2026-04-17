@@ -38,7 +38,7 @@ from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
 )
-from utils.executors import critical_executor
+from utils.executors import storage_executor
 from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Conversation
@@ -157,11 +157,17 @@ def delete_account(
 
         # 3. Wipe Firestore subcollections in the background — can take minutes
         #    for heavy users and would otherwise time out at the load balancer.
-        #    critical_executor (non-daemon) so a graceful pod shutdown blocks
-        #    on the wipe instead of silently abandoning it. Per backend
-        #    CLAUDE.md: never ad-hoc Thread/ThreadPoolExecutor — use the
-        #    shared executors.
-        critical_executor.submit(_background_wipe_user_data, uid)
+        #    Run on storage_executor (Firestore/GCS pool) instead of
+        #    critical_executor: a multi-minute wipe should not occupy one of
+        #    the 8 time-sensitive slots used for memory extraction, webhook
+        #    delivery, and trends. Per backend CLAUDE.md: never ad-hoc
+        #    Thread/ThreadPoolExecutor — use the shared executors.
+        #    Caveat: shutdown_executors() registers cancel_futures=True via
+        #    atexit, so a wipe still queued (not yet picked up by a worker)
+        #    can be dropped on pod shutdown after Firebase auth is already
+        #    revoked. Acceptable for now since Firestore data is recoverable
+        #    from backups; revisit if delete-account throughput grows.
+        storage_executor.submit(_background_wipe_user_data, uid)
 
         return {'status': 'ok', 'message': 'Account deletion started'}
     except Exception as e:
