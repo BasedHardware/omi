@@ -425,8 +425,8 @@ class TestPrivateCloudQueueCap:
         assert 'deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)' in src
         assert 'private_cloud_queue: List[dict] = []' not in src
 
-    def test_queue_max_size_is_10(self):
-        """Queue cap should be 10 items (~19MB max per connection)."""
+    def test_queue_max_size_is_20(self):
+        """Queue cap should be 20 items (~18MB max per connection, safe for 30-conn pods)."""
         import ast
         import os
 
@@ -440,7 +440,7 @@ class TestPrivateCloudQueueCap:
                 for target in node.targets:
                     if isinstance(target, ast.Name) and target.id == 'PRIVATE_CLOUD_QUEUE_MAX_SIZE':
                         assert isinstance(node.value, ast.Constant)
-                        assert node.value.value == 10
+                        assert node.value.value == 20
                         return
         pytest.fail("PRIVATE_CLOUD_QUEUE_MAX_SIZE constant not found")
 
