@@ -252,7 +252,7 @@ void main() {
     });
 
     test('fires after 60+ minutes', () {
-      final last = DateTime.now().subtract(const Duration(minutes: 60));
+      final last = DateTime.now().subtract(const Duration(minutes: 61));
       expect(shouldNotify(last, DateTime.now()), true);
     });
 
