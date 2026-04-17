@@ -60,6 +60,8 @@ class Subscription(BaseModel):
     features: List[str] = []
     cancel_at_period_end: bool = False
     limits: PlanLimits = PlanLimits()
+    deprecated: bool = False
+    deprecation_message: Optional[str] = None
 
 
 class PricingOption(BaseModel):
