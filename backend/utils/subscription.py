@@ -1,12 +1,13 @@
 import os
 from datetime import datetime, timezone
 from typing import List, Optional
+
+from fastapi import HTTPException
 import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
 from database.announcements import compare_versions
-from fastapi import HTTPException
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize
@@ -258,17 +259,11 @@ def get_plan_display_name(plan: PlanType) -> str:
 def get_chat_quota_snapshot(uid: str) -> dict:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
-
-    Imports are done locally to avoid the circular `utils.subscription` ↔
-    `database.users` cycle at module import time.
     """
-    from database import user_usage as _user_usage
-    from database.users import get_user_valid_subscription as _get_sub
-
-    subscription = _get_sub(uid)
+    subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
-    usage = _user_usage.get_monthly_chat_usage(uid)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
 
     if limits.chat_cost_usd_per_month is not None:
         unit = 'cost_usd'
