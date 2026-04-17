@@ -2,8 +2,18 @@ import asyncio
 import threading
 from typing import List
 import os
-import requests
 import time
+
+import httpx
+
+from utils.http_client import (
+    get_webhook_client,
+    get_webhook_circuit_breaker,
+    get_webhook_semaphore,
+    latest_wins_start,
+    latest_wins_check,
+)
+from utils.executors import critical_executor
 
 import database.notifications as notification_db
 from database import mem_db
@@ -41,6 +51,7 @@ from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
+from utils.mentor_notifications import process_mentor_notification
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,7 +75,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
-        response = requests.get(url, headers=headers)
+        response = httpx.get(url, headers=headers)
 
         if response.status_code != 200:
             logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
@@ -78,7 +89,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
-                raw_response = requests.get(item["download_url"], headers=headers)
+                raw_response = httpx.get(item["download_url"], headers=headers)
                 if raw_response.status_code == 200:
                     docs_content[item["path"]] = raw_response.text
 
@@ -96,8 +107,8 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 # **************************************************
 
 
-def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED"""
+async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
+    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -108,10 +119,9 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     if not filtered_apps:
         return []
 
-    threads = []
     results = {}
 
-    def _single(app: App):
+    async def _single(app: App):
         if not app.external_integration.webhook_url:
             return
 
@@ -127,18 +137,27 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
         else:
             url += '?uid=' + uid
 
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
+            return
+
         try:
             payload = serialize_datetimes(conversation_dict)
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=30,
-            )  # TODO: failing?
+            async with get_webhook_semaphore():
+                client = get_webhook_client()
+                response = await client.post(
+                    url,
+                    json=payload,
+                )
             if response.status_code != 200:
+                cb.record_failure()
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 return
+
+            cb.record_success()
 
             if app.uid is not None:
                 if app.uid != uid:
@@ -153,18 +172,14 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
                     uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
                 )
 
-            # print('response', response.json())
             if message := response.json().get('message', ''):
                 results[app.id] = message
         except Exception as e:
+            cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
             return
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=_single, args=(app,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
 
     messages = []
     for key, message in results.items():
@@ -177,13 +192,13 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    await asyncio.to_thread(_trigger_realtime_integrations, uid, segments, conversation_id)
+    return await _async_trigger_realtime_integrations(uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
-    await asyncio.to_thread(_trigger_realtime_audio_bytes, uid, sample_rate, data)
+    return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
 
 # proactive notification
@@ -477,43 +492,53 @@ def _process_proactive_notification(uid: str, app: App, data):
     return message
 
 
-def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
         return {}
 
-    threads = []
-    results = {}
+    audio_data = bytes(data)
 
-    def _single(app: App):
+    version = latest_wins_start(uid)
+
+    async def _single(app: App):
+        if not latest_wins_check(uid, version):
+            return  # Newer call superseded this one
+
         if not app.external_integration.webhook_url:
             return
 
         url = app.external_integration.webhook_url
         url += f'?sample_rate={sample_rate}&uid={uid}'
-        try:
-            response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
-            logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
-        except Exception as e:
-            logger.error(f"Plugin integration error: {e}")
+
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
             return
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=_single, args=(app,)))
+        try:
+            async with get_webhook_semaphore():
+                if not latest_wins_check(uid, version):
+                    return  # Check again after acquiring semaphore
+                client = get_webhook_client()
+                response = await client.post(
+                    url, content=audio_data, headers={'Content-Type': 'application/octet-stream'}
+                )
+            logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+            cb.record_success()
+        except Exception as e:
+            cb.record_failure()
+            logger.error(f"Plugin integration error: {e}")
 
-    [t.start() for t in threads]
-    [t.join() for t in threads]
-
-    return results
+    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
+    return {}
 
 
-def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
-    # Process mentor notification first (built-in feature)
-    from utils.mentor_notifications import process_mentor_notification
-
+async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+    # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
-    conversation_messages = process_mentor_notification(uid, segments)
+    loop = asyncio.get_running_loop()
+    conversation_messages = await loop.run_in_executor(critical_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
             mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
@@ -532,10 +557,9 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             return messages
         return {}
 
-    threads = []
     results = {}
 
-    def _single(app: App):
+    async def _single(app: App):
         if not app.external_integration.webhook_url:
             return
 
@@ -545,13 +569,23 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
         else:
             url += '?uid=' + uid
 
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
+            return
+
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
+            async with get_webhook_semaphore():
+                client = get_webhook_client()
+                response = await client.post(url, json={"session_id": uid, "segments": segments})
             if response.status_code != 200:
+                cb.record_failure()
                 logger.info(
                     f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {sanitize(response.text[:100])}'
                 )
                 return
+
+            cb.record_success()
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
                 record_app_usage(
@@ -580,14 +614,11 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
                     results[app.id] = message
 
         except Exception as e:
+            cb.record_failure()
             logger.error(f"App integration error: {e}")
             return
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=_single, args=(app,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
 
     # Merge mentor results with app results
     all_results = {**mentor_results, **results}

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, List
@@ -56,7 +57,7 @@ def create_memory(
     memory = process_conversation(uid, language_code, create_memory)
 
     # Always trigger integration
-    trigger_external_integrations(uid, memory)
+    asyncio.run(trigger_external_integrations(uid, memory))
 
     # Empty response
     return {}

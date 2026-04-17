@@ -1,6 +1,7 @@
 from datetime import datetime
-import threading
 from typing import List, Optional
+
+from utils.executors import critical_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -52,7 +53,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
-    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    critical_executor.submit(update_personas_async, uid)
     return memory_db
 
 

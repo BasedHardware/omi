@@ -140,7 +140,7 @@ async def create_conversation_via_integration(
     conversation = process_conversation(uid, language_code, create_conversation)
 
     # Always trigger integration
-    trigger_external_integrations(uid, conversation)
+    await trigger_external_integrations(uid, conversation)
 
     # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
     # to finish for the conversation id
