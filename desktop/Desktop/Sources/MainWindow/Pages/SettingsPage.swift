@@ -6522,10 +6522,6 @@ struct SettingsContentView: View {
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {
-              FloatingBarUsageLimiter.shared.applyPlan(
-                plan: subscription.subscription.plan,
-                status: subscription.subscription.status
-              )
               userSubscription = subscription
               subscriptionError = nil
               pendingSubscriptionPriceId = nil

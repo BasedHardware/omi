@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Removed 30 messages/month chat limit for free users \u2014 desktop now matches mobile (no frontend chat cap)"
+  ],
   "releases": [
     {
       "version": "0.11.324",
