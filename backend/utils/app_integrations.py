@@ -519,7 +519,9 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
-                response = await client.post(url, content=data, headers={'Content-Type': 'application/octet-stream'})
+                response = await client.post(
+                    url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
+                )
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             cb.record_success()
         except Exception as e:
