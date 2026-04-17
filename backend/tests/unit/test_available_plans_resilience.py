@@ -253,6 +253,51 @@ def test_legacy_unlimited_subscriber_sees_is_active():
     assert active_plans[0]["interval"] == "month"
 
 
+def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
+    """Operator subscriber on old client (no platform header) gets price remapped to Unlimited."""
+    from models.users import Subscription, SubscriptionStatus, PlanType
+
+    OP_MONTHLY = "price_operator_monthly_test"
+    monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", OP_MONTHLY)
+
+    sub = Subscription(
+        plan=PlanType.operator,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_operator_123",
+        cancel_at_period_end=False,
+    )
+    _users_mod.get_user_subscription.return_value = sub
+
+    stripe_sub = MagicMock()
+    stripe_sub.to_dict.return_value = {
+        "items": {"data": [{"price": {"id": OP_MONTHLY}}]},
+        "customer": "cus_456",
+    }
+    stripe.Subscription.retrieve = MagicMock(return_value=stripe_sub)
+    stripe.SubscriptionSchedule.list = MagicMock(return_value=MagicMock(data=[]))
+
+    def _mock_retrieve(price_id):
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", PRO_MONTHLY: "month", PRO_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, PRO_MONTHLY: 990, PRO_ANNUAL: 9900}
+        if price_id not in intervals:
+            raise Exception(f"Unexpected price_id: {price_id}")
+        return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
+
+    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+
+    # No platform header → old client → adapt_plans_for_legacy_client + price remap
+    response = client.get("/v1/payments/available-plans")
+
+    assert response.status_code == 200
+    plans = response.json()["plans"]
+
+    # Operator price should be remapped to Unlimited monthly, so is_active is set
+    active_plans = [p for p in plans if p["is_active"]]
+    assert len(active_plans) == 1
+    assert active_plans[0]["id"] == UNLIM_MONTHLY
+    assert active_plans[0]["interval"] == "month"
+
+
 def test_all_prices_fail_returns_500():
     """When every stripe.Price.retrieve call fails, endpoint returns HTTP 500."""
     _users_mod.get_user_subscription.return_value = None
