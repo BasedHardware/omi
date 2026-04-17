@@ -558,7 +558,7 @@ class OmiBleForegroundService : Service() {
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
-            persistDisconnectEvent(addr, -1, isManual = false)
+            persistDisconnectEvent(addr, -1, isManual = false, eventType = "disconnect")
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
             bleManager.mainHandler.post {
