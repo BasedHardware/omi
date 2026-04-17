@@ -1,7 +1,6 @@
 import sys
 import types
 
-sys.modules.setdefault("stripe", types.SimpleNamespace())
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 
