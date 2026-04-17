@@ -1039,7 +1039,13 @@
           "name": { "type": "string", "description": "Descriptive name." },
           "key_prefix": { "type": "string", "description": "First part of the key (for identification)." },
           "created_at": { "type": "string", "format": "date-time" },
-          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." }
+          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." },
+
+          "scopes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Permission scopes assigned to the API key."
+          }
         }
       },
       "ApiKeyCreated": {
@@ -1050,14 +1056,26 @@
           "key_prefix": { "type": "string" },
           "key": { "type": "string", "description": "The full API key. **Only returned once during creation.**" },
           "created_at": { "type": "string", "format": "date-time" },
-          "last_used_at": { "type": ["string", "null"], "format": "date-time" }
+          "last_used_at": { "type": ["string", "null"], "format": "date-time" },
+
+           "scopes": {
+             "type": "array",
+             "items": { "type": "string" },
+             "description": "Permission scopes assigned to the API key."
+          }
         }
       },
       "CreateApiKey": {
         "type": "object",
         "required": ["name"],
         "properties": {
-          "name": { "type": "string", "description": "Descriptive name for the key." }
+          "name": { "type": "string", "description": "Descriptive name for the key." },
+
+           "scopes": {
+             "type": "array",
+             "items": { "type": "string" },
+             "description": "Optional scopes to assign. Defaults to read-only if not provided."
+          }
         }
       },
       "SuccessResponse": {
