@@ -341,6 +341,10 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
+  # Intentionally higher than backend-listen (22) — pusher's WebSocket
+  # handling profile can absorb 30 concurrent connections per pod, while
+  # backend-listen cannot (see #6752, PR #6732 rollback). Both values are
+  # tuned continuously as the async request pipeline evolves.
   activeConnectionsPerPod: 30
 
 podDisruptionBudget:
