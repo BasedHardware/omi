@@ -963,7 +963,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                         ],
                         // Deprecation notice for legacy Unlimited subscribers
-                        if (isDeprecated && sub?.deprecationMessage != null) ...[
+                        if (isDeprecated) ...[
                           const SizedBox(height: 16),
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -979,17 +979,17 @@ class _PlansSheetState extends State<PlansSheet> {
                                   children: [
                                     Icon(Icons.info_outline, color: Colors.orange.shade400, size: 20),
                                     const SizedBox(width: 8),
-                                    const Expanded(
+                                    Expanded(
                                       child: Text(
-                                        'Plan Update',
-                                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                                        context.l10n.planUpdate,
+                                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  sub!.deprecationMessage!,
+                                  context.l10n.planDeprecationMessage,
                                   style: TextStyle(color: Colors.grey.shade300, fontSize: 13, height: 1.4),
                                 ),
                               ],
