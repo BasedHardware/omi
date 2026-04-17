@@ -2,6 +2,48 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.324",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.323",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.322",
+      "date": "2026-04-16",
+      "changes": [
+        "Fixed Rewind screen capture contending with other screenshot apps (e.g. CleanShot) and causing brief UI stalls"
+      ]
+    },
+    {
+      "version": "0.11.321",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.320",
+      "date": "2026-04-16",
+      "changes": [
+        "Floating bar voice picker now plays a short sample when you switch voices"
+      ]
+    },
+    {
+      "version": "0.11.319",
+      "date": "2026-04-16",
+      "changes": [
+        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+      ]
+    },
+    {
       "version": "0.11.318",
       "date": "2026-04-15",
       "changes": [

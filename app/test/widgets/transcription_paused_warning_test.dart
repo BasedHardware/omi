@@ -120,8 +120,9 @@ void main() {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
       // Set up a fake recording device to exercise the device recording path
-      captureProvider
-          .updateRecordingDevice(BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50));
+      captureProvider.updateRecordingDevice(
+        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
+      );
       captureProvider.updateRecordingState(RecordingState.deviceRecord);
 
       await pumpCaptureWidget(tester, captureProvider);
@@ -138,8 +139,9 @@ void main() {
     testWidgets('paused state overrides Listening during device recording', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
-      captureProvider
-          .updateRecordingDevice(BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50));
+      captureProvider.updateRecordingDevice(
+        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
+      );
       captureProvider.updateRecordingState(RecordingState.deviceRecord);
 
       await pumpCaptureWidget(tester, captureProvider);

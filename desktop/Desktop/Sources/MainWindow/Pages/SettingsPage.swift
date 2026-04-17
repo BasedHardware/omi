@@ -224,6 +224,8 @@ struct SettingsContentView: View {
   @State private var userSubscription: UserSubscriptionResponse?
   @State private var isLoadingSubscription: Bool = false
   @State private var subscriptionError: String?
+  @State private var chatUsageQuota: APIClient.ChatUsageQuota?
+  @State private var isLoadingChatUsage: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
@@ -1818,7 +1820,103 @@ struct SettingsContentView: View {
           }
         }
       }
+
+      chatUsageQuotaCard
     }
+  }
+
+  // MARK: - Chat Usage Quota Card
+
+  @ViewBuilder
+  private var chatUsageQuotaCard: some View {
+    if let quota = chatUsageQuota {
+      settingsCard(settingId: "planusage.current") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Text("Usage this month")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Text(chatUsageQuotaValueText(quota))
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(chatUsageBarColor(quota))
+              .monospacedDigit()
+          }
+
+          ProgressView(value: min(quota.percent / 100.0, 1.0))
+            .progressViewStyle(LinearProgressViewStyle(tint: chatUsageBarColor(quota)))
+            .frame(height: 6)
+
+          HStack {
+            Text(chatUsageQuotaDescription(quota))
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            if let resetText = chatUsageQuotaResetText(quota) {
+              Text(resetText)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
+
+          if !quota.allowed {
+            Text("You've reached this month's limit. Upgrade your plan or wait until the next reset.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          } else if quota.percent >= 80.0 {
+            Text("You're close to your monthly limit.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+      }
+    } else if isLoadingChatUsage {
+      settingsCard(settingId: "planusage.current") {
+        HStack {
+          ProgressView().controlSize(.small)
+          Text("Loading usage…")
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+    }
+  }
+
+  private func chatUsageQuotaValueText(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      let limit = q.limit.map { String(format: "$%.0f", $0) } ?? "—"
+      return String(format: "$%.2f / %@", q.used, limit)
+    }
+    let used = Int(q.used)
+    let limit = q.limit.map { "\(Int($0))" } ?? "∞"
+    return "\(used) / \(limit)"
+  }
+
+  private func chatUsageQuotaDescription(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      return "Chat spend on \(q.plan) plan"
+    }
+    return "Chat questions on \(q.plan) plan"
+  }
+
+  private func chatUsageQuotaResetText(_ q: APIClient.ChatUsageQuota) -> String? {
+    guard let resetAt = q.resetAt else { return nil }
+    let resetDate = Date(timeIntervalSince1970: TimeInterval(resetAt))
+    let now = Date()
+    let days = max(0, Int(resetDate.timeIntervalSince(now) / 86400))
+    if days <= 0 {
+      return "Resets today"
+    }
+    if days == 1 {
+      return "Resets tomorrow"
+    }
+    return "Resets in \(days) days"
+  }
+
+  private func chatUsageBarColor(_ q: APIClient.ChatUsageQuota) -> Color {
+    if !q.allowed || q.percent >= 100.0 { return OmiColors.warning }
+    if q.percent >= 80.0 { return OmiColors.warning }
+    return OmiColors.purplePrimary
   }
 
   // MARK: - AI Chat Section
@@ -1929,9 +2027,47 @@ struct SettingsContentView: View {
         }
       }
 
+      voicePicker(settingId: "floatingbar.voice")
+        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
+        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
         .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
         .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+    }
+  }
+
+  private func voicePicker(settingId: String) -> some View {
+    settingsCard(settingId: settingId) {
+      HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Voice")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
+          )
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textSecondary)
+        }
+        Spacer()
+        Picker("", selection: $shortcutSettings.selectedVoiceID) {
+          Section("Female") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+          Section("Male") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(width: 180)
+        .tint(OmiColors.purplePrimary)
+      }
     }
   }
 
@@ -5518,7 +5654,9 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    let order = ["unlimited": 0, "pro": 1]
+    // Oracle (mass-market, green) on the left, Architect/Pro (premium, purple)
+    // on the right, legacy Unlimited last if the user is still on it.
+    let order = ["operator": 0, "pro": 1, "unlimited": 2]
     return mergedPlanCatalog.sorted { lhs, rhs in
       let lhsOrder = order[lhs.id, default: Int.max]
       let rhsOrder = order[rhs.id, default: Int.max]
@@ -5531,16 +5669,41 @@ struct SettingsContentView: View {
 
   private var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Basic"
+      return isLoadingSubscription ? "Loading plan..." : "Free"
     }
     switch subscription.plan {
     case .basic:
-      return "Basic"
+      return "Free"
     case .unlimited:
-      return "Unlimited Plan"
+      // Backend serializes Operator subscribers as plan="unlimited" for
+      // backward compat with old mobile builds that don't know the
+      // `operator` enum. Distinguish by matching current_price_id against
+      // an Operator-titled plan in the catalog.
+      if isCurrentSubscriptionOperator() {
+        return "Operator"
+      }
+      return "Unlimited (legacy)"
     case .pro:
-      return "Omi Pro"
+      return "Architect"
+    case .operator:
+      return "Operator"
     }
+  }
+
+  /// Returns true when the user's current Stripe price maps to a plan the
+  /// backend is calling "Operator". Protects against the wire-level
+  /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
+  private func isCurrentSubscriptionOperator() -> Bool {
+    guard let subscription = userSubscription?.subscription,
+          let currentPriceId = subscription.currentPriceId
+    else { return false }
+    for plan in subscriptionPlansForDisplay {
+      guard plan.title == "Operator" else { continue }
+      if plan.prices.contains(where: { $0.id == currentPriceId }) {
+        return true
+      }
+    }
+    return false
   }
 
   private var currentPlanSubtitle: String {
@@ -5586,16 +5749,18 @@ struct SettingsContentView: View {
 
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
-    case "unlimited":
-      return "Current mobile and web subscription"
+    case "operator", "unlimited":
+      return "500 questions per month"
     case "pro":
-      return "Desktop power-user tier"
+      return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
     }
   }
 
   private func planAccentColor(for planId: String) -> Color {
+    // Architect (pro) is the premium/purple tier; Oracle + legacy Unlimited
+    // are the mass-market green tier.
     planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
   }
 
@@ -5617,7 +5782,7 @@ struct SettingsContentView: View {
 
   private func planEyebrow(for planId: String) -> String {
     switch planId {
-    case "unlimited":
+    case "operator", "unlimited":
       return "Most popular"
     case "pro":
       return "Automation + coding"
@@ -5628,10 +5793,10 @@ struct SettingsContentView: View {
 
   private func planDescription(for planId: String) -> String {
     switch planId {
-    case "unlimited":
-      return "Uses the existing Unlimited subscription from mobile and web."
+    case "operator", "unlimited":
+      return "500 chat questions per month. Shared with mobile and web."
     case "pro":
-      return "Unlock automations, vibe coding, and unlimited actions on desktop."
+      return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
     }
@@ -5670,17 +5835,17 @@ struct SettingsContentView: View {
     switch planId {
     case "pro":
       return [
-        "Automations",
-        "Vibe coding",
-        "Unlimited actions",
+        "Automations and vibe coding",
+        "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
+        "~$400 of monthly AI compute included (fair-use cap)",
       ]
-    case "unlimited":
+    case "operator", "unlimited":
       return [
-        "Unlimited listening time",
-        "Unlimited words transcribed",
-        "Unlimited insights",
-        "Unlimited memories",
+        "500 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
       ]
     default:
       return []
@@ -5709,7 +5874,7 @@ struct SettingsContentView: View {
       let title: String
       switch planId {
       case "unlimited":
-        title = "Unlimited Plan"
+        title = "Plus"
       case "pro":
         title = "Omi Pro"
       default:
@@ -6200,6 +6365,19 @@ struct SettingsContentView: View {
           subscriptionError = "Failed to load plan information."
           isLoadingSubscription = false
         }
+      }
+    }
+    loadChatUsageQuota()
+  }
+
+  private func loadChatUsageQuota() {
+    guard !isLoadingChatUsage else { return }
+    isLoadingChatUsage = true
+    Task {
+      let quota = await APIClient.shared.fetchChatUsageQuota()
+      await MainActor.run {
+        chatUsageQuota = quota
+        isLoadingChatUsage = false
       }
     }
   }

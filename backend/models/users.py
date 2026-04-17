@@ -13,9 +13,10 @@ class WebhookType(str, Enum):
 
 
 class PlanType(str, Enum):
-    basic = 'basic'
-    unlimited = 'unlimited'
-    pro = 'pro'
+    basic = 'basic'  # display "Free"
+    unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
+    pro = 'pro'  # display "Architect" — pure rename, same Stripe price IDs
+    operator = 'operator'  # new — display "Operator"
 
 
 class SubscriptionStatus(str, Enum):
@@ -28,6 +29,26 @@ class PlanLimits(BaseModel):
     words_transcribed: Optional[int] = None
     insights_gained: Optional[int] = None
     memories_created: Optional[int] = None
+    # Chat caps. Exactly one of these is set per plan: `free` and `unlimited`
+    # (displayed as "Plus") cap by question count; `pro` caps by cost_usd.
+    chat_questions_per_month: Optional[int] = None
+    chat_cost_usd_per_month: Optional[float] = None
+
+
+class ChatQuotaUnit(str, Enum):
+    questions = 'questions'
+    cost_usd = 'cost_usd'
+
+
+class ChatUsageQuota(BaseModel):
+    plan: str  # display name: "Free", "Plus", "Pro"
+    plan_type: str  # internal id: "basic" | "unlimited" | "pro"
+    unit: ChatQuotaUnit
+    used: float
+    limit: Optional[float] = None  # None = unlimited (fallback)
+    percent: float = 0.0
+    allowed: bool = True
+    reset_at: Optional[int] = None  # unix seconds — start of next month UTC
 
 
 class Subscription(BaseModel):
@@ -49,10 +70,11 @@ class PricingOption(BaseModel):
 
 
 class SubscriptionPlan(BaseModel):
-    id: str  # e.g., 'unlimited'
+    id: str  # e.g., 'oracle'
     title: str
     features: List[str] = []
     prices: List[PricingOption] = []
+    legacy: bool = False  # hide from new users; keep visible if they're already subscribed
 
 
 class UserSubscriptionResponse(BaseModel):
