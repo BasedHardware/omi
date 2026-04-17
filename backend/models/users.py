@@ -79,11 +79,14 @@ class PricingOption(BaseModel):
 
 
 class SubscriptionPlan(BaseModel):
-    id: str  # e.g., 'oracle'
+    id: str  # e.g., 'operator'
     title: str
+    subtitle: Optional[str] = None  # e.g. "500 questions per month" — rendered under the title
+    description: Optional[str] = None  # longer copy rendered below price
+    eyebrow: Optional[str] = None  # e.g. "Most popular" — rendered above the title
     features: List[str] = []
     prices: List[PricingOption] = []
-    legacy: bool = False  # hide from new users; keep visible if they're already subscribed
+    legacy: bool = False
 
 
 class UserSubscriptionResponse(BaseModel):

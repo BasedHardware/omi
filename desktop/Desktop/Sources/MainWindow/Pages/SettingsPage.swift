@@ -73,6 +73,9 @@ struct SubscriptionPlanCatalogMerger {
         mergedById[plan.id] = SubscriptionPlanOption(
           id: plan.id,
           title: plan.title.isEmpty ? existing.title : plan.title,
+          subtitle: plan.subtitle ?? existing.subtitle,
+          description: plan.description ?? existing.description,
+          eyebrow: plan.eyebrow ?? existing.eyebrow,
           features: plan.features.isEmpty ? existing.features : plan.features,
           prices: mergePrices(primary: plan.prices, fallback: existing.prices)
         )
@@ -5968,7 +5971,7 @@ struct SettingsContentView: View {
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 6) {
-          Text(planEyebrow(for: plan.id).uppercased())
+          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
             .scaledFont(size: 10, weight: .bold)
             .foregroundColor(accent)
             .tracking(0.8)
@@ -5977,7 +5980,7 @@ struct SettingsContentView: View {
             .scaledFont(size: 18, weight: .bold)
             .foregroundColor(OmiColors.textPrimary)
 
-          if let subtitle = planSubtitle(for: plan.id) {
+          if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
@@ -6000,7 +6003,7 @@ struct SettingsContentView: View {
         .fixedSize(horizontal: true, vertical: false)
       }
 
-      Text(planDescription(for: plan.id))
+      Text(plan.description ?? planDescription(for: plan.id))
         .scaledFont(size: 13)
         .foregroundColor(OmiColors.textSecondary)
 

@@ -3932,8 +3932,21 @@ struct SubscriptionPriceOption: Codable, Identifiable {
 struct SubscriptionPlanOption: Codable, Identifiable {
   let id: String
   let title: String
+  let subtitle: String?
+  let description: String?
+  let eyebrow: String?
   let features: [String]
   let prices: [SubscriptionPriceOption]
+
+  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+    self.id = id
+    self.title = title
+    self.subtitle = subtitle
+    self.description = description
+    self.eyebrow = eyebrow
+    self.features = features
+    self.prices = prices
+  }
 }
 
 struct UserSubscriptionResponse: Codable {
