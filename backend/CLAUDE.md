@@ -160,6 +160,6 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
-10. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=10)` to prevent OOM kills; dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
+10. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=20)` to prevent OOM kills (sized for 30 conns/pod); dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
 11. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
 12. **DG keepalive vs response timeout** — `keep_alive()` prevents DG's 10s idle timeout but NOT 1011 response timeout after all audio is processed. Post-session 1011 is benign.
