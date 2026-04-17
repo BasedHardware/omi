@@ -127,15 +127,16 @@ See `.claude/settings.json` for connection details.
 ### Testing with Named Bundles
 When the user asks to test a feature or bug fix, **always create a separate named bundle** so it can run side-by-side with the existing dev/prod apps:
 ```bash
-OMI_APP_NAME="fix-rewind-delay" ./run.sh
+OMI_APP_NAME="omi-fix-rewind" ./run.sh
 ```
-This creates `/Applications/fix-rewind-delay.app` with bundle ID `com.omi.fix-rewind-delay`, completely independent of "Omi Dev" and "Omi Beta". Name it after the feature/bug being tested (e.g., `OMI_APP_NAME="onboarding-capture" ./run.sh`). The user can then run multiple test builds simultaneously without interfering with each other or the production app.
+This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-rewind`, completely independent of "Omi Dev" and "Omi Beta". Name it after the feature/bug being tested. The user can then run multiple test builds simultaneously without interfering with each other or the production app.
 
 **Rules:**
 - NEVER use the default `./run.sh` (which overwrites "Omi Dev") when testing a specific feature — always set `OMI_APP_NAME`
+- **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
 - Keep the name short and descriptive (it becomes both the app name and bundle ID suffix)
 - The named bundle gets its own permissions, database, and auth state — the user may need to re-grant permissions and sign in
-- To connect agent-swift: `agent-swift connect --bundle-id com.omi.fix-rewind-delay`
+- To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
