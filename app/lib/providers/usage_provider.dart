@@ -57,7 +57,8 @@ class UsageProvider with ChangeNotifier {
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
-    if (_subscription!.subscription.plan == PlanType.unlimited) return false;
+    final plan = _subscription!.subscription.plan;
+    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.pro) return false;
     // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
