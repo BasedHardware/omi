@@ -62,11 +62,11 @@ def test_operator_default_matches_unlimited_default(monkeypatch):
     assert unlimited_limits.chat_questions_per_month == 500
 
 
-def test_pro_architect_uses_dollar_cap():
-    """Pro (Architect) plan uses dollar cap, not question count."""
+def test_architect_uses_dollar_cap():
+    """Architect plan uses dollar cap, not question count."""
     from utils.subscription import get_plan_limits
 
-    limits = get_plan_limits(PlanType.pro)
+    limits = get_plan_limits(PlanType.architect)
     assert limits.chat_cost_usd_per_month is not None
     assert limits.chat_questions_per_month is None
     assert limits.transcription_seconds is None  # unlimited transcription
@@ -76,7 +76,7 @@ def test_operator_is_paid():
     from utils.subscription import is_paid_plan
 
     assert is_paid_plan(PlanType.operator)
-    assert is_paid_plan(PlanType.pro)
+    assert is_paid_plan(PlanType.architect)
     assert is_paid_plan(PlanType.unlimited)
     assert not is_paid_plan(PlanType.basic)
 
@@ -91,7 +91,7 @@ def test_filter_plans_hides_legacy():
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' not in plan_ids
     assert 'operator' in plan_ids
-    assert 'pro' in plan_ids
+    assert 'architect' in plan_ids
 
 
 def test_filter_plans_keeps_legacy_for_current_subscriber():
@@ -104,7 +104,7 @@ def test_filter_plans_keeps_legacy_for_current_subscriber():
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' in plan_ids
     assert 'operator' in plan_ids
-    assert 'pro' in plan_ids
+    assert 'architect' in plan_ids
 
 
 def test_legacy_client_adaptation():
@@ -117,14 +117,14 @@ def test_legacy_client_adaptation():
     plan_ids = [d['plan_id'] for d in adapted]
     assert 'operator' not in plan_ids
     assert 'unlimited' in plan_ids
-    assert 'pro' in plan_ids
+    assert 'architect' in plan_ids
 
     unlimited_def = next(d for d in adapted if d['plan_id'] == 'unlimited')
     assert unlimited_def['title'] == 'Unlimited Plan'
     assert unlimited_def['legacy'] is False  # old clients don't know about legacy flag
 
-    pro_def = next(d for d in adapted if d['plan_id'] == 'pro')
-    assert pro_def['title'] == 'Omi Pro'
+    architect_def = next(d for d in adapted if d['plan_id'] == 'architect')
+    assert architect_def['title'] == 'Omi Pro'
 
 
 def test_version_gating_macos_always_new():
@@ -238,5 +238,5 @@ def test_plan_display_names():
 
     assert get_plan_display_name(PlanType.basic) == 'Free'
     assert get_plan_display_name(PlanType.operator) == 'Operator'
-    assert get_plan_display_name(PlanType.pro) == 'Architect'
+    assert get_plan_display_name(PlanType.architect) == 'Architect'
     assert 'legacy' in get_plan_display_name(PlanType.unlimited).lower()
