@@ -227,14 +227,11 @@ void main() {
   });
 
   group('disconnect notification rate-limiting (#6505)', () {
-    // Mirrors the rate-limit logic in DeviceProvider.onDeviceDisconnected:
-    //
-    //   final now = DateTime.now();
-    //   if (_lastDisconnectNotificationTime != null &&
-    //       now.difference(_lastDisconnectNotificationTime!) < rateLimit) {
-    //     return;  // suppressed
-    //   }
-    //   _lastDisconnectNotificationTime = now;  // on timer fire
+    // Note: following the same pattern used by the battery throttling tests in
+    // this file — extracting the rate-limit logic into a pure test helper that
+    // mirrors production, rather than adding a public test-only method to
+    // DeviceProvider (which would pollute the production API). The logic is
+    // trivial enough that mirroring it here is safer than the alternative.
 
     const rateLimit = Duration(minutes: 60);
 
@@ -251,7 +248,7 @@ void main() {
       expect(shouldNotify(null, DateTime.now()), true);
     });
 
-    test('fires after 60+ minutes', () {
+    test('fires after 61 minutes (well past rate-limit)', () {
       final last = DateTime.now().subtract(const Duration(minutes: 61));
       expect(shouldNotify(last, DateTime.now()), true);
     });
@@ -266,9 +263,12 @@ void main() {
       expect(shouldNotify(last, DateTime.now()), false);
     });
 
-    test('fires again after full rate-limit period', () {
-      final last = DateTime.now().subtract(const Duration(minutes: 61));
-      expect(shouldNotify(last, DateTime.now()), true);
+    test('boundary: exactly 60 minutes ago — rate-limited (not strictly past)', () {
+      // Uses a fixed delta so two separate DateTime.now() calls don't affect the result.
+      final base = DateTime.now();
+      final last = base.subtract(const Duration(minutes: 60));
+      // Less than 60 minutes, so still rate-limited.
+      expect(shouldNotify(last, base), false);
     });
   });
 }
