@@ -3871,7 +3871,8 @@ struct NotificationSettingsResponse: Codable {
 enum SubscriptionPlanType: String, Codable {
   case basic      // display "Free"
   case unlimited  // legacy — display "Unlimited (legacy)"
-  case pro        // display "Architect" — same Stripe IDs, pure rename
+  case architect  // display "Architect" ($400/mo, cost_usd quota)
+  case pro        // backward compat: old Firestore docs may still say "pro"
   case `operator` // new — display "Operator"
 }
 
@@ -4933,7 +4934,7 @@ extension APIClient {
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
   struct ChatUsageQuota: Decodable {
     let plan: String       // display name: "Free" | "Plus" | "Pro"
-    let planType: String   // internal id: "basic" | "unlimited" | "pro"
+    let planType: String   // internal id: "basic" | "unlimited" | "architect"
     let unit: String       // "questions" | "cost_usd"
     let used: Double
     let limit: Double?     // nil means unlimited
