@@ -236,9 +236,9 @@ env:
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
-  - name: STRIPE_PRO_MONTHLY_PRICE_ID
+  - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
     value: "price_1TN7s21F8wnoWYvwG6JuEFm6"
-  - name: STRIPE_PRO_ANNUAL_PRICE_ID
+  - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
     value: "price_1TN7sF1F8wnoWYvwd0QaLZNA"
   - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID
     value: "price_1TN7jS1F8wnoWYvwM5GqfxDw"
