@@ -127,17 +127,29 @@ from utils.conversations.render import populate_folder_names, populate_speaker_n
 # ---------------------------------------------------------------------------
 
 
+def _folder_lookup(table: dict):
+    """Build a side_effect that returns table[folder_id] (None if missing)
+    while also accepting the (uid, folder_id) signature get_folder uses."""
+
+    def _side_effect(_uid, folder_id):
+        return table.get(folder_id)
+
+    return _side_effect
+
+
 class TestAddFolderNamesToConversations:
     """Tests for populate_folder_names in developer API."""
 
     def setup_method(self):
         _mock_get_folders.reset_mock()
+        _mock_get_folder.reset_mock(side_effect=True)
+        _mock_get_folder.return_value = None
 
     def test_conversations_with_folder_id_get_folder_name(self):
-        _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
-            {'id': 'folder2', 'name': 'Personal'},
-        ]
+        _mock_get_folder.side_effect = _folder_lookup({
+            'folder1': {'id': 'folder1', 'name': 'Work'},
+            'folder2': {'id': 'folder2', 'name': 'Personal'},
+        })
         conversations = [
             {'id': 'conv1', 'folder_id': 'folder1'},
             {'id': 'conv2', 'folder_id': 'folder2'},
@@ -146,7 +158,10 @@ class TestAddFolderNamesToConversations:
 
         assert conversations[0]['folder_name'] == 'Work'
         assert conversations[1]['folder_name'] == 'Personal'
-        _mock_get_folders.assert_called_once_with('uid1')
+        # One get_folder call per distinct folder_id; the old all-folders scan
+        # must not be invoked.
+        assert _mock_get_folder.call_count == 2
+        _mock_get_folders.assert_not_called()
 
     def test_conversations_without_folder_id_get_none(self):
         conversations = [
@@ -157,12 +172,12 @@ class TestAddFolderNamesToConversations:
 
         assert conversations[0]['folder_name'] is None
         assert conversations[1]['folder_name'] is None
-        _mock_get_folders.assert_not_called()
+        _mock_get_folder.assert_not_called()
 
     def test_folder_id_not_found_in_db_returns_none(self):
-        _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
-        ]
+        _mock_get_folder.side_effect = _folder_lookup({
+            'folder1': {'id': 'folder1', 'name': 'Work'},
+        })
         conversations = [
             {'id': 'conv1', 'folder_id': 'deleted_folder'},
         ]
@@ -171,9 +186,9 @@ class TestAddFolderNamesToConversations:
         assert conversations[0]['folder_name'] is None
 
     def test_mixed_conversations_with_and_without_folder_id(self):
-        _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
-        ]
+        _mock_get_folder.side_effect = _folder_lookup({
+            'folder1': {'id': 'folder1', 'name': 'Work'},
+        })
         conversations = [
             {'id': 'conv1', 'folder_id': 'folder1'},
             {'id': 'conv2', 'folder_id': None},
@@ -190,14 +205,15 @@ class TestAddFolderNamesToConversations:
         populate_folder_names('uid1', conversations)
 
         assert conversations == []
-        _mock_get_folders.assert_not_called()
+        _mock_get_folder.assert_not_called()
 
-    def test_batch_fetches_all_folders_once(self):
-        """Verify N+1 avoidance: get_folders is called only once regardless of conversation count."""
-        _mock_get_folders.return_value = [
-            {'id': 'f1', 'name': 'Work'},
-            {'id': 'f2', 'name': 'Personal'},
-        ]
+    def test_only_distinct_folder_ids_are_fetched(self):
+        """Per-id fetch invariant: get_folder is called exactly once per
+        distinct folder_id, regardless of conversation count."""
+        _mock_get_folder.side_effect = _folder_lookup({
+            'f1': {'id': 'f1', 'name': 'Work'},
+            'f2': {'id': 'f2', 'name': 'Personal'},
+        })
         conversations = [
             {'id': 'conv1', 'folder_id': 'f1'},
             {'id': 'conv2', 'folder_id': 'f2'},
@@ -205,7 +221,8 @@ class TestAddFolderNamesToConversations:
         ]
         populate_folder_names('uid1', conversations)
 
-        assert _mock_get_folders.call_count == 1
+        assert _mock_get_folder.call_count == 2  # f1 and f2 each fetched once
+        _mock_get_folders.assert_not_called()
 
 
 class TestAddFolderNamesWebhookPayload:
@@ -213,15 +230,20 @@ class TestAddFolderNamesWebhookPayload:
 
     def setup_method(self):
         _mock_get_folders.reset_mock()
+        _mock_get_folder.reset_mock(side_effect=True)
+        _mock_get_folder.return_value = None
 
     def test_payload_with_folder_id_gets_folder_name(self):
-        _mock_get_folders.return_value = [{'id': 'folder1', 'name': 'Work'}]
+        _mock_get_folder.side_effect = _folder_lookup({
+            'folder1': {'id': 'folder1', 'name': 'Work'},
+        })
         payload = {'folder_id': 'folder1'}
 
         populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] == 'Work'
-        _mock_get_folders.assert_called_once_with('uid1')
+        _mock_get_folder.assert_called_once_with('uid1', 'folder1')
+        _mock_get_folders.assert_not_called()
 
     def test_payload_without_folder_id_gets_none(self):
         payload = {'folder_id': None}
@@ -229,7 +251,7 @@ class TestAddFolderNamesWebhookPayload:
         populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folders.assert_not_called()
+        _mock_get_folder.assert_not_called()
 
     def test_payload_missing_folder_id_key_gets_none(self):
         payload = {}
@@ -237,10 +259,10 @@ class TestAddFolderNamesWebhookPayload:
         populate_folder_names('uid1', [payload])
 
         assert payload['folder_name'] is None
-        _mock_get_folders.assert_not_called()
+        _mock_get_folder.assert_not_called()
 
     def test_folder_not_found_in_db_returns_none(self):
-        _mock_get_folders.return_value = []
+        # default _mock_get_folder.return_value=None → unknown folder yields None
         payload = {'folder_id': 'deleted_folder'}
 
         populate_folder_names('uid1', [payload])
