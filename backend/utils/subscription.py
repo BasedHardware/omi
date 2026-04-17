@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.pro, PlanType.operator}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -22,10 +22,9 @@ def is_paid_plan(plan: PlanType) -> bool:
 def get_paid_plan_definitions() -> list[dict]:
     """All plan definitions.
 
-    Pro is displayed as "Architect" — pure rename. Unlimited is kept as legacy
-    so existing subscribers keep their access and Stripe webhooks still resolve,
-    but it's filtered out of the "new user" purchase catalog via
-    `filter_plans_for_user`.
+    Unlimited is kept as legacy so existing subscribers keep their access
+    and Stripe webhooks still resolve, but it's filtered out of the "new user"
+    purchase catalog via `filter_plans_for_user`.
     """
     return [
         {
@@ -38,11 +37,11 @@ def get_paid_plan_definitions() -> list[dict]:
             "legacy": False,
         },
         {
-            "plan_type": PlanType.pro,
-            "plan_id": "pro",
+            "plan_type": PlanType.architect,
+            "plan_id": "architect",
             "title": "Architect",
-            "monthly_price_id": os.getenv('STRIPE_PRO_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_PRO_ANNUAL_PRICE_ID'),
+            "monthly_price_id": os.getenv('STRIPE_ARCHITECT_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_ARCHITECT_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -121,8 +120,10 @@ def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
         if d['plan_id'] in ('operator', 'pro'):
             continue
         adapted = dict(d)
-        if d['plan_id'] == 'unlimited':
-            adapted['title'] = 'Omi Unlimited'
+        if d['plan_id'] == 'architect':
+            adapted['title'] = 'Omi Pro'
+        elif d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Unlimited Plan'
             adapted['legacy'] = False
         out.append(adapted)
     return out
@@ -134,7 +135,7 @@ def legacy_plan_features(plan: PlanType) -> List[str]:
     Mirrors what `get_plan_features` used to return before the Operator /
     Architect rename so older clients' UI doesn't change under them.
     """
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         return [
             "Automations",
             "Vibe coding",
@@ -185,7 +186,7 @@ BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '500'))
-PRO_CHAT_COST_USD_PER_MONTH = float(os.getenv('PRO_CHAT_COST_USD_PER_MONTH', '400.0'))
+ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
 # Hard kill-switch for the cap. Default OFF so we can deploy the backend to
 # prod without immediately blocking any existing over-cap user. Flip to "true"
@@ -196,7 +197,7 @@ CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false'
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
     PlanType.unlimited: 'Unlimited (legacy)',
-    PlanType.pro: 'Architect',
+    PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
 }
 
@@ -296,7 +297,7 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
       - Free: question count
       - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
       - Unlimited (legacy): question count (PLUS_CHAT_QUESTIONS_PER_MONTH, default 500)
-      - Pro (Architect): dollar cap ($400/mo default)
+      - Architect: dollar cap ($400/mo default)
     """
     if plan == PlanType.operator:
         return PlanLimits(
@@ -314,26 +315,26 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             memories_created=None,
             chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
         )
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
             memories_created=None,
-            chat_cost_usd_per_month=PRO_CHAT_COST_USD_PER_MONTH,
+            chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
         )
     return get_basic_plan_limits()
 
 
 def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         # Lead with what you GET, keep the $400 as a soft fair-use line at the bottom.
         return [
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
-            f"~${int(PRO_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
+            f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
         ]
 
     if plan == PlanType.operator:
