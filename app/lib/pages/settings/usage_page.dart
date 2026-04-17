@@ -410,7 +410,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+    final plan = provider.subscription!.subscription.plan;
+    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.pro;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
