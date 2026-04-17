@@ -1,11 +1,14 @@
 import asyncio
 import io
+import os
 import re
 import wave
-from typing import List, Optional
+from functools import lru_cache
+from typing import List, Optional, Tuple
 
 import av
 import numpy as np
+from gliner import GLiNER
 
 from database import conversations as conversations_db
 from database import users as users_db
@@ -20,6 +23,463 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+GLINER_MODEL_NAME = os.getenv("GLINER_MODEL", "knowledgator/gliner-multitask-v1.0")
+GLINER_THRESHOLD = float(os.getenv("GLINER_THRESHOLD", "0.5"))
+
+TITLE_PREFIXES = frozenset(
+    {
+        "dr.",
+        "dr",
+        "mr.",
+        "mr",
+        "mrs.",
+        "mrs",
+        "ms.",
+        "ms",
+        "prof.",
+        "prof",
+        "rev.",
+        "rev",
+        "hon.",
+        "hon",
+        "capt.",
+        "capt",
+        "gen.",
+        "gen",
+        "col.",
+        "col",
+        "sgt.",
+        "sgt",
+        "lt.",
+        "lt",
+        "cmd.",
+        "cmd",
+        "adm.",
+        "adm",
+        "sr.",
+        "sr",
+        "jr.",
+        "jr",
+    }
+)
+
+NAME_PREFIXES = frozenset(
+    {
+        "de",
+        "da",
+        "del",
+        "van",
+        "von",
+        "di",
+        "la",
+        "le",
+        "el",
+        "mc",
+        "mac",
+        "o'",
+        "ben",
+        "bin",
+        "ibn",
+        "fitz",
+        "abu",
+        "abd",
+        "ibn",
+        "al-",
+    }
+)
+
+_gliner_model = None
+
+
+from gliner import GLiNER
+
+_gliner_model = None
+
+
+def _get_gliner_model():
+    global _gliner_model
+    if _gliner_model is None:
+        try:
+            _gliner_model = GLiNER.from_pretrained(GLINER_MODEL_NAME)
+            logger.info(f"Loaded GLiNER model: {GLINER_MODEL_NAME}")
+        except Exception as e:
+            logger.error(f"Failed to load GLiNER model: {e}")
+            raise
+    return _gliner_model
+
+
+def _clean_person_name(name: str) -> Optional[str]:
+    cleaned = name.strip()
+    if not cleaned or len(cleaned) < 2:
+        return None
+
+    words = cleaned.split()
+    if not words:
+        return None
+
+    first_word = words[0].lower()
+    if first_word in TITLE_PREFIXES:
+        if len(words) > 1:
+            return words[1].capitalize()
+        return None
+
+    if first_word in NAME_PREFIXES and len(words) > 1:
+        return words[1].capitalize()
+
+    if len(first_word) == 1 and first_word not in NAME_PREFIXES:
+        if len(words) > 1:
+            return words[1].capitalize()
+        return None
+
+    if len(words) == 1 and len(words[0]) == 1:
+        return None
+
+    return words[0].capitalize()
+
+
+GLINER_INTRO_PHRASES = frozenset(
+    {
+        "i am",
+        "i'm",
+        "my name is",
+        "soy",
+        "soy's",
+        "me llamo",
+        "me llamo",
+        "mi nombre",
+        "mi nombre",
+        "je suis",
+        "je suis",
+        "je m'appelle",
+        "je m'appelle",
+        "mon nom",
+        "mon nom",
+        "ich bin",
+        "ich bin",
+        "ich heiße",
+        "ich heiße",
+        "mein name",
+        "mein name",
+        "jeg er",
+        "jeg er",
+        "jeg hedder",
+        "jeg hedder",
+        "mit navn",
+        "mit navn",
+        "soy",
+        "soy's",
+        "me llamo",
+        "me llamo",
+        "mi nombre",
+        "mi nombre",
+        "soy",
+        "eu sou",
+        "chamo-me",
+        "o meu nome",
+        "o meu nome",
+        "sono",
+        "mi chiamo",
+        "il mio nome",
+        "il mio nome",
+        "ik ben",
+        "ik ben",
+        "mijn naam",
+        "mijn naam",
+        "ik heet",
+        "ik heet",
+        "jag är",
+        "jag är",
+        "jag heter",
+        "jag heter",
+        "mitt namn",
+        "mitt namn",
+        "jag är",
+        "jeg er",
+        "jeg heter",
+        "navnet mitt",
+        "olen",
+        "olen",
+        "minun nimeni",
+        "minun nimeni",
+        "jestem",
+        "jestem",
+        "nazywam się",
+        "mam na imię",
+        "mam na imię",
+        "benim adım",
+        "benim adım",
+        "sunt",
+        "sunt",
+        "mă numesc",
+        "numele meu",
+        "numele meu",
+        "én vagyok",
+        "én vagyok",
+        "a nevem",
+        "a nevem",
+        "jsem",
+        "jsem",
+        "jmenuji se",
+        "jmenuji se",
+        "volám sa",
+        "volám sa",
+        "аз съм",
+        "az съм",
+        "казв",
+        "казвам се",
+        "името",
+        "името ми",
+        "моё",
+        "моё имя",
+        "мене",
+        "мене звати",
+        "моє",
+        "моє ім'я",
+        "я",
+        "меня",
+        "меня зовут",
+        "тôi",
+        "tôi là",
+        "tên tôi",
+        "tên tôi là",
+        "saya",
+        "nama",
+        "nama saya",
+    }
+)
+
+GLINER_INTRO_WORDS = frozenset(
+    {
+        "soy",
+        "soys",
+        "me",
+        "mi",
+        "je",
+        "j",
+        "suis",
+        "m'appelle",
+        "ich",
+        "bin",
+        "heiße",
+        "jeg",
+        "hedder",
+        "navn",
+        "sono",
+        "chiamo",
+        "nome",
+        "ik",
+        "ben",
+        "naam",
+        "heet",
+        "jag",
+        "heter",
+        "mitt",
+        "namn",
+        "olen",
+        "minun",
+        "nimeni",
+        "jestem",
+        "nazywam",
+        "imie",
+        "benim",
+        "adim",
+        "sunt",
+        "numesc",
+        "numele",
+        "én",
+        "vagyok",
+        "nevem",
+        "jsem",
+        "jmenuji",
+        "volám",
+        "az",
+        "съм",
+        "казвам",
+        "името",
+        "я",
+        "меня",
+        "зовут",
+        "мене",
+        "звати",
+        "tôi",
+        "tên",
+        "saya",
+        "nama",
+    }
+)
+
+
+def _is_intro_phrase_word(word: str) -> bool:
+    word_lower = word.lower().strip()
+    return word_lower in GLINER_INTRO_WORDS or word_lower in GLINER_INTRO_PHRASES
+
+
+def _contains_intro_phrase(text: str) -> bool:
+    """Check if text contains any intro phrase (word-boundary aware)."""
+    text_lower = text.lower()
+    for phrase in GLINER_INTRO_PHRASES:
+        if len(phrase) <= 4:
+            # Short tokens: require word boundaries to avoid substring false positives
+            if re.search(r"\b" + re.escape(phrase) + r"\b", text_lower):
+                return True
+        else:
+            if phrase in text_lower:
+                return True
+    return False
+
+
+@lru_cache(maxsize=1000)
+def _detect_person_entities_cached(text: str) -> Tuple[List[str], bool]:
+    # Skip GLiNER entirely for texts that are likely self-introductions
+    # GLiNER often returns the full intro phrase instead of just the name
+    if _contains_intro_phrase(text):
+        logger.debug(f"Skipping GLiNER for intro phrase: {text[:30]}...")
+        return ([], True)  # Return empty but mark as available
+
+    try:
+        model = _get_gliner_model()
+        entities = model.predict_entities(
+            text, labels=["person", "Person"], threshold=GLINER_THRESHOLD
+        )
+        persons = [
+            e["text"].strip()
+            for e in entities
+            if e.get("label", "").lower() == "person"
+        ]
+        persons = [p for p in persons if not _is_intro_phrase_word(p) and len(p) >= 2]
+        return (persons, True)
+    except Exception as e:
+        logger.warning(f"GLiNER NER failed: {e}")
+        return ([], False)
+
+
+def detect_speaker_from_text(text: str) -> Optional[str]:
+    if not text or len(text.strip()) < 3:
+        return None
+
+    persons, ner_available = _detect_person_entities_cached(text)
+    if ner_available and persons:
+        for person in persons:
+            cleaned = _clean_person_name(person)
+            if cleaned:
+                return cleaned
+
+    for pattern in patterns_to_check:
+        match = re.search(pattern, text)
+        if match:
+            name = match.groups()[-1]
+            if name and len(name) >= 2:
+                words = name.split()
+                return " ".join(w.capitalize() for w in words)
+
+    text_lower = text.lower().strip()
+    check_prefixes = ["hi, ", "hi ", "hello, ", "hello ", "uh ", "um ", "uhm "]
+    for prefix in check_prefixes:
+        if text_lower.startswith(prefix):
+            text_lower = text_lower[len(prefix) :].strip()
+            break
+
+    if text_lower.startswith("this is "):
+        idx = len("this is ")
+        remaining = text_lower[idx:].strip()
+        if remaining:
+            first_word = remaining.split()[0]
+            if first_word and len(first_word) >= 2:
+                return first_word.capitalize()
+    elif text_lower.startswith("hey this is "):
+        idx = len("hey this is ")
+        remaining = text_lower[idx:].strip()
+        if remaining:
+            first_word = remaining.split()[0]
+            if first_word and len(first_word) >= 2:
+                return first_word.capitalize()
+    else:
+        excluded_standalone = (
+            "am",
+            "is",
+            "was",
+            "will",
+            "do",
+            "did",
+            "have",
+            "had",
+            "go",
+            "went",
+            "to",
+            "the",
+            "a",
+            "an",
+            "be",
+            "been",
+            "being",
+            "not",
+            "just",
+            "only",
+            "all",
+            "so",
+            "if",
+            "in",
+            "on",
+            "at",
+            "we",
+            "us",
+            "can",
+            "may",
+            "must",
+        )
+        intro_phrases = [
+            "hey it's",
+            "hey its",
+            "call me",
+            "you're speaking with",
+            "you're talking to",
+            "my name is",
+            "i am",
+            "i'm",
+        ]
+        for phrase in intro_phrases:
+            if text_lower.startswith(phrase):
+                start_idx = len(phrase)
+                remaining = text_lower[start_idx:].strip()
+                if remaining:
+                    first_word = remaining.split()[0]
+                    if (
+                        first_word
+                        and len(first_word) >= 2
+                        and first_word.lower() not in excluded_standalone
+                    ):
+                        return first_word.capitalize()
+                break
+
+    return None
+
+
+async def batch_detect_speakers_from_texts(texts: List[str]) -> List[Optional[str]]:
+    results = [None] * len(texts)
+    pending = []
+
+    for i, text in enumerate(texts):
+        if not text or len(text.strip()) < 3:
+            results[i] = None
+            continue
+
+        persons, _ = _detect_person_entities_cached(text)
+        if persons:
+            for person in persons:
+                cleaned = _clean_person_name(person)
+                if cleaned:
+                    results[i] = cleaned
+                    break
+            if results[i] is None:
+                pending.append(i)
+        else:
+            pending.append(i)
+
+    for i in pending:
+        results[i] = detect_speaker_from_text(texts[i])
+
+    return results
+
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
     """
@@ -33,7 +493,7 @@ def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
         WAV format bytes
     """
     wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, 'wb') as wf:
+    with wave.open(wav_buffer, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
@@ -41,7 +501,9 @@ def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
     return wav_buffer.getvalue()
 
 
-def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec: float) -> bytes:
+def _trim_pcm_audio(
+    pcm_data: bytes, sample_rate: int, start_sec: float, end_sec: float
+) -> bytes:
     """
     Trim PCM16 mono audio using av for sample-accurate cutting.
 
@@ -56,7 +518,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     """
     # Create WAV container for av to read
     wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, 'wb') as wf:
+    with wave.open(wav_buffer, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
@@ -65,7 +527,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
 
     # Use av to extract trimmed audio with sample-accurate boundaries
     trimmed_samples = []
-    with av.open(wav_buffer, mode='r') as container:
+    with av.open(wav_buffer, mode="r") as container:
         stream = container.streams.audio[0]
 
         for frame in container.decode(stream):
@@ -107,7 +569,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
                 trimmed_samples.append(arr[frame_start_sample:frame_end_sample])
 
     if not trimmed_samples:
-        return b''
+        return b""
 
     return np.concatenate(trimmed_samples).astype(np.int16).tobytes()
 
@@ -120,106 +582,113 @@ SPEAKER_SAMPLE_WINDOW_HALF = SPEAKER_SAMPLE_MIN_SEGMENT_DURATION / 2
 # Each pattern should have a capture group for the name.
 # The name is expected to be the last capture group.
 SPEAKER_IDENTIFICATION_PATTERNS = {
-    'bg': [  # Bulgarian
+    "bg": [  # Bulgarian
         r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-Я][а-я]*)\b",
     ],
-    'ca': [  # Catalan
+    "ca": [  # Catalan
         r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'zh': [  # Chinese
+    "zh": [  # Chinese
         r"(我是|我叫|我的名字是)\s*([\u4e00-\u9fa5]+)",
     ],
-    'cs': [  # Czech
+    "cs": [  # Czech
         r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'da': [  # Danish
+    "da": [  # Danish
         r"\b(Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'de': [  # German
+    "de": [  # German
         r"\b(ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'el': [  # Greek
+    "el": [  # Greek
         r"\b(Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b",
     ],
-    'en': [  # English
+    "en": [  # English
         r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*)\b",
         r"\b([A-Z][a-zA-Z]*)\s+is my name\b",
+        r"\bThis is ([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\b",
+        r"\bHey(?:,?\s+(?:it'?s?)?)\s+([A-Z][a-zA-Z]+)\b",
+        r"\bHey this is ([A-Z][a-zA-Z]+)\b",
+        r"\bCall me ([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\b",
+        r"\bYou(?:'?r?e?) speaking with ([A-Z][a-zA-Z]+)\b",
+        r"\bYou(?:'?r?e?) talking to ([A-Z][a-zA-Z]+)\b",
+        r"\bThe name'?s ([A-Z][a-zA-Z]+)\b",
     ],
-    'es': [  # Spanish
+    "es": [  # Spanish
         r"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+([A-Z][a-zA-Z]*)\b",
         r"\b([A-Z][a-zA-Z]*)\s+es mi nombre\b",
     ],
-    'et': [  # Estonian
+    "et": [  # Estonian
         r"\b(Ma olen|ma olen|Minu nimi on|minu nimi on)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'fi': [  # Finnish
+    "fi": [  # Finnish
         r"\b(Olen|olen|Minun nimeni on|minun nimeni on)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'fr': [  # French
+    "fr": [  # French
         r"\b(je suis|Je suis|je m'appelle|Je m'appelle|mon nom est|Mon nom est)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'hi': [  # Hindi
+    "hi": [  # Hindi
         r"(मैं हूँ|मेरा नाम है)\s+([\u0900-\u097F]+)",
     ],
-    'hu': [  # Hungarian
+    "hu": [  # Hungarian
         r"\b(Én vagyok|én vagyok|A nevem|a nevem)\s+([A-Z][a-zA-Z]*)\b",
         r"\b([A-Z][a-zA-Z]*)\s+vagyok\b",
     ],
-    'id': [  # Indonesian
+    "id": [  # Indonesian
         r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'it': [  # Italian
+    "it": [  # Italian
         r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'ja': [  # Japanese
+    "ja": [  # Japanese
         r"(私は|わたしは|私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)",
     ],
-    'ko': [  # Korean
+    "ko": [  # Korean
         r"(저는|제 이름은)\s*([\uac00-\ud7a3]+)",
     ],
-    'lt': [  # Lithuanian
+    "lt": [  # Lithuanian
         r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'lv': [  # Latvian
+    "lv": [  # Latvian
         r"\b(Es esmu|es esmu|Mans vārds ir|mans vārds ir)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'ms': [  # Malay
+    "ms": [  # Malay
         r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'nl': [  # Dutch / Flemish
+    "nl": [  # Dutch / Flemish
         r"\b(Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'no': [  # Norwegian
+    "no": [  # Norwegian
         r"\b(Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'pl': [  # Polish
+    "pl": [  # Polish
         r"\b(Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'pt': [  # Portuguese
+    "pt": [  # Portuguese
         r"\b(Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'ro': [  # Romanian
+    "ro": [  # Romanian
         r"\b(Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'ru': [  # Russian
+    "ru": [  # Russian
         r"\b(Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-Я][а-я]*)\b",
     ],
-    'sk': [  # Slovak
+    "sk": [  # Slovak
         r"\b(Som|som|Volám sa|volám sa)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'sv': [  # Swedish
+    "sv": [  # Swedish
         r"\b(Jag är|jag är|Jag heter|jag heter|Mitt namn är|mitt namn är)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'th': [  # Thai
+    "th": [  # Thai
         r"(ผมชื่อ|ฉันชื่อ|ผมคือ|ฉันคือ)\s*([\u0e00-\u0e7f]+)",
     ],
-    'tr': [  # Turkish
+    "tr": [  # Turkish
         r"\b(Benim adım|benim adım)\s+([A-Z][a-zA-Z]*)\b",
     ],
-    'uk': [  # Ukrainian
+    "uk": [  # Ukrainian
         r"\b(Я|я|Мене звати|мене звати|Моє ім'я|моє ім'я)\s+([А-ЯІЇЄҐ][а-яіїєґ]*)\b",
     ],
-    'vi': [  # Vietnamese
+    "vi": [  # Vietnamese
         r"\b(Tôi là|tôi là|Tên tôi là|tên tôi là)\s+([A-Z][a-zA-Z]*)\b",
     ],
 }
@@ -228,16 +697,6 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 patterns_to_check = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
-
-
-def detect_speaker_from_text(text: str) -> Optional[str]:
-    for pattern in patterns_to_check:
-        match = re.search(pattern, text)
-        if match:
-            name = match.groups()[-1]
-            if name and len(name) >= 2:
-                return name.capitalize()
-    return None
 
 
 async def extract_speaker_samples(
@@ -262,7 +721,9 @@ async def extract_speaker_samples(
         # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 1:
-            logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
+            logger.warning(
+                f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}"
+            )
             return
 
         # Fetch conversation to get started_at and segment details
@@ -271,42 +732,50 @@ async def extract_speaker_samples(
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
 
-        started_at = conversation.get('started_at')
+        started_at = conversation.get("started_at")
         if not started_at:
             logger.info(f"Conversation {conversation_id} has no started_at {uid}")
             return
 
-        started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
+        started_at_ts = (
+            started_at.timestamp()
+            if hasattr(started_at, "timestamp")
+            else float(started_at)
+        )
 
         # Build segment lookup from conversation's transcript_segments
-        conv_segments = conversation.get('transcript_segments', [])
-        segment_map = {s.get('id'): s for s in conv_segments if s.get('id')}
+        conv_segments = conversation.get("transcript_segments", [])
+        segment_map = {s.get("id"): s for s in conv_segments if s.get("id")}
 
         # Get chunks from audio_files instead of storage listing
-        audio_files = conversation.get('audio_files', [])
+        audio_files = conversation.get("audio_files", [])
         if not audio_files:
-            logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
+            logger.warning(
+                f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}"
+            )
             return
 
         # Collect all chunk timestamps from audio files
         all_timestamps = []
         for af in audio_files:
-            timestamps = af.get('chunk_timestamps', [])
+            timestamps = af.get("chunk_timestamps", [])
             all_timestamps.extend(timestamps)
 
         if not all_timestamps:
-            logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
+            logger.warning(
+                f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}"
+            )
             return
 
         # Build chunks list in expected format
-        chunks = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
+        chunks = [{"timestamp": ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
         max_samples_to_add = 1 - sample_count
 
         # Build ordered list with index lookup for expansion
-        ordered_segments = [s for s in conv_segments if s.get('id')]
-        segment_index_map = {s.get('id'): i for i, s in enumerate(ordered_segments)}
+        ordered_segments = [s for s in conv_segments if s.get("id")]
+        segment_index_map = {s.get("id"): i for i, s in enumerate(ordered_segments)}
 
         for seg_id in segment_ids:
             if samples_added >= max_samples_to_add:
@@ -314,27 +783,32 @@ async def extract_speaker_samples(
 
             seg = segment_map.get(seg_id)
             if not seg:
-                logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
+                logger.warning(
+                    f"Segment {seg_id} not found in conversation {uid} {conversation_id}"
+                )
                 continue
 
-            segment_start = seg.get('start')
-            segment_end = seg.get('end')
+            segment_start = seg.get("start")
+            segment_end = seg.get("end")
             if segment_start is None or segment_end is None:
                 continue
 
             seg_duration = segment_end - segment_start
-            speaker_id = seg.get('speaker_id')
+            speaker_id = seg.get("speaker_id")
 
             # If segment is too short, try expanding to adjacent segments with same speaker
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
+            if (
+                seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION
+                and speaker_id is not None
+            ):
                 seg_idx = segment_index_map.get(seg_id)
                 if seg_idx is not None:
                     i = seg_idx - 1
                     while i >= 0:
                         prev_seg = ordered_segments[i]
-                        if prev_seg.get('speaker_id') != speaker_id:
+                        if prev_seg.get("speaker_id") != speaker_id:
                             break
-                        prev_start = prev_seg.get('start')
+                        prev_start = prev_seg.get("start")
                         if prev_start is not None:
                             segment_start = min(segment_start, prev_start)
                             seg_duration = segment_end - segment_start
@@ -361,12 +835,12 @@ async def extract_speaker_samples(
             abs_end = started_at_ts + sample_end
 
             # Find relevant chunks
-            sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
+            sorted_chunks = sorted(chunks, key=lambda c: c["timestamp"])
 
             # Find first chunk that starts at or before abs_start
             first_idx = 0
             for i, chunk in enumerate(sorted_chunks):
-                if chunk['timestamp'] <= abs_start:
+                if chunk["timestamp"] <= abs_start:
                     first_idx = i
                 else:
                     break
@@ -374,8 +848,8 @@ async def extract_speaker_samples(
             # Collect from first_idx up to abs_end
             relevant_timestamps = []
             for chunk in sorted_chunks[first_idx:]:
-                if chunk['timestamp'] <= abs_end:
-                    relevant_timestamps.append(chunk['timestamp'])
+                if chunk["timestamp"] <= abs_end:
+                    relevant_timestamps.append(chunk["timestamp"])
                 else:
                     break
 
@@ -412,43 +886,61 @@ async def extract_speaker_samples(
                 continue
 
             # Get expected text from segment for comparison
-            expected_text = seg.get('text', '')
+            expected_text = seg.get("text", "")
 
             # Convert PCM to WAV for Deepgram
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
             # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text
+            )
             if not is_valid:
-                logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
+                logger.error(
+                    f"Sample failed quality check: {reason} {uid} {conversation_id}"
+                )
                 continue  # Try next segment
 
             # Upload and store
             path = await asyncio.to_thread(
-                upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+                upload_person_speech_sample_from_bytes,
+                sample_audio,
+                uid,
+                person_id,
+                sample_rate,
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
+            success = users_db.add_person_speech_sample(
+                uid, person_id, path, transcript=transcript
+            )
             if success:
                 samples_added += 1
-                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
+                seg_text = seg.get("text", "")[:100]  # Truncate to 100 chars
                 logger.info(
                     f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text} {uid} {conversation_id}"
                 )
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
                 try:
-                    embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "sample.wav")
+                    embedding = await asyncio.to_thread(
+                        extract_embedding_from_bytes, wav_bytes, "sample.wav"
+                    )
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
-                    users_db.set_person_speaker_embedding(uid, person_id, embedding_list)
+                    users_db.set_person_speaker_embedding(
+                        uid, person_id, embedding_list
+                    )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )
                 except Exception as emb_err:
-                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+                    logger.error(
+                        f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}"
+                    )
             else:
-                logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
+                logger.error(
+                    f"Failed to add speech sample for person {person_id} {uid} {conversation_id}"
+                )
                 break  # Likely hit limit
 
     except Exception as e:

@@ -220,3 +220,8 @@ app/macos/Runner/LocalDev.entitlements
 # Generated browser snapshots (contain PII)
 builds-snapshot.md
 *-snapshot.md
+
+# Temporary test files
+/tmp/
+*.pyc
+__pycache__/
