@@ -2137,7 +2137,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let usageLimiter = FloatingBarUsageLimiter.shared
         if usageLimiter.isLimitReached {
             log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
-            errorMessage = "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting."
+            errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
             NotificationCenter.default.post(
                 name: .showUsageLimitPopup,
                 object: nil,
