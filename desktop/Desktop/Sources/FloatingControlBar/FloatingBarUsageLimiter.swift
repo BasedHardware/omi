@@ -15,10 +15,10 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
     /// Server-reported quota snapshot, plus an optimistic local delta for queries
     /// sent since the last server sync.
-    private var serverQuota: APIClient.ChatUsageQuota?
-    private var optimisticDelta: Int = 0
+    private(set) var serverQuota: APIClient.ChatUsageQuota?
+    private(set) var optimisticDelta: Int = 0
 
-    private init() {
+    init() {
         hasPaidPlan =
             UserDefaults.standard.string(forKey: Self.cachedPlanKey).map { $0 != "basic" } ?? false
     }
@@ -38,9 +38,14 @@ final class FloatingBarUsageLimiter: ObservableObject {
     /// Sync quota from the server, resetting the optimistic delta.
     func syncQuota() async {
         if let quota = await APIClient.shared.fetchChatUsageQuota() {
-            serverQuota = quota
-            optimisticDelta = 0
+            applyQuota(quota)
         }
+    }
+
+    /// Apply a quota snapshot directly (used by syncQuota and tests).
+    func applyQuota(_ quota: APIClient.ChatUsageQuota) {
+        serverQuota = quota
+        optimisticDelta = 0
     }
 
     /// Update cached plan directly from an already-fetched subscription (no extra API call).
