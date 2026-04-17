@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 
 import av
 import numpy as np
+from gliner import GLiNER
 
 from database import conversations as conversations_db
 from database import users as users_db
@@ -125,12 +126,12 @@ def _clean_person_name(name: str) -> Optional[str]:
     if first_word in NAME_PREFIXES and len(words) > 1:
         return words[1].capitalize()
 
-    if len(first_word) <= 2 and first_word not in NAME_PREFIXES:
+    if len(first_word) == 1 and first_word not in NAME_PREFIXES:
         if len(words) > 1:
             return words[1].capitalize()
         return None
 
-    if len(words) == 1 and len(words[0]) <= 2:
+    if len(words) == 1 and len(words[0]) == 1:
         return None
 
     return words[0].capitalize()
@@ -314,11 +315,16 @@ def _is_intro_phrase_word(word: str) -> bool:
 
 
 def _contains_intro_phrase(text: str) -> bool:
-    """Check if text contains any intro phrase."""
+    """Check if text contains any intro phrase (word-boundary aware)."""
     text_lower = text.lower()
     for phrase in GLINER_INTRO_PHRASES:
-        if phrase in text_lower:
-            return True
+        if len(phrase) <= 4:
+            # Short tokens: require word boundaries to avoid substring false positives
+            if re.search(r"\b" + re.escape(phrase) + r"\b", text_lower):
+                return True
+        else:
+            if phrase in text_lower:
+                return True
     return False
 
 
