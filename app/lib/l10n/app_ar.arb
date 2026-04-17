@@ -2902,5 +2902,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "حذف الحساب نهائياً",
     "keepMyAccount": "الاحتفاظ بحسابي",
-    "deleteAccountFailed": "تعذر حذف حسابك. يرجى المحاولة مرة أخرى."
+    "deleteAccountFailed": "تعذر حذف حسابك. يرجى المحاولة مرة أخرى.",
+    "planUpdate": "تحديث الخطة",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر $49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

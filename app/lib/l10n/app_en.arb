@@ -10728,5 +10728,13 @@
     "deleteAccountFailed": "Could not delete your account. Please try again.",
     "@deleteAccountFailed": {
         "description": "Error shown when deletion API fails"
+    },
+    "planUpdate": "Plan Update",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Your Unlimited plan is being retired. Switch to the Operator plan — same great features at $49/mo. Your current plan will continue to work in the meantime.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
     }
 }

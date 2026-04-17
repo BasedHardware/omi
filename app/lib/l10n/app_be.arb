@@ -10658,5 +10658,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Выдаліць уліковы запіс назаўсёды",
     "keepMyAccount": "Захаваць мой уліковы запіс",
-    "deleteAccountFailed": "Не атрымалася выдаліць ваш уліковы запіс. Паспрабуйце яшчэ раз."
+    "deleteAccountFailed": "Не атрымалася выдаліць ваш уліковы запіс. Паспрабуйце яшчэ раз.",
+    "planUpdate": "Абнаўленне плана",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ваш план Unlimited спыняецца. Пераключыцеся на план Operator — тыя ж выдатныя магчымасці за $49/мес. Ваш бягучы план будзе працягваць працаваць тым часам.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

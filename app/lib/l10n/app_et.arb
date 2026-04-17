@@ -2935,5 +2935,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Kustuta konto jäädavalt",
     "keepMyAccount": "Säilita minu konto",
-    "deleteAccountFailed": "Sinu kontot ei õnnestunud kustutada. Palun proovi uuesti."
+    "deleteAccountFailed": "Sinu kontot ei õnnestunud kustutada. Palun proovi uuesti.",
+    "planUpdate": "Plaani uuendus",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga $49/kuus. Teie praegune plaan jätkab vahepeal tööd.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

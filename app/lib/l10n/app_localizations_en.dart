@@ -9004,4 +9004,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+
+  @override
+  String get planUpdate => 'Plan Update';
+
+  @override
+  String get planDeprecationMessage =>
+      'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.';
 }

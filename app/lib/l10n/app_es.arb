@@ -2936,5 +2936,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Eliminar cuenta permanentemente",
     "keepMyAccount": "Conservar mi cuenta",
-    "deleteAccountFailed": "No se pudo eliminar tu cuenta. Inténtalo de nuevo."
+    "deleteAccountFailed": "No se pudo eliminar tu cuenta. Inténtalo de nuevo.",
+    "planUpdate": "Actualización del plan",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Su plan Unlimited está siendo retirado. Cambie al plan Operator — las mismas excelentes funciones a $49/mes. Su plan actual seguirá funcionando mientras tanto.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

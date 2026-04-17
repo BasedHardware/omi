@@ -16844,6 +16844,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete your account. Please try again.'**
   String get deleteAccountFailed;
+
+  /// Header for plan deprecation notice
+  ///
+  /// In en, this message translates to:
+  /// **'Plan Update'**
+  String get planUpdate;
+
+  /// Deprecation notice for legacy Unlimited subscribers
+  ///
+  /// In en, this message translates to:
+  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
+  String get planDeprecationMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

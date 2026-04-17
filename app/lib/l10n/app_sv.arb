@@ -2935,5 +2935,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Radera kontot permanent",
     "keepMyAccount": "Behåll mitt konto",
-    "deleteAccountFailed": "Kunde inte radera ditt konto. Försök igen."
+    "deleteAccountFailed": "Kunde inte radera ditt konto. Försök igen.",
+    "planUpdate": "Planuppdatering",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för $49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

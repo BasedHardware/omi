@@ -9016,4 +9016,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Nepavyko ištrinti tavo paskyros. Bandyk dar kartą.';
+
+  @override
+  String get planUpdate => 'Plano atnaujinimas';
+
+  @override
+  String get planDeprecationMessage =>
+      'Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už \$49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.';
 }

@@ -10658,5 +10658,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "ఖాతాను శాశ్వతంగా తొలగించండి",
     "keepMyAccount": "నా ఖాతాను ఉంచండి",
-    "deleteAccountFailed": "మీ ఖాతాను తొలగించలేకపోయాము. దయచేసి మళ్ళీ ప్రయత్నించండి."
+    "deleteAccountFailed": "మీ ఖాతాను తొలగించలేకపోయాము. దయచేసి మళ్ళీ ప్రయత్నించండి.",
+    "planUpdate": "ప్లాన్ అప్‌డేట్",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు $49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

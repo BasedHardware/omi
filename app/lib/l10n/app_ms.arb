@@ -2935,5 +2935,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Padam akaun secara kekal",
     "keepMyAccount": "Kekalkan akaun saya",
-    "deleteAccountFailed": "Tidak dapat memadam akaun anda. Sila cuba lagi."
+    "deleteAccountFailed": "Tidak dapat memadam akaun anda. Sila cuba lagi.",
+    "planUpdate": "Kemas Kini Pelan",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada $49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

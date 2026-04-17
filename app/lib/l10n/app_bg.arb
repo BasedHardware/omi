@@ -2904,5 +2904,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Изтрий акаунта окончателно",
     "keepMyAccount": "Запази акаунта ми",
-    "deleteAccountFailed": "Акаунтът ви не може да бъде изтрит. Моля, опитайте отново."
+    "deleteAccountFailed": "Акаунтът ви не може да бъде изтрит. Моля, опитайте отново.",
+    "planUpdate": "Актуализация на плана",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за $49/мес. Текущият ви план ще продължи да работи междувременно.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

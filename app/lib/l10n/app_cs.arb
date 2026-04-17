@@ -2904,5 +2904,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Trvale smazat účet",
     "keepMyAccount": "Ponechat můj účet",
-    "deleteAccountFailed": "Váš účet se nepodařilo smazat. Zkuste to znovu."
+    "deleteAccountFailed": "Váš účet se nepodařilo smazat. Zkuste to znovu.",
+    "planUpdate": "Aktualizace plánu",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za $49/měs. Váš stávající plán bude zatím nadále fungovat.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

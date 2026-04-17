@@ -9012,4 +9012,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Kunde inte radera ditt konto. Försök igen.';
+
+  @override
+  String get planUpdate => 'Planuppdatering';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för \$49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.';
 }

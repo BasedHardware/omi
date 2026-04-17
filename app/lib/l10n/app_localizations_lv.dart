@@ -9026,4 +9026,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Tavu kontu nevarēja izdzēst. Lūdzu, mēģini vēlreiz.';
+
+  @override
+  String get planUpdate => 'Plāna atjauninājums';
+
+  @override
+  String get planDeprecationMessage =>
+      'Jūsu Unlimited plāns tiek pārtraukts. Pārejiet uz Operator plānu — tās pašas lieliskās funkcijas par \$49/mēnesī. Jūsu pašreizējais plāns turpinās darboties pa to laiku.';
 }

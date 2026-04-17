@@ -2977,5 +2977,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Hapus akun secara permanen",
     "keepMyAccount": "Pertahankan akun saya",
-    "deleteAccountFailed": "Tidak dapat menghapus akun Anda. Silakan coba lagi."
+    "deleteAccountFailed": "Tidak dapat menghapus akun Anda. Silakan coba lagi.",
+    "planUpdate": "Pembaruan Paket",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga $49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

@@ -8988,4 +8988,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'आपका खाता हटाया नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get planUpdate => 'प्लान अपडेट';
+
+  @override
+  String get planDeprecationMessage =>
+      'आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ \$49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।';
 }

@@ -8947,4 +8947,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'تعذر حذف حسابك. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get planUpdate => 'تحديث الخطة';
+
+  @override
+  String get planDeprecationMessage =>
+      'يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر \$49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.';
 }

@@ -9021,4 +9021,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Брисање вашег налога није успело. Покушајте поново.';
+
+  @override
+  String get planUpdate => 'Ажурирање плана';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ваш Unlimited план се укида. Пређите на Operator план — исте одличне функције за \$49/мес. Ваш тренутни план ће наставити да ради у међувремену.';
 }

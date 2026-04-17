@@ -9021,4 +9021,11 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Не вдалося видалити ваш акаунт. Спробуйте ще раз.';
+
+  @override
+  String get planUpdate => 'Оновлення плану';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ваш план Unlimited припиняється. Перейдіть на план Operator — ті самі чудові функції за \$49/міс. Ваш поточний план продовжить працювати тим часом.';
 }

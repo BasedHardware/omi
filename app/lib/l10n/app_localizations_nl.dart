@@ -9036,4 +9036,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Je account kon niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get planUpdate => 'Abonnement bijwerken';
+
+  @override
+  String get planDeprecationMessage =>
+      'Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor \$49/maand. Uw huidige abonnement blijft in de tussentijd werken.';
 }

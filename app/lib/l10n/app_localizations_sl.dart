@@ -9032,4 +9032,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Vašega računa ni bilo mogoče izbrisati. Poskusite znova.';
+
+  @override
+  String get planUpdate => 'Posodobitev načrta';
+
+  @override
+  String get planDeprecationMessage =>
+      'Vaš načrt Unlimited se ukinja. Preklopite na načrt Operator — enake odlične funkcije za \$49/mesec. Vaš trenutni načrt bo medtem še naprej deloval.';
 }

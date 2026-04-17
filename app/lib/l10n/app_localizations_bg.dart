@@ -9043,4 +9043,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Акаунтът ви не може да бъде изтрит. Моля, опитайте отново.';
+
+  @override
+  String get planUpdate => 'Актуализация на плана';
+
+  @override
+  String get planDeprecationMessage =>
+      'Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за \$49/мес. Текущият ви план ще продължи да работи междувременно.';
 }

@@ -9012,4 +9012,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Não foi possível excluir sua conta. Tente novamente.';
+
+  @override
+  String get planUpdate => 'Atualização do plano';
+
+  @override
+  String get planDeprecationMessage =>
+      'Seu plano Unlimited está sendo descontinuado. Mude para o plano Operator — os mesmos ótimos recursos por \$49/mês. Seu plano atual continuará funcionando enquanto isso.';
 }

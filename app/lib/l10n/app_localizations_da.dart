@@ -8994,4 +8994,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Kunne ikke slette din konto. Prøv igen.';
+
+  @override
+  String get planUpdate => 'Planopdatering';
+
+  @override
+  String get planDeprecationMessage =>
+      'Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til \$49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.';
 }

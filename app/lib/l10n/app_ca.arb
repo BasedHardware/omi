@@ -2904,5 +2904,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Eliminar compte permanentment",
     "keepMyAccount": "Mantenir el meu compte",
-    "deleteAccountFailed": "No s'ha pogut eliminar el teu compte. Torna-ho a provar."
+    "deleteAccountFailed": "No s'ha pogut eliminar el teu compte. Torna-ho a provar.",
+    "planUpdate": "Actualització del pla",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "El vostre pla Unlimited s'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a $49/mes. El vostre pla actual continuarà funcionant mentrestant.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

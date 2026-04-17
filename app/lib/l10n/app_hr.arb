@@ -10658,5 +10658,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Trajno izbriši račun",
     "keepMyAccount": "Zadrži moj račun",
-    "deleteAccountFailed": "Brisanje vašeg računa nije uspjelo. Pokušajte ponovno."
+    "deleteAccountFailed": "Brisanje vašeg računa nije uspjelo. Pokušajte ponovno.",
+    "planUpdate": "Ažuriranje plana",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Vaš Unlimited plan se ukida. Prijeđite na Operator plan — iste izvrsne značajke za $49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

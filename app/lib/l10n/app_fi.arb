@@ -2935,5 +2935,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Poista tili pysyvästi",
     "keepMyAccount": "Säilytä tilini",
-    "deleteAccountFailed": "Tiliäsi ei voitu poistaa. Yritä uudelleen."
+    "deleteAccountFailed": "Tiliäsi ei voitu poistaa. Yritä uudelleen.",
+    "planUpdate": "Tilauksen päivitys",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan $49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

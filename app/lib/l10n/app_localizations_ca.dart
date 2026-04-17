@@ -9062,4 +9062,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'No s\'ha pogut eliminar el teu compte. Torna-ho a provar.';
+
+  @override
+  String get planUpdate => 'Actualització del pla';
+
+  @override
+  String get planDeprecationMessage =>
+      'El vostre pla Unlimited s\'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a \$49/mes. El vostre pla actual continuarà funcionant mentrestant.';
 }

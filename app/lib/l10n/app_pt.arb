@@ -2971,5 +2971,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Excluir conta permanentemente",
     "keepMyAccount": "Manter minha conta",
-    "deleteAccountFailed": "Não foi possível excluir sua conta. Tente novamente."
+    "deleteAccountFailed": "Não foi possível excluir sua conta. Tente novamente.",
+    "planUpdate": "Atualização do plano",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Seu plano Unlimited está sendo descontinuado. Mude para o plano Operator — os mesmos ótimos recursos por $49/mês. Seu plano atual continuará funcionando enquanto isso.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

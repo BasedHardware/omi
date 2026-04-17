@@ -9017,4 +9017,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'আপনার অ্যাকাউন্ট মুছে ফেলা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get planUpdate => 'প্ল্যান আপডেট';
+
+  @override
+  String get planDeprecationMessage =>
+      'আপনার Unlimited প্ল্যান বন্ধ হচ্ছে। Operator প্ল্যানে স্যুইচ করুন — একই দুর্দান্ত ফিচার \$49/মাসে। আপনার বর্তমান প্ল্যান এর মধ্যে কাজ করতে থাকবে।';
 }

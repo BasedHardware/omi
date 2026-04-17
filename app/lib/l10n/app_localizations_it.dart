@@ -9063,4 +9063,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Impossibile eliminare il tuo account. Riprova.';
+
+  @override
+  String get planUpdate => 'Aggiornamento del piano';
+
+  @override
+  String get planDeprecationMessage =>
+      'Il tuo piano Unlimited viene ritirato. Passa al piano Operator — le stesse fantastiche funzionalità a \$49/mese. Il tuo piano attuale continuerà a funzionare nel frattempo.';
 }

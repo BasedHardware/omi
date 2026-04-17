@@ -9077,4 +9077,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'உங்கள் கணக்கை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get planUpdate => 'திட்ட புதுப்பிப்பு';
+
+  @override
+  String get planDeprecationMessage =>
+      'உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் \$49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.';
 }

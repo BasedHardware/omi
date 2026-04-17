@@ -2944,5 +2944,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Slet konto permanent",
     "keepMyAccount": "Behold min konto",
-    "deleteAccountFailed": "Kunne ikke slette din konto. Prøv igen."
+    "deleteAccountFailed": "Kunne ikke slette din konto. Prøv igen.",
+    "planUpdate": "Planopdatering",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til $49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

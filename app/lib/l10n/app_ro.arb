@@ -2935,5 +2935,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Șterge contul definitiv",
     "keepMyAccount": "Păstrează contul meu",
-    "deleteAccountFailed": "Nu am putut șterge contul tău. Încearcă din nou."
+    "deleteAccountFailed": "Nu am putut șterge contul tău. Încearcă din nou.",
+    "planUpdate": "Actualizare plan",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la $49/lună. Planul dvs. actual va continua să funcționeze între timp.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }

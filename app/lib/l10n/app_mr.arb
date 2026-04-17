@@ -10658,5 +10658,13 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "खाते कायमचे हटवा",
     "keepMyAccount": "माझे खाते ठेवा",
-    "deleteAccountFailed": "तुमचे खाते हटवता आले नाही. कृपया पुन्हा प्रयत्न करा."
+    "deleteAccountFailed": "तुमचे खाते हटवता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+    "planUpdate": "प्लॅन अपडेट",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये $49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    }
 }
