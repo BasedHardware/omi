@@ -178,7 +178,7 @@ async def google_api_request(
                 logger.warning(f"🌐 Rate limited (429), retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})")
             else:
                 logger.warning(
-                    f"�� Server error {r.status_code}, retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                    f"🌐 Server error {r.status_code}, retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})"
                 )
             await asyncio.sleep(delay)
             continue
@@ -189,4 +189,5 @@ async def google_api_request(
     # All retries exhausted
     if last_error and isinstance(last_error, (httpx.TimeoutException, httpx.ConnectError)):
         raise last_error
-    raise GoogleAPIError(r.status_code, sanitize(r.text[:200]) if r.text else "No error body")
+    # Unreachable with _MAX_RETRIES >= 1, but kept as a safety net
+    raise GoogleAPIError(0, "All retries exhausted with no response")

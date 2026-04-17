@@ -724,10 +724,7 @@ async def get_calendar_events_tool(
         return result.strip()
     except Exception as e:
         logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Unexpected error fetching calendar events: {str(e)}"
+        return f"Unexpected error fetching calendar events: {e}"
 
 
 @tool
@@ -917,10 +914,7 @@ async def create_calendar_event_tool(
 
     except Exception as e:
         logger.error(f"❌ Unexpected error in create_calendar_event_tool: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Unexpected error creating calendar event: {str(e)}"
+        return f"Unexpected error creating calendar event: {e}"
 
 
 @tool
