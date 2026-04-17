@@ -51,7 +51,7 @@ PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk ex
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
 # Queue size limits
-PRIVATE_CLOUD_QUEUE_MAX_SIZE = 10  # ~19MB/connection max — prevents OOM (was unbounded, hit 150+ items = ~147MB/user)
+PRIVATE_CLOUD_QUEUE_MAX_SIZE = 20  # ~18MB/connection max (30 conns × 18MB = 540MB) — prevents OOM with headroom
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
 # Constants for transcript queue batching
