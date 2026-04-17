@@ -7,7 +7,6 @@ import types
 # Mock external dependencies before importing app code
 _announcements_mod = types.ModuleType("database.announcements")
 _announcements_mod._compare_versions = lambda a, b: (a > b) - (a < b)
-sys.modules.setdefault("stripe", types.SimpleNamespace())
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 sys.modules.setdefault("database.announcements", _announcements_mod)
