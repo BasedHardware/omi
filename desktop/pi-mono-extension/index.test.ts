@@ -22,7 +22,7 @@ import {
   summarizeInput,
   appendAudit,
   __resetAuditWarnedForTest,
-  OMI_TOOL_SPECS,
+  OMI_TOOLS,
   OMI_TOOL_TIMEOUT_MS,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
@@ -927,22 +927,30 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOL_SPECS: exactly 13 tools defined", () => {
-  assert.equal(OMI_TOOL_SPECS.length, 13);
+test("OMI_TOOLS: exactly 13 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 13);
 });
 
-test("OMI_TOOL_SPECS: all tools have name, description, properties, required", () => {
-  for (const tool of OMI_TOOL_SPECS) {
+test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
+  for (const tool of OMI_TOOLS) {
     assert.ok(tool.name, `tool missing name`);
+    assert.ok(tool.label, `${tool.name} missing label`);
     assert.ok(tool.description, `${tool.name} missing description`);
-    assert.ok(typeof tool.properties === "object", `${tool.name} missing properties`);
-    assert.ok(Array.isArray(tool.required), `${tool.name} missing required array`);
+    assert.ok(tool.parameters, `${tool.name} missing parameters schema`);
+    assert.equal(tool.parameters.type, "object", `${tool.name} parameters should be TypeBox Object`);
+    assert.equal(typeof tool.execute, "function", `${tool.name} missing execute function`);
   }
 });
 
-test("OMI_TOOL_SPECS: unique tool names", () => {
-  const names = OMI_TOOL_SPECS.map(t => t.name);
+test("OMI_TOOLS: unique tool names", () => {
+  const names = OMI_TOOLS.map(t => t.name);
   assert.equal(new Set(names).size, names.length, "duplicate tool names");
+});
+
+test("OMI_TOOLS: all have promptSnippet for system prompt injection", () => {
+  for (const tool of OMI_TOOLS) {
+    assert.ok(tool.promptSnippet, `${tool.name} missing promptSnippet`);
+  }
 });
 
 test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {
