@@ -1042,9 +1042,9 @@
           "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." },
 
           "scopes": {
-            "type": "array",
+            "type": ["array", "null"],
             "items": { "type": "string" },
-            "description": "Permission scopes assigned to the API key."
+            "description": "Permission scopes assigned to the API key. Null for legacy keys (treated as read-only)."
           }
         }
       },
@@ -1058,10 +1058,10 @@
           "created_at": { "type": "string", "format": "date-time" },
           "last_used_at": { "type": ["string", "null"], "format": "date-time" },
 
-           "scopes": {
-             "type": "array",
-             "items": { "type": "string" },
-             "description": "Permission scopes assigned to the API key."
+          "scopes": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Permission scopes assigned to the API key. Null for legacy keys (treated as read-only)."
           }
         }
       },
@@ -1071,10 +1071,18 @@
         "properties": {
           "name": { "type": "string", "description": "Descriptive name for the key." },
 
-           "scopes": {
-             "type": "array",
-             "items": { "type": "string" },
-             "description": "Optional scopes to assign. Defaults to read-only if not provided."
+          "scopes": {
+           "type": "array",
+           "items": {
+             "type": "string",
+             "enum": [
+               "conversations:read", "conversations:write",
+               "memories:read", "memories:write",
+               "action_items:read", "action_items:write",
+               "goals:read", "goals:write"
+              ]
+            },
+            "description": "Optional scopes to assign. Defaults to read-only (conversations:read, memories:read, action_items:read, goals:read) if not provided."
           }
         }
       },
