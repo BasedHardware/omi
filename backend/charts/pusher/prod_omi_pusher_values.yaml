@@ -268,6 +268,14 @@ env:
     value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
+  - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
+    value: "price_1TN7vz1F8wnoWYvwXbVLEX0Y"
+  - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
+    value: "price_1TN7vz1F8wnoWYvwkrqXVn5t"
+  - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID
+    value: "price_1TMxVM1F8wnoWYvw9uaoYX7V"
+  - name: STRIPE_OPERATOR_ANNUAL_PRICE_ID
+    value: "price_1TMxVM1F8wnoWYvwNfXdF6LW"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: METRICS_SECRET

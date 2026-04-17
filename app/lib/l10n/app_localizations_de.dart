@@ -9085,4 +9085,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Dein Konto konnte nicht gelöscht werden. Bitte versuche es erneut.';
+
+  @override
+  String get planUpdate => 'Plan-Aktualisierung';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ihr Unlimited-Plan wird eingestellt. Wechseln Sie zum Operator-Plan — dieselben großartigen Funktionen für \$49/Monat. Ihr aktueller Plan funktioniert in der Zwischenzeit weiterhin.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade deinen Plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du hast einen kostenpflichtigen Plan.';
 }

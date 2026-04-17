@@ -87,6 +87,9 @@ pytest tests/unit/test_desktop_migration.py -v
 pytest tests/unit/test_staged_tasks_batch_scores.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 pytest tests/unit/test_available_plans_resilience.py -v
+pytest tests/unit/test_subscription_restructure.py -v
+pytest tests/unit/test_subscription_plans.py -v
+pytest tests/unit/test_payment_available_plans_source.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
 pytest tests/unit/test_async_webhooks.py -v
 pytest tests/unit/test_async_app_integrations.py -v

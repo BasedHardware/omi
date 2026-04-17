@@ -9033,4 +9033,17 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Не атрымалася выдаліць ваш уліковы запіс. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get planUpdate => 'Абнаўленне плана';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ваш план Unlimited спыняецца. Пераключыцеся на план Operator — тыя ж выдатныя магчымасці за \$49/мес. Ваш бягучы план будзе працягваць працаваць тым часам.';
+
+  @override
+  String get upgradeYourPlan => 'Палепшыце свой план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вы на платным плане.';
 }

@@ -15,8 +15,15 @@ class WebhookType(str, Enum):
 class PlanType(str, Enum):
     basic = 'basic'  # display "Free"
     unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
-    pro = 'pro'  # display "Architect" — pure rename, same Stripe price IDs
-    operator = 'operator'  # new — display "Operator"
+    architect = 'architect'  # display "Architect"
+    operator = 'operator'  # display "Operator"
+
+    @classmethod
+    def _missing_(cls, value):
+        # Backward compat: 'pro' was renamed to 'architect'
+        if value == 'pro':
+            return cls.architect
+        return None
 
 
 class SubscriptionStatus(str, Enum):
@@ -30,7 +37,7 @@ class PlanLimits(BaseModel):
     insights_gained: Optional[int] = None
     memories_created: Optional[int] = None
     # Chat caps. Exactly one of these is set per plan: `free` and `unlimited`
-    # (displayed as "Plus") cap by question count; `pro` caps by cost_usd.
+    # (displayed as "Plus") cap by question count; `architect` caps by cost_usd.
     chat_questions_per_month: Optional[int] = None
     chat_cost_usd_per_month: Optional[float] = None
 
@@ -41,8 +48,8 @@ class ChatQuotaUnit(str, Enum):
 
 
 class ChatUsageQuota(BaseModel):
-    plan: str  # display name: "Free", "Plus", "Pro"
-    plan_type: str  # internal id: "basic" | "unlimited" | "pro"
+    plan: str  # display name: "Free", "Plus", "Architect"
+    plan_type: str  # internal id: "basic" | "unlimited" | "architect"
     unit: ChatQuotaUnit
     used: float
     limit: Optional[float] = None  # None = unlimited (fallback)
@@ -60,6 +67,8 @@ class Subscription(BaseModel):
     features: List[str] = []
     cancel_at_period_end: bool = False
     limits: PlanLimits = PlanLimits()
+    deprecated: bool = False
+    deprecation_message: Optional[str] = None
 
 
 class PricingOption(BaseModel):

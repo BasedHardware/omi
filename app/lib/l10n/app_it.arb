@@ -2935,5 +2935,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Elimina account definitivamente",
     "keepMyAccount": "Mantieni il mio account",
-    "deleteAccountFailed": "Impossibile eliminare il tuo account. Riprova."
+    "deleteAccountFailed": "Impossibile eliminare il tuo account. Riprova.",
+    "planUpdate": "Aggiornamento del piano",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Il tuo piano Unlimited viene ritirato. Passa al piano Operator — le stesse fantastiche funzionalità a $49/mese. Il tuo piano attuale continuerà a funzionare nel frattempo.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Aggiorna il tuo piano",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Sei su un piano a pagamento.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -3903,13 +3903,16 @@ struct UserSubscriptionInfo: Codable {
   let features: [String]
   let cancelAtPeriodEnd: Bool
   let limits: SubscriptionLimitsResponse
+  let deprecated: Bool?
+  let deprecationMessage: String?
 
   enum CodingKeys: String, CodingKey {
-    case plan, status, features, limits
+    case plan, status, features, limits, deprecated
     case currentPeriodEnd = "current_period_end"
     case stripeSubscriptionId = "stripe_subscription_id"
     case currentPriceId = "current_price_id"
     case cancelAtPeriodEnd = "cancel_at_period_end"
+    case deprecationMessage = "deprecation_message"
   }
 }
 

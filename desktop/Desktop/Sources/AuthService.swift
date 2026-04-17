@@ -1066,6 +1066,7 @@ class AuthService {
         // Stop background services that make API calls before clearing caches
         Task {
             await AgentSyncService.shared.stop()
+            await FloatingBarUsageLimiter.shared.reset()
         }
 
         // Close database and invalidate all storage caches so the next sign-in

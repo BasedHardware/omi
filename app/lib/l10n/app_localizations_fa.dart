@@ -9010,4 +9010,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'حذف حساب شما ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get planUpdate => 'به‌روزرسانی طرح';
+
+  @override
+  String get planDeprecationMessage =>
+      'طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با \$49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.';
+
+  @override
+  String get upgradeYourPlan => 'طرح خود را ارتقا دهید';
+
+  @override
+  String get youAreOnAPaidPlan => 'شما در یک طرح پولی هستید.';
 }

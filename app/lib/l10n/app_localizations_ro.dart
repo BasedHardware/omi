@@ -9051,4 +9051,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Nu am putut șterge contul tău. Încearcă din nou.';
+
+  @override
+  String get planUpdate => 'Actualizare plan';
+
+  @override
+  String get planDeprecationMessage =>
+      'Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la \$49/lună. Planul dvs. actual va continua să funcționeze între timp.';
+
+  @override
+  String get upgradeYourPlan => 'Îmbunătățește-ți planul';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ești pe un plan plătit.';
 }

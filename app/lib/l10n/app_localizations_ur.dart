@@ -9025,4 +9025,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get planUpdate => 'پلان اپ ڈیٹ';
+
+  @override
+  String get planDeprecationMessage =>
+      'آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز \$49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔';
+
+  @override
+  String get upgradeYourPlan => 'اپنا پلان اپ گریڈ کریں';
+
+  @override
+  String get youAreOnAPaidPlan => 'آپ ایک ادا شدہ پلان پر ہیں۔';
 }

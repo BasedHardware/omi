@@ -5,13 +5,14 @@ import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
+from database.announcements import _compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.pro, PlanType.operator}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -21,10 +22,9 @@ def is_paid_plan(plan: PlanType) -> bool:
 def get_paid_plan_definitions() -> list[dict]:
     """All plan definitions.
 
-    Pro is displayed as "Architect" — pure rename. Unlimited is kept as legacy
-    so existing subscribers keep their access and Stripe webhooks still resolve,
-    but it's filtered out of the "new user" purchase catalog via
-    `filter_plans_for_user`.
+    Unlimited is kept as legacy so existing subscribers keep their access
+    and Stripe webhooks still resolve, but it's filtered out of the "new user"
+    purchase catalog via `filter_plans_for_user`.
     """
     return [
         {
@@ -37,11 +37,11 @@ def get_paid_plan_definitions() -> list[dict]:
             "legacy": False,
         },
         {
-            "plan_type": PlanType.pro,
-            "plan_id": "pro",
+            "plan_type": PlanType.architect,
+            "plan_id": "architect",
             "title": "Architect",
-            "monthly_price_id": os.getenv('STRIPE_PRO_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_PRO_ANNUAL_PRICE_ID'),
+            "monthly_price_id": os.getenv('STRIPE_ARCHITECT_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_ARCHITECT_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -58,51 +58,52 @@ def get_paid_plan_definitions() -> list[dict]:
 
 
 def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
-    """Drop legacy plans from the purchase catalog — always.
+    """Drop legacy plans from the purchase catalog unless the user is on one.
 
-    Legacy subscribers still see their current plan at the top of the Settings
-    → Plan and Usage screen (rendered from `subscription.plan`, not from the
-    purchase catalog) and can manage it via the Stripe customer portal, so
-    there's no need to offer it as a picker card too.
+    Legacy subscribers need their plan kept in the catalog so the mobile app
+    can detect `is_active` for interval-change flows.  New users never see
+    legacy plans in the picker.
     """
-    return [d for d in definitions if not d.get('legacy')]
+    return [d for d in definitions if not d.get('legacy') or d.get('plan_type') == current_plan]
 
 
 # Minimum desktop build that ships with the new plan catalog + quota UI.
-# Clients below this threshold — older desktop, or any mobile build — get the
-# pre-Operator plan shape. Once a stable release catches up, lower this.
 NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv('NEW_PLANS_MIN_DESKTOP_VERSION', '0.11.324')
+
+# Minimum mobile build that ships with the `operator` enum value and new plan UI.
+# Mobile builds below this version get the legacy catalog with operator→unlimited mapping.
+NEW_PLANS_MIN_MOBILE_VERSION = os.getenv('NEW_PLANS_MIN_MOBILE_VERSION', '1.0.530')
 
 
 def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -> bool:
-    """True iff this caller's client has the Swift code that understands the new
-    Operator + Architect plan shape and the /v1/users/me/usage-quota endpoint.
+    """True iff this caller's client understands the Operator + Architect plan shape.
 
-    Any macOS desktop build qualifies. iOS / Android clients always get the
-    legacy plan catalog so the rollout is gated to desktop without cross-
-    client breakage.
-
-    The existing APIClient.swift doesn't send an X-App-Version header, so we
-    cannot version-gate per-build — version is included only as an opt-in
-    tightening hook once the client starts sending it.
+    Desktop (macOS): any build at or above NEW_PLANS_MIN_DESKTOP_VERSION qualifies.
+    Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION qualifies.
+    Unknown platform: legacy catalog.
     """
-    from database.announcements import _compare_versions
-
-    if not platform or platform.lower() != 'macos':
+    if not platform:
         return False
 
-    # No version header: assume a recent-enough desktop build. Desktop clients
-    # don't currently send X-App-Version (see APIClient.swift buildHeaders),
-    # so requiring it here would fail-closed for every real desktop user.
-    if not app_version:
-        return True
+    platform_lower = platform.lower()
 
-    try:
-        return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
-    except Exception:
-        # Malformed version — fail-open on macOS rather than show the old
-        # catalog to a desktop client.
-        return True
+    if platform_lower == 'macos':
+        if not app_version:
+            return True
+        try:
+            return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+        except Exception:
+            return True
+
+    if platform_lower in ('android', 'ios'):
+        if not app_version:
+            return False
+        try:
+            return _compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
+        except Exception:
+            return False
+
+    return False
 
 
 def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
@@ -119,8 +120,10 @@ def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
         if d['plan_id'] in ('operator', 'pro'):
             continue
         adapted = dict(d)
-        if d['plan_id'] == 'unlimited':
-            adapted['title'] = 'Omi Unlimited'
+        if d['plan_id'] == 'architect':
+            adapted['title'] = 'Omi Pro'
+        elif d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Unlimited Plan'
             adapted['legacy'] = False
         out.append(adapted)
     return out
@@ -132,7 +135,7 @@ def legacy_plan_features(plan: PlanType) -> List[str]:
     Mirrors what `get_plan_features` used to return before the Operator /
     Architect rename so older clients' UI doesn't change under them.
     """
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         return [
             "Automations",
             "Vibe coding",
@@ -181,8 +184,9 @@ BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
+OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '500'))
-PRO_CHAT_COST_USD_PER_MONTH = float(os.getenv('PRO_CHAT_COST_USD_PER_MONTH', '400.0'))
+ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
 # Hard kill-switch for the cap. Default OFF so we can deploy the backend to
 # prod without immediately blocking any existing over-cap user. Flip to "true"
@@ -193,7 +197,7 @@ CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false'
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
     PlanType.unlimited: 'Unlimited (legacy)',
-    PlanType.pro: 'Architect',
+    PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
 }
 
@@ -291,10 +295,19 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 
     Chat caps:
       - Free: question count
-      - Oracle + legacy Unlimited: question count (200/mo default)
-      - Pro (Architect): dollar cap ($400/mo default)
+      - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
+      - Unlimited (legacy): question count (PLUS_CHAT_QUESTIONS_PER_MONTH, default 500)
+      - Architect: dollar cap ($400/mo default)
     """
-    if plan in (PlanType.unlimited, PlanType.operator):
+    if plan == PlanType.operator:
+        return PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+            chat_questions_per_month=OPERATOR_CHAT_QUESTIONS_PER_MONTH,
+        )
+    if plan == PlanType.unlimited:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
@@ -302,29 +315,37 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             memories_created=None,
             chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
         )
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
             memories_created=None,
-            chat_cost_usd_per_month=PRO_CHAT_COST_USD_PER_MONTH,
+            chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
         )
     return get_basic_plan_limits()
 
 
 def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
-    if plan == PlanType.pro:
+    if plan == PlanType.architect:
         # Lead with what you GET, keep the $400 as a soft fair-use line at the bottom.
         return [
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
-            f"~${int(PRO_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
+            f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
         ]
 
-    if plan in (PlanType.unlimited, PlanType.operator):
+    if plan == PlanType.operator:
+        return [
+            f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
+            "Shared with mobile and web",
+        ]
+
+    if plan == PlanType.unlimited:
         return [
             f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",

@@ -1799,6 +1799,42 @@ struct SettingsContentView: View {
         }
       }
 
+      if let subscription = userSubscription?.subscription,
+        subscription.deprecated == true
+      {
+        settingsCard(settingId: "planusage.deprecation") {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+                .scaledFont(size: 16)
+              Text("Plan Retiring")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+
+            Text(
+              subscription.deprecationMessage
+                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo."
+            )
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+              selectedPlanIdForCheckout = "operator"
+            }) {
+              Text("Try Operator")
+                .scaledFont(size: 13, weight: .semibold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(OmiColors.success)
+          }
+        }
+      }
+
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: 18) {
@@ -6521,11 +6557,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              FloatingBarUsageLimiter.shared.applyPlan(
-                plan: subscription.subscription.plan,
-                status: subscription.subscription.status
-              )
               userSubscription = subscription
               subscriptionError = nil
               pendingSubscriptionPriceId = nil

@@ -8962,4 +8962,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get planUpdate => 'อัปเดตแผน';
+
+  @override
+  String get planDeprecationMessage =>
+      'แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา \$49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้';
+
+  @override
+  String get upgradeYourPlan => 'อัปเกรดแผนของคุณ';
+
+  @override
+  String get youAreOnAPaidPlan => 'คุณอยู่ในแผนชำระเงิน';
 }

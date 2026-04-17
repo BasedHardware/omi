@@ -10658,5 +10658,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Трајно избриши налог",
     "keepMyAccount": "Задржи мој налог",
-    "deleteAccountFailed": "Брисање вашег налога није успело. Покушајте поново."
+    "deleteAccountFailed": "Брисање вашег налога није успело. Покушајте поново.",
+    "planUpdate": "Ажурирање плана",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ваш Unlimited план се укида. Пређите на Operator план — исте одличне функције за $49/мес. Ваш тренутни план ће наставити да ради у међувремену.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Надоградите свој план",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "На плаћеном сте плану.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -2936,5 +2936,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "खाता स्थायी रूप से हटाएँ",
     "keepMyAccount": "मेरा खाता रखें",
-    "deleteAccountFailed": "आपका खाता हटाया नहीं जा सका। कृपया पुनः प्रयास करें।"
+    "deleteAccountFailed": "आपका खाता हटाया नहीं जा सका। कृपया पुनः प्रयास करें।",
+    "planUpdate": "प्लान अपडेट",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ $49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "अपना प्लान अपग्रेड करें",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "आप एक सशुल्क प्लान पर हैं।",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

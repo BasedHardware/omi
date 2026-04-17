@@ -9093,4 +9093,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Hindi ma-delete ang iyong account. Pakisubukan muli.';
+
+  @override
+  String get planUpdate => 'Update ng Plano';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa \$49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.';
+
+  @override
+  String get upgradeYourPlan => 'I-upgrade ang Iyong Plano';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ikaw ay nasa bayad na plano.';
 }

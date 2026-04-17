@@ -2957,5 +2957,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "永久删除账户",
     "keepMyAccount": "保留我的账户",
-    "deleteAccountFailed": "无法删除您的账户。请重试。"
+    "deleteAccountFailed": "无法删除您的账户。请重试。",
+    "planUpdate": "套餐更新",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 $49。您当前的套餐在此期间将继续可用。",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "升级你的计划",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "你正在使用付费计划。",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

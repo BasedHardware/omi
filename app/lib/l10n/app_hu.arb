@@ -3031,5 +3031,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Fiók végleges törlése",
     "keepMyAccount": "Fiókom megtartása",
-    "deleteAccountFailed": "Nem sikerült törölni a fiókodat. Próbáld újra."
+    "deleteAccountFailed": "Nem sikerült törölni a fiókodat. Próbáld újra.",
+    "planUpdate": "Csomag frissítés",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók $49/hó áron. A jelenlegi csomagja addig is tovább működik.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Frissítsd a csomagodat",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Fizetős csomagod van.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }
