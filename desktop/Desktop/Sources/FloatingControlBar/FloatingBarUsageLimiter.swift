@@ -63,8 +63,10 @@ final class FloatingBarUsageLimiter: ObservableObject {
             return false
         }
         if quota.allowed {
-            // Check optimistic delta against remaining headroom.
-            guard let limit = quota.limit else { return false }
+            // Optimistic delta only applies to question-based quotas.
+            // For cost_usd (Architect/Pro), we can't estimate cost per query
+            // locally — rely on the server snapshot alone.
+            guard quota.unit == "questions", let limit = quota.limit else { return false }
             return (quota.used + Double(optimisticDelta)) >= limit
         }
         return true
