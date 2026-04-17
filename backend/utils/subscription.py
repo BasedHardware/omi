@@ -5,6 +5,7 @@ import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
+from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.log_sanitizer import sanitize
 import logging
@@ -86,8 +87,6 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     cannot version-gate per-build — version is included only as an opt-in
     tightening hook once the client starts sending it.
     """
-    from database.announcements import _compare_versions
-
     if not platform or platform.lower() != 'macos':
         return False
 
@@ -98,7 +97,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         return True
 
     try:
-        return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+        return compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
     except Exception:
         # Malformed version — fail-open on macOS rather than show the old
         # catalog to a desktop client.
