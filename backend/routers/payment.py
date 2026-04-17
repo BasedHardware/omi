@@ -233,17 +233,20 @@ def get_available_plans_endpoint(
         all_definitions = get_paid_plan_definitions()
         if not new_plans_enabled:
             all_definitions = adapt_plans_for_legacy_client(all_definitions)
-            # Operator subscriber on old client: map their Stripe price to Unlimited
+            # Operator subscriber on old client: map their Stripe prices to Unlimited
             # so is_active detection works against the legacy catalog.
-            if current_price_id and current_subscription and current_subscription.plan == PlanType.operator:
+            if current_subscription and current_subscription.plan == PlanType.operator:
                 op_monthly = os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID', '')
                 op_annual = os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID', '')
                 unlim_monthly = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID', '')
                 unlim_annual = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID', '')
-                if current_price_id == op_monthly and unlim_monthly:
-                    current_price_id = unlim_monthly
-                elif current_price_id == op_annual and unlim_annual:
-                    current_price_id = unlim_annual
+                price_map = {}
+                if op_monthly and unlim_monthly:
+                    price_map[op_monthly] = unlim_monthly
+                if op_annual and unlim_annual:
+                    price_map[op_annual] = unlim_annual
+                current_price_id = price_map.get(current_price_id, current_price_id)
+                scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
