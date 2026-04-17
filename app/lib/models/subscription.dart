@@ -2,7 +2,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType { basic, unlimited, pro }
+enum PlanType { basic, unlimited, pro, operator }
 
 enum SubscriptionStatus { active, inactive }
 
@@ -17,6 +17,9 @@ class Subscription {
   final List<String> features;
   @JsonKey(defaultValue: false)
   final bool cancelAtPeriodEnd;
+  @JsonKey(defaultValue: false)
+  final bool deprecated;
+  final String? deprecationMessage;
 
   Subscription({
     required this.plan,
@@ -26,6 +29,8 @@ class Subscription {
     this.currentPriceId,
     this.features = const [],
     this.cancelAtPeriodEnd = false,
+    this.deprecated = false,
+    this.deprecationMessage,
   });
 
   factory Subscription.fromJson(Map<String, dynamic> json) => _$SubscriptionFromJson(json);
