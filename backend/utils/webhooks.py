@@ -159,7 +159,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
-                    webhook_url, content=data, headers={'Content-Type': 'application/octet-stream'}
+                    webhook_url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
                 )
             logger.info(f'send_audio_bytes_developer_webhook: {webhook_url} {response.status_code}')
             cb.record_success()
