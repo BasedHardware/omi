@@ -498,8 +498,6 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
     if not filtered_apps:
         return {}
 
-    audio_data = bytes(data)
-
     version = latest_wins_start(uid)
 
     async def _single(app: App):
@@ -521,16 +519,21 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
-                response = await client.post(
-                    url, content=audio_data, headers={'Content-Type': 'application/octet-stream'}
-                )
+                response = await client.post(url, content=data, headers={'Content-Type': 'application/octet-stream'})
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             cb.record_success()
         except Exception as e:
             cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
 
-    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
+    # Cap per-call concurrency: only fan out to 8 apps at a time to limit memory pressure
+    # from concurrent webhook calls holding references to the audio data
+    chunk_size = 8
+    for i in range(0, len(filtered_apps), chunk_size):
+        chunk = filtered_apps[i : i + chunk_size]
+        await asyncio.gather(*[_single(app) for app in chunk], return_exceptions=True)
+        if not latest_wins_check(uid, version):
+            break  # Newer data arrived, stop sending stale chunks
     return {}
 
 
