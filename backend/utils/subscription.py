@@ -99,9 +99,14 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 
     try:
         return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
-    except Exception:
+    except Exception as e:
         # Malformed version — fail-open on macOS rather than show the old
-        # catalog to a desktop client.
+        # catalog to a desktop client. Logged so ops can distinguish a real
+        # parser regression from a one-off bad header.
+        logger.warning(
+            f"should_show_new_plans: failed to parse X-App-Version, falling open "
+            f"(platform={sanitize(str(platform))} version={sanitize(str(app_version))} err={sanitize(str(e))})"
+        )
         return True
 
 
