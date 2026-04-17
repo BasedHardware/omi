@@ -114,19 +114,22 @@ _usage_mod.Features.NOTIFICATIONS = "notifications"
 # Stub llms.memory
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=[])
 
-# Stub http_client
-sys.modules["utils.http_client"].get_webhook_client = MagicMock()
-sys.modules["utils.http_client"].get_maps_client = MagicMock()
-_mock_cb = MagicMock()
-_mock_cb.allow_request = MagicMock(return_value=True)
-_mock_cb.record_success = MagicMock()
-_mock_cb.record_failure = MagicMock()
-sys.modules["utils.http_client"].get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
+# Stub http_client — only set mock attributes on stub modules (not the real module)
 import asyncio as _asyncio
 
-sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
-sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
-sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is not None and not hasattr(_http_mod, '__file__'):
+    # Stub module — safe to add mock attributes for import resolution
+    _http_mod.get_webhook_client = MagicMock()
+    _http_mod.get_maps_client = MagicMock()
+    _mock_cb = MagicMock()
+    _mock_cb.allow_request = MagicMock(return_value=True)
+    _mock_cb.record_success = MagicMock()
+    _mock_cb.record_failure = MagicMock()
+    _http_mod.get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
+    _http_mod.get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
+    _http_mod.latest_wins_start = MagicMock(return_value=1)
+    _http_mod.latest_wins_check = MagicMock(return_value=True)
 
 # Stub executors — must use real ThreadPoolExecutor because asyncio's
 # run_in_executor calls executor.submit() and wraps the returned Future.
