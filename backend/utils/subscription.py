@@ -132,19 +132,16 @@ def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
     so older clients (mobile, stable desktop) keep showing the old plan titles
     and don't see desktop-only plans.
 
-    Hides Operator and Architect (pro) entirely — both are desktop-only.
-    Drops the legacy suffix + flag from Unlimited so pre-rollout clients
-    still see it as "Omi Unlimited".
+    Hides Operator and Architect entirely — both are desktop-only.
+    Keeps only Unlimited (Neo) as "Omi Unlimited" for legacy mobile clients.
     """
     out: list[dict] = []
     for d in definitions:
-        if d['plan_id'] in ('operator', 'pro'):
+        if d['plan_id'] in ('operator', 'architect'):
             continue
         adapted = dict(d)
-        if d['plan_id'] == 'architect':
-            adapted['title'] = 'Omi Pro'
-        elif d['plan_id'] == 'unlimited':
-            adapted['title'] = 'Unlimited Plan'
+        if d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Omi Unlimited'
             adapted['legacy'] = False
         out.append(adapted)
     return out
