@@ -74,7 +74,7 @@ def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [i
         file_path = source_files[i]
         sound = AudioSegment.from_wav(file_path)
         silent_sec = silent_seconds[i]
-        combined_sounds = combined_sounds + sound + AudioSegment.silent(duration=silent_sec)
+        combined_sounds = combined_sounds + sound + AudioSegment.silent(duration=silent_sec * 1000)
     combined_sounds.export(dest_file_path, format="wav")
 
 
