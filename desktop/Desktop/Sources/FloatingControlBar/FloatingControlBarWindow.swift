@@ -89,16 +89,35 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if ShortcutSettings.shared.draggableBarEnabled,
            let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
-            // Verify saved position is on a visible screen
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14)) }
-            if onScreen {
-                self.setFrameOrigin(origin)
+            // Validate that the full bar frame (not just a 14pt inset) fits inside
+            // some screen's visibleFrame. visibleFrame already excludes the Dock
+            // and menu bar on macOS, so clamping against it is what keeps the
+            // input field above the Dock (#6684).
+            let candidateFrame = NSRect(origin: origin, size: frame.size)
+            if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(candidateFrame) }) {
+                let clamped = FloatingControlBarWindow.clamp(candidateFrame, to: targetScreen.visibleFrame)
+                self.setFrameOrigin(clamped.origin)
             } else {
                 centerOnMainScreen()
             }
         } else {
             centerOnMainScreen()
         }
+    }
+
+    /// Clamp `rect` so it stays entirely inside `visible`. visibleFrame already
+    /// excludes the Dock and menu bar, so clamping here keeps the Floating Bar
+    /// off both. This also gracefully handles rects larger than the screen.
+    static func clamp(_ rect: NSRect, to visible: NSRect) -> NSRect {
+        guard visible.width > 0 && visible.height > 0 else { return rect }
+        var r = rect
+        // Clamp x so the window fits between visible.minX and visible.maxX.
+        let maxX = max(visible.minX, visible.maxX - r.width)
+        r.origin.x = min(max(r.origin.x, visible.minX), maxX)
+        // Clamp y so the window fits between visible.minY and visible.maxY.
+        let maxY = max(visible.minY, visible.maxY - r.height)
+        r.origin.y = min(max(r.origin.y, visible.minY), maxY)
+        return r
     }
 
     override var canBecomeKey: Bool { true }
@@ -240,13 +259,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let relY = currentVisible.height > 0 ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
             let newX = targetVisible.origin.x + relX * targetVisible.width
             let newY = targetVisible.origin.y + relY * targetVisible.height
-            setFrameOrigin(NSPoint(x: newX, y: newY))
+            // Clamp against the target screen's visibleFrame so the bar doesn't
+            // land under that screen's Dock after a cross-screen migration (#6684).
+            let clamped = FloatingControlBarWindow.clamp(
+                NSRect(origin: NSPoint(x: newX, y: newY), size: frame.size),
+                to: targetVisible
+            )
+            setFrameOrigin(clamped.origin)
             UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
         } else {
             // Non-draggable: center on new screen
             let x = targetVisible.midX - frame.width / 2
             let y = targetVisible.maxY - frame.height - 20
-            setFrameOrigin(NSPoint(x: x, y: y))
+            let clamped = FloatingControlBarWindow.clamp(
+                NSRect(origin: NSPoint(x: x, y: y), size: frame.size),
+                to: targetVisible
+            )
+            setFrameOrigin(clamped.origin)
         }
 
         log("FloatingControlBarWindow: followed cursor to screen \(targetScreen.localizedName)")
