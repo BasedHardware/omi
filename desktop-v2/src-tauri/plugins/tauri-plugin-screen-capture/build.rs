@@ -13,6 +13,9 @@ const COMMANDS: &[&str] = &[
     "delete_old_screenshots",
     "delete_screenshot_by_id",
     "delete_all_screenshots",
+    "save_screenshot_embedding",
+    "search_screenshots_semantic",
+    "screenshots_missing_embeddings",
 ];
 
 fn main() {

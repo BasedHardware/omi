@@ -15,6 +15,9 @@ permissions = [
     "allow-delete-old-screenshots",
     "allow-delete-screenshot-by-id",
     "allow-delete-all-screenshots",
+    "allow-save-screenshot-embedding",
+    "allow-search-screenshots-semantic",
+    "allow-screenshots-missing-embeddings",
 ]
 
 [[permission]]
@@ -86,3 +89,18 @@ commands.allow = ["delete_screenshot_by_id"]
 identifier = "allow-delete-all-screenshots"
 description = "Allows deleting all screenshots from the database"
 commands.allow = ["delete_all_screenshots"]
+
+[[permission]]
+identifier = "allow-save-screenshot-embedding"
+description = "Allows persisting an embedding vector against a screenshot row"
+commands.allow = ["save_screenshot_embedding"]
+
+[[permission]]
+identifier = "allow-search-screenshots-semantic"
+description = "Allows cosine-similarity search over stored screenshot embeddings"
+commands.allow = ["search_screenshots_semantic"]
+
+[[permission]]
+identifier = "allow-screenshots-missing-embeddings"
+description = "Allows listing screenshots that still need embeddings (for backfill)"
+commands.allow = ["screenshots_missing_embeddings"]

@@ -5,11 +5,18 @@ import {
   getActiveWindow,
   getRecentScreenshots,
   getScreenshotImage,
+  getScreenshotById,
   searchScreenshots,
+  searchScreenshotsSemantic,
   deleteAllScreenshots as deleteAllScreenshotsIpc,
   deleteScreenshotById as deleteScreenshotByIdIpc,
 } from "@/services/rewind";
 import type { CaptureConfig } from "@/services/rewind";
+import { embedText } from "@/services/embeddingService";
+import {
+  backfillScreenshotEmbeddings,
+  embedAndSaveScreenshot,
+} from "@/services/rewindEmbeddings";
 import { isCommercialTime, watchCommercialTime } from "@/utils/commercialTime";
 import { useFocusStore } from "@/stores/focusStore";
 
@@ -33,6 +40,10 @@ export interface Screenshot {
   appName: string;
   windowTitle: string;
   ocrText?: string;
+  /** Why this row is in a result set: literal keyword hit (FTS), or meaning match (vector). */
+  matchType?: "keyword" | "semantic";
+  /** Cosine similarity for semantic hits (for debugging/sorting). */
+  matchScore?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +83,8 @@ interface RewindState {
   isLoading: boolean;
   /** True while the initial DB history is being loaded. */
   isLoadingHistory: boolean;
+  /** Timestamp of last successful loadCaptureState — used as a freshness gate. */
+  lastFetchedAt: number | null;
 
   // Actions
   toggleRewind: () => Promise<void>;
@@ -81,11 +94,13 @@ interface RewindState {
   selectScreenshot: (id: string | null) => Promise<void>;
   search: (query: string) => Promise<void>;
   clearSearch: () => void;
-  loadCaptureState: () => Promise<void>;
+  loadCaptureState: (force?: boolean) => Promise<void>;
   loadMore: (offset: number) => Promise<void>;
   updateConfig: (config: Partial<CaptureConfig>) => void;
   deleteScreenshot: (id: string) => void;
   clearAllScreenshots: () => Promise<void>;
+  /** Cancel any in-flight eager image decode loop (e.g. when leaving Rewind). */
+  cancelImageLoad: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +109,12 @@ interface RewindState {
 
 /** Handle for the polling interval so we can clear it on stop. */
 let captureIntervalId: ReturnType<typeof setInterval> | null = null;
+
+/** Freshness window for loadCaptureState — DB rows + eager image decode. */
+const STALE_MS = 30_000;
+
+/** Token for the in-flight eager image decode loop. Bumping this aborts the prior loop. */
+let imageLoadToken = 0;
 
 /**
  * Normalise a timestamp string to ISO-8601.
@@ -153,42 +174,80 @@ export const useRewindStore = create<RewindState>((set, get) => ({
   captureConfig: { interval_ms: 3000, quality: 80, max_width: 3000 },
   isLoading: false,
   isLoadingHistory: false,
+  lastFetchedAt: null,
 
   // -------------------------------------------------------------------------
-  // loadCaptureState — called once on mount to populate history from DB
+  // cancelImageLoad — bumps the token so any in-flight eager decode aborts.
   // -------------------------------------------------------------------------
-  loadCaptureState: async () => {
+  cancelImageLoad: () => {
+    imageLoadToken += 1;
+  },
+
+  // -------------------------------------------------------------------------
+  // loadCaptureState — called on Rewind mount to populate history from DB.
+  // Gated by STALE_MS so revisits within the window skip the IPC + decode.
+  // -------------------------------------------------------------------------
+  loadCaptureState: async (force = false) => {
+    const { lastFetchedAt, screenshots: existing } = get();
+    if (!force && lastFetchedAt && Date.now() - lastFetchedAt < STALE_MS && existing.length > 0) {
+      return;
+    }
+
     set({ isLoadingHistory: true });
     try {
       const rows = await getRecentScreenshots(100, 0);
       if (rows.length === 0) {
-        set({ isLoadingHistory: false });
+        set({ isLoadingHistory: false, lastFetchedAt: Date.now() });
         return;
       }
 
       // Build Screenshot objects (data is empty for all; we lazy-load below).
       const screenshots = rows.map(rowToScreenshot);
 
-      set({ screenshots, isLoadingHistory: false });
+      set({ screenshots, isLoadingHistory: false, lastFetchedAt: Date.now() });
 
-      // Eagerly fetch image data for the most recent EAGER_LOAD_COUNT entries.
-      const eager = screenshots.slice(0, EAGER_LOAD_COUNT);
-      const imageResults = await Promise.allSettled(
-        eager.map((s) => (s.dbId > 0 ? getScreenshotImage(s.dbId) : Promise.resolve("")))
-      );
-
-      set((state) => {
-        const updated = state.screenshots.map((s, i) => {
-          if (i < EAGER_LOAD_COUNT) {
-            const result = imageResults[i];
-            return result.status === "fulfilled" && result.value
-              ? { ...s, data: result.value }
-              : s;
+      // Eagerly fetch image data sequentially so we can abort mid-loop when
+      // the user navigates away. A new call (or cancelImageLoad) bumps the
+      // token, causing this loop to bail out without further setState calls.
+      const myToken = ++imageLoadToken;
+      const startEagerLoad = () => {
+        void (async () => {
+          for (let i = 0; i < Math.min(EAGER_LOAD_COUNT, screenshots.length); i++) {
+            if (myToken !== imageLoadToken) return;
+            const s = screenshots[i];
+            if (s.dbId <= 0) continue;
+            try {
+              const data = await getScreenshotImage(s.dbId);
+              if (myToken !== imageLoadToken) return;
+              if (!data) continue;
+              set((state) => {
+                const idx = state.screenshots.findIndex((x) => x.dbId === s.dbId);
+                if (idx === -1) return state;
+                const next = state.screenshots.slice();
+                next[idx] = { ...next[idx], data };
+                return { screenshots: next };
+              });
+            } catch {
+              // Ignore individual failures — metadata still renders.
+            }
           }
-          return s;
-        });
-        return { screenshots: updated };
-      });
+        })();
+      };
+
+      // Defer to idle so the next paint (often a different screen) goes first.
+      const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => void })
+        .requestIdleCallback;
+      if (typeof idle === "function") {
+        idle(startEagerLoad);
+      } else {
+        setTimeout(startEagerLoad, 0);
+      }
+
+      // Catch up on embeddings for any OCR'd screenshots that missed the
+      // capture-time embed (pre-feature rows, transient proxy failures, etc).
+      backfillScreenshotEmbeddings().catch((e) =>
+        console.warn("[Rewind] embedding backfill failed:", e),
+      );
     } catch (err) {
       console.error("[Rewind] loadCaptureState failed:", err);
       set({ isLoadingHistory: false });
@@ -287,6 +346,17 @@ export const useRewindStore = create<RewindState>((set, get) => ({
           const updated = [screenshot, ...state.screenshots].slice(0, MAX_SCREENSHOTS);
           return { screenshots: updated };
         });
+
+        // Fire-and-forget semantic embedding. Failure is non-fatal — the
+        // row stays in the DB and the backfill loop will pick it up later.
+        if (ocrResult.ocr_text) {
+          embedAndSaveScreenshot(
+            ocrResult.db_id,
+            ocrResult.ocr_text,
+            windowInfo.app_name,
+            windowInfo.window_title,
+          ).catch((e) => console.warn("[Rewind] embed failed:", e));
+        }
       } catch (err) {
         console.error("[Rewind] capture tick failed:", err);
       } finally {
@@ -334,6 +404,16 @@ export const useRewindStore = create<RewindState>((set, get) => ({
         const updated = [screenshot, ...state.screenshots].slice(0, MAX_SCREENSHOTS);
         return { screenshots: updated, isLoading: false };
       });
+
+      // Fire-and-forget semantic embedding for manual snapshots too.
+      if (ocrResult.db_id != null && ocrResult.ocr_text) {
+        embedAndSaveScreenshot(
+          ocrResult.db_id,
+          ocrResult.ocr_text,
+          windowInfo.app_name,
+          windowInfo.window_title,
+        ).catch((e) => console.warn("[Rewind] embed failed:", e));
+      }
     } catch (err) {
       console.error("[Rewind] takeSnapshot failed:", err);
       set({ isLoading: false });
@@ -385,7 +465,9 @@ export const useRewindStore = create<RewindState>((set, get) => ({
   },
 
   // -------------------------------------------------------------------------
-  // search — FTS5 database search, debounced in the UI
+  // search — hybrid FTS5 + cosine-similarity search (mirrors Swift's
+  // `RewindViewModel.performSearch`). FTS hits come first; vector-only hits
+  // above the 0.5 similarity threshold are appended, dedup'd by dbId.
   // -------------------------------------------------------------------------
   search: async (query: string) => {
     set({ searchQuery: query, isSearching: true });
@@ -396,18 +478,46 @@ export const useRewindStore = create<RewindState>((set, get) => ({
     }
 
     try {
-      const rows = await searchScreenshots(query, 50);
+      // Run FTS and query-embedding in parallel. Embedding failure is
+      // non-fatal — the FTS path still works offline.
+      const [ftsRows, queryVec] = await Promise.all([
+        searchScreenshots(query, 50),
+        embedText(query, "RETRIEVAL_QUERY").catch(() => null),
+      ]);
 
-      // Map DB rows to Screenshot objects. Prefer in-memory copies that already
-      // have image data loaded.
+      const semanticHits = queryVec
+        ? await searchScreenshotsSemantic(queryVec, 50, 0.5).catch(() => [])
+        : [];
+
       const inMemoryById = new Map(get().screenshots.map((s) => [s.dbId, s]));
-      const results: Screenshot[] = rows.map((row) => {
-        const inMemory = inMemoryById.get(row.id);
-        if (inMemory) return inMemory;
-        return rowToScreenshot(row);
-      });
 
-      set({ searchResults: results, isSearching: false });
+      // FTS results first, preserving BM25 order from Rust. Tag each as a
+      // keyword hit so the UI can render the "Text match" badge.
+      const ftsResults: Screenshot[] = ftsRows.map((row) => {
+        const base = inMemoryById.get(row.id) ?? rowToScreenshot(row);
+        return { ...base, matchType: "keyword" as const, matchScore: undefined };
+      });
+      const ftsIds = new Set(ftsRows.map((r) => r.id));
+
+      // Vector-only hits — skip any already in the FTS set. If the row
+      // isn't in-memory, fetch its metadata so it renders.
+      const semanticOnly: Screenshot[] = [];
+      for (const hit of semanticHits) {
+        if (ftsIds.has(hit.id)) continue;
+        let base = inMemoryById.get(hit.id);
+        if (!base) {
+          const row = await getScreenshotById(hit.id).catch(() => null);
+          if (!row) continue;
+          base = rowToScreenshot(row);
+        }
+        semanticOnly.push({
+          ...base,
+          matchType: "semantic",
+          matchScore: hit.similarity,
+        });
+      }
+
+      set({ searchResults: [...ftsResults, ...semanticOnly], isSearching: false });
     } catch (err) {
       console.error("[Rewind] search failed:", err);
       set({ isSearching: false });

@@ -179,3 +179,58 @@ export async function deleteScreenshotById(id: number): Promise<boolean> {
 export async function deleteAllScreenshots(): Promise<number> {
   return invoke<number>("plugin:screen-capture|delete_all_screenshots");
 }
+
+// ---------------------------------------------------------------------------
+// Semantic search (Gemini gemini-embedding-001, 3072-dim, L2-normalized).
+// Embedding generation happens in TypeScript; the plugin only stores the
+// vector and performs cosine similarity over the SQLite BLOB column.
+// ---------------------------------------------------------------------------
+
+/** A single semantic-search hit (screenshot id + cosine similarity). */
+export interface SemanticHit {
+  id: number;
+  similarity: number;
+}
+
+/** A screenshot row that still needs an embedding computed. */
+export interface EmbeddingBacklogItem {
+  id: number;
+  ocr_text: string;
+  app_name: string;
+  window_title: string;
+}
+
+/** Persist an embedding (3072 f32 values) against a screenshot row. */
+export async function saveScreenshotEmbedding(
+  id: number,
+  embedding: Float32Array,
+): Promise<void> {
+  await invoke("plugin:screen-capture|save_screenshot_embedding", {
+    id,
+    // Tauri IPC serializes Float32Array as an object, not an array — convert.
+    embedding: Array.from(embedding),
+  });
+}
+
+/** Cosine-similarity search over stored embeddings. Default threshold 0.5. */
+export async function searchScreenshotsSemantic(
+  queryEmbedding: Float32Array,
+  limit = 50,
+  minSimilarity = 0.5,
+): Promise<SemanticHit[]> {
+  return invoke<SemanticHit[]>("plugin:screen-capture|search_screenshots_semantic", {
+    queryEmbedding: Array.from(queryEmbedding),
+    limit,
+    minSimilarity,
+  });
+}
+
+/** List screenshots missing an embedding (for backfill). */
+export async function screenshotsMissingEmbeddings(
+  limit = 200,
+): Promise<EmbeddingBacklogItem[]> {
+  return invoke<EmbeddingBacklogItem[]>(
+    "plugin:screen-capture|screenshots_missing_embeddings",
+    { limit },
+  );
+}

@@ -18,6 +18,9 @@ Default permissions for the screen capture plugin
 - `allow-delete-old-screenshots`
 - `allow-delete-screenshot-by-id`
 - `allow-delete-all-screenshots`
+- `allow-save-screenshot-embedding`
+- `allow-search-screenshots-semantic`
+- `allow-screenshots-missing-embeddings`
 
 ## Permission Table
 
@@ -265,6 +268,58 @@ Denies the save_screenshot command without any pre-configured scope.
 <tr>
 <td>
 
+`screen-capture:allow-save-screenshot-embedding`
+
+</td>
+<td>
+
+Enables the save_screenshot_embedding command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-save-screenshot-embedding`
+
+</td>
+<td>
+
+Denies the save_screenshot_embedding command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-screenshots-missing-embeddings`
+
+</td>
+<td>
+
+Enables the screenshots_missing_embeddings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-screenshots-missing-embeddings`
+
+</td>
+<td>
+
+Denies the screenshots_missing_embeddings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `screen-capture:allow-search-screenshots`
 
 </td>
@@ -284,6 +339,32 @@ Enables the search_screenshots command without any pre-configured scope.
 <td>
 
 Denies the search_screenshots command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-search-screenshots-semantic`
+
+</td>
+<td>
+
+Enables the search_screenshots_semantic command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-search-screenshots-semantic`
+
+</td>
+<td>
+
+Denies the search_screenshots_semantic command without any pre-configured scope.
 
 </td>
 </tr>
@@ -570,6 +651,45 @@ Allows deleting a single screenshot by its database ID
 <td>
 
 Allows deleting all screenshots from the database
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-save-screenshot-embedding`
+
+</td>
+<td>
+
+Allows persisting an embedding vector against a screenshot row
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-search-screenshots-semantic`
+
+</td>
+<td>
+
+Allows cosine-similarity search over stored screenshot embeddings
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-screenshots-missing-embeddings`
+
+</td>
+<td>
+
+Allows listing screenshots that still need embeddings (for backfill)
 
 </td>
 </tr>

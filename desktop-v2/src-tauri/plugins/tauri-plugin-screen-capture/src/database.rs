@@ -15,6 +15,22 @@ pub struct ScreenshotRow {
     pub height: u32,
 }
 
+/// A row that needs an embedding computed (used by the TS backfill loop).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EmbeddingBacklogItem {
+    pub id: i64,
+    pub ocr_text: String,
+    pub app_name: String,
+    pub window_title: String,
+}
+
+/// A single semantic-search hit: screenshot id + cosine similarity score.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SemanticHit {
+    pub id: i64,
+    pub similarity: f32,
+}
+
 /// SQLite-backed persistence for Rewind screenshots.
 pub struct RewindDatabase {
     conn: Mutex<Connection>,
@@ -42,8 +58,18 @@ impl RewindDatabase {
             conn.query_row("PRAGMA journal_mode=WAL", [], |row| row.get(0))?;
         tracing::info!("SQLite journal mode: {}", _mode);
 
-        // Run migrations.
-        conn.execute_batch(MIGRATION_V1)?;
+        // Run migrations gated on user_version.
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version < 1 {
+            conn.execute_batch(MIGRATION_V1)?;
+            conn.execute_batch("PRAGMA user_version = 1")?;
+            tracing::info!("Ran Rewind DB migration V1");
+        }
+        if version < 2 {
+            conn.execute_batch(MIGRATION_V2)?;
+            conn.execute_batch("PRAGMA user_version = 2")?;
+            tracing::info!("Ran Rewind DB migration V2 (embeddings)");
+        }
 
         tracing::info!("Rewind database ready");
         Ok(Self { conn: Mutex::new(conn) })
@@ -164,6 +190,94 @@ impl RewindDatabase {
         Ok(deleted as u64)
     }
 
+    // -----------------------------------------------------------------------
+    // Semantic search: store + read + scan embeddings as LE f32 BLOBs.
+    // Ported from desktop-v2/src-tauri/src/commands/staged_tasks_db.rs.
+    // -----------------------------------------------------------------------
+
+    /// Persist an embedding (normalized f32 vector) against an existing row.
+    pub fn update_screenshot_embedding(&self, id: i64, embedding: &[f32]) -> Result<()> {
+        let bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "UPDATE screenshots SET embedding = ?2 WHERE id = ?1",
+            params![id, bytes],
+        )?;
+        Ok(())
+    }
+
+    /// Return screenshots that have OCR text but no embedding yet. Used by
+    /// the TS backfill loop on app startup.
+    pub fn get_screenshots_missing_embeddings(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<EmbeddingBacklogItem>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, ocr_text, app_name, window_title \
+             FROM screenshots \
+             WHERE embedding IS NULL \
+               AND ocr_text IS NOT NULL \
+               AND length(ocr_text) >= 20 \
+             ORDER BY timestamp DESC \
+             LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                Ok(EmbeddingBacklogItem {
+                    id: row.get(0)?,
+                    ocr_text: row.get::<_, String>(1)?,
+                    app_name: row.get(2)?,
+                    window_title: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Cosine-similarity search across stored embeddings. Vectors are
+    /// pre-normalized on write, so cosine = dot product. Streams rows and
+    /// keeps only hits above `min_sim`, returning up to `top_k` sorted desc.
+    pub fn search_similar_screenshots(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        min_sim: f32,
+    ) -> Result<Vec<SemanticHit>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, embedding FROM screenshots WHERE embedding IS NOT NULL",
+        )?;
+
+        let mut scored: Vec<SemanticHit> = stmt
+            .query_map([], |row| {
+                let id: i64 = row.get(0)?;
+                let blob: Vec<u8> = row.get(1)?;
+                Ok((id, blob))
+            })?
+            .filter_map(|res| res.ok())
+            .filter_map(|(id, blob)| {
+                let vec = parse_embedding(&blob)?;
+                if vec.len() != query.len() {
+                    return None;
+                }
+                let sim = dot(&vec, query);
+                if sim < min_sim {
+                    return None;
+                }
+                Some(SemanticHit { id, similarity: sim })
+            })
+            .collect();
+
+        scored.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        scored.truncate(top_k);
+        Ok(scored)
+    }
+
     /// Return the dhash of the most recently stored screenshot, used for deduplication.
     #[allow(dead_code)]
     pub fn get_latest_dhash(&self) -> Result<Option<String>> {
@@ -178,6 +292,24 @@ impl RewindDatabase {
             None => Ok(None),
         }
     }
+}
+
+/// Decode a little-endian f32 BLOB. Returns None on length mismatch.
+fn parse_embedding(blob: &[u8]) -> Option<Vec<f32>> {
+    if blob.len() % 4 != 0 {
+        return None;
+    }
+    Some(
+        blob.chunks_exact(4)
+            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect(),
+    )
+}
+
+/// Plain dot product. Vectors are pre-normalized on write, so this equals
+/// cosine similarity.
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 /// Map a SQLite row to a `ScreenshotRow` (columns: id, timestamp, app_name,
@@ -244,4 +376,14 @@ CREATE TRIGGER IF NOT EXISTS screenshots_au AFTER UPDATE ON screenshots BEGIN
     INSERT INTO screenshots_fts(rowid, ocr_text, window_title, app_name)
     VALUES (new.id, new.ocr_text, new.window_title, new.app_name);
 END;
+";
+
+// V2: add an `embedding` BLOB column (little-endian f32 vector, 3072-dim)
+// for Gemini gemini-embedding-001 semantic search. A partial index on the
+// NULL-embedding rows keeps the backfill query cheap.
+const MIGRATION_V2: &str = "
+ALTER TABLE screenshots ADD COLUMN embedding BLOB;
+
+CREATE INDEX IF NOT EXISTS idx_screenshots_missing_embedding
+    ON screenshots(id) WHERE embedding IS NULL;
 ";

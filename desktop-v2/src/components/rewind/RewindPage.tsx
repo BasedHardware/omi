@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRewindStore } from "../../stores/rewindStore";
-import { Search, X, Circle, Square, Clock, Monitor, FileText, ChevronDown, ChevronUp, Loader2, Trash2 } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { useRewindStore, type Screenshot } from "../../stores/rewindStore";
+import { getScreenshotImage } from "../../services/rewind";
+import { Search, X, Circle, Square, Clock, Monitor, FileText, ChevronDown, ChevronUp, Loader2, Trash2, Sparkles, Type } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Hash-based color for app names (matches Swift InteractiveTimelineBar)
@@ -51,7 +53,19 @@ export function RewindPage() {
     isLoadingHistory,
     deleteScreenshot,
     clearAllScreenshots,
+    cancelImageLoad,
   } = useRewindStore();
+
+  // When the user navigates away from any Aura tab (Rewind/Focus), cancel the
+  // in-flight eager image decode so it doesn't compete with the next screen's
+  // first paint. The page itself stays mounted (route keep-alive) so we use
+  // location instead of an unmount cleanup.
+  const { pathname } = useLocation();
+  const isRewindRoute =
+    pathname === "/aura" || pathname === "/rewind" || pathname === "/focus";
+  useEffect(() => {
+    if (!isRewindRoute) cancelImageLoad();
+  }, [isRewindRoute, cancelImageLoad]);
 
   const [ocrExpanded, setOcrExpanded] = useState(false);
   // Controlled input value — may be ahead of the debounced search query.
@@ -90,6 +104,18 @@ export function RewindPage() {
       }
     }
   }, [screenshots, searchQuery, selectedScreenshot, selectScreenshot]);
+
+  // When search results arrive, auto-select the top hit so the viewer shows
+  // *something* the user can orient around (otherwise they get a stale image
+  // from before the search).
+  useEffect(() => {
+    if (!searchQuery || searchResults.length === 0) return;
+    const inResults = searchResults.some((r) => r.id === selectedScreenshot?.id);
+    if (!inResults) {
+      void selectScreenshot(searchResults[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, searchResults]);
 
   // Reset manual-selection flag when capture stops (so next capture auto-follows again).
   useEffect(() => {
@@ -220,7 +246,7 @@ export function RewindPage() {
             type="text"
             value={inputValue}
             onChange={handleSearchChange}
-            placeholder="Search your screen history..."
+            placeholder="Search words or describe what you saw…"
             className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--bg-tertiary)] py-2.5 pl-10 pr-10 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] transition-colors focus:border-[var(--app-accent)]"
           />
           {inputValue && (
@@ -232,13 +258,38 @@ export function RewindPage() {
             </button>
           )}
         </div>
-        {/* Search result count */}
+        {/* Search result count — split by match type so the user sees why something matched. */}
         {searchQuery && !isSearching && (
-          <p className="mt-1.5 text-xs text-[var(--text-secondary)] pl-1">
-            {searchResults.length === 0
-              ? "No results found"
-              : `${searchResults.length} result${searchResults.length === 1 ? "" : "s"}`}
-          </p>
+          <div className="mt-1.5 flex items-center gap-3 pl-1 text-xs text-[var(--text-secondary)]">
+            {searchResults.length === 0 ? (
+              <span>No matches for &ldquo;{searchQuery}&rdquo;</span>
+            ) : (
+              <>
+                <span>
+                  {searchResults.length} result
+                  {searchResults.length === 1 ? "" : "s"}
+                </span>
+                {(() => {
+                  const keyword = searchResults.filter((r) => r.matchType === "keyword").length;
+                  const semantic = searchResults.filter((r) => r.matchType === "semantic").length;
+                  return (
+                    <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                      {keyword > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Type className="h-3 w-3" /> {keyword} text
+                        </span>
+                      )}
+                      {semantic > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> {semantic} meaning
+                        </span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -330,6 +381,20 @@ export function RewindPage() {
               </div>
             )}
           </div>
+        ) : searchQuery && !isSearching && searchResults.length === 0 ? (
+          /* No search matches */
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)] border border-[var(--app-border)]">
+              <Search className="h-8 w-8 text-[var(--text-secondary)]" />
+            </div>
+            <h3 className="text-lg font-medium text-[var(--text-primary)]">
+              No matches for &ldquo;{searchQuery}&rdquo;
+            </h3>
+            <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+              Try different words, or describe what was on screen (e.g.
+              &ldquo;spreadsheet&rdquo;, &ldquo;calendar invite&rdquo;).
+            </p>
+          </div>
         ) : (
           /* Empty state */
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
@@ -347,14 +412,26 @@ export function RewindPage() {
         )}
       </div>
 
-      {/* Timeline bar — colored segments like Swift InteractiveTimelineBar */}
-      {displayedScreenshots.length > 0 && (
-        <TimelineBar
-          screenshots={displayedScreenshots}
-          selectedId={selectedScreenshot?.id ?? null}
-          onSelect={handleThumbnailClick}
-          formatTime={formatTime}
-        />
+      {/* Bottom strip: search results when searching, timeline otherwise. */}
+      {searchQuery ? (
+        searchResults.length > 0 && (
+          <SearchResultsStrip
+            results={searchResults}
+            selectedId={selectedScreenshot?.id ?? null}
+            query={searchQuery}
+            onSelect={handleThumbnailClick}
+            formatTime={formatTime}
+          />
+        )
+      ) : (
+        displayedScreenshots.length > 0 && (
+          <TimelineBar
+            screenshots={displayedScreenshots}
+            selectedId={selectedScreenshot?.id ?? null}
+            onSelect={handleThumbnailClick}
+            formatTime={formatTime}
+          />
+        )
       )}
     </div>
   );
@@ -537,4 +614,206 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// SearchResultsStrip — horizontal thumbnails ranked by match, shown when
+// the user is searching. Each card shows an OCR snippet with the query
+// highlighted plus a "Text" / "Meaning" badge, so the user always knows
+// *why* something is a match.
+// ---------------------------------------------------------------------------
+
+interface SearchResultsStripProps {
+  results: Screenshot[];
+  selectedId: string | null;
+  query: string;
+  onSelect: (id: string) => void;
+  formatTime: (ts: string) => string;
+}
+
+function SearchResultsStrip({
+  results,
+  selectedId,
+  query,
+  onSelect,
+  formatTime,
+}: SearchResultsStripProps) {
+  return (
+    <div className="shrink-0 border-t border-[var(--app-border)] bg-[var(--bg-secondary)] px-4 py-3">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {results.map((s) => (
+          <SearchResultCard
+            key={s.id}
+            screenshot={s}
+            query={query}
+            selected={selectedId === s.id}
+            onSelect={() => onSelect(s.id)}
+            formatTime={formatTime}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface SearchResultCardProps {
+  screenshot: Screenshot;
+  query: string;
+  selected: boolean;
+  onSelect: () => void;
+  formatTime: (ts: string) => string;
+}
+
+function SearchResultCard({
+  screenshot: s,
+  query,
+  selected,
+  onSelect,
+  formatTime,
+}: SearchResultCardProps) {
+  // Lazy-load the thumbnail when the card first renders. Cards stay cheap
+  // because the DB query returns metadata only.
+  const [thumb, setThumb] = useState<string | null>(s.data || null);
+  useEffect(() => {
+    if (thumb || s.dbId <= 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await getScreenshotImage(s.dbId);
+        if (!cancelled && data) setThumb(data);
+      } catch {
+        /* ignore — card still renders metadata */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [s.dbId, thumb]);
+
+  const snippet = useMemo(
+    () => buildSnippet(s.ocrText, query, 140),
+    [s.ocrText, query],
+  );
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`shrink-0 w-56 rounded-lg border p-2 text-left transition-colors ${
+        selected
+          ? "border-[var(--app-accent)] bg-[var(--bg-tertiary)]"
+          : "border-[var(--app-border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)]"
+      }`}
+    >
+      {/* Thumbnail */}
+      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded bg-black/30">
+        {thumb ? (
+          <img
+            src={`data:image/jpeg;base64,${thumb}`}
+            alt={s.windowTitle || s.appName}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Loader2 className="h-4 w-4 text-[var(--text-secondary)] animate-spin" />
+          </div>
+        )}
+        {/* Match-type badge */}
+        {s.matchType && (
+          <div
+            className={`absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              s.matchType === "keyword"
+                ? "bg-sky-500/20 text-sky-200"
+                : "bg-violet-500/20 text-violet-200"
+            }`}
+            title={
+              s.matchType === "keyword"
+                ? "Matched your words in on-screen text"
+                : `Matched by meaning${s.matchScore != null ? ` (${(s.matchScore * 100).toFixed(0)}%)` : ""}`
+            }
+          >
+            {s.matchType === "keyword" ? (
+              <>
+                <Type className="h-2.5 w-2.5" />
+                Text
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-2.5 w-2.5" />
+                Meaning
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Meta line */}
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+        <span className="truncate font-medium text-[var(--text-primary)]">
+          {s.appName || "Unknown"}
+        </span>
+        <span className="shrink-0 text-[var(--text-secondary)]">
+          {formatTime(s.timestamp)}
+        </span>
+      </div>
+
+      {/* OCR snippet with query highlighted (keyword matches only — semantic
+          hits don't necessarily contain the query literally). */}
+      {snippet && (
+        <p className="line-clamp-2 text-[11px] leading-snug text-[var(--text-secondary)]">
+          {renderHighlighted(snippet, query)}
+        </p>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Snippet + highlight helpers
+// ---------------------------------------------------------------------------
+
+/** Build a ~N-char snippet centered on the first occurrence of the query. */
+function buildSnippet(
+  text: string | undefined,
+  query: string,
+  maxLen: number,
+): string | null {
+  if (!text) return null;
+  const q = query.trim().toLowerCase();
+  if (!q) return text.slice(0, maxLen);
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx < 0) {
+    // Semantic hit with no literal match — just return the head of the OCR.
+    return text.slice(0, maxLen).trim();
+  }
+  const half = Math.floor((maxLen - q.length) / 2);
+  const start = Math.max(0, idx - half);
+  const end = Math.min(text.length, start + maxLen);
+  return (start > 0 ? "…" : "") + text.slice(start, end).trim() + (end < text.length ? "…" : "");
+}
+
+/** Render a snippet with case-insensitive matches of `query` bolded. */
+function renderHighlighted(snippet: string, query: string): React.ReactNode {
+  const q = query.trim();
+  if (!q) return snippet;
+  const parts: React.ReactNode[] = [];
+  const lower = snippet.toLowerCase();
+  const qLower = q.toLowerCase();
+  let cursor = 0;
+  let next = lower.indexOf(qLower, cursor);
+  let key = 0;
+  while (next >= 0) {
+    if (next > cursor) parts.push(snippet.slice(cursor, next));
+    parts.push(
+      <mark
+        key={`m${key++}`}
+        className="rounded bg-yellow-400/30 px-0.5 font-semibold text-[var(--text-primary)]"
+      >
+        {snippet.slice(next, next + q.length)}
+      </mark>,
+    );
+    cursor = next + q.length;
+    next = lower.indexOf(qLower, cursor);
+  }
+  if (cursor < snippet.length) parts.push(snippet.slice(cursor));
+  return parts;
 }

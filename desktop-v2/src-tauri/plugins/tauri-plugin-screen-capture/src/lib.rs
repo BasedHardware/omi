@@ -5,7 +5,7 @@ mod dhash;
 mod models;
 mod ocr;
 
-use database::{RewindDatabase, ScreenshotRow};
+use database::{EmbeddingBacklogItem, RewindDatabase, ScreenshotRow, SemanticHit};
 use models::{CaptureConfig, CaptureState};
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -440,6 +440,59 @@ async fn delete_all_screenshots(
 }
 
 // ---------------------------------------------------------------------------
+// Semantic search commands (Gemini gemini-embedding-001, 3072-dim, L2-normalized).
+// Embeddings are computed in TS (`services/embeddingService.ts`) and pushed
+// down via `save_screenshot_embedding`. Query-side search is done here so
+// the full BLOB scan stays off the renderer thread.
+// ---------------------------------------------------------------------------
+
+/// Persist an embedding against an existing screenshot row.
+#[tauri::command]
+async fn save_screenshot_embedding(
+    db_state: State<'_, DatabaseState>,
+    id: i64,
+    embedding: Vec<f32>,
+) -> Result<(), String> {
+    let db = Arc::clone(&db_state.db);
+    tokio::task::spawn_blocking(move || db.update_screenshot_embedding(id, &embedding))
+        .await
+        .map_err(|e| format!("db task panicked: {}", e))?
+        .map_err(|e| format!("update_screenshot_embedding failed: {}", e))
+}
+
+/// Cosine-similarity search over stored embeddings. `limit` defaults to 50;
+/// `min_similarity` defaults to 0.5 (matches Swift's RewindViewModel).
+#[tauri::command]
+async fn search_screenshots_semantic(
+    db_state: State<'_, DatabaseState>,
+    query_embedding: Vec<f32>,
+    limit: Option<u32>,
+    min_similarity: Option<f32>,
+) -> Result<Vec<SemanticHit>, String> {
+    let limit = limit.unwrap_or(50) as usize;
+    let min_sim = min_similarity.unwrap_or(0.5);
+    let db = Arc::clone(&db_state.db);
+    tokio::task::spawn_blocking(move || db.search_similar_screenshots(&query_embedding, limit, min_sim))
+        .await
+        .map_err(|e| format!("db task panicked: {}", e))?
+        .map_err(|e| format!("semantic search failed: {}", e))
+}
+
+/// Return screenshots with OCR text but no embedding yet (for TS backfill).
+#[tauri::command]
+async fn screenshots_missing_embeddings(
+    db_state: State<'_, DatabaseState>,
+    limit: Option<u32>,
+) -> Result<Vec<EmbeddingBacklogItem>, String> {
+    let limit = limit.unwrap_or(200);
+    let db = Arc::clone(&db_state.db);
+    tokio::task::spawn_blocking(move || db.get_screenshots_missing_embeddings(limit))
+        .await
+        .map_err(|e| format!("db task panicked: {}", e))?
+        .map_err(|e| format!("screenshots_missing_embeddings failed: {}", e))
+}
+
+// ---------------------------------------------------------------------------
 // Plugin init
 // ---------------------------------------------------------------------------
 
@@ -461,6 +514,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             delete_old_screenshots,
             delete_screenshot_by_id,
             delete_all_screenshots,
+            save_screenshot_embedding,
+            search_screenshots_semantic,
+            screenshots_missing_embeddings,
         ])
         .setup(|app, _api| {
             app.manage(ScreenCaptureState {
