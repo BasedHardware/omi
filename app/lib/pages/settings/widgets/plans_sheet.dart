@@ -379,7 +379,9 @@ class _PlansSheetState extends State<PlansSheet> {
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
     final isUpgradingFromMonthlyToAnnual =
-        currentSub?.plan == PlanType.unlimited && currentSub?.status == SubscriptionStatus.active && isYearly;
+        (currentSub?.plan == PlanType.unlimited || currentSub?.plan == PlanType.operator) &&
+            currentSub?.status == SubscriptionStatus.active &&
+            isYearly;
 
     if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
       // Show confirmation popup for monthly to annual upgrade
@@ -486,7 +488,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     final currentSub = provider.subscription!.subscription;
 
-    if (currentSub.plan == PlanType.unlimited) {
+    if (currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => ConfirmationDialog(
@@ -508,8 +510,8 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
 
-      // If user already has unlimited monthly plan and it's not canceled
-      if (currentSub.plan == PlanType.unlimited &&
+      // If user already has a paid plan and it's not canceled
+      if ((currentSub.plan == PlanType.unlimited || currentSub.plan == PlanType.operator) &&
           currentSub.status == SubscriptionStatus.active &&
           !currentSub.cancelAtPeriodEnd) {
         result = await provider.upgradeUserSubscription(priceId: priceId);
@@ -580,7 +582,9 @@ class _PlansSheetState extends State<PlansSheet> {
         }
 
         final sub = provider.subscription?.subscription;
-        final isUnlimited = sub?.plan == PlanType.unlimited;
+        final isPaidPlan = sub?.plan == PlanType.unlimited || sub?.plan == PlanType.operator || sub?.plan == PlanType.pro;
+        final isUnlimited = isPaidPlan; // backward-compat alias for UI branching
+        final isDeprecated = sub?.deprecated ?? false;
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
 
         String renewalDate = 'N/A';
@@ -879,7 +883,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                   );
                                 } else {
                                   return Text(
-                                    isUnlimited ? 'Change Plan' : 'Keep Omi Unlimited',
+                                    isUnlimited ? 'Change Plan' : 'Upgrade Your Plan',
                                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                   );
                                 }
@@ -900,7 +904,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             } else {
                               return Text(
                                 isUnlimited
-                                    ? 'You are on the Unlimited Plan.'
+                                    ? 'You are on a paid plan.'
                                     : 'Choose your plan to unlock unlimited Omi.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
@@ -958,8 +962,42 @@ class _PlansSheetState extends State<PlansSheet> {
                             },
                           ),
                         ],
+                        // Deprecation notice for legacy Unlimited subscribers
+                        if (isDeprecated && sub?.deprecationMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.info_outline, color: Colors.orange.shade400, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'Plan Update',
+                                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  sub!.deprecationMessage!,
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 13, height: 1.4),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 24),
-                        // Features list - only for unlimited users
+                        // Features list - only for paid plan users
                         if (isUnlimited) ...[
                           Column(
                             children: [
@@ -1320,8 +1358,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             }
 
                             final isLoading = _isUpgrading;
-                            // For basic users, show "Keep Unlimited". For unlimited users upgrading, show "Continue"
-                            final buttonText = isUnlimited ? 'Continue' : 'Keep Unlimited';
+                            // For basic users, show "Upgrade". For paid users upgrading, show "Continue"
+                            final buttonText = isUnlimited ? 'Continue' : 'Upgrade';
 
                             return SizedBox(
                               width: double.infinity,
