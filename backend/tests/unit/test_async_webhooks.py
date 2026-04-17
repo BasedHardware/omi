@@ -141,21 +141,21 @@ class TestSendAudioBytesDeveloperWebhook:
         assert call_args.kwargs.get("headers", {}).get("Content-Type") == "application/octet-stream"
 
     @pytest.mark.asyncio
-    async def test_bytearray_sent_directly(self):
-        """Verify bytearray is passed directly to httpx (no bytes copy)."""
+    async def test_bytearray_converted_to_bytes_at_call_site(self):
+        """Verify bytearray is converted to bytes inline at httpx call (required by httpx 0.28)."""
         mock_response = MagicMock()
         mock_response.status_code = 200
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        original_data = bytearray(b'\xab\xcd')
         with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
-            await send_audio_bytes_developer_webhook("uid-1", 8000, original_data)
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\xab\xcd'))
 
         call_args = mock_client.post.call_args
         sent_content = call_args.kwargs.get("content")
-        assert sent_content is original_data
+        assert isinstance(sent_content, bytes)
+        assert sent_content == b'\xab\xcd'
 
     @pytest.mark.asyncio
     async def test_url_comma_parsing(self):
