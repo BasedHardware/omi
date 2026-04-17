@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/main.dart' as app;
 
@@ -113,7 +114,7 @@ void main() {
       _analyzeRssGrowth(snapshots);
 
       // Write results
-      _writeResultsToFile(snapshots);
+      await _writeResultsToFile(snapshots);
     });
 
     testWidgets('Detect leaks in isolated widget cycles', (WidgetTester tester) async {
@@ -190,7 +191,7 @@ void main() {
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       // Write JSON results
-      _writeWidgetLeakResults(results);
+      await _writeWidgetLeakResults(results);
 
       // Soft assertion - warn but don't fail for small leaks
       for (final entry in results.entries) {
@@ -510,11 +511,12 @@ Future<void> _navigateHome(WidgetTester tester) async {
 // File Output
 // =============================================================================
 
-void _writeResultsToFile(List<_MemorySnapshot> snapshots) {
+Future<void> _writeResultsToFile(List<_MemorySnapshot> snapshots) async {
   try {
+    final dir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final jsonFile = File('/tmp/omi_memory_$timestamp.json');
-    final csvFile = File('/tmp/omi_memory_$timestamp.csv');
+    final jsonFile = File('${dir.path}/omi_memory_$timestamp.json');
+    final csvFile = File('${dir.path}/omi_memory_$timestamp.csv');
 
     // JSON output
     final jsonBuffer = StringBuffer();
@@ -549,10 +551,11 @@ void _writeResultsToFile(List<_MemorySnapshot> snapshots) {
   }
 }
 
-void _writeWidgetLeakResults(Map<String, _LeakTestResult> results) {
+Future<void> _writeWidgetLeakResults(Map<String, _LeakTestResult> results) async {
   try {
+    final dir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_widget_leaks_$timestamp.json');
+    final file = File('${dir.path}/omi_widget_leaks_$timestamp.json');
 
     final buffer = StringBuffer();
     buffer.writeln('{');

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/main.dart' as app;
 
@@ -155,7 +156,7 @@ void main() {
       debugPrint('');
       debugPrint('[8/8] Generating battery drain report...');
       _printBatteryReport(stateResults);
-      _writeResultsToFile(stateResults);
+      await _writeResultsToFile(stateResults);
     });
 
     testWidgets('Measure frame rendering cost over time', (WidgetTester tester) async {
@@ -166,18 +167,15 @@ void main() {
       debugPrint('');
 
       // This test measures whether frame cost increases over time
-      // (indicating resource leaks or cache bloat)
+      // (indicating resource leaks or cache bloat).
+      // NOTE: app.main() is NOT called here — both testWidgets in this file run in
+      // the same process, so the app from the first test is still live. Calling
+      // app.main() again would double-register Firebase, providers, and widget trees.
 
-      app.main();
-      for (int i = 0; i < 50; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      await _handleOnboardingIfNeeded(tester);
       await _pumpFor(tester, 3000);
       await _dismissAnyPopup(tester);
 
-      // Wait for stabilization
+      // Stabilize
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(seconds: 1));
         await _dismissAnyPopup(tester);
@@ -275,7 +273,7 @@ void main() {
       }
 
       // Write results
-      _writeFrameCostResults(measurements);
+      await _writeFrameCostResults(measurements);
     });
   });
 }
@@ -404,6 +402,7 @@ Future<_StateProfile> _profileState(
     p50BuildMs: buildUs[buildUs.length ~/ 2] / 1000,
     p90BuildMs: buildUs[(buildUs.length * 0.9).toInt()] / 1000,
     p99BuildMs: buildUs[(buildUs.length * 0.99).toInt()] / 1000,
+    // 16ms = 60Hz budget. On 90/120Hz devices, frames between 8-16ms are also janky but won't be counted here.
     jankyFrames: timings.where((t) => t.buildDuration.inMilliseconds + t.rasterDuration.inMilliseconds > 16).length,
     framesPerSecond: timings.length / durationSeconds,
   );
@@ -484,10 +483,11 @@ void _printBatteryReport(List<_StateProfile> states) {
   }
 }
 
-void _writeResultsToFile(List<_StateProfile> states) {
+Future<void> _writeResultsToFile(List<_StateProfile> states) async {
   try {
+    final dir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_battery_$timestamp.json');
+    final file = File('${dir.path}/omi_battery_$timestamp.json');
 
     final buffer = StringBuffer();
     buffer.writeln('{');
@@ -519,10 +519,11 @@ void _writeResultsToFile(List<_StateProfile> states) {
   }
 }
 
-void _writeFrameCostResults(List<_FrameCostMeasurement> measurements) {
+Future<void> _writeFrameCostResults(List<_FrameCostMeasurement> measurements) async {
   try {
+    final dir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_frame_cost_$timestamp.json');
+    final file = File('${dir.path}/omi_frame_cost_$timestamp.json');
 
     final buffer = StringBuffer();
     buffer.writeln('{');

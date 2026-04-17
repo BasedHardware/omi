@@ -136,26 +136,38 @@ fi
 # Test Definitions
 # =============================================================================
 
-# Array of test files and their names
-declare -A TESTS
-TESTS[memory]="integration_test/memory_leak_test.dart"
-TESTS[battery]="integration_test/battery_drain_test.dart"
-TESTS[animation]="integration_test/animation_performance_test.dart"
-TESTS[shimmer]="integration_test/shimmer_cpu_test.dart"
-TESTS[rebuild]="integration_test/widget_rebuild_profiling_test.dart"
-TESTS[app]="integration_test/app_performance_test.dart"
+# Test names, files, and descriptions as parallel arrays (bash 3.2 compatible — macOS ships 3.2)
+TEST_NAMES=("memory" "battery" "animation" "shimmer" "rebuild" "app")
+TEST_FILES=(
+  "integration_test/memory_leak_test.dart"
+  "integration_test/battery_drain_test.dart"
+  "integration_test/animation_performance_test.dart"
+  "integration_test/shimmer_cpu_test.dart"
+  "integration_test/widget_rebuild_profiling_test.dart"
+  "integration_test/app_performance_test.dart"
+)
+TEST_DESCS=(
+  "Memory leak detection (heap growth analysis)"
+  "Battery drain estimation (CPU + frame cost profiling)"
+  "Animation performance (frame timing)"
+  "Shimmer CPU impact (static vs animated)"
+  "Widget rebuild frequency (Selector vs Consumer)"
+  "Full app performance (navigation + profiling)"
+)
 
 # Quick mode skips longer tests
 QUICK_SKIP=("battery" "app")
 
-# Test descriptions
-declare -A TEST_DESC
-TEST_DESC[memory]="Memory leak detection (heap growth analysis)"
-TEST_DESC[battery]="Battery drain estimation (CPU + frame cost profiling)"
-TEST_DESC[animation]="Animation performance (frame timing)"
-TEST_DESC[shimmer]="Shimmer CPU impact (static vs animated)"
-TEST_DESC[rebuild]="Widget rebuild frequency (Selector vs Consumer)"
-TEST_DESC[app]="Full app performance (navigation + profiling)"
+# Lookup helpers for parallel arrays
+_test_index() {
+  local name="$1"
+  for i in "${!TEST_NAMES[@]}"; do
+    if [[ "${TEST_NAMES[$i]}" == "$name" ]]; then echo "$i"; return 0; fi
+  done
+  return 1
+}
+_test_file() { local i; i=$(_test_index "$1") && echo "${TEST_FILES[$i]}"; }
+_test_desc() { local i; i=$(_test_index "$1") && echo "${TEST_DESCS[$i]}"; }
 
 # =============================================================================
 # Test Runner
@@ -163,7 +175,8 @@ TEST_DESC[app]="Full app performance (navigation + profiling)"
 
 run_single_test() {
   local name="$1"
-  local test_file="${TESTS[$name]}"
+  local test_file
+  test_file=$(_test_file "$name")
   local log_file="$RUN_DIR/${name}.log"
   local result_file="$RUN_DIR/${name}.result"
 
@@ -173,7 +186,7 @@ run_single_test() {
     return 0
   fi
 
-  log "Running: ${TEST_DESC[$name]}"
+  log "Running: $(_test_desc "$name")"
   log "  File: $test_file"
   log "  Log:  $log_file"
 
@@ -206,9 +219,9 @@ run_single_test() {
 
 get_tests_to_run() {
   if [[ -n "$SINGLE_TEST" ]]; then
-    if [[ -z "${TESTS[$SINGLE_TEST]+x}" ]]; then
+    if ! _test_index "$SINGLE_TEST" >/dev/null; then
       log_err "Unknown test: $SINGLE_TEST"
-      log "Available tests: ${!TESTS[*]}"
+      log "Available tests: ${TEST_NAMES[*]}"
       exit 1
     fi
     echo "$SINGLE_TEST"
@@ -322,7 +335,7 @@ generate_report() {
         SKIP) icon="⏭️"; ((skip_count++)) || true ;;
       esac
 
-      echo "| $icon $name | $status | ${TEST_DESC[$name]} |"
+      echo "| $icon $name | $status | $(_test_desc "$name") |"
     done
 
     echo ""
