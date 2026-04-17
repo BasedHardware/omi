@@ -108,14 +108,14 @@ final class SubscriptionInfoDecoderTests: XCTestCase {
     XCTAssertNil(info.deprecationMessage)
   }
 
-  func testDecodeProPlan() throws {
+  func testDecodeArchitectPlan() throws {
     let json = """
       {
-        "plan": "pro",
+        "plan": "architect",
         "status": "active",
         "current_period_end": 1700000000,
-        "stripe_subscription_id": "sub_pro",
-        "current_price_id": "price_pro",
+        "stripe_subscription_id": "sub_architect",
+        "current_price_id": "price_architect",
         "features": ["automations"],
         "cancel_at_period_end": true,
         "limits": {
@@ -127,8 +127,30 @@ final class SubscriptionInfoDecoderTests: XCTestCase {
       }
       """
     let info = try JSONDecoder().decode(UserSubscriptionInfo.self, from: json.data(using: .utf8)!)
-    XCTAssertEqual(info.plan, .pro)
+    XCTAssertEqual(info.plan, .architect)
     XCTAssertTrue(info.cancelAtPeriodEnd)
     XCTAssertNil(info.deprecated)
+  }
+
+  func testDecodeProPlanBackwardCompat() throws {
+    let json = """
+      {
+        "plan": "pro",
+        "status": "active",
+        "current_period_end": 1700000000,
+        "stripe_subscription_id": "sub_pro",
+        "current_price_id": "price_pro",
+        "features": ["automations"],
+        "cancel_at_period_end": false,
+        "limits": {
+          "transcription_seconds": null,
+          "words_transcribed": null,
+          "insights_gained": null,
+          "memories_created": null
+        }
+      }
+      """
+    let info = try JSONDecoder().decode(UserSubscriptionInfo.self, from: json.data(using: .utf8)!)
+    XCTAssertEqual(info.plan, .pro)
   }
 }

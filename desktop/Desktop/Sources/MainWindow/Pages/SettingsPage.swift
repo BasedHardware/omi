@@ -5690,17 +5690,19 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Oracle (mass-market, green) on the left, Architect/Pro (premium, purple)
-    // on the right, legacy Unlimited last if the user is still on it.
-    let order = ["operator": 0, "pro": 1, "unlimited": 2]
-    return mergedPlanCatalog.sorted { lhs, rhs in
-      let lhsOrder = order[lhs.id, default: Int.max]
-      let rhsOrder = order[rhs.id, default: Int.max]
-      if lhsOrder != rhsOrder {
-        return lhsOrder < rhsOrder
+    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // on the right. Hide the user's current plan — they already see it above.
+    let order = ["operator": 0, "architect": 1, "unlimited": 2]
+    return mergedPlanCatalog
+      .filter { !isCurrentSubscriptionPlan($0) }
+      .sorted { lhs, rhs in
+        let lhsOrder = order[lhs.id, default: Int.max]
+        let rhsOrder = order[rhs.id, default: Int.max]
+        if lhsOrder != rhsOrder {
+          return lhsOrder < rhsOrder
+        }
+        return lhs.title < rhs.title
       }
-      return lhs.title < rhs.title
-    }
   }
 
   private var currentPlanTitle: String {
@@ -5719,7 +5721,7 @@ struct SettingsContentView: View {
         return "Operator"
       }
       return "Unlimited (legacy)"
-    case .pro:
+    case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
@@ -5787,7 +5789,7 @@ struct SettingsContentView: View {
     switch planId {
     case "operator", "unlimited":
       return "500 questions per month"
-    case "pro":
+    case "architect":
       return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
@@ -5795,9 +5797,9 @@ struct SettingsContentView: View {
   }
 
   private func planAccentColor(for planId: String) -> Color {
-    // Architect (pro) is the premium/purple tier; Oracle + legacy Unlimited
+    // Architect is the premium/purple tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
+    planId == "architect" ? OmiColors.purplePrimary : OmiColors.success
   }
 
   private func planSummaryText(for plan: SubscriptionPlanOption) -> String {
@@ -5820,7 +5822,7 @@ struct SettingsContentView: View {
     switch planId {
     case "operator", "unlimited":
       return "Most popular"
-    case "pro":
+    case "architect":
       return "Automation + coding"
     default:
       return "Plan"
@@ -5831,7 +5833,7 @@ struct SettingsContentView: View {
     switch planId {
     case "operator", "unlimited":
       return "500 chat questions per month. Shared with mobile and web."
-    case "pro":
+    case "architect":
       return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
@@ -5869,7 +5871,7 @@ struct SettingsContentView: View {
 
   private func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
-    case "pro":
+    case "architect":
       return [
         "Automations and vibe coding",
         "Unlimited listening, memories, and insights",
@@ -5893,8 +5895,8 @@ struct SettingsContentView: View {
     if normalized.contains("unlimited") {
       return "unlimited"
     }
-    if normalized.contains("pro") {
-      return "pro"
+    if normalized.contains("architect") || normalized.contains("pro") {
+      return "architect"
     }
     return nil
   }
@@ -5911,8 +5913,8 @@ struct SettingsContentView: View {
       switch planId {
       case "unlimited":
         title = "Plus"
-      case "pro":
-        title = "Omi Pro"
+      case "architect":
+        title = "Architect"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -5940,8 +5942,10 @@ struct SettingsContentView: View {
     let isSelected = selectedPlanIdForCheckout == plan.id
     let accent = planAccentColor(for: plan.id)
     let isCurrentPlan = isCurrentSubscriptionPlan(plan)
-    let isProUser = userSubscription?.subscription.plan == .pro
-    let isDowngrade = isProUser && plan.id == "unlimited"
+    let isArchitectUser =
+      userSubscription?.subscription.plan == .architect
+      || userSubscription?.subscription.plan == .pro
+    let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
 
     VStack(alignment: .leading, spacing: 16) {
