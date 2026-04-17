@@ -19,6 +19,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 # --- env vars needed at import time --------------------------------------
 os.environ.setdefault(
@@ -52,13 +53,29 @@ for _name in (
 
 
 # database.announcements.compare_versions is needed at subscription import time.
+# Mirrors the production two-pass behaviour: compare the semantic version
+# first, and only fall back to the build-number suffix when both inputs
+# carry one. Without the build-number pass, equal-semver-but-different-build
+# inputs (e.g. "0.11.324+607" vs "0.11.324+608") would compare equal and
+# any future regression in that path would not be caught.
 def _compare_versions(v1: str, v2: str) -> int:
-    a = tuple(int(p) for p in v1.split("+", 1)[0].split("."))
-    b = tuple(int(p) for p in v2.split("+", 1)[0].split("."))
-    if a < b:
+    a_sem = tuple(int(p) for p in v1.split("+", 1)[0].split("."))
+    b_sem = tuple(int(p) for p in v2.split("+", 1)[0].split("."))
+    if a_sem < b_sem:
         return -1
-    if a > b:
+    if a_sem > b_sem:
         return 1
+    a_build = v1.split("+", 1)[1] if "+" in v1 else None
+    b_build = v2.split("+", 1)[1] if "+" in v2 else None
+    if a_build is not None and b_build is not None:
+        try:
+            a_int, b_int = int(a_build), int(b_build)
+        except ValueError:
+            return 0
+        if a_int < b_int:
+            return -1
+        if a_int > b_int:
+            return 1
     return 0
 
 
@@ -123,8 +140,6 @@ class TestEnforceChatQuotaQuestionUnit:
             subscription.enforce_chat_quota("uid-x")  # no exception
 
     def test_at_limit_raises_402(self, monkeypatch):
-        from fastapi import HTTPException
-
         monkeypatch.setattr(subscription, "CHAT_CAP_ENFORCEMENT_ENABLED", True)
         with patch.object(subscription, "get_chat_quota_snapshot", return_value=self._snap(30.0, 30.0)):
             with pytest.raises(HTTPException) as exc:
@@ -139,8 +154,6 @@ class TestEnforceChatQuotaQuestionUnit:
             assert "reset_at" in detail
 
     def test_over_limit_includes_actual_used(self, monkeypatch):
-        from fastapi import HTTPException
-
         monkeypatch.setattr(subscription, "CHAT_CAP_ENFORCEMENT_ENABLED", True)
         with patch.object(subscription, "get_chat_quota_snapshot", return_value=self._snap(34.0, 30.0)):
             with pytest.raises(HTTPException) as exc:
@@ -165,8 +178,6 @@ class TestEnforceChatQuotaCostUnit:
             subscription.enforce_chat_quota("uid-pro")
 
     def test_over_cost_cap_raises_with_cost_unit(self, monkeypatch):
-        from fastapi import HTTPException
-
         monkeypatch.setattr(subscription, "CHAT_CAP_ENFORCEMENT_ENABLED", True)
         snap = {
             "plan": PlanType.pro,
