@@ -87,6 +87,8 @@ class WebhookCircuitBreaker:
 
 # Global registry of per-target circuit breakers
 _webhook_circuit_breakers: dict[str, WebhookCircuitBreaker] = {}
+_CIRCUIT_BREAKER_MAX_ENTRIES = 500
+_CIRCUIT_BREAKER_IDLE_TTL = 3600  # seconds — evict entries idle for 1 hour
 
 
 def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
@@ -94,6 +96,7 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
 
     Keyed by the URL path (scheme + host + path, without query params) so that
     different webhook endpoints on the same host are isolated from each other.
+    Evicts stale entries when the registry grows beyond _CIRCUIT_BREAKER_MAX_ENTRIES.
     """
     try:
         # Strip query params but keep scheme + host + path
@@ -101,8 +104,25 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
     except (IndexError, AttributeError):
         key = url
     if key not in _webhook_circuit_breakers:
+        if len(_webhook_circuit_breakers) > _CIRCUIT_BREAKER_MAX_ENTRIES:
+            _evict_stale_circuit_breakers()
         _webhook_circuit_breakers[key] = WebhookCircuitBreaker(key)
     return _webhook_circuit_breakers[key]
+
+
+def _evict_stale_circuit_breakers():
+    """Remove circuit breaker entries that have been idle (closed, no recent failures)."""
+    now = time.monotonic()
+    stale_keys = [
+        k
+        for k, cb in _webhook_circuit_breakers.items()
+        if cb._state == 'closed'
+        and (now - cb._last_failure_time > _CIRCUIT_BREAKER_IDLE_TTL or cb._last_failure_time == 0.0)
+    ]
+    for k in stale_keys:
+        del _webhook_circuit_breakers[k]
+    if stale_keys:
+        logger.info(f'Evicted {len(stale_keys)} stale circuit breakers, {len(_webhook_circuit_breakers)} remaining')
 
 
 # ---------------------------------------------------------------------------
@@ -110,17 +130,34 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
 # ---------------------------------------------------------------------------
 
 _latest_wins_versions: dict[str, int] = defaultdict(int)
+_latest_wins_last_seen: dict[str, float] = {}
+_LATEST_WINS_MAX_ENTRIES = 10000
+_LATEST_WINS_IDLE_TTL = 600  # seconds — evict UIDs idle for 10 minutes
 
 
 def latest_wins_start(uid: str) -> int:
     """Increment and return the current version for a uid's audio byte call."""
     _latest_wins_versions[uid] += 1
+    _latest_wins_last_seen[uid] = time.monotonic()
+    if len(_latest_wins_versions) > _LATEST_WINS_MAX_ENTRIES:
+        _evict_stale_latest_wins()
     return _latest_wins_versions[uid]
 
 
 def latest_wins_check(uid: str, version: int) -> bool:
     """Return True if this version is still the latest for the uid."""
     return _latest_wins_versions.get(uid, 0) == version
+
+
+def _evict_stale_latest_wins():
+    """Remove latest-wins entries for UIDs not seen recently."""
+    now = time.monotonic()
+    stale_uids = [uid for uid, last_seen in _latest_wins_last_seen.items() if now - last_seen > _LATEST_WINS_IDLE_TTL]
+    for uid in stale_uids:
+        _latest_wins_versions.pop(uid, None)
+        _latest_wins_last_seen.pop(uid, None)
+    if stale_uids:
+        logger.info(f'Evicted {len(stale_uids)} stale latest-wins entries, {len(_latest_wins_versions)} remaining')
 
 
 # ---------------------------------------------------------------------------
@@ -248,5 +285,8 @@ async def close_all_clients():
     _maps_client = None
     _auth_client = None
     _stt_client = None
-    # Reset semaphores (keyed by event loop)
+    # Reset stateful registries
     _semaphores.clear()
+    _webhook_circuit_breakers.clear()
+    _latest_wins_versions.clear()
+    _latest_wins_last_seen.clear()
