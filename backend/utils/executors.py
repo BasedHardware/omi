@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 logger = logging.getLogger(__name__)
 
 critical_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="critical")
-storage_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="storage")
+storage_executor = ThreadPoolExecutor(max_workers=16, thread_name_prefix="storage")
 
 
 def shutdown_executors():
