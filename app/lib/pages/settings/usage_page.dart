@@ -283,30 +283,45 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text(context.l10n.yourOmiInsights),
+        title: Text(context.l10n.insightsPageTitle),
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
         actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.deepPurple,
-          isScrollable: true,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          unselectedLabelStyle: const TextStyle(fontSize: 16),
-          tabs: [
-            Tab(text: context.l10n.today),
-            Tab(text: context.l10n.thisMonth),
-            Tab(text: context.l10n.thisYear),
-            Tab(text: context.l10n.allTime),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(52),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: const Color(0xFF4A4A50),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey.shade500,
+              labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: const TextStyle(fontSize: 14),
+              padding: const EdgeInsets.all(3),
+              tabs: [
+                Tab(text: context.l10n.tabWeek),
+                Tab(text: context.l10n.tabMonth),
+                Tab(text: context.l10n.tabYear),
+                Tab(text: context.l10n.tabAll),
+              ],
+            ),
+          ),
         ),
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -410,77 +425,109 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final plan = provider.subscription!.subscription.plan;
+    final sub = provider.subscription!.subscription;
+    final plan = sub.plan;
     final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
 
+    // Build renewal/cancellation subtitle
+    String? renewalText;
+    if (sub.currentPeriodEnd != null) {
+      final endDate = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+      final dateStr = DateFormat.yMMMd().format(endDate);
+      if (sub.cancelAtPeriodEnd) {
+        renewalText = context.l10n.cancelsShort(dateStr);
+      } else {
+        renewalText = context.l10n.renewsShort(dateStr);
+      }
+    }
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      child: isUnlimited
+          ? GestureDetector(
+              onTap: _isUpgrading ? null : _showPlansSheet,
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Center(
+                      child: Text('∞',
+                          style: TextStyle(fontSize: 22, color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.unlimitedPlan,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        if (renewalText != null)
+                          Text(renewalText, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ),
+                  Text(context.l10n.managePlan, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                  const SizedBox(width: 2),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+                ],
               ),
-              if (isUnlimited)
-                GestureDetector(
-                  onTap: _isUpgrading ? null : _showPlansSheet,
-                  child: Row(
-                    children: [
-                      Text(context.l10n.managePlan, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
-                    ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.basicPlan,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isUpgrading ? null : _showPlansSheet,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isUpgrading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                context.l10n.upgradeToUnlimited,
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward, size: 18),
+                            ],
+                          ),
                   ),
                 ),
-            ],
-          ),
-          if (!isUnlimited) ...[
-            const SizedBox(height: 4),
-            Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _isUpgrading ? null : _showPlansSheet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: _isUpgrading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward, size: 18),
-                        ],
-                      ),
-              ),
+              ],
             ),
-          ],
-        ],
-      ),
     );
   }
 
@@ -1048,8 +1095,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
