@@ -5692,7 +5692,8 @@ struct SettingsContentView: View {
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
     // Operator (mass-market, green) on the left, Architect (premium, purple)
     // on the right. Hide the user's current plan — they already see it above.
-    let order = ["operator": 0, "architect": 1, "unlimited": 2]
+    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
+    let order = ["unlimited": 0, "operator": 1, "architect": 2]
     return mergedPlanCatalog
       .filter { !isCurrentSubscriptionPlan($0) }
       .sorted { lhs, rhs in
@@ -5720,7 +5721,7 @@ struct SettingsContentView: View {
       if isCurrentSubscriptionOperator() {
         return "Operator"
       }
-      return "Unlimited (legacy)"
+      return "Neo"
     case .architect, .pro:
       return "Architect"
     case .operator:
@@ -5787,7 +5788,9 @@ struct SettingsContentView: View {
 
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "100 questions per month"
+    case "operator":
       return "500 questions per month"
     case "architect":
       return "Power-user AI — thousands of chats + agentic automations"
@@ -5820,7 +5823,9 @@ struct SettingsContentView: View {
 
   private func planEyebrow(for planId: String) -> String {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "Starter"
+    case "operator":
       return "Most popular"
     case "architect":
       return "Automation + coding"
@@ -5831,7 +5836,9 @@ struct SettingsContentView: View {
 
   private func planDescription(for planId: String) -> String {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "100 chat questions per month. Shared with mobile and web."
+    case "operator":
       return "500 chat questions per month. Shared with mobile and web."
     case "architect":
       return "Power-user AI for heavy agentic workflows and vibe coding."
@@ -5878,9 +5885,16 @@ struct SettingsContentView: View {
         "Priority desktop AI features",
         "~$400 of monthly AI compute included (fair-use cap)",
       ]
-    case "operator", "unlimited":
+    case "operator":
       return [
         "500 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
+      ]
+    case "unlimited":
+      return [
+        "100 chat questions per month",
         "Unlimited listening and transcription",
         "Unlimited memories and insights",
         "Shared with mobile and web",
