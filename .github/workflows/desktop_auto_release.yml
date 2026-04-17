@@ -258,7 +258,7 @@ jobs:
           print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
           "
 
-      - name: Commit changelog and create tag
+      - name: Commit changelog, update main, and create tag
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
@@ -268,7 +268,11 @@ jobs:
           git add desktop/CHANGELOG.json
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
+          # Keep main's changelog in sync. This push only changes desktop/CHANGELOG.json,
+          # which is excluded from this workflow's push trigger.
+          git push origin HEAD:main
+
+          # Tag the synced changelog commit; Codemagic uses this tag to trigger builds.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
