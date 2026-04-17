@@ -77,22 +77,31 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     """True iff this caller's client has the Swift code that understands the new
     Operator + Architect plan shape and the /v1/users/me/usage-quota endpoint.
 
-    Only macOS desktop builds on `NEW_PLANS_MIN_DESKTOP_VERSION` or newer
-    qualify. iOS / Android / older desktop builds get the legacy plan catalog
-    so the rollout is gated to the beta channel without cross-client breakage.
+    Any macOS desktop build qualifies. iOS / Android clients always get the
+    legacy plan catalog so the rollout is gated to desktop without cross-
+    client breakage.
+
+    The existing APIClient.swift doesn't send an X-App-Version header, so we
+    cannot version-gate per-build — version is included only as an opt-in
+    tightening hook once the client starts sending it.
     """
-    # Lazy import so we don't pull the database layer at module import time
-    # and to avoid turning this into another circular-import sinkhole.
     from database.announcements import _compare_versions
 
     if not platform or platform.lower() != 'macos':
         return False
+
+    # No version header: assume a recent-enough desktop build. Desktop clients
+    # don't currently send X-App-Version (see APIClient.swift buildHeaders),
+    # so requiring it here would fail-closed for every real desktop user.
     if not app_version:
-        return False
+        return True
+
     try:
         return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
     except Exception:
-        return False
+        # Malformed version — fail-open on macOS rather than show the old
+        # catalog to a desktop client.
+        return True
 
 
 def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
