@@ -20,12 +20,14 @@
 //
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
-import type {
-  ExtensionAPI,
-  ToolCallEvent,
-  ToolCallEventResult,
-  ToolResultEvent,
+import {
+  defineTool,
+  type ExtensionAPI,
+  type ToolCallEvent,
+  type ToolCallEventResult,
+  type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
+import { Type } from "@mariozechner/pi-ai";
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -464,17 +466,25 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>): Promise<string> {
+function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
   if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
+  if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
       resolve(`Error: tool '${name}' timed out after ${OMI_TOOL_TIMEOUT_MS / 1000}s`);
     }, OMI_TOOL_TIMEOUT_MS);
+    const cleanup = () => {
+      clearTimeout(timer);
+      omiPendingCalls.delete(callId);
+      resolve("Error: tool call aborted");
+    };
+    signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
       resolve: (result: string) => {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", cleanup);
         resolve(result);
       },
     });
@@ -482,32 +492,204 @@ function callSwiftTool(name: string, input: Record<string, unknown>): Promise<st
   });
 }
 
-interface OmiToolSpec {
+export const OMI_TOOL_TIMEOUT_MS = 30_000;
+
+// ---------------------------------------------------------------------------
+// Omi tool definitions — pi-mono defineTool() with TypeBox schemas
+// ---------------------------------------------------------------------------
+
+/** Factory: create a defineTool()-compliant Omi tool that forwards to Swift. */
+function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   name: string;
   label: string;
   description: string;
-  snippet: string;
-  properties: Record<string, { type: string; description?: string }>;
-  required: string[];
+  promptSnippet: string;
+  promptGuidelines?: string[];
+  properties: T;
+  required: (keyof T)[];
+}) {
+  return defineTool({
+    name: spec.name,
+    label: spec.label,
+    description: spec.description,
+    promptSnippet: spec.promptSnippet,
+    promptGuidelines: spec.promptGuidelines,
+    parameters: Type.Object(
+      spec.properties,
+      { additionalProperties: false },
+    ),
+    async execute(_toolCallId, params, signal) {
+      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal);
+      return { content: [{ type: "text" as const, text: result }], details: undefined };
+    },
+  });
 }
 
-export const OMI_TOOL_SPECS: OmiToolSpec[] = [
-  { name: "execute_sql", label: "Execute SQL", description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only (SELECT only). Key tables: screenshots, transcription_sessions, action_items, memories, staged_tasks, focus_sessions, observations, goals, indexed_files.", snippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)", properties: { query: { type: "string", description: "SQL query to execute" } }, required: ["query"] },
-  { name: "semantic_search", label: "Semantic Search", description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.", snippet: "semantic_search - Search screen history by meaning", properties: { query: { type: "string", description: "Natural language search query" }, days: { type: "number", description: "Days to search back (default 7)" }, app_filter: { type: "string", description: "Filter to a specific app" } }, required: ["query"] },
-  { name: "get_daily_recap", label: "Daily Recap", description: "Pre-formatted daily activity recap: app usage, conversations, tasks, focus, memories, observations.", snippet: "get_daily_recap - Get a daily activity summary", properties: { days_ago: { type: "number", description: "0=today, 1=yesterday, 7=past week" } }, required: [] },
-  { name: "search_tasks", label: "Search Tasks", description: "Vector similarity search on tasks. Find tasks by meaning or topic.", snippet: "search_tasks - Find tasks by meaning", properties: { query: { type: "string", description: "Natural language task description" }, include_completed: { type: "boolean", description: "Include completed tasks" } }, required: ["query"] },
-  { name: "complete_task", label: "Complete Task", description: "Toggle a task's completion status. Syncs to backend.", snippet: "complete_task - Mark a task as complete/incomplete", properties: { task_id: { type: "string", description: "backendId from action_items" } }, required: ["task_id"] },
-  { name: "delete_task", label: "Delete Task", description: "Delete a task permanently. Syncs to backend.", snippet: "delete_task - Delete a task permanently", properties: { task_id: { type: "string", description: "backendId from action_items" } }, required: ["task_id"] },
-  { name: "get_conversations", label: "Get Conversations", description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.", snippet: "get_conversations - Retrieve conversations by date range", properties: { start_date: { type: "string", description: "ISO date with timezone" }, end_date: { type: "string", description: "ISO date with timezone" }, limit: { type: "number", description: "Default 20" }, offset: { type: "number" }, include_transcript: { type: "boolean", description: "Load speaker data" } }, required: [] },
-  { name: "search_conversations", label: "Search Conversations", description: "Semantic search across conversations. Use for specific events or topics.", snippet: "search_conversations - Find conversations about a topic", properties: { query: { type: "string", description: "Event or topic to search for" }, start_date: { type: "string" }, end_date: { type: "string" }, limit: { type: "number", description: "Default 5, max 20" }, include_transcript: { type: "boolean" } }, required: ["query"] },
-  { name: "get_memories", label: "Get Memories", description: "Retrieve user memories — facts, preferences, habits. Use for 'what do you know about me?' type questions.", snippet: "get_memories - Retrieve stored facts and preferences", properties: { limit: { type: "number", description: "Default 50" }, offset: { type: "number" }, start_date: { type: "string" }, end_date: { type: "string" } }, required: [] },
-  { name: "search_memories", label: "Search Memories", description: "Semantic search across user memories. Find memories about a topic using AI embeddings.", snippet: "search_memories - Find memories about a topic", properties: { query: { type: "string", description: "Topic to search for" }, limit: { type: "number", description: "Default 5, max 20" } }, required: ["query"] },
-  { name: "get_action_items", label: "Get Action Items", description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.", snippet: "get_action_items - Retrieve tasks", properties: { limit: { type: "number" }, offset: { type: "number" }, completed: { type: "boolean", description: "true=done, false=pending" }, start_date: { type: "string" }, end_date: { type: "string" }, due_start_date: { type: "string" }, due_end_date: { type: "string" } }, required: [] },
-  { name: "create_action_item", label: "Create Action Item", description: "Create a new task. Use when user explicitly asks to add a task.", snippet: "create_action_item - Create a new task", properties: { description: { type: "string", description: "Short task description" }, due_at: { type: "string", description: "Due date ISO" }, conversation_id: { type: "string" } }, required: ["description"] },
-  { name: "update_action_item", label: "Update Action Item", description: "Update task status, description, or due date.", snippet: "update_action_item - Update an existing task", properties: { action_item_id: { type: "string", description: "Task ID (required)" }, completed: { type: "boolean" }, description: { type: "string" }, due_at: { type: "string" } }, required: ["action_item_id"] },
+export const OMI_TOOLS = [
+  omiTool({
+    name: "execute_sql",
+    label: "Execute SQL",
+    description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only (SELECT only). Key tables: screenshots, transcription_sessions, action_items, memories, staged_tasks, focus_sessions, observations, goals, indexed_files.",
+    promptSnippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
+    promptGuidelines: [
+      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
+      "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
+    ],
+    properties: {
+      query: Type.String({ description: "SQL query to execute" }),
+    },
+    required: ["query"],
+  }),
+  omiTool({
+    name: "semantic_search",
+    label: "Semantic Search",
+    description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
+    promptSnippet: "semantic_search - Search screen history by meaning",
+    promptGuidelines: [
+      "Prefer semantic_search over execute_sql when the user asks about something they 'saw' or 'looked at'.",
+    ],
+    properties: {
+      query: Type.String({ description: "Natural language search query" }),
+      days: Type.Optional(Type.Number({ description: "Days to search back (default 7)" })),
+      app_filter: Type.Optional(Type.String({ description: "Filter to a specific app" })),
+    },
+    required: ["query"],
+  }),
+  omiTool({
+    name: "get_daily_recap",
+    label: "Daily Recap",
+    description: "Pre-formatted daily activity recap: app usage, conversations, tasks, focus, memories, observations.",
+    promptSnippet: "get_daily_recap - Get a daily activity summary",
+    properties: {
+      days_ago: Type.Optional(Type.Number({ description: "0=today, 1=yesterday, 7=past week" })),
+    },
+    required: [],
+  }),
+  omiTool({
+    name: "search_tasks",
+    label: "Search Tasks",
+    description: "Vector similarity search on tasks. Find tasks by meaning or topic.",
+    promptSnippet: "search_tasks - Find tasks by meaning",
+    properties: {
+      query: Type.String({ description: "Natural language task description" }),
+      include_completed: Type.Optional(Type.Boolean({ description: "Include completed tasks" })),
+    },
+    required: ["query"],
+  }),
+  omiTool({
+    name: "complete_task",
+    label: "Complete Task",
+    description: "Toggle a task's completion status. Syncs to backend.",
+    promptSnippet: "complete_task - Mark a task as complete/incomplete",
+    properties: {
+      task_id: Type.String({ description: "backendId from action_items" }),
+    },
+    required: ["task_id"],
+  }),
+  omiTool({
+    name: "delete_task",
+    label: "Delete Task",
+    description: "Delete a task permanently. Syncs to backend.",
+    promptSnippet: "delete_task - Delete a task permanently",
+    properties: {
+      task_id: Type.String({ description: "backendId from action_items" }),
+    },
+    required: ["task_id"],
+  }),
+  omiTool({
+    name: "get_conversations",
+    label: "Get Conversations",
+    description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
+    promptSnippet: "get_conversations - Retrieve conversations by date range",
+    properties: {
+      start_date: Type.Optional(Type.String({ description: "ISO date with timezone" })),
+      end_date: Type.Optional(Type.String({ description: "ISO date with timezone" })),
+      limit: Type.Optional(Type.Number({ description: "Default 20" })),
+      offset: Type.Optional(Type.Number()),
+      include_transcript: Type.Optional(Type.Boolean({ description: "Load speaker data" })),
+    },
+    required: [],
+  }),
+  omiTool({
+    name: "search_conversations",
+    label: "Search Conversations",
+    description: "Semantic search across conversations. Use for specific events or topics.",
+    promptSnippet: "search_conversations - Find conversations about a topic",
+    properties: {
+      query: Type.String({ description: "Event or topic to search for" }),
+      start_date: Type.Optional(Type.String()),
+      end_date: Type.Optional(Type.String()),
+      limit: Type.Optional(Type.Number({ description: "Default 5, max 20" })),
+      include_transcript: Type.Optional(Type.Boolean()),
+    },
+    required: ["query"],
+  }),
+  omiTool({
+    name: "get_memories",
+    label: "Get Memories",
+    description: "Retrieve user memories — facts, preferences, habits. Use for 'what do you know about me?' type questions.",
+    promptSnippet: "get_memories - Retrieve stored facts and preferences",
+    properties: {
+      limit: Type.Optional(Type.Number({ description: "Default 50" })),
+      offset: Type.Optional(Type.Number()),
+      start_date: Type.Optional(Type.String()),
+      end_date: Type.Optional(Type.String()),
+    },
+    required: [],
+  }),
+  omiTool({
+    name: "search_memories",
+    label: "Search Memories",
+    description: "Semantic search across user memories. Find memories about a topic using AI embeddings.",
+    promptSnippet: "search_memories - Find memories about a topic",
+    properties: {
+      query: Type.String({ description: "Topic to search for" }),
+      limit: Type.Optional(Type.Number({ description: "Default 5, max 20" })),
+    },
+    required: ["query"],
+  }),
+  omiTool({
+    name: "get_action_items",
+    label: "Get Action Items",
+    description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
+    promptSnippet: "get_action_items - Retrieve tasks",
+    properties: {
+      limit: Type.Optional(Type.Number()),
+      offset: Type.Optional(Type.Number()),
+      completed: Type.Optional(Type.Boolean({ description: "true=done, false=pending" })),
+      start_date: Type.Optional(Type.String()),
+      end_date: Type.Optional(Type.String()),
+      due_start_date: Type.Optional(Type.String()),
+      due_end_date: Type.Optional(Type.String()),
+    },
+    required: [],
+  }),
+  omiTool({
+    name: "create_action_item",
+    label: "Create Action Item",
+    description: "Create a new task. Use when user explicitly asks to add a task.",
+    promptSnippet: "create_action_item - Create a new task",
+    properties: {
+      description: Type.String({ description: "Short task description" }),
+      due_at: Type.Optional(Type.String({ description: "Due date ISO" })),
+      conversation_id: Type.Optional(Type.String()),
+    },
+    required: ["description"],
+  }),
+  omiTool({
+    name: "update_action_item",
+    label: "Update Action Item",
+    description: "Update task status, description, or due date.",
+    promptSnippet: "update_action_item - Update an existing task",
+    properties: {
+      action_item_id: Type.String({ description: "Task ID (required)" }),
+      completed: Type.Optional(Type.Boolean()),
+      description: Type.Optional(Type.String()),
+      due_at: Type.Optional(Type.String()),
+    },
+    required: ["action_item_id"],
+  }),
 ];
-
-export const OMI_TOOL_TIMEOUT_MS = 30_000;
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -521,20 +703,10 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
     process.stderr.write(`[omi-tools] Failed to connect: ${err instanceof Error ? err.message : err}\n`);
     return;
   }
-  for (const tool of OMI_TOOL_SPECS) {
-    pi.registerTool({
-      name: tool.name,
-      label: tool.label,
-      description: tool.description,
-      promptSnippet: tool.snippet,
-      parameters: { type: "object", properties: tool.properties, required: tool.required, additionalProperties: false } as any,
-      async execute(_toolCallId, params) {
-        const result = await callSwiftTool(tool.name, params as Record<string, unknown>);
-        return { content: [{ type: "text" as const, text: result }], details: undefined };
-      },
-    });
+  for (const tool of OMI_TOOLS) {
+    pi.registerTool(tool);
   }
-  process.stderr.write(`[omi-tools] Registered ${OMI_TOOL_SPECS.length} Omi tools\n`);
+  process.stderr.write(`[omi-tools] Registered ${OMI_TOOLS.length} Omi tools\n`);
 }
 
 // ---------------------------------------------------------------------------
