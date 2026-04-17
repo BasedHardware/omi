@@ -146,6 +146,29 @@ final class OmiBleManager: NSObject {
         return peripherals[uuid]?.state == .connected
     }
 
+    /// Re-issue `connect()` on any previously-connected peripheral that isn't
+    /// currently connected and wasn't manually disconnected. Scan-discovered
+    /// peripherals that never completed a connection are excluded via the
+    /// `everConnected` guard so we don't try to connect to unrelated devices
+    /// picked up during a scan. Safe to call whenever the app returns to the
+    /// foreground — `centralManager.connect` is idempotent and pending connects
+    /// cost nothing while iOS waits at the chipset level.
+    func reconnectStalePeripherals() {
+        guard centralManager.state == .poweredOn else { return }
+        for (uuid, peripheral) in peripherals {
+            guard everConnected.contains(uuid) else { continue }
+            if manuallyDisconnected.contains(uuid) { continue }
+            switch peripheral.state {
+            case .connected, .connecting:
+                continue
+            default:
+                NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
+                peripheral.delegate = self
+                centralManager.connect(peripheral, options: nil)
+            }
+        }
+    }
+
     // MARK: - Characteristic Operations
 
     func readCharacteristic(

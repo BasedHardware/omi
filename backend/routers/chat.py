@@ -42,6 +42,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
+from utils.subscription import enforce_chat_quota
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
@@ -95,6 +96,10 @@ def send_message(
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
 ):
+    # Hard cap: Free/Plus by question count, Pro by cost_usd. Raises 402 with a
+    # structured body the client can use to render the upgrade modal.
+    enforce_chat_quota(uid)
+
     compat_app_id = app_id or plugin_id
     logger.info(f'send_message {data.text} {compat_app_id} {uid}')
 

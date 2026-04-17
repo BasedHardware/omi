@@ -164,8 +164,8 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard",
       settingId: "planusage.current"),
     SettingsSearchItem(
-      name: "Upgrade Plan", subtitle: "Buy Unlimited Plan or Omi Pro",
-      keywords: ["upgrade", "buy", "pricing", "checkout", "pro", "unlimited"], section: .planUsage,
+      name: "Upgrade Plan", subtitle: "Buy Plus or Omi Pro",
+      keywords: ["upgrade", "buy", "pricing", "checkout", "pro", "plus", "unlimited"], section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
 
     // About

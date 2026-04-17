@@ -6,7 +6,7 @@ import hashlib
 import os
 
 import pytz
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.app_review_config import should_hide_subscription_ui
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -48,15 +49,29 @@ from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
-from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
+from models.users import (
+    WebhookType,
+    UserSubscriptionResponse,
+    SubscriptionPlan,
+    PlanType,
+    PricingOption,
+    ChatUsageQuota,
+    ChatQuotaUnit,
+)
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
     get_paid_plan_definitions,
+    get_plan_display_name,
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
+    filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
+    legacy_plan_features,
 )
+from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -745,7 +760,11 @@ def get_user_usage_stats_endpoint(
 
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
-def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_subscription_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Gets the user's subscription plan and usage."""
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
     if uid in marketplace_reviewers:
@@ -796,6 +815,16 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
+    # Backward-compat guard: old mobile builds (Flutter PlanType in
+    # app/lib/models/subscription.dart is a fixed {basic, unlimited, pro})
+    # will throw a Dart decoding exception on any new plan enum value. Map
+    # Operator subscribers -> "unlimited" for wire serialization so existing
+    # deployed clients keep working. Desktop/web clients distinguish Operator
+    # from Unlimited by matching current_price_id against Operator price IDs,
+    # which is unchanged.
+    if subscription.plan == PlanType.operator:
+        subscription.plan = PlanType.unlimited
+
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
 
@@ -811,9 +840,20 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading
+    # Build available plans for upgrading. Two gates applied in order:
+    #   1. Version-gate: only macOS desktop clients at NEW_PLANS_MIN_DESKTOP_VERSION
+    #      or newer see the new Operator + Architect catalog. Everyone else
+    #      (mobile, older desktop builds) gets the pre-v0.11.324 plan shape
+    #      so we don't break them while the beta rollout bakes.
+    #   2. Legacy-filter: existing Unlimited subscribers still see their plan;
+    #      brand-new users don't.
+    new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+    all_definitions = get_paid_plan_definitions()
+    if not new_plans_enabled:
+        all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    for definition in get_paid_plan_definitions():
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan)
+    for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
         annual_price_id = definition["annual_price_id"]
@@ -863,14 +903,22 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
 
         if plan_prices:
+            features = (
+                get_plan_features(definition["plan_type"])
+                if new_plans_enabled
+                else legacy_plan_features(definition["plan_type"])
+            )
             available_plans.append(
                 SubscriptionPlan(
                     id=definition["plan_id"],
                     title=definition["title"],
-                    features=get_plan_features(definition["plan_type"]),
+                    features=features,
                     prices=plan_prices,
+                    legacy=bool(definition.get("legacy")),
                 )
             )
+
+    show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
 
     return UserSubscriptionResponse(
         subscription=subscription,
@@ -883,12 +931,53 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_used=memories_created_used,
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
+        show_subscription_ui=show_subscription_ui,
     )
 
 
 # **************************************
 # ****** Daily Summary Settings ********
 # **************************************
+
+
+@router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
+def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+    """Current-month chat usage for the user, plus their plan's cap.
+
+    - Free / Plus: counted in questions (user-initiated chat turns)
+    - Pro: counted in dollar spend on desktop chat
+    - Resets at the start of each UTC month
+    """
+    subscription = get_user_valid_subscription(uid)
+    plan = subscription.plan if subscription else PlanType.basic
+    limits = get_plan_limits(plan)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
+
+    if limits.chat_cost_usd_per_month is not None:
+        unit = ChatQuotaUnit.cost_usd
+        used = float(usage['cost_usd'])
+        limit_value = float(limits.chat_cost_usd_per_month)
+    else:
+        unit = ChatQuotaUnit.questions
+        used = float(usage['questions'])
+        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+
+    percent = 0.0
+    allowed = True
+    if limit_value is not None and limit_value > 0:
+        percent = min(100.0, round(100.0 * used / limit_value, 2))
+        allowed = used < limit_value
+
+    return ChatUsageQuota(
+        plan=get_plan_display_name(plan),
+        plan_type=plan.value,
+        unit=unit,
+        used=round(used, 4),
+        limit=limit_value,
+        percent=percent,
+        allowed=allowed,
+        reset_at=usage['reset_at'],
+    )
 
 
 class DailySummarySettingsResponse(BaseModel):
