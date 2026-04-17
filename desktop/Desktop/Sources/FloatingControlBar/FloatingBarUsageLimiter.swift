@@ -49,6 +49,14 @@ final class FloatingBarUsageLimiter: ObservableObject {
         UserDefaults.standard.set(plan.rawValue, forKey: Self.cachedPlanKey)
     }
 
+    /// Reset all quota state on sign-out so the next user starts clean.
+    func reset() {
+        serverQuota = nil
+        optimisticDelta = 0
+        hasPaidPlan = false
+        UserDefaults.standard.removeObject(forKey: Self.cachedPlanKey)
+    }
+
     var isLimitReached: Bool {
         guard let quota = serverQuota else {
             // No server data yet — allow the query (server will enforce).
@@ -72,6 +80,9 @@ final class FloatingBarUsageLimiter: ObservableObject {
     var limitDescription: String {
         guard let quota = serverQuota, let limit = quota.limit else {
             return "your monthly free message limit"
+        }
+        if quota.unit == "cost_usd" {
+            return String(format: "your $%.0f %@ monthly spend limit", limit, quota.plan)
         }
         return "\(Int(limit)) \(quota.plan) messages this month"
     }
