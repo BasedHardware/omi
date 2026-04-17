@@ -297,7 +297,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
-                    final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                    final sp = usageProvider.subscription?.subscription.plan;
+                    final isUnlimited = sp == PlanType.unlimited || sp == PlanType.operator || sp == PlanType.pro;
                     return _buildSettingsItem(
                       title: context.l10n.planAndUsage,
                       icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
@@ -373,7 +374,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 ),
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
-                    final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                    final sp2 = usageProvider.subscription?.subscription.plan;
+                    final isUnlimited = sp2 == PlanType.unlimited || sp2 == PlanType.operator || sp2 == PlanType.pro;
                     if (!isUnlimited) return const SizedBox.shrink();
                     return Column(
                       children: [
