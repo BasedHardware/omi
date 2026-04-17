@@ -14,7 +14,7 @@ Options (via environment variables):
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_API_URL from .env directly)
   AUTH_PORT=10200           Auth service port (default: 10200)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
-  OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_APP_NAME="fix-rewind" App name (auto-prefixed with omi-, e.g. "omi-fix-rewind")
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
@@ -93,9 +93,17 @@ substep() {
 
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
-APP_NAME="${OMI_APP_NAME:-Omi Dev}"
 IS_NAMED_BUNDLE=false
-[ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
+if [ -n "${OMI_APP_NAME:-}" ]; then
+    IS_NAMED_BUNDLE=true
+    # Auto-prefix with omi- so named bundles are visually grouped in /Applications/
+    case "$OMI_APP_NAME" in
+        omi-*|Omi*) APP_NAME="$OMI_APP_NAME" ;;
+        *)          APP_NAME="omi-$OMI_APP_NAME" ;;
+    esac
+else
+    APP_NAME="Omi Dev"
+fi
 
 slugify_identifier() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
