@@ -52,11 +52,27 @@ for _name in [
     "database.redis_db",
     "database.user_usage",
     "database.cache",
+    "database.announcements",
 ]:
     _m = types.ModuleType(_name)
     sys.modules[_name] = _m
     # Set as attribute on database package so `from database import X` works
     setattr(_db_mod, _name.split(".")[-1], _m)
+
+# database.announcements needs _compare_versions for should_show_new_plans()
+_announcements_mod = sys.modules["database.announcements"]
+
+
+def _compare_versions(a, b):
+    a_parts = [int(x) for x in a.split('.')]
+    b_parts = [int(x) for x in b.split('.')]
+    for x, y in zip(a_parts, b_parts):
+        if x != y:
+            return 1 if x > y else -1
+    return len(a_parts) - len(b_parts)
+
+
+_announcements_mod._compare_versions = _compare_versions
 
 # database.users needs the functions payment.py imports by name
 _users_mod = sys.modules["database.users"]
@@ -193,6 +209,48 @@ def test_all_valid_prices_returns_all_plans():
     plan_ids = {p["id"] for p in plans}
     assert plan_ids == {UNLIM_MONTHLY, UNLIM_ANNUAL, PRO_MONTHLY, PRO_ANNUAL}
     assert len(plans) == 4
+
+
+def test_legacy_unlimited_subscriber_sees_is_active():
+    """Legacy Unlimited subscriber gets their plan with is_active=True in catalog."""
+    from models.users import Subscription, SubscriptionStatus, PlanType
+
+    sub = Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_legacy_123",
+        cancel_at_period_end=False,
+    )
+    _users_mod.get_user_subscription.return_value = sub
+
+    # Mock Stripe subscription retrieval to return the monthly price
+    stripe_sub = MagicMock()
+    stripe_sub.to_dict.return_value = {
+        "items": {"data": [{"price": {"id": UNLIM_MONTHLY}}]},
+        "customer": "cus_123",
+    }
+    stripe.Subscription.retrieve = MagicMock(return_value=stripe_sub)
+    stripe.SubscriptionSchedule.list = MagicMock(return_value=MagicMock(data=[]))
+
+    def _mock_retrieve(price_id):
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", PRO_MONTHLY: "month", PRO_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, PRO_MONTHLY: 990, PRO_ANNUAL: 9900}
+        if price_id not in intervals:
+            raise Exception(f"Unexpected price_id: {price_id}")
+        return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
+
+    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+
+    response = client.get("/v1/payments/available-plans")
+
+    assert response.status_code == 200
+    plans = response.json()["plans"]
+
+    # Legacy unlimited subscriber should have their monthly plan marked active
+    active_plans = [p for p in plans if p["is_active"]]
+    assert len(active_plans) == 1
+    assert active_plans[0]["id"] == UNLIM_MONTHLY
+    assert active_plans[0]["interval"] == "month"
 
 
 def test_all_prices_fail_returns_500():
