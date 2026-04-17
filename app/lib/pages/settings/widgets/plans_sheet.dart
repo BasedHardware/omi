@@ -883,7 +883,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                   );
                                 } else {
                                   return Text(
-                                    isUnlimited ? 'Change Plan' : 'Upgrade Your Plan',
+                                    isUnlimited ? context.l10n.changePlan : context.l10n.upgradeYourPlan,
                                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                   );
                                 }
@@ -904,7 +904,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             } else {
                               return Text(
                                 isUnlimited
-                                    ? 'You are on a paid plan.'
+                                    ? context.l10n.youAreOnAPaidPlan
                                     : 'Choose your plan to unlock unlimited Omi.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
@@ -1359,7 +1359,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
                             final isLoading = _isUpgrading;
                             // For basic users, show "Upgrade". For paid users upgrading, show "Continue"
-                            final buttonText = isUnlimited ? 'Continue' : 'Upgrade';
+                            final buttonText = isUnlimited ? context.l10n.continueText : context.l10n.upgrade;
 
                             return SizedBox(
                               width: double.infinity,
