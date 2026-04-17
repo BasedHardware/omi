@@ -293,8 +293,8 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 
     Chat caps:
       - Free: question count
-      - Oracle + legacy Unlimited: question count (200/mo default)
-      - Pro (Architect): dollar cap ($400/mo default)
+      - Operator + legacy Unlimited: question count (PLUS_CHAT_QUESTIONS_PER_MONTH default)
+      - Pro (Architect): dollar cap (PRO_CHAT_COST_USD_PER_MONTH default)
     """
     if plan in (PlanType.unlimited, PlanType.operator):
         return PlanLimits(
