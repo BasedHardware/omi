@@ -235,6 +235,35 @@ class TestAsyncTriggerRealtimeAudioBytes:
             mock_threading.Thread.assert_not_called()
 
 
+class TestAudioBytesChunkedFanOut:
+    """Test >8 apps are sent in chunked batches."""
+
+    @pytest.mark.asyncio
+    async def test_12_apps_sent_in_two_chunks(self):
+        """12 apps should be sent in chunks of 8 + 4."""
+        apps = []
+        for i in range(12):
+            app = MagicMock()
+            app.id = f"app-{i}"
+            app.triggers_realtime_audio_bytes.return_value = True
+            app.enabled = True
+            app.external_integration.webhook_url = f"https://app{i}.test/audio"
+            apps.append(app)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(app_integrations, "get_available_apps", return_value=apps), patch(
+            "utils.app_integrations.get_webhook_client", return_value=mock_client
+        ):
+            await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 100))
+
+        # All 12 apps should have received the audio
+        assert mock_client.post.call_count == 12
+
+
 class TestAsyncTriggerRealtimeIntegrations:
     """Test async realtime integration fan-out."""
 
