@@ -5690,17 +5690,19 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Oracle (mass-market, green) on the left, Architect/Pro (premium, purple)
-    // on the right, legacy Unlimited last if the user is still on it.
+    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // on the right. Hide the user's current plan — they already see it above.
     let order = ["operator": 0, "architect": 1, "unlimited": 2]
-    return mergedPlanCatalog.sorted { lhs, rhs in
-      let lhsOrder = order[lhs.id, default: Int.max]
-      let rhsOrder = order[rhs.id, default: Int.max]
-      if lhsOrder != rhsOrder {
-        return lhsOrder < rhsOrder
+    return mergedPlanCatalog
+      .filter { !isCurrentSubscriptionPlan($0) }
+      .sorted { lhs, rhs in
+        let lhsOrder = order[lhs.id, default: Int.max]
+        let rhsOrder = order[rhs.id, default: Int.max]
+        if lhsOrder != rhsOrder {
+          return lhsOrder < rhsOrder
+        }
+        return lhs.title < rhs.title
       }
-      return lhs.title < rhs.title
-    }
   }
 
   private var currentPlanTitle: String {
