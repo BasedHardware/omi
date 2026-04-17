@@ -357,14 +357,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        # Block downgrades from Pro to Unlimited
-        if current_plan == PlanType.pro and target_plan == PlanType.unlimited:
+        # Block downgrades from Architect to Unlimited
+        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
             raise HTTPException(
                 status_code=400,
-                detail="Downgrading from Pro to Unlimited is not available. Please contact support if you need to change your plan.",
+                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
             )
 
-        # Cross-plan change (e.g. Unlimited→Pro): immediate swap with proration
+        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
             updated_sub = stripe.Subscription.modify(
                 stripe_sub['id'],
