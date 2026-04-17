@@ -90,12 +90,15 @@ NAME_PREFIXES = frozenset(
 _gliner_model = None
 
 
+from gliner import GLiNER
+
+_gliner_model = None
+
+
 def _get_gliner_model():
     global _gliner_model
     if _gliner_model is None:
         try:
-            from gliner import GLiNER
-
             _gliner_model = GLiNER.from_pretrained(GLINER_MODEL_NAME)
             logger.info(f"Loaded GLiNER model: {GLINER_MODEL_NAME}")
         except Exception as e:
