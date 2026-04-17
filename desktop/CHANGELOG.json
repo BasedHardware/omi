@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Chat limits now use server-side quota instead of local counter",
-    "Added deprecation notice for Unlimited plan subscribers with Operator upgrade option"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.326",
+      "date": "2026-04-17",
+      "changes": [
+        "Chat limits now use server-side quota instead of local counter",
+        "Added deprecation notice for Unlimited plan subscribers with Operator upgrade option"
+      ]
+    },
     {
       "version": "0.11.324",
       "date": "2026-04-16",
