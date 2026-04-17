@@ -101,7 +101,10 @@ def cancel_all_active_subscriptions(customer_id: str) -> dict:
     partial Stripe outage doesn't abort the surrounding deletion flow.
 
     Returns: {'cancelled': [sub_id, ...], 'skipped': [sub_id, ...],
-              'errors': [{'sub_id'/'status', 'err'}, ...]}.
+              'errors': [{'context': str, 'err': str}, ...]}.
+    `context` is the subscription id for per-sub modify failures and
+    `list:<status>` for list-call failures, so callers can iterate without
+    branching on which key is present.
     """
     cancelled: list[str] = []
     skipped: list[str] = []
@@ -118,9 +121,9 @@ def cancel_all_active_subscriptions(customer_id: str) -> dict:
                     stripe.Subscription.modify(sub.id, cancel_at_period_end=True)
                     cancelled.append(sub.id)
                 except Exception as e:
-                    errors.append({'sub_id': sub.id, 'err': str(e)})
+                    errors.append({'context': sub.id, 'err': str(e)})
         except Exception as e:
-            errors.append({'status': status, 'err': str(e)})
+            errors.append({'context': f'list:{status}', 'err': str(e)})
 
     return {'cancelled': cancelled, 'skipped': skipped, 'errors': errors}
 
