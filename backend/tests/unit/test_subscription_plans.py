@@ -24,5 +24,5 @@ def test_pro_price_ids_map_to_pro_plan(monkeypatch):
 def test_pro_is_treated_as_paid_unlimited_plan():
     assert is_paid_plan(PlanType.pro) is True
     assert get_plan_limits(PlanType.pro).transcription_seconds is None
-    assert "Automations" in get_plan_features(PlanType.pro)
-    assert "Unlimited actions" in get_plan_features(PlanType.pro)
+    assert "Automations and vibe coding" in get_plan_features(PlanType.pro)
+    assert "Unlimited listening, memories, and insights" in get_plan_features(PlanType.pro)

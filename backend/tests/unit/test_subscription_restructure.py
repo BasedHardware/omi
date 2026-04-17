@@ -83,15 +83,17 @@ def test_filter_plans_hides_legacy():
     assert 'pro' in plan_ids
 
 
-def test_filter_plans_hides_legacy_even_for_unlimited_subscriber():
-    """Even Unlimited subscribers don't see Unlimited in purchase catalog."""
+def test_filter_plans_keeps_legacy_for_current_subscriber():
+    """Unlimited subscribers see their plan in catalog for active-plan detection."""
     from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
 
     definitions = get_paid_plan_definitions()
     filtered = filter_plans_for_user(definitions, PlanType.unlimited)
 
     plan_ids = [d['plan_id'] for d in filtered]
-    assert 'unlimited' not in plan_ids
+    assert 'unlimited' in plan_ids
+    assert 'operator' in plan_ids
+    assert 'pro' in plan_ids
 
 
 def test_legacy_client_adaptation():
