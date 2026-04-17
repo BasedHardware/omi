@@ -2943,5 +2943,13 @@
     "planDeprecationMessage": "Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för $49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Uppgradera din plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Du har en betald plan.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

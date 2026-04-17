@@ -2943,5 +2943,13 @@
     "planDeprecationMessage": "Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor $49/maand. Uw huidige abonnement blijft in de tussentijd werken.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Upgrade je abonnement",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Je hebt een betaald abonnement.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

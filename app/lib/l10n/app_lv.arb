@@ -2943,5 +2943,13 @@
     "planDeprecationMessage": "Jūsu Unlimited plāns tiek pārtraukts. Pārejiet uz Operator plānu — tās pašas lieliskās funkcijas par $49/mēnesī. Jūsu pašreizējais plāns turpinās darboties pa to laiku.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Uzlabojiet savu plānu",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Jums ir maksas plāns.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

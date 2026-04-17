@@ -2978,5 +2978,13 @@
     "planDeprecationMessage": "Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler $49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Planınızı Yükseltin",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Ücretli bir plandasınız.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

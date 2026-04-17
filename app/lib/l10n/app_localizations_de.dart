@@ -9092,4 +9092,10 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Ihr Unlimited-Plan wird eingestellt. Wechseln Sie zum Operator-Plan — dieselben großartigen Funktionen für \$49/Monat. Ihr aktueller Plan funktioniert in der Zwischenzeit weiterhin.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade deinen Plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du hast einen kostenpflichtigen Plan.';
 }

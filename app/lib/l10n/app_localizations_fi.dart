@@ -9014,4 +9014,10 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan \$49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.';
+
+  @override
+  String get upgradeYourPlan => 'Päivitä tilauksesi';
+
+  @override
+  String get youAreOnAPaidPlan => 'Sinulla on maksullinen tilaus.';
 }

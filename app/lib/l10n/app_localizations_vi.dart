@@ -9015,4 +9015,10 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá \$49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.';
+
+  @override
+  String get upgradeYourPlan => 'Nâng cấp gói của bạn';
+
+  @override
+  String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
 }

@@ -8943,4 +8943,10 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-\$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.';
+
+  @override
+  String get upgradeYourPlan => 'שדרג את התוכנית שלך';
+
+  @override
+  String get youAreOnAPaidPlan => 'אתה על תוכנית בתשלום.';
 }

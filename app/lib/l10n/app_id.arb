@@ -2985,5 +2985,13 @@
     "planDeprecationMessage": "Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga $49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Tingkatkan Paket Anda",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Anda menggunakan paket berbayar.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

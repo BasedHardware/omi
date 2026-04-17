@@ -9038,4 +9038,10 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Vaš Unlimited plan se ukida. Pređite na Operator plan — iste odlične funkcije za \$49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.';
+
+  @override
+  String get upgradeYourPlan => 'Nadogradite svoj plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Na plaćenom ste planu.';
 }

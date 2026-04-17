@@ -9084,4 +9084,10 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் \$49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.';
+
+  @override
+  String get upgradeYourPlan => 'உங்கள் திட்டத்தை மேம்படுத்தவும்';
+
+  @override
+  String get youAreOnAPaidPlan => 'நீங்கள் கட்டண திட்டத்தில் உள்ளீர்கள்.';
 }

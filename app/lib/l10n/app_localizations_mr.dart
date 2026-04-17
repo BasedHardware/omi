@@ -9026,4 +9026,10 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये \$49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.';
+
+  @override
+  String get upgradeYourPlan => 'तुमचा प्लॅन अपग्रेड करा';
+
+  @override
+  String get youAreOnAPaidPlan => 'तुम्ही सशुल्क प्लॅनवर आहात.';
 }

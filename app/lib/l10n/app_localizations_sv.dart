@@ -9019,4 +9019,10 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för \$49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.';
+
+  @override
+  String get upgradeYourPlan => 'Uppgradera din plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du har en betald plan.';
 }

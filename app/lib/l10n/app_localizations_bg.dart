@@ -9050,4 +9050,10 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за \$49/мес. Текущият ви план ще продължи да работи междувременно.';
+
+  @override
+  String get upgradeYourPlan => 'Надградете плана си';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вие сте на платен план.';
 }

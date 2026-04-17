@@ -9024,4 +9024,10 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'আপনার Unlimited প্ল্যান বন্ধ হচ্ছে। Operator প্ল্যানে স্যুইচ করুন — একই দুর্দান্ত ফিচার \$49/মাসে। আপনার বর্তমান প্ল্যান এর মধ্যে কাজ করতে থাকবে।';
+
+  @override
+  String get upgradeYourPlan => 'আপনার প্ল্যান আপগ্রেড করুন';
+
+  @override
+  String get youAreOnAPaidPlan => 'আপনি একটি পেইড প্ল্যানে আছেন।';
 }

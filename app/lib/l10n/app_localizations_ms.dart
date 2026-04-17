@@ -9039,4 +9039,10 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada \$49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.';
+
+  @override
+  String get upgradeYourPlan => 'Naik Taraf Pelan Anda';
+
+  @override
+  String get youAreOnAPaidPlan => 'Anda menggunakan pelan berbayar.';
 }

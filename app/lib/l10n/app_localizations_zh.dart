@@ -8851,4 +8851,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
+
+  @override
+  String get upgradeYourPlan => '升级你的计划';
+
+  @override
+  String get youAreOnAPaidPlan => '你正在使用付费计划。';
 }

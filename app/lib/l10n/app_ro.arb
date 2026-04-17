@@ -2943,5 +2943,13 @@
     "planDeprecationMessage": "Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la $49/lună. Planul dvs. actual va continua să funcționeze între timp.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Îmbunătățește-ți planul",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Ești pe un plan plătit.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

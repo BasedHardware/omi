@@ -9023,4 +9023,10 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už \$49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.';
+
+  @override
+  String get upgradeYourPlan => 'Atnaujinkite savo planą';
+
+  @override
+  String get youAreOnAPaidPlan => 'Jūs naudojate mokamą planą.';
 }

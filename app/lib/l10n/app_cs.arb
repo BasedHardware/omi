@@ -2912,5 +2912,13 @@
     "planDeprecationMessage": "Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za $49/měs. Váš stávající plán bude zatím nadále fungovat.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Upgradujte svůj plán",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Máte placený plán.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

@@ -9032,4 +9032,10 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز \$49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔';
+
+  @override
+  String get upgradeYourPlan => 'اپنا پلان اپ گریڈ کریں';
+
+  @override
+  String get youAreOnAPaidPlan => 'آپ ایک ادا شدہ پلان پر ہیں۔';
 }

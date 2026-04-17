@@ -9064,4 +9064,10 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Вашиот Unlimited план се укинува. Преминете на Operator план — истите одлични функции за \$49/мес. Вашиот тековен план ќе продолжи да работи во меѓувреме.';
+
+  @override
+  String get upgradeYourPlan => 'Надградете го вашиот план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вие сте на платен план.';
 }

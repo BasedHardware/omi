@@ -8954,4 +8954,10 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر \$49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.';
+
+  @override
+  String get upgradeYourPlan => 'قم بترقية خطتك';
+
+  @override
+  String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
 }

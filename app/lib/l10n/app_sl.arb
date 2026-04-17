@@ -10666,5 +10666,13 @@
     "planDeprecationMessage": "Vaš načrt Unlimited se ukinja. Preklopite na načrt Operator — enake odlične funkcije za $49/mesec. Vaš trenutni načrt bo medtem še naprej deloval.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Nadgradite svoj načrt",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Imate plačljiv načrt.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

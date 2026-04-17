@@ -9011,4 +9011,10 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
+
+  @override
+  String get upgradeYourPlan => 'Upgradujte svůj plán';
+
+  @override
+  String get youAreOnAPaidPlan => 'Máte placený plán.';
 }

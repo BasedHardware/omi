@@ -8867,4 +8867,10 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
+
+  @override
+  String get upgradeYourPlan => '플랜 업그레이드';
+
+  @override
+  String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
 }

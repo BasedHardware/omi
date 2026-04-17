@@ -2912,5 +2912,13 @@
     "planDeprecationMessage": "Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за $49/мес. Текущият ви план ще продължи да работи междувременно.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Надградете плана си",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Вие сте на платен план.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

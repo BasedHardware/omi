@@ -9044,4 +9044,10 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Ваш план Unlimited прекращается. Перейдите на план Operator — те же отличные функции за \$49/мес. Ваш текущий план продолжит работать тем временем.';
+
+  @override
+  String get upgradeYourPlan => 'Улучшите свой план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вы на платном плане.';
 }

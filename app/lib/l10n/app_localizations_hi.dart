@@ -8995,4 +8995,10 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ \$49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।';
+
+  @override
+  String get upgradeYourPlan => 'अपना प्लान अपग्रेड करें';
+
+  @override
+  String get youAreOnAPaidPlan => 'आप एक सशुल्क प्लान पर हैं।';
 }

@@ -2944,5 +2944,13 @@
     "planDeprecationMessage": "Su plan Unlimited está siendo retirado. Cambie al plan Operator — las mismas excelentes funciones a $49/mes. Su plan actual seguirá funcionando mientras tanto.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Mejora tu plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Estás en un plan de pago.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

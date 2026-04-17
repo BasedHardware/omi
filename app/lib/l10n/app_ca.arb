@@ -2912,5 +2912,13 @@
     "planDeprecationMessage": "El vostre pla Unlimited s'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a $49/mes. El vostre pla actual continuarà funcionant mentrestant.",
     "@planDeprecationMessage": {
         "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Actualitza el teu pla",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Estàs en un pla de pagament.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
     }
 }

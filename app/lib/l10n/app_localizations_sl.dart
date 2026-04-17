@@ -9039,4 +9039,10 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Vaš načrt Unlimited se ukinja. Preklopite na načrt Operator — enake odlične funkcije za \$49/mesec. Vaš trenutni načrt bo medtem še naprej deloval.';
+
+  @override
+  String get upgradeYourPlan => 'Nadgradite svoj načrt';
+
+  @override
+  String get youAreOnAPaidPlan => 'Imate plačljiv načrt.';
 }

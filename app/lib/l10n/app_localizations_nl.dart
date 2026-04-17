@@ -9043,4 +9043,10 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor \$49/maand. Uw huidige abonnement blijft in de tussentijd werken.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade je abonnement';
+
+  @override
+  String get youAreOnAPaidPlan => 'Je hebt een betaald abonnement.';
 }

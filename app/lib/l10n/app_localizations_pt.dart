@@ -9019,4 +9019,10 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get planDeprecationMessage =>
       'Seu plano Unlimited está sendo descontinuado. Mude para o plano Operator — os mesmos ótimos recursos por \$49/mês. Seu plano atual continuará funcionando enquanto isso.';
+
+  @override
+  String get upgradeYourPlan => 'Atualize seu plano';
+
+  @override
+  String get youAreOnAPaidPlan => 'Você está em um plano pago.';
 }
