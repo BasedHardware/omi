@@ -2,12 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import { useConversationStore } from "../../stores/conversationStore";
 import type { Conversation, TranscriptSegment } from "../../stores/conversationStore";
 import { useAudioStore, type LiveSegment, TRANSCRIPTION_LANGUAGES } from "../../stores/audioStore";
-import { Star, Search, Clock, User, CalendarIcon, X, StarIcon, Mic, MicOff, Loader2, Square, AlertTriangle, FileText } from "lucide-react";
+import { retrySyncNow } from "../../services/audioCapture";
+import { Star, Search, Clock, User, CalendarIcon, X, StarIcon, Mic, MicOff, Loader2, Square, AlertTriangle, FileText, RefreshCw, Trash2 } from "lucide-react";
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { Calendar } from "../ui/calendar";
 import { type PersonaState } from "../ai-elements/persona";
@@ -243,47 +259,164 @@ function FilterBar({
   );
 }
 
+function SyncStatusBadge({ conversation }: { conversation: Conversation }) {
+  const loadConversations = useConversationStore((s) => s.loadConversations);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const status = conversation.syncStatus;
+  if (!status || status === "synced") return null;
+
+  if (status === "syncing") {
+    return (
+      <Badge variant="secondary" className="gap-1 text-[10px] font-medium">
+        <Loader2 className="size-2.5 animate-spin" />
+        Syncing…
+      </Badge>
+    );
+  }
+
+  if (status === "failed") {
+    const localId = conversation.localId;
+    const canRetry = typeof localId === "number";
+    return (
+      <div className="flex items-center gap-1">
+        <Badge variant="destructive" className="text-[10px] font-medium">
+          Sync failed
+        </Badge>
+        {canRetry && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Retry sync"
+            title="Retry sync"
+            className={cn(
+              "flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+              isRetrying && "pointer-events-none opacity-50",
+            )}
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (isRetrying) return;
+              setIsRetrying(true);
+              try {
+                await retrySyncNow(localId as number);
+                await loadConversations();
+              } catch (err) {
+                console.error("[Conversations] retrySyncNow failed:", err);
+              } finally {
+                setIsRetrying(false);
+              }
+            }}
+          >
+            {isRetrying ? (
+              <Loader2 className="size-2.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-2.5" />
+            )}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // local_only
+  return (
+    <Badge variant="secondary" className="text-[10px] font-medium">
+      Local only
+    </Badge>
+  );
+}
+
 function ConversationCard({
   conversation,
   isSelected,
   onSelect,
+  onDelete,
 }: {
   conversation: Conversation;
   isSelected: boolean;
   onSelect: () => void;
+  onDelete: () => void;
 }) {
   const title = conversation.structured?.title || "Untitled Meeting";
   const overview = conversation.structured?.overview || "";
+  const showSyncBadge =
+    !!conversation.syncStatus && conversation.syncStatus !== "synced";
+  const canDelete =
+    conversation.syncStatus === undefined || conversation.syncStatus === "synced";
 
-  return (
-    <Button
-      variant="ghost"
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect();
+    }
+  };
+
+  const row = (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={handleKeyDown}
       className={cn(
-        "flex h-auto w-full flex-col items-stretch gap-1 rounded-lg border border-transparent px-3 py-2.5 text-left font-normal hover:bg-secondary/50",
+        "group relative flex h-auto w-full cursor-pointer flex-col items-stretch gap-1 rounded-lg border border-transparent px-3 py-2.5 text-left font-normal transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected && "border-border/50 bg-secondary hover:bg-secondary",
       )}
-      onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {formatTime(conversation.created_at)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="text-xs text-muted-foreground group-hover:opacity-0">
+            {formatTime(conversation.created_at)}
+          </span>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              aria-label="Delete meeting"
+              className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       {overview && (
         <p className="truncate text-xs leading-relaxed text-muted-foreground">
           {overview}
         </p>
       )}
-      {conversation.starred && (
-        <span className="flex items-center gap-1 text-xs font-medium text-primary">
-          <Star className="size-3 fill-current" />
-          Starred
-        </span>
-      )}
-    </Button>
+      <div className="flex items-center gap-2">
+        {conversation.starred && (
+          <span className="flex items-center gap-1 text-xs font-medium text-primary">
+            <Star className="size-3 fill-current" />
+            Starred
+          </span>
+        )}
+        {showSyncBadge && <SyncStatusBadge conversation={conversation} />}
+      </div>
+    </div>
+  );
+
+  if (!canDelete) return row;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          variant="destructive"
+          onSelect={() => onDelete()}
+        >
+          <Trash2 className="size-3.5" />
+          Delete Meeting
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -373,10 +506,12 @@ function ConversationDetail({
   conversation,
   transcriptOpen,
   onToggleTranscript,
+  onDelete,
 }: {
   conversation: Conversation;
   transcriptOpen: boolean;
   onToggleTranscript: () => void;
+  onDelete: () => void;
 }) {
   const title = conversation.structured?.title || "Untitled Meeting";
   const overview = conversation.structured?.overview || "";
@@ -393,6 +528,8 @@ function ConversationDetail({
 
   const hasResults = (conversation.apps_results?.length ?? 0) > 0;
   const hasSegments = !!segments && segments.length > 0;
+  const canDelete =
+    conversation.syncStatus === undefined || conversation.syncStatus === "synced";
 
   return (
     <div className="flex flex-col">
@@ -400,16 +537,30 @@ function ConversationDetail({
       <div className="flex flex-col gap-3 border-b border-border/50 px-6 py-5">
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
-          {hasResults && hasSegments && (
-            <Button
-              variant={transcriptOpen ? "secondary" : "ghost"}
-              size="xs"
-              onClick={onToggleTranscript}
-            >
-              <FileText className="size-3" />
-              Transcript
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {hasResults && hasSegments && (
+              <Button
+                variant={transcriptOpen ? "secondary" : "ghost"}
+                size="xs"
+                onClick={onToggleTranscript}
+              >
+                <FileText className="size-3" />
+                Transcript
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={onDelete}
+                aria-label="Delete meeting"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="size-3" />
+                Delete
+              </Button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{formatDate(conversation.created_at)}</span>
@@ -453,7 +604,13 @@ function ConversationDetail({
   );
 }
 
-function DetailPanel({ conversation }: { conversation: Conversation }) {
+function DetailPanel({
+  conversation,
+  onDelete,
+}: {
+  conversation: Conversation;
+  onDelete: () => void;
+}) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   // Reset the sidebar state when switching conversations.
@@ -473,6 +630,7 @@ function DetailPanel({ conversation }: { conversation: Conversation }) {
           conversation={conversation}
           transcriptOpen={transcriptOpen}
           onToggleTranscript={() => setTranscriptOpen((v) => !v)}
+          onDelete={onDelete}
         />
       </div>
       <AnimatePresence initial={false}>
@@ -826,6 +984,8 @@ function LiveMeetingDetail() {
   const stopAudio = useAudioStore((s) => s.stopAudio);
   const language = useAudioStore((s) => s.language);
   const setLanguage = useAudioStore((s) => s.setLanguage);
+  const vadMode = useAudioStore((s) => s.vadMode);
+  const setVadMode = useAudioStore((s) => s.setVadMode);
   const [, forceTick] = useState(0);
 
   useEffect(() => {
@@ -881,6 +1041,70 @@ function LiveMeetingDetail() {
                 ))}
               </TabsList>
             </Tabs>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+                  title="Choose how the microphone picks up speech"
+                  aria-label="Microphone sensitivity"
+                >
+                  Mic: {vadMode === "off" ? "Always on" : vadMode === "sensitive" ? "High" : vadMode === "balanced" ? "Medium" : "Low"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-72 border-0 bg-card p-1.5 shadow-xl ring-1 ring-white/10"
+              >
+                <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-foreground">
+                  Microphone sensitivity
+                </div>
+                <div className="px-2 pb-2 text-[11px] leading-snug text-muted-foreground">
+                  How much of what you say should be picked up.
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {([
+                    {
+                      value: "off",
+                      label: "Always on",
+                      hint: "Send everything — the clearest transcripts, recommended for meetings.",
+                    },
+                    {
+                      value: "sensitive",
+                      label: "High",
+                      hint: "Catches quiet voices and quick whispers.",
+                    },
+                    {
+                      value: "balanced",
+                      label: "Medium",
+                      hint: "A good mix of quality and data savings.",
+                    },
+                    {
+                      value: "aggressive",
+                      label: "Low",
+                      hint: "Only captures loud, clear speech. Uses the least data.",
+                    },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => void setVadMode(opt.value)}
+                      className={cn(
+                        "flex flex-col items-start gap-0.5 rounded-md px-2 py-2 text-left transition-colors",
+                        vadMode === opt.value
+                          ? "bg-accent text-accent-foreground"
+                          : "hover:bg-accent/50",
+                      )}
+                    >
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      <span className="text-[11px] leading-snug text-muted-foreground">
+                        {opt.hint}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             {isRecording && (
               <Button
                 variant="destructive"
@@ -1052,12 +1276,44 @@ export function ConversationsPage() {
     loadConversations,
     searchConversations,
     selectConversation,
+    deleteConversation,
   } = useConversationStore();
 
   const [filter, setFilter] = useState<FilterType>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedLive, setSelectedLive] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const requestDelete = (id: string) => {
+    setDeleteError(null);
+    setPendingDeleteId(id);
+  };
+
+  const cancelDelete = () => {
+    if (isDeleting) return;
+    setPendingDeleteId(null);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteConversation(pendingDeleteId);
+      setPendingDeleteId(null);
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete meeting.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const isRecording = useAudioStore((s) => s.isRecording);
   const isProcessing = useAudioStore((s) => s.isProcessing);
@@ -1252,6 +1508,7 @@ export function ConversationsPage() {
                       setSelectedLive(false);
                       selectConversation(conv);
                     }}
+                    onDelete={() => requestDelete(conv.id)}
                   />
                 ))}
               </div>
@@ -1265,7 +1522,10 @@ export function ConversationsPage() {
               <LiveMeetingDetail />
             </div>
           ) : selectedConversation ? (
-            <DetailPanel conversation={selectedConversation} />
+            <DetailPanel
+              conversation={selectedConversation}
+              onDelete={() => requestDelete(selectedConversation.id)}
+            />
           ) : (
             <div className="flex-1 overflow-y-auto">
               <ConversationsEmptyState />
@@ -1273,6 +1533,47 @@ export function ConversationsPage() {
           )}
         </div>
       </div>
+      <Dialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelDelete();
+        }}
+      >
+        <DialogContent className="border-border/40 sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Delete Meeting</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this meeting? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={cancelDelete}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
