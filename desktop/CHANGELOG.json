@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Floating Bar positioning so the input field is no longer hidden behind the macOS Dock"
+  ],
   "releases": [
     {
       "version": "0.11.324",
