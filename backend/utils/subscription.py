@@ -58,14 +58,13 @@ def get_paid_plan_definitions() -> list[dict]:
 
 
 def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
-    """Drop legacy plans from the purchase catalog — always.
+    """Drop legacy plans from the purchase catalog unless the user is on one.
 
-    Legacy subscribers still see their current plan at the top of the Settings
-    → Plan and Usage screen (rendered from `subscription.plan`, not from the
-    purchase catalog) and can manage it via the Stripe customer portal, so
-    there's no need to offer it as a picker card too.
+    Legacy subscribers need their plan kept in the catalog so the mobile app
+    can detect `is_active` for interval-change flows.  New users never see
+    legacy plans in the picker.
     """
-    return [d for d in definitions if not d.get('legacy')]
+    return [d for d in definitions if not d.get('legacy') or d.get('plan_type') == current_plan]
 
 
 # Minimum desktop build that ships with the new plan catalog + quota UI.
