@@ -90,6 +90,41 @@ def cancel_subscription(subscription_id: str):
         return None
 
 
+def cancel_all_active_subscriptions(customer_id: str) -> dict:
+    """Mark every active or trialing Stripe subscription for a customer as
+    cancel_at_period_end. Used by account deletion so the user stops being
+    billed once they no longer have an account to manage the subscription
+    from.
+
+    Idempotent: subscriptions already scheduled for cancellation are skipped,
+    and any per-subscription error is captured rather than raised so a
+    partial Stripe outage doesn't abort the surrounding deletion flow.
+
+    Returns: {'cancelled': [sub_id, ...], 'skipped': [sub_id, ...],
+              'errors': [{'sub_id'/'status', 'err'}, ...]}.
+    """
+    cancelled: list[str] = []
+    skipped: list[str] = []
+    errors: list[dict] = []
+
+    for status in ('active', 'trialing'):
+        try:
+            subs = stripe.Subscription.list(customer=customer_id, status=status, limit=20)
+            for sub in subs.auto_paging_iter():
+                if getattr(sub, 'cancel_at_period_end', False):
+                    skipped.append(sub.id)
+                    continue
+                try:
+                    stripe.Subscription.modify(sub.id, cancel_at_period_end=True)
+                    cancelled.append(sub.id)
+                except Exception as e:
+                    errors.append({'sub_id': sub.id, 'err': str(e)})
+        except Exception as e:
+            errors.append({'status': status, 'err': str(e)})
+
+    return {'cancelled': cancelled, 'skipped': skipped, 'errors': errors}
+
+
 def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str, status_filter: str = 'all'):
     """Find app subscription using customer ID (fast path)."""
     try:
