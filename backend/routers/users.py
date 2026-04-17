@@ -155,7 +155,30 @@ def delete_account(
             else:
                 raise
 
-        # 3. Wipe Firestore subcollections in the background — can take minutes
+        # 3. Stop the user being billed for a subscription they no longer
+        #    have an account to manage. Period-end cancel matches the
+        #    existing cancel_subscription helper used elsewhere; flip to
+        #    immediate cancel here if compliance prefers no grace period.
+        #    Stripe failure must not block the deletion flow — the user
+        #    already pressed delete; reconciliation can happen via webhook.
+        try:
+            customer_id = users_db.get_stripe_customer_id(uid)
+            if customer_id:
+                result = stripe_utils.cancel_all_active_subscriptions(customer_id)
+                if result['cancelled']:
+                    logger.info(
+                        f'delete_account stripe period-end-cancel for {uid} '
+                        f'subs={result["cancelled"]} skipped={result["skipped"]}'
+                    )
+                if result['errors']:
+                    logger.error(
+                        f'delete_account stripe partial failures for {uid}: '
+                        f'{sanitize(str(result["errors"]))}'
+                    )
+        except Exception as e:
+            logger.error(f'delete_account stripe cancel raised for {uid}: {sanitize(str(e))}')
+
+        # 4. Wipe Firestore subcollections in the background — can take minutes
         #    for heavy users and would otherwise time out at the load balancer.
         threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
 
