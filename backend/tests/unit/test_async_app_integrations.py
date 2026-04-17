@@ -114,19 +114,22 @@ _usage_mod.Features.NOTIFICATIONS = "notifications"
 # Stub llms.memory
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=[])
 
-# Stub http_client
-sys.modules["utils.http_client"].get_webhook_client = MagicMock()
-sys.modules["utils.http_client"].get_maps_client = MagicMock()
-_mock_cb = MagicMock()
-_mock_cb.allow_request = MagicMock(return_value=True)
-_mock_cb.record_success = MagicMock()
-_mock_cb.record_failure = MagicMock()
-sys.modules["utils.http_client"].get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
+# Stub http_client — only set mock attributes on stub modules (not the real module)
 import asyncio as _asyncio
 
-sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
-sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
-sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is not None and not hasattr(_http_mod, '__file__'):
+    # Stub module — safe to add mock attributes for import resolution
+    _http_mod.get_webhook_client = MagicMock()
+    _http_mod.get_maps_client = MagicMock()
+    _mock_cb = MagicMock()
+    _mock_cb.allow_request = MagicMock(return_value=True)
+    _mock_cb.record_success = MagicMock()
+    _mock_cb.record_failure = MagicMock()
+    _http_mod.get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
+    _http_mod.get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
+    _http_mod.latest_wins_start = MagicMock(return_value=1)
+    _http_mod.latest_wins_check = MagicMock(return_value=True)
 
 # Stub executors — must use real ThreadPoolExecutor because asyncio's
 # run_in_executor calls executor.submit() and wraps the returned Future.
@@ -233,6 +236,35 @@ class TestAsyncTriggerRealtimeAudioBytes:
         ), patch("utils.app_integrations.threading") as mock_threading:
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
             mock_threading.Thread.assert_not_called()
+
+
+class TestAudioBytesChunkedFanOut:
+    """Test >8 apps are sent in chunked batches."""
+
+    @pytest.mark.asyncio
+    async def test_12_apps_sent_in_two_chunks(self):
+        """12 apps should be sent in chunks of 8 + 4."""
+        apps = []
+        for i in range(12):
+            app = MagicMock()
+            app.id = f"app-{i}"
+            app.triggers_realtime_audio_bytes.return_value = True
+            app.enabled = True
+            app.external_integration.webhook_url = f"https://app{i}.test/audio"
+            apps.append(app)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(app_integrations, "get_available_apps", return_value=apps), patch(
+            "utils.app_integrations.get_webhook_client", return_value=mock_client
+        ):
+            await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 100))
+
+        # All 12 apps should have received the audio
+        assert mock_client.post.call_count == 12
 
 
 class TestAsyncTriggerRealtimeIntegrations:

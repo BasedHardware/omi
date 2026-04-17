@@ -28,7 +28,7 @@ _db_redis.disable_user_webhook_db = MagicMock()
 _db_redis.enable_user_webhook_db = MagicMock()
 _db_redis.set_user_webhook_db = MagicMock()
 
-for mod_name in ["database", "database.notifications", "database.users"]:
+for mod_name in ["database", "database.notifications", "database.users", "database.folders", "database.conversations"]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = types.ModuleType(mod_name)
         if mod_name == "database":
@@ -37,6 +37,8 @@ for mod_name in ["database", "database.notifications", "database.users"]:
 sys.modules["database.notifications"].get_token_only = MagicMock(return_value=None)
 sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "Test"})
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
+sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
+sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 
 if "utils.notifications" not in sys.modules:
     sys.modules["utils.notifications"] = types.ModuleType("utils.notifications")
@@ -141,8 +143,8 @@ class TestSendAudioBytesDeveloperWebhook:
         assert call_args.kwargs.get("headers", {}).get("Content-Type") == "application/octet-stream"
 
     @pytest.mark.asyncio
-    async def test_bytearray_converted_to_bytes(self):
-        """Verify bytearray is converted to immutable bytes before sending."""
+    async def test_bytearray_converted_to_bytes_at_call_site(self):
+        """Verify bytearray is converted to bytes inline at httpx call (required by httpx 0.28)."""
         mock_response = MagicMock()
         mock_response.status_code = 200
 
@@ -155,6 +157,7 @@ class TestSendAudioBytesDeveloperWebhook:
         call_args = mock_client.post.call_args
         sent_content = call_args.kwargs.get("content")
         assert isinstance(sent_content, bytes)
+        assert sent_content == b'\xab\xcd'
 
     @pytest.mark.asyncio
     async def test_url_comma_parsing(self):

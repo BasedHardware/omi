@@ -144,7 +144,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - Semaphores: always wrap calls — `async with get_webhook_semaphore(): await client.post(...)`
   - Circuit breakers: `get_webhook_circuit_breaker(url)` for external targets — call `cb.record_success()`/`cb.record_failure()`
   - Lifecycle: lazy singletons, closed at shutdown via `close_all_clients()`
-- **Lane 2 — Executors** (`utils/executors.py`): `critical_executor` (8 workers) and `storage_executor` (4 workers). Never ad-hoc `Thread`/`ThreadPoolExecutor`. Use `loop.run_in_executor(critical_executor, fn)`.
+- **Lane 2 — Executors** (`utils/executors.py`): `critical_executor` (8 workers) and `storage_executor` (16 workers). Never ad-hoc `Thread`/`ThreadPoolExecutor`. Use `loop.run_in_executor(critical_executor, fn)`.
   - Deadlock rule: coordinators that fan out to `critical_executor` must run in default executor (`None`)
 - **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
 - **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
@@ -160,6 +160,6 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
-10. **Unbounded queues for user data** — `deque(maxlen=N)` silently drops audio; data-safety queues must stay unbounded
+10. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=20)` to prevent OOM kills (sized for 30 conns/pod); dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
 11. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
 12. **DG keepalive vs response timeout** — `keep_alive()` prevents DG's 10s idle timeout but NOT 1011 response timeout after all audio is processed. Post-session 1011 is benign.

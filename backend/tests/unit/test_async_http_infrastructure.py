@@ -386,9 +386,9 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_4_workers(self):
-        """storage_executor documented as 4 workers for batch I/O."""
-        assert storage_executor._max_workers == 4
+    def test_storage_executor_has_16_workers(self):
+        """storage_executor sized for 16 workers to handle concurrent private cloud uploads."""
+        assert storage_executor._max_workers == 16
 
 
 class TestNotificationWebhookWiring:
@@ -408,3 +408,119 @@ class TestNotificationWebhookWiring:
         # Verify the exact wiring pattern
         assert 'storage_executor.submit(asyncio.run, day_summary_webhook(' in src
         assert 'critical_executor' not in src
+
+
+class TestPrivateCloudQueueCap:
+    """Verify private_cloud_queue uses bounded deque to prevent OOM."""
+
+    def test_pusher_uses_deque_with_maxlen(self):
+        """private_cloud_queue must be deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)."""
+        import ast
+        import os
+
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+            src = f.read()
+
+        assert 'deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)' in src
+        assert 'private_cloud_queue: List[dict] = []' not in src
+
+    def test_queue_max_size_is_20(self):
+        """Queue cap should be 20 items (~18MB max per connection, safe for 30-conn pods)."""
+        import ast
+        import os
+
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+            src = f.read()
+
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == 'PRIVATE_CLOUD_QUEUE_MAX_SIZE':
+                        assert isinstance(node.value, ast.Constant)
+                        assert node.value.value == 20
+                        return
+        pytest.fail("PRIVATE_CLOUD_QUEUE_MAX_SIZE constant not found")
+
+    def test_overflow_warning_at_all_enqueue_points(self):
+        """All 3 enqueue points must log overflow warning before deque drops oldest."""
+        import os
+
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+            src = f.read()
+
+        # Count occurrences of the overflow warning pattern
+        warning_count = src.count('private_cloud_queue full')
+        assert warning_count == 3, f"Expected 3 overflow warnings, found {warning_count}"
+
+    def test_deque_maxlen_drops_oldest(self):
+        """Verify deque(maxlen=N) drops oldest item when full."""
+        from collections import deque
+
+        q = deque(maxlen=3)
+        q.append({'id': 1})
+        q.append({'id': 2})
+        q.append({'id': 3})
+        assert len(q) == 3
+        q.append({'id': 4})  # oldest (id=1) should be dropped
+        assert len(q) == 3
+        assert q[0]['id'] == 2
+        assert q[-1]['id'] == 4
+
+
+class TestCircuitBreakerAccessTracking:
+    """Verify circuit breaker eviction uses last-access time."""
+
+    def test_active_breaker_not_evicted(self):
+        """Actively used breaker should not be evicted even with 0 failures."""
+        import time
+        from utils.http_client import (
+            _webhook_circuit_breakers,
+            get_webhook_circuit_breaker,
+            _evict_stale_circuit_breakers,
+            _CIRCUIT_BREAKER_IDLE_TTL,
+        )
+
+        _webhook_circuit_breakers.clear()
+        cb = get_webhook_circuit_breaker('https://active.test/hook')
+        cb.allow_request()  # Updates _last_access_time to now
+        assert cb._last_failure_time == 0.0  # Never failed
+
+        _evict_stale_circuit_breakers()
+        assert 'https://active.test/hook' in _webhook_circuit_breakers
+        _webhook_circuit_breakers.clear()
+
+    def test_stale_breaker_evicted(self):
+        """Breaker not accessed for > TTL should be evicted."""
+        import time
+        from utils.http_client import (
+            _webhook_circuit_breakers,
+            get_webhook_circuit_breaker,
+            _evict_stale_circuit_breakers,
+            _CIRCUIT_BREAKER_IDLE_TTL,
+        )
+
+        _webhook_circuit_breakers.clear()
+        cb = get_webhook_circuit_breaker('https://stale.test/hook')
+        # Backdate access time to exceed TTL
+        cb._last_access_time = time.monotonic() - _CIRCUIT_BREAKER_IDLE_TTL - 1
+
+        _evict_stale_circuit_breakers()
+        assert 'https://stale.test/hook' not in _webhook_circuit_breakers
+        _webhook_circuit_breakers.clear()
+
+    def test_allow_request_updates_access_time(self):
+        """allow_request() must update _last_access_time."""
+        import time
+        from utils.http_client import _webhook_circuit_breakers, get_webhook_circuit_breaker
+
+        _webhook_circuit_breakers.clear()
+        cb = get_webhook_circuit_breaker('https://test.test/hook')
+        old_access = cb._last_access_time
+        time.sleep(0.01)
+        cb.allow_request()
+        assert cb._last_access_time > old_access
+        _webhook_circuit_breakers.clear()

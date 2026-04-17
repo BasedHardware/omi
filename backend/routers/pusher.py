@@ -4,7 +4,7 @@ import json
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Set
+from typing import Dict, Set
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -50,8 +50,8 @@ PRIVATE_CLOUD_CHUNK_DURATION = 60.0
 PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk exceeds this age
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
-# Queue warning thresholds
-PRIVATE_CLOUD_QUEUE_WARN_SIZE = 50
+# Queue size limits
+PRIVATE_CLOUD_QUEUE_MAX_SIZE = 20  # ~18MB/connection max (30 conns × 18MB = 540MB) — prevents OOM with headroom
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
 # Constants for transcript queue batching
@@ -169,9 +169,10 @@ async def _websocket_util_trigger(
     transcript_queue: deque = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
     audio_bytes_queue: deque = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
 
-    # private_cloud_queue stays unbounded — it carries irreplaceable user audio.
-    # Silent drops (via deque maxlen) would cause permanent data loss.
-    private_cloud_queue: List[dict] = []
+    # private_cloud_queue caps at PRIVATE_CLOUD_QUEUE_MAX_SIZE to prevent OOM kills.
+    # An OOM kill loses ALL queued data for ALL users on the pod — dropping the oldest
+    # chunk for one user is strictly better than killing the pod.
+    private_cloud_queue: deque = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
     async def process_private_cloud_queue():
@@ -206,6 +207,7 @@ async def _websocket_util_trigger(
             if not batch or len(batch['data']) == 0:
                 return
             chunk_data = bytes(batch['data'])
+            del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
@@ -214,6 +216,7 @@ async def _websocket_util_trigger(
                 await loop.run_in_executor(
                     storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
+                del chunks_to_upload
                 try:
                     audio_files = await loop.run_in_executor(
                         storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
@@ -397,6 +400,11 @@ async def _websocket_util_trigger(
                         and current_conversation_id != new_conversation_id
                         and len(private_cloud_sync_buffer) > 0
                     ):
+                        if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                            logger.warning(
+                                f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                                f"dropping oldest chunk to prevent OOM {uid}"
+                            )
                         private_cloud_queue.append(
                             {
                                 'data': bytes(private_cloud_sync_buffer),
@@ -483,8 +491,11 @@ async def _websocket_util_trigger(
                         private_cloud_sync_buffer.extend(audio_data)
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
-                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_WARN_SIZE:
-                                logger.warning(f"Warning: private_cloud_queue size {len(private_cloud_queue)} {uid}")
+                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                                logger.warning(
+                                    f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                                    f"dropping oldest chunk to prevent OOM {uid}"
+                                )
                             private_cloud_queue.append(
                                 {
                                     'data': bytes(private_cloud_sync_buffer),
@@ -537,6 +548,11 @@ async def _websocket_util_trigger(
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
             if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
+                if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                    logger.warning(
+                        f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                        f"dropping oldest chunk to prevent OOM {uid}"
+                    )
                 private_cloud_queue.append(
                     {
                         'data': bytes(private_cloud_sync_buffer),
