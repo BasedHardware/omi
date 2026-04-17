@@ -102,10 +102,15 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     except Exception as e:
         # Malformed version — fail-open on macOS rather than show the old
         # catalog to a desktop client. Logged so ops can distinguish a real
-        # parser regression from a one-off bad header.
+        # parser regression from a one-off bad header. Newline / CR are
+        # escaped before sanitize() so a crafted X-App-Version header cannot
+        # forge synthetic log lines (CWE-117).
+        def _safe(v):
+            return sanitize(str(v).replace('\r', '\\r').replace('\n', '\\n'))
+
         logger.warning(
             f"should_show_new_plans: failed to parse X-App-Version, falling open "
-            f"(platform={sanitize(str(platform))} version={sanitize(str(app_version))} err={sanitize(str(e))})"
+            f"(platform={_safe(platform)} version={_safe(app_version)} err={_safe(e)})"
         )
         return True
 
