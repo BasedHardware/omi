@@ -912,6 +912,9 @@ def get_user_subscription_endpoint(
                 SubscriptionPlan(
                     id=definition["plan_id"],
                     title=definition["title"],
+                    subtitle=definition.get("subtitle"),
+                    description=definition.get("description"),
+                    eyebrow=definition.get("eyebrow"),
                     features=features,
                     prices=plan_prices,
                     legacy=bool(definition.get("legacy")),
