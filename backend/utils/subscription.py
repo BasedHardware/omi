@@ -108,21 +108,19 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
     """Transform the new-shape plan catalog back into the pre-v0.11.324 shape
     so older clients (mobile, stable desktop) keep showing the old plan titles
-    and don't see Operator in their purchase options.
+    and don't see desktop-only plans.
 
-    Hides the Operator entry entirely, renames Architect back to "Omi Pro",
-    and drops the legacy suffix + flag from Unlimited so pre-rollout clients
-    still see it as a normal (non-legacy) Unlimited Plan.
+    Hides Operator and Architect (pro) entirely — both are desktop-only.
+    Drops the legacy suffix + flag from Unlimited so pre-rollout clients
+    still see it as "Omi Unlimited".
     """
     out: list[dict] = []
     for d in definitions:
-        if d['plan_id'] == 'operator':
+        if d['plan_id'] in ('operator', 'pro'):
             continue
         adapted = dict(d)
-        if d['plan_id'] == 'pro':
-            adapted['title'] = 'Omi Pro'
-        elif d['plan_id'] == 'unlimited':
-            adapted['title'] = 'Unlimited Plan'
+        if d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Omi Unlimited'
             adapted['legacy'] = False
         out.append(adapted)
     return out
