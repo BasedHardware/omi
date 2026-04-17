@@ -953,6 +953,98 @@ test("OMI_TOOLS: all have promptSnippet for system prompt injection", () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// TypeBox schema shape validation per tool
+// ---------------------------------------------------------------------------
+
+test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
+  for (const tool of OMI_TOOLS) {
+    assert.equal(
+      (tool.parameters as any).additionalProperties,
+      false,
+      `${tool.name} parameters missing additionalProperties:false`,
+    );
+  }
+});
+
+test("OMI_TOOLS: required fields match expected per tool", () => {
+  const expected: Record<string, string[]> = {
+    execute_sql: ["query"],
+    semantic_search: ["query"],
+    get_daily_recap: [],
+    search_tasks: ["query"],
+    complete_task: ["task_id"],
+    delete_task: ["task_id"],
+    get_conversations: [],
+    search_conversations: ["query"],
+    get_memories: [],
+    search_memories: ["query"],
+    get_action_items: [],
+    create_action_item: ["description"],
+    update_action_item: ["action_item_id"],
+  };
+  for (const tool of OMI_TOOLS) {
+    const req = (tool.parameters as any).required ?? [];
+    assert.deepEqual(
+      req.sort(),
+      (expected[tool.name] ?? []).sort(),
+      `${tool.name} required fields mismatch`,
+    );
+  }
+});
+
+test("OMI_TOOLS: all declared properties have TypeBox type metadata", () => {
+  for (const tool of OMI_TOOLS) {
+    const props = (tool.parameters as any).properties;
+    assert.ok(props, `${tool.name} missing properties`);
+    for (const [key, schema] of Object.entries(props)) {
+      const s = schema as any;
+      // TypeBox schemas always have a `type` field (string, number, boolean)
+      // Optional wraps in anyOf but the inner schema has type
+      const hasType = s.type || (s.anyOf && s.anyOf.some((v: any) => v.type));
+      assert.ok(hasType, `${tool.name}.${key} missing TypeBox type metadata`);
+    }
+  }
+});
+
+test("OMI_TOOLS: execute_sql has 'query' as Type.String", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "execute_sql")!;
+  const queryProp = (tool.parameters as any).properties.query;
+  assert.equal(queryProp.type, "string");
+  assert.ok(queryProp.description);
+});
+
+test("OMI_TOOLS: semantic_search optional fields are Type.Optional", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "semantic_search")!;
+  const props = (tool.parameters as any).properties;
+  // 'days' and 'app_filter' should be optional (TypeBox wraps in anyOf with undefined)
+  const required = (tool.parameters as any).required ?? [];
+  assert.ok(!required.includes("days"), "days should be optional");
+  assert.ok(!required.includes("app_filter"), "app_filter should be optional");
+  // 'query' should be required
+  assert.ok(required.includes("query"), "query should be required");
+});
+
+// ---------------------------------------------------------------------------
+// promptGuidelines tests
+// ---------------------------------------------------------------------------
+
+test("OMI_TOOLS: execute_sql has promptGuidelines", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "execute_sql")!;
+  assert.ok(tool.promptGuidelines, "execute_sql missing promptGuidelines");
+  assert.ok(tool.promptGuidelines!.length >= 1, "execute_sql should have at least 1 guideline");
+  assert.ok(
+    tool.promptGuidelines!.some(g => g.includes("quantitative")),
+    "execute_sql guideline should mention quantitative queries",
+  );
+});
+
+test("OMI_TOOLS: semantic_search has promptGuidelines", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "semantic_search")!;
+  assert.ok(tool.promptGuidelines, "semantic_search missing promptGuidelines");
+  assert.ok(tool.promptGuidelines!.length >= 1);
+});
+
 test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {
   assert.equal(OMI_TOOL_TIMEOUT_MS, 30_000);
 });
@@ -1063,6 +1155,104 @@ test("callSwiftTool: malformed messages don't wedge pending map", async () => {
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
     assert.equal(result, "ok");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AbortSignal wiring in callSwiftTool
+// ---------------------------------------------------------------------------
+
+test("callSwiftTool: already-aborted signal returns error immediately", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    server.on("connection", () => {});
+    await __connectOmiPipeForTest(sockPath);
+
+    const ac = new AbortController();
+    ac.abort(); // abort before calling
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" }, ac.signal);
+    assert.equal(result, "Error: tool call aborted");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: abort after enqueue resolves with error and cleans up", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    // Server accepts but never responds — tool call hangs until abort
+    server.on("connection", () => {});
+    await __connectOmiPipeForTest(sockPath);
+
+    const ac = new AbortController();
+    const promise = __callSwiftToolForTest("execute_sql", { query: "SELECT 1" }, ac.signal);
+    // Let the call enqueue
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(__omiPendingCallsForTest.size, 1, "should have 1 pending call");
+    ac.abort();
+    const result = await promise;
+    assert.equal(result, "Error: tool call aborted");
+    assert.equal(__omiPendingCallsForTest.size, 0, "pending calls should be cleaned up after abort");
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: normal result after abort signal is not double-resolved", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    server.on("connection", (socket) => {
+      let buf = "";
+      socket.on("data", (data) => {
+        buf += data.toString();
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          if (line.trim()) {
+            const msg = JSON.parse(line);
+            // Respond after a delay (after abort has fired)
+            setTimeout(() => {
+              socket.write(JSON.stringify({
+                type: "tool_result",
+                callId: msg.callId,
+                result: "late-result",
+              }) + "\n");
+            }, 50);
+          }
+        }
+      });
+    });
+    await __connectOmiPipeForTest(sockPath);
+
+    const ac = new AbortController();
+    const promise = __callSwiftToolForTest("execute_sql", { query: "SELECT 1" }, ac.signal);
+    await new Promise((r) => setTimeout(r, 10));
+    ac.abort();
+    const result = await promise;
+    // Should get the abort error, not the late result
+    assert.equal(result, "Error: tool call aborted");
+    // Wait for the late response to arrive — should not cause errors
+    await new Promise((r) => setTimeout(r, 100));
     assert.equal(__omiPendingCallsForTest.size, 0);
   } finally {
     __resetOmiPipeForTest();
