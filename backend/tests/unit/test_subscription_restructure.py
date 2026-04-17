@@ -6,7 +6,19 @@ import types
 
 # Mock external dependencies before importing app code
 _announcements_mod = types.ModuleType("database.announcements")
-_announcements_mod._compare_versions = lambda a, b: (a > b) - (a < b)
+
+
+def _compare_versions(a, b):
+    """Semantic version comparison matching the real _compare_versions."""
+    a_parts = [int(x) for x in a.split('.')]
+    b_parts = [int(x) for x in b.split('.')]
+    for x, y in zip(a_parts, b_parts):
+        if x != y:
+            return 1 if x > y else -1
+    return len(a_parts) - len(b_parts)
+
+
+_announcements_mod._compare_versions = _compare_versions
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 sys.modules.setdefault("database.announcements", _announcements_mod)
@@ -117,7 +129,6 @@ def test_legacy_client_adaptation():
 
 def test_version_gating_macos_always_new():
     """macOS always gets new plans (no version header = True)."""
-    # _compare_versions mocked at module level to do simple string comparison
     from utils.subscription import should_show_new_plans
 
     assert should_show_new_plans('macos', None) is True
@@ -128,11 +139,9 @@ def test_version_gating_mobile_requires_version():
     """Mobile requires version header and must meet minimum."""
     from utils.subscription import should_show_new_plans
 
-    # No version header on mobile = legacy
     assert should_show_new_plans('android', None) is False
     assert should_show_new_plans('ios', None) is False
 
-    # With version >= min = new plans (simple string compare: '9' > '1')
     assert should_show_new_plans('android', '99.99.999') is True
     assert should_show_new_plans('ios', '99.99.999') is True
 
@@ -141,9 +150,35 @@ def test_version_gating_old_mobile_gets_legacy():
     """Old mobile builds get legacy catalog."""
     from utils.subscription import should_show_new_plans
 
-    # '0.0.1' < '1.0.530' in string comparison
     assert should_show_new_plans('android', '0.0.1') is False
     assert should_show_new_plans('ios', '0.0.1') is False
+
+
+def test_version_gating_exact_threshold():
+    """Exact threshold version gets new plans."""
+    from utils.subscription import should_show_new_plans
+
+    assert should_show_new_plans('android', '1.0.530') is True
+    assert should_show_new_plans('ios', '1.0.530') is True
+    assert should_show_new_plans('macos', '0.11.324') is True
+
+
+def test_version_gating_just_below_threshold():
+    """One version below threshold gets legacy."""
+    from utils.subscription import should_show_new_plans
+
+    assert should_show_new_plans('android', '1.0.529') is False
+    assert should_show_new_plans('ios', '1.0.529') is False
+    assert should_show_new_plans('macos', '0.11.323') is False
+
+
+def test_version_gating_malformed_version():
+    """Malformed version: macOS fail-open, mobile fail-closed."""
+    from utils.subscription import should_show_new_plans
+
+    assert should_show_new_plans('macos', 'not.a.version') is True
+    assert should_show_new_plans('android', 'not.a.version') is False
+    assert should_show_new_plans('ios', 'not.a.version') is False
 
 
 def test_version_gating_unknown_platform():
