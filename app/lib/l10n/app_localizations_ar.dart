@@ -8960,4 +8960,29 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
+
+  @override
+  String get insightsPageTitle => 'الإحصاءات';
+
+  @override
+  String get tabWeek => 'أسبوع';
+
+  @override
+  String get tabMonth => 'شهر';
+
+  @override
+  String get tabYear => 'سنة';
+
+  @override
+  String get tabAll => 'الكل';
+
+  @override
+  String renewsShort(String date) {
+    return 'يتجدد $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'يُلغى $date';
+  }
 }

@@ -9009,4 +9009,29 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Máte platený plán.';
+
+  @override
+  String get insightsPageTitle => 'Prehľady';
+
+  @override
+  String get tabWeek => 'Týždeň';
+
+  @override
+  String get tabMonth => 'Mesiac';
+
+  @override
+  String get tabYear => 'Rok';
+
+  @override
+  String get tabAll => 'Všetko';
+
+  @override
+  String renewsShort(String date) {
+    return 'Obnoví sa $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Zruší sa $date';
+  }
 }

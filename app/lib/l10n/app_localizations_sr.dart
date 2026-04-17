@@ -9034,4 +9034,29 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'На плаћеном сте плану.';
+
+  @override
+  String get insightsPageTitle => 'Увиди';
+
+  @override
+  String get tabWeek => 'Недеља';
+
+  @override
+  String get tabMonth => 'Месец';
+
+  @override
+  String get tabYear => 'Година';
+
+  @override
+  String get tabAll => 'Све';
+
+  @override
+  String renewsShort(String date) {
+    return 'Обнавља се $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Отказује се $date';
+  }
 }

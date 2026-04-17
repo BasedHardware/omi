@@ -9064,4 +9064,29 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ești pe un plan plătit.';
+
+  @override
+  String get insightsPageTitle => 'Statistici';
+
+  @override
+  String get tabWeek => 'Săptămână';
+
+  @override
+  String get tabMonth => 'Lună';
+
+  @override
+  String get tabYear => 'An';
+
+  @override
+  String get tabAll => 'Tot';
+
+  @override
+  String renewsShort(String date) {
+    return 'Se reînnoiește $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Se anulează $date';
+  }
 }

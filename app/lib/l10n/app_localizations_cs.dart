@@ -9017,4 +9017,29 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Máte placený plán.';
+
+  @override
+  String get insightsPageTitle => 'Přehledy';
+
+  @override
+  String get tabWeek => 'Týden';
+
+  @override
+  String get tabMonth => 'Měsíc';
+
+  @override
+  String get tabYear => 'Rok';
+
+  @override
+  String get tabAll => 'Vše';
+
+  @override
+  String renewsShort(String date) {
+    return 'Obnoví se $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Zruší se $date';
+  }
 }

@@ -9029,4 +9029,29 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Jūs naudojate mokamą planą.';
+
+  @override
+  String get insightsPageTitle => 'Įžvalgos';
+
+  @override
+  String get tabWeek => 'Savaitė';
+
+  @override
+  String get tabMonth => 'Mėnuo';
+
+  @override
+  String get tabYear => 'Metai';
+
+  @override
+  String get tabAll => 'Visi';
+
+  @override
+  String renewsShort(String date) {
+    return 'Atsinaujina $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Atšaukiama $date';
+  }
 }

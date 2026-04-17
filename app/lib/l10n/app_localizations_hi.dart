@@ -9001,4 +9001,29 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'आप एक सशुल्क प्लान पर हैं।';
+
+  @override
+  String get insightsPageTitle => 'अंतर्दृष्टि';
+
+  @override
+  String get tabWeek => 'सप्ताह';
+
+  @override
+  String get tabMonth => 'महीना';
+
+  @override
+  String get tabYear => 'वर्ष';
+
+  @override
+  String get tabAll => 'सभी';
+
+  @override
+  String renewsShort(String date) {
+    return 'नवीनीकरण $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'रद्द $date';
+  }
 }

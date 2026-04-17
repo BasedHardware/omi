@@ -9045,4 +9045,29 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Anda menggunakan pelan berbayar.';
+
+  @override
+  String get insightsPageTitle => 'Wawasan';
+
+  @override
+  String get tabWeek => 'Minggu';
+
+  @override
+  String get tabMonth => 'Bulan';
+
+  @override
+  String get tabYear => 'Tahun';
+
+  @override
+  String get tabAll => 'Semua';
+
+  @override
+  String renewsShort(String date) {
+    return 'Diperbaharui $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Dibatalkan $date';
+  }
 }

@@ -8857,4 +8857,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '你正在使用付费计划。';
+
+  @override
+  String get insightsPageTitle => '数据统计';
+
+  @override
+  String get tabWeek => '周';
+
+  @override
+  String get tabMonth => '月';
+
+  @override
+  String get tabYear => '年';
+
+  @override
+  String get tabAll => '全部';
+
+  @override
+  String renewsShort(String date) {
+    return '$date 续订';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date 取消';
+  }
 }

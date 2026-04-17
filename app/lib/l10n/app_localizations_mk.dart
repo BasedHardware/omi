@@ -9070,4 +9070,29 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вие сте на платен план.';
+
+  @override
+  String get insightsPageTitle => 'Увиди';
+
+  @override
+  String get tabWeek => 'Недела';
+
+  @override
+  String get tabMonth => 'Месец';
+
+  @override
+  String get tabYear => 'Година';
+
+  @override
+  String get tabAll => 'Сите';
+
+  @override
+  String renewsShort(String date) {
+    return 'Се обновува $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Се откажува $date';
+  }
 }

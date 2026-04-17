@@ -9023,4 +9023,29 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'شما در یک طرح پولی هستید.';
+
+  @override
+  String get insightsPageTitle => 'آمار';
+
+  @override
+  String get tabWeek => 'هفته';
+
+  @override
+  String get tabMonth => 'ماه';
+
+  @override
+  String get tabYear => 'سال';
+
+  @override
+  String get tabAll => 'همه';
+
+  @override
+  String renewsShort(String date) {
+    return 'تمدید $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'لغو $date';
+  }
 }

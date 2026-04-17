@@ -9075,4 +9075,29 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Estàs en un pla de pagament.';
+
+  @override
+  String get insightsPageTitle => 'Estadístiques';
+
+  @override
+  String get tabWeek => 'Setmana';
+
+  @override
+  String get tabMonth => 'Mes';
+
+  @override
+  String get tabYear => 'Any';
+
+  @override
+  String get tabAll => 'Tot';
+
+  @override
+  String renewsShort(String date) {
+    return 'Es renova $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Es cancel·la $date';
+  }
 }

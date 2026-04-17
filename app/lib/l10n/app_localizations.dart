@@ -16868,6 +16868,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You are on a paid plan.'**
   String get youAreOnAPaidPlan;
+
+  /// Title for the insights/usage page
+  ///
+  /// In en, this message translates to:
+  /// **'Insights'**
+  String get insightsPageTitle;
+
+  /// Week tab label
+  ///
+  /// In en, this message translates to:
+  /// **'Week'**
+  String get tabWeek;
+
+  /// Month tab label
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get tabMonth;
+
+  /// Year tab label
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get tabYear;
+
+  /// All tab label
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get tabAll;
+
+  /// Short renewal text
+  ///
+  /// In en, this message translates to:
+  /// **'Renews {date}'**
+  String renewsShort(String date);
+
+  /// Short cancellation text
+  ///
+  /// In en, this message translates to:
+  /// **'Cancels {date}'**
+  String cancelsShort(String date);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

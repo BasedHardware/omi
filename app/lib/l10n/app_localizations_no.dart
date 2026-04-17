@@ -9017,4 +9017,29 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du er på en betalt plan.';
+
+  @override
+  String get insightsPageTitle => 'Innsikt';
+
+  @override
+  String get tabWeek => 'Uke';
+
+  @override
+  String get tabMonth => 'Måned';
+
+  @override
+  String get tabYear => 'År';
+
+  @override
+  String get tabAll => 'Alle';
+
+  @override
+  String renewsShort(String date) {
+    return 'Fornyes $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Kanselleres $date';
+  }
 }

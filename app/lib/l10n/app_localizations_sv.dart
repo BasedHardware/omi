@@ -9025,4 +9025,29 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du har en betald plan.';
+
+  @override
+  String get insightsPageTitle => 'Insikter';
+
+  @override
+  String get tabWeek => 'Vecka';
+
+  @override
+  String get tabMonth => 'Månad';
+
+  @override
+  String get tabYear => 'År';
+
+  @override
+  String get tabAll => 'Alla';
+
+  @override
+  String renewsShort(String date) {
+    return 'Förnyas $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Avbryts $date';
+  }
 }

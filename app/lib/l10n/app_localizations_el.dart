@@ -9086,4 +9086,29 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Είστε σε πληρωμένο πλάνο.';
+
+  @override
+  String get insightsPageTitle => 'Στατιστικά';
+
+  @override
+  String get tabWeek => 'Εβδομάδα';
+
+  @override
+  String get tabMonth => 'Μήνας';
+
+  @override
+  String get tabYear => 'Έτος';
+
+  @override
+  String get tabAll => 'Όλα';
+
+  @override
+  String renewsShort(String date) {
+    return 'Ανανεώνεται $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Ακυρώνεται $date';
+  }
 }

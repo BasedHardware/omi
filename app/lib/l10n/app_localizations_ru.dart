@@ -9050,4 +9050,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вы на платном плане.';
+
+  @override
+  String get insightsPageTitle => 'Статистика';
+
+  @override
+  String get tabWeek => 'Неделя';
+
+  @override
+  String get tabMonth => 'Месяц';
+
+  @override
+  String get tabYear => 'Год';
+
+  @override
+  String get tabAll => 'Всё';
+
+  @override
+  String renewsShort(String date) {
+    return 'Обновляется $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Отменяется $date';
+  }
 }

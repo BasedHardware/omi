@@ -9034,4 +9034,29 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ви на платному плані.';
+
+  @override
+  String get insightsPageTitle => 'Статистика';
+
+  @override
+  String get tabWeek => 'Тиждень';
+
+  @override
+  String get tabMonth => 'Місяць';
+
+  @override
+  String get tabYear => 'Рік';
+
+  @override
+  String get tabAll => 'Все';
+
+  @override
+  String renewsShort(String date) {
+    return 'Оновлюється $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Скасовується $date';
+  }
 }

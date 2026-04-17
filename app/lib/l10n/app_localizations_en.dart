@@ -9017,4 +9017,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'You are on a paid plan.';
+
+  @override
+  String get insightsPageTitle => 'Insights';
+
+  @override
+  String get tabWeek => 'Week';
+
+  @override
+  String get tabMonth => 'Month';
+
+  @override
+  String get tabYear => 'Year';
+
+  @override
+  String get tabAll => 'All';
+
+  @override
+  String renewsShort(String date) {
+    return 'Renews $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Cancels $date';
+  }
 }

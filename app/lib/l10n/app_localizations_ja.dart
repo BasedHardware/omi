@@ -8872,4 +8872,29 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get insightsPageTitle => 'インサイト';
+
+  @override
+  String get tabWeek => '週';
+
+  @override
+  String get tabMonth => '月';
+
+  @override
+  String get tabYear => '年';
+
+  @override
+  String get tabAll => '全期間';
+
+  @override
+  String renewsShort(String date) {
+    return '$date に更新';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date にキャンセル';
+  }
 }

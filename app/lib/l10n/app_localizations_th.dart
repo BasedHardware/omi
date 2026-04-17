@@ -8975,4 +8975,29 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'คุณอยู่ในแผนชำระเงิน';
+
+  @override
+  String get insightsPageTitle => 'สถิติ';
+
+  @override
+  String get tabWeek => 'สัปดาห์';
+
+  @override
+  String get tabMonth => 'เดือน';
+
+  @override
+  String get tabYear => 'ปี';
+
+  @override
+  String get tabAll => 'ทั้งหมด';
+
+  @override
+  String renewsShort(String date) {
+    return 'ต่ออายุ $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'ยกเลิก $date';
+  }
 }

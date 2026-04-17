@@ -9020,4 +9020,29 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Sinulla on maksullinen tilaus.';
+
+  @override
+  String get insightsPageTitle => 'Tilastot';
+
+  @override
+  String get tabWeek => 'Viikko';
+
+  @override
+  String get tabMonth => 'Kuukausi';
+
+  @override
+  String get tabYear => 'Vuosi';
+
+  @override
+  String get tabAll => 'Kaikki';
+
+  @override
+  String renewsShort(String date) {
+    return 'Uusitaan $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Peruutetaan $date';
+  }
 }

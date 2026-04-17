@@ -9104,4 +9104,29 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Vous êtes sur un forfait payant.';
+
+  @override
+  String get insightsPageTitle => 'Statistiques';
+
+  @override
+  String get tabWeek => 'Semaine';
+
+  @override
+  String get tabMonth => 'Mois';
+
+  @override
+  String get tabYear => 'Année';
+
+  @override
+  String get tabAll => 'Tout';
+
+  @override
+  String renewsShort(String date) {
+    return 'Renouvellement $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Annulation $date';
+  }
 }

@@ -8949,4 +8949,29 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'אתה על תוכנית בתשלום.';
+
+  @override
+  String get insightsPageTitle => 'תובנות';
+
+  @override
+  String get tabWeek => 'שבוע';
+
+  @override
+  String get tabMonth => 'חודש';
+
+  @override
+  String get tabYear => 'שנה';
+
+  @override
+  String get tabAll => 'הכל';
+
+  @override
+  String renewsShort(String date) {
+    return 'מתחדש $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'מבוטל $date';
+  }
 }

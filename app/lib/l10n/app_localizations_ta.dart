@@ -9090,4 +9090,29 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'நீங்கள் கட்டண திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get insightsPageTitle => 'நுண்ணறிவுகள்';
+
+  @override
+  String get tabWeek => 'வாரம்';
+
+  @override
+  String get tabMonth => 'மாதம்';
+
+  @override
+  String get tabYear => 'ஆண்டு';
+
+  @override
+  String get tabAll => 'அனைத்தும்';
+
+  @override
+  String renewsShort(String date) {
+    return '$date புதுப்பிக்கப்படும்';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date ரத்து';
+  }
 }

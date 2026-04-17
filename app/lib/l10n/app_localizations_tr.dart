@@ -9034,4 +9034,29 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ücretli bir plandasınız.';
+
+  @override
+  String get insightsPageTitle => 'İstatistikler';
+
+  @override
+  String get tabWeek => 'Hafta';
+
+  @override
+  String get tabMonth => 'Ay';
+
+  @override
+  String get tabYear => 'Yıl';
+
+  @override
+  String get tabAll => 'Tümü';
+
+  @override
+  String renewsShort(String date) {
+    return '$date yenilenir';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date iptal edilir';
+  }
 }

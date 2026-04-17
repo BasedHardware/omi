@@ -9049,4 +9049,29 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Je hebt een betaald abonnement.';
+
+  @override
+  String get insightsPageTitle => 'Inzichten';
+
+  @override
+  String get tabWeek => 'Week';
+
+  @override
+  String get tabMonth => 'Maand';
+
+  @override
+  String get tabYear => 'Jaar';
+
+  @override
+  String get tabAll => 'Alles';
+
+  @override
+  String renewsShort(String date) {
+    return 'Verlengt $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Eindigt $date';
+  }
 }

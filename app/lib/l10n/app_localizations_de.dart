@@ -9098,4 +9098,29 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du hast einen kostenpflichtigen Plan.';
+
+  @override
+  String get insightsPageTitle => 'Einblicke';
+
+  @override
+  String get tabWeek => 'Woche';
+
+  @override
+  String get tabMonth => 'Monat';
+
+  @override
+  String get tabYear => 'Jahr';
+
+  @override
+  String get tabAll => 'Alle';
+
+  @override
+  String renewsShort(String date) {
+    return 'Erneuert sich $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Endet $date';
+  }
 }

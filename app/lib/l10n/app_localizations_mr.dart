@@ -9032,4 +9032,29 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'तुम्ही सशुल्क प्लॅनवर आहात.';
+
+  @override
+  String get insightsPageTitle => 'अंतर्दृष्टी';
+
+  @override
+  String get tabWeek => 'आठवडा';
+
+  @override
+  String get tabMonth => 'महिना';
+
+  @override
+  String get tabYear => 'वर्ष';
+
+  @override
+  String get tabAll => 'सर्व';
+
+  @override
+  String renewsShort(String date) {
+    return '$date नूतनीकरण';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date रद्द';
+  }
 }

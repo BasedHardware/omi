@@ -9041,4 +9041,29 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Masz płatny plan.';
+
+  @override
+  String get insightsPageTitle => 'Statystyki';
+
+  @override
+  String get tabWeek => 'Tydzień';
+
+  @override
+  String get tabMonth => 'Miesiąc';
+
+  @override
+  String get tabYear => 'Rok';
+
+  @override
+  String get tabAll => 'Wszystko';
+
+  @override
+  String renewsShort(String date) {
+    return 'Odnawia się $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Anuluje się $date';
+  }
 }

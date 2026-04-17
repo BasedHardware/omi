@@ -9039,4 +9039,29 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Jums ir maksas plāns.';
+
+  @override
+  String get insightsPageTitle => 'Ieskati';
+
+  @override
+  String get tabWeek => 'Nedēļa';
+
+  @override
+  String get tabMonth => 'Mēnesis';
+
+  @override
+  String get tabYear => 'Gads';
+
+  @override
+  String get tabAll => 'Visi';
+
+  @override
+  String renewsShort(String date) {
+    return 'Atjaunojas $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Atceļas $date';
+  }
 }

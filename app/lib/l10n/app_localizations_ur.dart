@@ -9038,4 +9038,29 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'آپ ایک ادا شدہ پلان پر ہیں۔';
+
+  @override
+  String get insightsPageTitle => 'بصیرت';
+
+  @override
+  String get tabWeek => 'ہفتہ';
+
+  @override
+  String get tabMonth => 'مہینہ';
+
+  @override
+  String get tabYear => 'سال';
+
+  @override
+  String get tabAll => 'سب';
+
+  @override
+  String renewsShort(String date) {
+    return 'تجدید $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'منسوخ $date';
+  }
 }

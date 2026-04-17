@@ -9030,4 +9030,29 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'আপনি একটি পেইড প্ল্যানে আছেন।';
+
+  @override
+  String get insightsPageTitle => 'অন্তর্দৃষ্টি';
+
+  @override
+  String get tabWeek => 'সপ্তাহ';
+
+  @override
+  String get tabMonth => 'মাস';
+
+  @override
+  String get tabYear => 'বছর';
+
+  @override
+  String get tabAll => 'সব';
+
+  @override
+  String renewsShort(String date) {
+    return '$date পুনর্নবীকরণ';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date বাতিল';
+  }
 }

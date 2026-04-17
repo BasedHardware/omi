@@ -9106,4 +9106,29 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ikaw ay nasa bayad na plano.';
+
+  @override
+  String get insightsPageTitle => 'Mga Insight';
+
+  @override
+  String get tabWeek => 'Linggo';
+
+  @override
+  String get tabMonth => 'Buwan';
+
+  @override
+  String get tabYear => 'Taon';
+
+  @override
+  String get tabAll => 'Lahat';
+
+  @override
+  String renewsShort(String date) {
+    return 'Magre-renew $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Maka-cancel $date';
+  }
 }

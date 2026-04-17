@@ -8873,4 +8873,29 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
+
+  @override
+  String get insightsPageTitle => '통계';
+
+  @override
+  String get tabWeek => '주';
+
+  @override
+  String get tabMonth => '월';
+
+  @override
+  String get tabYear => '년';
+
+  @override
+  String get tabAll => '전체';
+
+  @override
+  String renewsShort(String date) {
+    return '$date 갱신';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date 취소';
+  }
 }

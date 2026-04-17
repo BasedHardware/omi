@@ -9018,4 +9018,29 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Oled tasulisel plaanil.';
+
+  @override
+  String get insightsPageTitle => 'Ülevaated';
+
+  @override
+  String get tabWeek => 'Nädal';
+
+  @override
+  String get tabMonth => 'Kuu';
+
+  @override
+  String get tabYear => 'Aasta';
+
+  @override
+  String get tabAll => 'Kõik';
+
+  @override
+  String renewsShort(String date) {
+    return 'Uueneb $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Tühistub $date';
+  }
 }

@@ -9060,4 +9060,29 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Fizetős csomagod van.';
+
+  @override
+  String get insightsPageTitle => 'Statisztikák';
+
+  @override
+  String get tabWeek => 'Hét';
+
+  @override
+  String get tabMonth => 'Hónap';
+
+  @override
+  String get tabYear => 'Év';
+
+  @override
+  String get tabAll => 'Mind';
+
+  @override
+  String renewsShort(String date) {
+    return 'Megújul $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Megszűnik $date';
+  }
 }

@@ -9051,4 +9051,29 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Na plaćenom ste planu.';
+
+  @override
+  String get insightsPageTitle => 'Uvidi';
+
+  @override
+  String get tabWeek => 'Tjedan';
+
+  @override
+  String get tabMonth => 'Mjesec';
+
+  @override
+  String get tabYear => 'Godina';
+
+  @override
+  String get tabAll => 'Sve';
+
+  @override
+  String renewsShort(String date) {
+    return 'Obnavlja se $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Otkazuje se $date';
+  }
 }

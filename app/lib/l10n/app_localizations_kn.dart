@@ -9053,4 +9053,29 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'ನೀವು ಪಾವತಿಸಿದ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+
+  @override
+  String get insightsPageTitle => 'ಒಳನೋಟಗಳು';
+
+  @override
+  String get tabWeek => 'ವಾರ';
+
+  @override
+  String get tabMonth => 'ತಿಂಗಳು';
+
+  @override
+  String get tabYear => 'ವರ್ಷ';
+
+  @override
+  String get tabAll => 'ಎಲ್ಲಾ';
+
+  @override
+  String renewsShort(String date) {
+    return '$date ನವೀಕರಣ';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date ರದ್ದು';
+  }
 }

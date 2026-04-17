@@ -9056,4 +9056,29 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вие сте на платен план.';
+
+  @override
+  String get insightsPageTitle => 'Статистика';
+
+  @override
+  String get tabWeek => 'Седмица';
+
+  @override
+  String get tabMonth => 'Месец';
+
+  @override
+  String get tabYear => 'Година';
+
+  @override
+  String get tabAll => 'Всичко';
+
+  @override
+  String renewsShort(String date) {
+    return 'Подновява се $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Отменя се $date';
+  }
 }

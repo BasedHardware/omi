@@ -9021,4 +9021,29 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
+
+  @override
+  String get insightsPageTitle => 'Thống kê';
+
+  @override
+  String get tabWeek => 'Tuần';
+
+  @override
+  String get tabMonth => 'Tháng';
+
+  @override
+  String get tabYear => 'Năm';
+
+  @override
+  String get tabAll => 'Tất cả';
+
+  @override
+  String renewsShort(String date) {
+    return 'Gia hạn $date';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return 'Hủy $date';
+  }
 }

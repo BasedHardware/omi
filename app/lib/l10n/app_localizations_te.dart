@@ -9072,4 +9072,29 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'మీరు చెల్లింపు ప్లాన్‌లో ఉన్నారు.';
+
+  @override
+  String get insightsPageTitle => 'అంతర్దృష్టులు';
+
+  @override
+  String get tabWeek => 'వారం';
+
+  @override
+  String get tabMonth => 'నెల';
+
+  @override
+  String get tabYear => 'సంవత్సరం';
+
+  @override
+  String get tabAll => 'అన్నీ';
+
+  @override
+  String renewsShort(String date) {
+    return '$date పునరుద్ధరణ';
+  }
+
+  @override
+  String cancelsShort(String date) {
+    return '$date రద్దు';
+  }
 }
