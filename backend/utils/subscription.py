@@ -69,40 +69,44 @@ def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> li
 
 
 # Minimum desktop build that ships with the new plan catalog + quota UI.
-# Clients below this threshold — older desktop, or any mobile build — get the
-# pre-Operator plan shape. Once a stable release catches up, lower this.
 NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv('NEW_PLANS_MIN_DESKTOP_VERSION', '0.11.324')
+
+# Minimum mobile build that ships with the `operator` enum value and new plan UI.
+# Mobile builds below this version get the legacy catalog with operator→unlimited mapping.
+NEW_PLANS_MIN_MOBILE_VERSION = os.getenv('NEW_PLANS_MIN_MOBILE_VERSION', '1.0.530')
 
 
 def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -> bool:
-    """True iff this caller's client has the Swift code that understands the new
-    Operator + Architect plan shape and the /v1/users/me/usage-quota endpoint.
+    """True iff this caller's client understands the Operator + Architect plan shape.
 
-    Any macOS desktop build qualifies. iOS / Android clients always get the
-    legacy plan catalog so the rollout is gated to desktop without cross-
-    client breakage.
-
-    The existing APIClient.swift doesn't send an X-App-Version header, so we
-    cannot version-gate per-build — version is included only as an opt-in
-    tightening hook once the client starts sending it.
+    Desktop (macOS): any build at or above NEW_PLANS_MIN_DESKTOP_VERSION qualifies.
+    Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION qualifies.
+    Unknown platform: legacy catalog.
     """
     from database.announcements import _compare_versions
 
-    if not platform or platform.lower() != 'macos':
+    if not platform:
         return False
 
-    # No version header: assume a recent-enough desktop build. Desktop clients
-    # don't currently send X-App-Version (see APIClient.swift buildHeaders),
-    # so requiring it here would fail-closed for every real desktop user.
-    if not app_version:
-        return True
+    platform_lower = platform.lower()
 
-    try:
-        return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
-    except Exception:
-        # Malformed version — fail-open on macOS rather than show the old
-        # catalog to a desktop client.
-        return True
+    if platform_lower == 'macos':
+        if not app_version:
+            return True
+        try:
+            return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+        except Exception:
+            return True
+
+    if platform_lower in ('android', 'ios'):
+        if not app_version:
+            return False
+        try:
+            return _compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
+        except Exception:
+            return False
+
+    return False
 
 
 def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
@@ -181,6 +185,7 @@ BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
+OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '500'))
 PRO_CHAT_COST_USD_PER_MONTH = float(os.getenv('PRO_CHAT_COST_USD_PER_MONTH', '400.0'))
 
@@ -291,10 +296,19 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 
     Chat caps:
       - Free: question count
-      - Oracle + legacy Unlimited: question count (200/mo default)
+      - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
+      - Unlimited (legacy): question count (PLUS_CHAT_QUESTIONS_PER_MONTH, default 500)
       - Pro (Architect): dollar cap ($400/mo default)
     """
-    if plan in (PlanType.unlimited, PlanType.operator):
+    if plan == PlanType.operator:
+        return PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+            chat_questions_per_month=OPERATOR_CHAT_QUESTIONS_PER_MONTH,
+        )
+    if plan == PlanType.unlimited:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
@@ -324,7 +338,15 @@ def get_plan_features(plan: PlanType) -> List[str]:
             f"~${int(PRO_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
         ]
 
-    if plan in (PlanType.unlimited, PlanType.operator):
+    if plan == PlanType.operator:
+        return [
+            f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
+            "Shared with mobile and web",
+        ]
+
+    if plan == PlanType.unlimited:
         return [
             f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
