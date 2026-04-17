@@ -111,13 +111,16 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
 
 
 def _evict_stale_circuit_breakers():
-    """Remove circuit breaker entries that have been idle (closed, no recent failures)."""
+    """Remove circuit breaker entries idle for longer than _CIRCUIT_BREAKER_IDLE_TTL.
+
+    Evicts all states (closed, open, half_open) — an open breaker for an
+    abandoned URL that hasn't been touched in an hour is just wasting memory.
+    """
     now = time.monotonic()
     stale_keys = [
         k
         for k, cb in _webhook_circuit_breakers.items()
-        if cb._state == 'closed'
-        and (now - cb._last_failure_time > _CIRCUIT_BREAKER_IDLE_TTL or cb._last_failure_time == 0.0)
+        if (now - cb._last_failure_time > _CIRCUIT_BREAKER_IDLE_TTL or cb._last_failure_time == 0.0)
     ]
     for k in stale_keys:
         del _webhook_circuit_breakers[k]
