@@ -18,13 +18,48 @@ export interface Memory {
 interface MemoryState {
   memories: Memory[];
   isLoading: boolean;
+  query: string;
+  categoryFilter: string | null;
   loadMemories: () => Promise<void>;
   deleteMemory: (id: string) => Promise<void>;
+  setQuery: (q: string) => void;
+  setCategoryFilter: (c: string | null) => void;
+  filteredMemories: () => Memory[];
 }
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
   memories: [],
   isLoading: false,
+  query: "",
+  categoryFilter: null,
+
+  setQuery: (q: string) => set({ query: q }),
+
+  setCategoryFilter: (c: string | null) => set({ categoryFilter: c }),
+
+  filteredMemories: () => {
+    const { memories, query, categoryFilter } = get();
+    const normalizedQuery = query.trim().toLowerCase();
+    return memories.filter((memory) => {
+      if (normalizedQuery.length > 0) {
+        const content = memory.content?.toLowerCase() ?? "";
+        const title = memory.structured?.title?.toLowerCase() ?? "";
+        if (
+          !content.includes(normalizedQuery) &&
+          !title.includes(normalizedQuery)
+        ) {
+          return false;
+        }
+      }
+      if (categoryFilter !== null) {
+        const category = memory.structured?.category ?? memory.category;
+        if (category !== categoryFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  },
 
   loadMemories: async () => {
     const token = useAuthStore.getState().idToken;
