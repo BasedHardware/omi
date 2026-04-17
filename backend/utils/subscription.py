@@ -5,7 +5,7 @@ import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
-from database.announcements import _compare_versions
+from database.announcements import compare_versions
 from fastapi import HTTPException
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.byok import get_byok_key
@@ -139,7 +139,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         if not app_version:
             return True
         try:
-            return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+            return compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
         except Exception:
             return True
 
@@ -147,7 +147,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         if not app_version:
             return False
         try:
-            return _compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
+            return compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
         except Exception:
             return False
 
