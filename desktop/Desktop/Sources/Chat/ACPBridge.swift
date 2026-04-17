@@ -79,6 +79,13 @@ actor ACPBridge {
     self.passApiKey = passApiKey
   }
 
+  /// Returns the chat model ID to use, routing to Wanqing model when enabled.
+  nonisolated static var effectiveChatModel: String {
+    UserDefaults.standard.bool(forKey: "useWanqingLLM")
+      ? "ep-u9c7ra-1776309766497075165"
+      : "claude-opus-4-6"
+  }
+
   // MARK: - State
 
   private var process: Process?
@@ -155,6 +162,14 @@ actor ACPBridge {
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+
+    // Wanqing LLM override: reroute Anthropic API calls to the Kuaishou Wanqing endpoint
+    if UserDefaults.standard.bool(forKey: "useWanqingLLM") {
+      if let key = APIKeyService.currentWanqingKey {
+        env["ANTHROPIC_API_KEY"] = key
+      }
+      env["ANTHROPIC_BASE_URL"] = "https://wanqing-api.corp.kuaishou.com/api/gateway"
+    }
 
     // Ensure the directory containing node is in PATH
     let nodeDir = (nodePath as NSString).deletingLastPathComponent

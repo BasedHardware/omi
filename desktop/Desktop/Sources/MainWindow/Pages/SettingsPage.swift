@@ -368,6 +368,8 @@ struct SettingsContentView: View {
   // Developer API Key overrides
   @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
+  @AppStorage("useWanqingLLM") private var useWanqingLLM: Bool = false
+  @AppStorage("dev_wanqing_api_key") private var devWanqingKey: String = ""
 
   init(
     appState: AppState,
@@ -4959,13 +4961,30 @@ struct SettingsContentView: View {
         value: $devAnthropicKey
       )
 
-      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+      settingsCard(settingId: "advanced.devkeys.wanqing.toggle") {
+        Toggle("Use Wanqing LLM (Kuaishou)", isOn: $useWanqingLLM)
+          .onChange(of: useWanqingLLM) { _, _ in
+            Task { await chatProvider?.restartBridgeForWanqingToggle() }
+          }
+      }
+
+      if useWanqingLLM {
+        developerKeyField(
+          title: "Wanqing API Key",
+          subtitle: "Bearer token for wanqing-api.corp.kuaishou.com",
+          settingId: "advanced.devkeys.wanqing",
+          value: $devWanqingKey
+        )
+      }
+
+      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty || !devWanqingKey.isEmpty {
         settingsCard(settingId: "advanced.devkeys.clear") {
           HStack {
             Spacer()
             Button(action: {
               devGeminiKey = ""
               devAnthropicKey = ""
+              devWanqingKey = ""
             }) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: 13, weight: .medium)

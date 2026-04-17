@@ -46,6 +46,10 @@ final class APIKeyService: ObservableObject {
         nonEmpty(UserDefaults.standard.string(forKey: "dev_anthropic_api_key")) ?? anthropicApiKey
     }
 
+    var effectiveWanqingKey: String? {
+        nonEmpty(UserDefaults.standard.string(forKey: "dev_wanqing_api_key"))
+    }
+
     var effectiveFirebaseApiKey: String? {
         firebaseApiKey
     }
@@ -138,6 +142,10 @@ final class APIKeyService: ObservableObject {
     nonisolated static var currentAnthropicKey: String? {
         nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_anthropic_api_key"))
             ?? (getenv("ANTHROPIC_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    nonisolated static var currentWanqingKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_wanqing_api_key"))
     }
 
     /// True when the app has enough configuration to start transcription and screen analysis.
