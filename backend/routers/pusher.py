@@ -548,6 +548,11 @@ async def _websocket_util_trigger(
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
             if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
+                if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                    logger.warning(
+                        f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                        f"dropping oldest chunk to prevent OOM {uid}"
+                    )
                 private_cloud_queue.append(
                     {
                         'data': bytes(private_cloud_sync_buffer),
