@@ -5,6 +5,7 @@ import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
+from database.announcements import _compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.log_sanitizer import sanitize
 import logging
@@ -82,8 +83,6 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION qualifies.
     Unknown platform: legacy catalog.
     """
-    from database.announcements import _compare_versions
-
     if not platform:
         return False
 
