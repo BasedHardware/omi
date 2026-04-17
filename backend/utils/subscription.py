@@ -48,13 +48,25 @@ def get_paid_plan_definitions() -> list[dict]:
         {
             "plan_type": PlanType.unlimited,
             "plan_id": "unlimited",
-            "title": "Unlimited (legacy)",
-            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
-            "annual_description": "Save 20% with annual billing.",
-            "legacy": True,
+            "title": "Neo",
+            "monthly_price_id": os.getenv('STRIPE_NEO_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_NEO_ANNUAL_PRICE_ID'),
+            "annual_description": "Save ~17% with annual billing.",
+            "legacy": False,
         },
     ]
+
+
+# Old Stripe price IDs for subscribers who signed up before the Neo/Architect
+# rename. Stripe webhooks still fire with these for renewals/cancellations.
+LEGACY_PRICE_MAP = {
+    # Old Unlimited ($19.99/mo, $199.99/yr) → PlanType.unlimited (now Neo)
+    'price_1RtJPm1F8wnoWYvwhVJ38kLb': PlanType.unlimited,
+    'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
+    # Old Pro ($199/mo, $1999/yr) → PlanType.architect
+    'price_1TAfBB1F8wnoWYvw8XBFM1dX': PlanType.architect,
+    'price_1TLFac1F8wnoWYvwtPxZhtzE': PlanType.architect,
+}
 
 
 def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
@@ -153,10 +165,16 @@ def legacy_plan_features(plan: PlanType) -> List[str]:
 
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
-    """Determines the plan type based on the Stripe price ID."""
+    """Determines the plan type based on the Stripe price ID.
+
+    Checks active definitions first, then LEGACY_PRICE_MAP for subscribers
+    on old pricing (pre-Neo/Architect rename).
+    """
     for definition in get_paid_plan_definitions():
         if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
             return definition["plan_type"]
+    if price_id in LEGACY_PRICE_MAP:
+        return LEGACY_PRICE_MAP[price_id]
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
@@ -184,8 +202,8 @@ BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
+NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '100'))
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
-PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
 # Hard kill-switch for the cap. Default OFF so we can deploy the backend to
@@ -196,7 +214,7 @@ CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false'
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
-    PlanType.unlimited: 'Unlimited (legacy)',
+    PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
 }
@@ -296,7 +314,7 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
     Chat caps:
       - Free: question count
       - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
-      - Unlimited (legacy): question count (PLUS_CHAT_QUESTIONS_PER_MONTH, default 500)
+      - Unlimited (legacy): question count (NEO_CHAT_QUESTIONS_PER_MONTH, default 500)
       - Architect: dollar cap ($400/mo default)
     """
     if plan == PlanType.operator:
@@ -313,7 +331,7 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             words_transcribed=None,
             insights_gained=None,
             memories_created=None,
-            chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
+            chat_questions_per_month=NEO_CHAT_QUESTIONS_PER_MONTH,
         )
     if plan == PlanType.architect:
         return PlanLimits(
@@ -347,7 +365,7 @@ def get_plan_features(plan: PlanType) -> List[str]:
 
     if plan == PlanType.unlimited:
         return [
-            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
             "Shared with mobile and web",
