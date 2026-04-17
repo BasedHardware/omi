@@ -1848,9 +1848,12 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textTertiary)
             }
 
-            HStack(alignment: .top, spacing: 14) {
-              ForEach(subscriptionPlansForDisplay) { plan in
-                subscriptionPlanCard(plan)
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(alignment: .top, spacing: 14) {
+                ForEach(subscriptionPlansForDisplay) { plan in
+                  subscriptionPlanCard(plan)
+                    .frame(minWidth: 220)
+                }
               }
             }
           }
@@ -5789,7 +5792,7 @@ struct SettingsContentView: View {
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
     case "unlimited":
-      return "100 questions per month"
+      return "200 questions per month"
     case "operator":
       return "500 questions per month"
     case "architect":
@@ -5894,7 +5897,7 @@ struct SettingsContentView: View {
       ]
     case "unlimited":
       return [
-        "100 chat questions per month",
+        "200 chat questions per month",
         "Unlimited listening and transcription",
         "Unlimited memories and insights",
         "Shared with mobile and web",
