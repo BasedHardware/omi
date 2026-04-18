@@ -1,6 +1,5 @@
 module CWebP [system] {
-    header "/opt/homebrew/include/webp/encode.h"
-    header "/opt/homebrew/include/webp/types.h"
+    header "shim.h"
     link "webp"
     export *
 }
