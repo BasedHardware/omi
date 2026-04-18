@@ -1,5 +1,6 @@
 import asyncio
 import json
+import tempfile
 import uuid
 import re
 import base64
@@ -827,8 +828,8 @@ def upload_file_chat(
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
-        safe_suffix = Path(file.filename).name  # strip any directory components
-        temp_file = Path(f"{uuid.uuid4().hex}_{safe_suffix}")
+        safe_suffix = Path(file.filename).name if file.filename else "upload"
+        temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
@@ -886,8 +887,8 @@ def upload_file_chat(
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
-        safe_suffix = Path(file.filename).name  # strip any directory components
-        temp_file = Path(f"{uuid.uuid4().hex}_{safe_suffix}")
+        safe_suffix = Path(file.filename).name if file.filename else "upload"
+        temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
