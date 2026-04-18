@@ -826,28 +826,31 @@ def upload_file_chat(
     thumbs_name = []
     files_chat = []
     for file in files:
-        temp_file = Path(f"{file.filename}")
-        with temp_file.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
+        safe_suffix = Path(file.filename).name  # strip any directory components
+        temp_file = Path(f"{uuid.uuid4().hex}_{safe_suffix}")
+        try:
+            with temp_file.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        result = FileChatTool.upload(temp_file)
+            result = FileChatTool.upload(temp_file)
 
-        thumb_name = result.get("thumbnail_name", "")
-        if thumb_name != "":
-            thumbs_name.append(thumb_name)
+            thumb_name = result.get("thumbnail_name", "")
+            if thumb_name != "":
+                thumbs_name.append(thumb_name)
 
-        filechat = FileChat(
-            id=str(uuid.uuid4()),
-            name=result.get("file_name", ""),
-            mime_type=result.get("mime_type", ""),
-            openai_file_id=result.get("file_id", ""),
-            created_at=datetime.now(timezone.utc),
-            thumb_name=thumb_name,
-        )
-        files_chat.append(filechat)
-
-        # cleanup temp_file
-        temp_file.unlink()
+            filechat = FileChat(
+                id=str(uuid.uuid4()),
+                name=result.get("file_name", ""),
+                mime_type=result.get("mime_type", ""),
+                openai_file_id=result.get("file_id", ""),
+                created_at=datetime.now(timezone.utc),
+                thumb_name=thumb_name,
+            )
+            files_chat.append(filechat)
+        finally:
+            if temp_file.exists():
+                temp_file.unlink()
 
     if len(thumbs_name) > 0:
         thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
@@ -882,28 +885,31 @@ def upload_file_chat(
     thumbs_name = []
     files_chat = []
     for file in files:
-        temp_file = Path(f"{file.filename}")
-        with temp_file.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
+        safe_suffix = Path(file.filename).name  # strip any directory components
+        temp_file = Path(f"{uuid.uuid4().hex}_{safe_suffix}")
+        try:
+            with temp_file.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        result = FileChatTool.upload(temp_file)
+            result = FileChatTool.upload(temp_file)
 
-        thumb_name = result.get("thumbnail_name", "")
-        if thumb_name != "":
-            thumbs_name.append(thumb_name)
+            thumb_name = result.get("thumbnail_name", "")
+            if thumb_name != "":
+                thumbs_name.append(thumb_name)
 
-        filechat = FileChat(
-            id=str(uuid.uuid4()),
-            name=result.get("file_name", ""),
-            mime_type=result.get("mime_type", ""),
-            openai_file_id=result.get("file_id", ""),
-            created_at=datetime.now(timezone.utc),
-            thumb_name=thumb_name,
-        )
-        files_chat.append(filechat)
-
-        # cleanup temp_file
-        temp_file.unlink()
+            filechat = FileChat(
+                id=str(uuid.uuid4()),
+                name=result.get("file_name", ""),
+                mime_type=result.get("mime_type", ""),
+                openai_file_id=result.get("file_id", ""),
+                created_at=datetime.now(timezone.utc),
+                thumb_name=thumb_name,
+            )
+            files_chat.append(filechat)
+        finally:
+            if temp_file.exists():
+                temp_file.unlink()
 
     if len(thumbs_name) > 0:
         thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
