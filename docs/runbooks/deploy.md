@@ -24,5 +24,7 @@
 
 ### Desktop App (macOS) — GitHub Actions + Codemagic
 - **Trigger**: push to `main` with `desktop/**` changes
-- **Step 1**: GitHub Actions `desktop_auto_release.yml` auto-increments version, pushes `v*-macos` tag
+- **Step 1**: GitHub Actions `desktop_auto_release.yml` deploys the desktop backend to development
+  and production Cloud Run, then computes the next desktop version, pushes the `v*-macos` tag, and
+  syncs `desktop/CHANGELOG.json` back to `main`
 - **Step 2**: Codemagic `omi-desktop-swift-release` builds, signs, notarizes, publishes

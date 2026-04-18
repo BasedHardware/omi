@@ -1,19 +1,22 @@
 ## Logs
 
 ### Flutter (iOS Simulator)
-App logs go to `/tmp/flutter-run.log`. Use `print()` (not `Logger.debug`) for logs that must appear there. Grep with `[TagName]` prefixes:
+Flutter logs are whatever file you redirect `flutter run` stdout into. The repo uses both
+`/tmp/flutter-run.log` and `/tmp/omi-flutter.log` in different workflows, so treat the path below
+as an example command convention rather than a fixed app log sink. Use `print()` (not
+`Logger.debug`) for logs that must appear there. Grep with `[TagName]` prefixes:
 ```bash
 grep -E "\[AgentChat\]|\[HomePage\]" /tmp/flutter-run.log | tail -20
 ```
 
-### Backend (Cloud Run)
+### Backend-listen (GKE, namespace `prod-omi-backend`)
 ```bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="backend-listen"' --project=based-hardware --limit=30 --freshness=5m --format=json
+kubectl logs -n prod-omi-backend -l app.kubernetes.io/instance=prod-omi-backend-listen --timestamps --since=10m | grep "<uid>"
 ```
 
 ### Agent-proxy (GKE, namespace `prod-omi-backend`)
 ```bash
-kubectl logs -n prod-omi-backend -l app=agent-proxy --timestamps --since=10m | grep "<uid>"
+kubectl logs -n prod-omi-backend -l app.kubernetes.io/instance=prod-omi-agent-proxy --timestamps --since=10m | grep "<uid>"
 ```
 
 ### Agent VM

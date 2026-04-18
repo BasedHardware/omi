@@ -2,9 +2,12 @@
 
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
-cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.com)
-cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
+cd app && flutter run -d <device-id> --flavor dev    # dev flavor (loads .dev.env)
+cd app && flutter run -d <device-id> --flavor prod   # prod flavor (loads .env)
 ```
+
+The actual backend host comes from `API_BASE_URL` in those env files, not from the flavor flag
+alone. Start from `app/.env.template` when creating local env files.
 
 See `/local-dev mobile` skill for full setup details, env file configuration, and troubleshooting.
 
