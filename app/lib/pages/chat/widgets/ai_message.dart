@@ -243,6 +243,7 @@ Widget buildMessageWidget(
       setMessageNps: sendMessageNps,
       date: message.createdAt,
       onAskOmi: onAskOmi,
+      sendMessage: sendMessage,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
@@ -267,6 +268,7 @@ Widget buildMessageWidget(
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
       onAskOmi: onAskOmi,
+      sendMessage: sendMessage,
     );
   }
 }
@@ -296,7 +298,7 @@ class InitialMessageWidget extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
               )
-            : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi),
+            : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi, sendMessage: sendMessage),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -402,6 +404,7 @@ class NormalMessageWidget extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
+  final Function(String) sendMessage;
 
   const NormalMessageWidget({
     super.key,
@@ -410,6 +413,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.message,
     required this.setMessageNps,
     required this.createdAt,
+    required this.sendMessage,
     this.showThinkingAfterText = false,
     this.thinkings = const [],
     this.onAskOmi,
@@ -556,7 +560,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi, sendMessage: widget.sendMessage),
                     );
                   },
                 ),
@@ -617,6 +621,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final DateTime date;
   final Function(String)? onAskOmi;
+  final Function(String) sendMessage;
 
   const MemoriesMessageWidget({
     super.key,
@@ -627,6 +632,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.message,
     required this.setMessageNps,
     required this.date,
+    required this.sendMessage,
     this.onAskOmi,
   });
 
@@ -770,7 +776,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         widget.onAskOmi?.call(text);
                       }, selectedText: selectedText);
                     },
-                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi, sendMessage: widget.sendMessage),
                   );
                 },
               ),
