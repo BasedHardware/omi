@@ -313,7 +313,7 @@ workflows:
           flutter build macos \
             --release \
             --build-name=1.0.80 \
-            --build-number=500 \
+            --build-number=501 \
             --flavor prod
 
       - name: Package application for App Store
