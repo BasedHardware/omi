@@ -2661,6 +2661,8 @@
     "onTheCallEnterThisCode": "Trong cuộc gọi, nhập mã này",
     "phoneAllow": "Cho phép",
     "phoneCallSettingsTitle": "Cài đặt cuộc gọi",
+    "showPhoneCallButtonTitle": "Hiển thị nút gọi điện",
+    "showPhoneCallButtonDesc": "Hiển thị nút gọi điện trên màn hình chính",
     "phoneCallsSubtitle": "Gọi điện với phiên âm thời gian thực",
     "phoneCallsWithOmi": "Cuộc gọi với Omi",
     "phoneContactsTab": "Danh bạ",

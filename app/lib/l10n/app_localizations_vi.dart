@@ -8305,6 +8305,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Hiển thị nút gọi điện';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Hiển thị nút gọi điện trên màn hình chính';
+
+  @override
   String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
 
   @override

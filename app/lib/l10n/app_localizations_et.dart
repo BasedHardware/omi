@@ -8300,6 +8300,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Kone seaded';
 
   @override
+  String get showPhoneCallButtonTitle => 'Kuva kõnenuppu';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Kuva telefonikõne nupp avakuval';
+
+  @override
   String get yourVerifiedNumbers => 'Teie kinnitatud numbrid';
 
   @override

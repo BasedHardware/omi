@@ -8337,6 +8337,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показване на бутона за телефонно обаждане';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Показване на бутона за телефонно обаждане на началния екран';
+
+  @override
   String get yourVerifiedNumbers => 'Вашите потвърдени номера';
 
   @override

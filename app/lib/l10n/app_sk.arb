@@ -2661,6 +2661,8 @@
     "onTheCallEnterThisCode": "Pocas hovoru zadajte tento kod",
     "phoneAllow": "Povolit",
     "phoneCallSettingsTitle": "Nastavenia hovorov",
+    "showPhoneCallButtonTitle": "Zobraziť tlačidlo hovoru",
+    "showPhoneCallButtonDesc": "Zobraziť tlačidlo telefonického hovoru na domovskej obrazovke",
     "phoneCallsSubtitle": "Volajte s prepisom v realnom case",
     "phoneCallsWithOmi": "Hovory s Omi",
     "phoneContactsTab": "Kontakty",

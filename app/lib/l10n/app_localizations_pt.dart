@@ -8305,6 +8305,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracoes de chamada';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostrar botão de chamada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Exibir botão de chamada telefônica na tela inicial';
+
+  @override
   String get yourVerifiedNumbers => 'Seus numeros verificados';
 
   @override

@@ -8365,6 +8365,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Ρυθμίσεις κλήσεων';
 
   @override
+  String get showPhoneCallButtonTitle => 'Εμφάνιση κουμπιού κλήσης';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Εμφάνιση κουμπιού τηλεφωνικής κλήσης στην αρχική οθόνη';
+
+  @override
   String get yourVerifiedNumbers => 'Οι επαληθευμένοι αριθμοί σας';
 
   @override

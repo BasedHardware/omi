@@ -8320,6 +8320,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracion de llamadas';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostrar botón de llamada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostrar el botón de llamada telefónica en la pantalla de inicio';
+
+  @override
   String get yourVerifiedNumbers => 'Tus numeros verificados';
 
   @override

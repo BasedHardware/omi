@@ -2657,6 +2657,8 @@
     "onTheCallEnterThisCode": "कॉल पर यह कोड दर्ज करें",
     "phoneAllow": "अनुमति दें",
     "phoneCallSettingsTitle": "कॉल सेटिंग्स",
+    "showPhoneCallButtonTitle": "फ़ोन कॉल बटन दिखाएं",
+    "showPhoneCallButtonDesc": "होम स्क्रीन पर फ़ोन कॉल बटन प्रदर्शित करें",
     "phoneCallsSubtitle": "रीयल-टाइम ट्रांसक्रिप्शन के साथ कॉल करें",
     "phoneCallsWithOmi": "Omi के साथ कॉल",
     "phoneContactsTab": "संपर्क",

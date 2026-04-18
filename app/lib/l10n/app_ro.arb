@@ -2656,6 +2656,8 @@
     "onTheCallEnterThisCode": "In timpul apelului, introduceti acest cod",
     "phoneAllow": "Permite",
     "phoneCallSettingsTitle": "Setari apeluri",
+    "showPhoneCallButtonTitle": "Afișați butonul de apel",
+    "showPhoneCallButtonDesc": "Afișați butonul de apel telefonic pe ecranul de pornire",
     "phoneCallsSubtitle": "Apelati cu transcriere in timp real",
     "phoneCallsWithOmi": "Apeluri cu Omi",
     "phoneContactsTab": "Contacte",

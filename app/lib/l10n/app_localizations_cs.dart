@@ -8299,6 +8299,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastaveni hovoru';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobrazit tlačítko telefonního hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobrazit tlačítko telefonního hovoru na domovské obrazovce';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overena cisla';
 
   @override

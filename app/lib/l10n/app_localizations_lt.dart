@@ -8311,6 +8311,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Skambuciu nustatymai';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rodyti skambučio mygtuką';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rodyti telefono skambučio mygtuką pradiniame ekrane';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu patvirtinti numeriai';
 
   @override

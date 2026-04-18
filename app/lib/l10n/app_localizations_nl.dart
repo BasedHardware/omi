@@ -8330,6 +8330,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Gespreksinstellingen';
 
   @override
+  String get showPhoneCallButtonTitle => 'Toon belknop';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Toon de telefoonbelknop op het startscherm';
+
+  @override
   String get yourVerifiedNumbers => 'Uw geverifieerde nummers';
 
   @override

@@ -8330,6 +8330,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Настройки звонков';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показать кнопку звонка';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Отображать кнопку телефонного звонка на главном экране';
+
+  @override
   String get yourVerifiedNumbers => 'Ваши подтвержденные номера';
 
   @override

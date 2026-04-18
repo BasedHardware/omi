@@ -2656,6 +2656,8 @@
     "onTheCallEnterThisCode": "ขณะโทร ป้อนรหัสนี้",
     "phoneAllow": "อนุญาต",
     "phoneCallSettingsTitle": "ตั้งค่าการโทร",
+    "showPhoneCallButtonTitle": "แสดงปุ่มโทรศัพท์",
+    "showPhoneCallButtonDesc": "แสดงปุ่มโทรศัพท์บนหน้าจอหลัก",
     "phoneCallsSubtitle": "โทรพร้อมถอดความแบบเรียลไทม์",
     "phoneCallsWithOmi": "โทรกับ Omi",
     "phoneContactsTab": "รายชื่อ",

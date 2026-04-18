@@ -8327,6 +8327,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Tetapan panggilan';
 
   @override
+  String get showPhoneCallButtonTitle => 'Tunjuk Butang Panggilan';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Paparkan butang panggilan telefon pada skrin utama';
+
+  @override
   String get yourVerifiedNumbers => 'Nombor anda yang disahkan';
 
   @override

@@ -2657,6 +2657,8 @@
     "onTheCallEnterThisCode": "通話中にこのコードを入力",
     "phoneAllow": "許可",
     "phoneCallSettingsTitle": "通話設定",
+    "showPhoneCallButtonTitle": "通話ボタンを表示",
+    "showPhoneCallButtonDesc": "ホーム画面に通話ボタンを表示する",
     "phoneCallsSubtitle": "リアルタイム文字起こし付きで通話",
     "phoneCallsWithOmi": "Omiで通話",
     "phoneContactsTab": "連絡先",

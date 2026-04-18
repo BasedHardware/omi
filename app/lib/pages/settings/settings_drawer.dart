@@ -28,7 +28,6 @@ import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'phone_call_settings_page.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
 
@@ -338,9 +337,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
-                        ? const AutoSyncPage()
-                        : const SyncPage();
+                    final page =
+                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -370,27 +368,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   showBetaTag: true,
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
-                  },
-                ),
-                Consumer<UsageProvider>(
-                  builder: (context, usageProvider, child) {
-                    final sp2 = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited = sp2 == PlanType.unlimited || sp2 == PlanType.operator || sp2 == PlanType.architect;
-                    if (!isUnlimited) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildSettingsItem(
-                          title: 'Phone Calls',
-                          icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
-                          onTap: () {
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const PhoneCallSettingsPage()));
-                          },
-                        ),
-                      ],
-                    );
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

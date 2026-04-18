@@ -8340,6 +8340,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Hivasbeallitasok';
 
   @override
+  String get showPhoneCallButtonTitle => 'Telefonhívás gomb megjelenítése';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Telefonhívás gomb megjelenítése a főképernyőn';
+
+  @override
   String get yourVerifiedNumbers => 'Ellenorzott szamai';
 
   @override

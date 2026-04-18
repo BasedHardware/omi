@@ -8286,6 +8286,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Opkaldsindstillinger';
 
   @override
+  String get showPhoneCallButtonTitle => 'Vis telefonopkaldsknap';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Vis knap til telefonopkald på startskærmen';
+
+  @override
   String get yourVerifiedNumbers => 'Dine verificerede numre';
 
   @override

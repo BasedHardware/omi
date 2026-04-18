@@ -162,6 +162,11 @@ class SharedPreferencesUtil {
 
   bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
 
+  // Phone call floating button on home screen - default is true
+  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
+
+  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 

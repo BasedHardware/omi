@@ -2656,6 +2656,8 @@
     "onTheCallEnterThisCode": "Kone ajal sisestage see kood",
     "phoneAllow": "Luba",
     "phoneCallSettingsTitle": "Kone seaded",
+    "showPhoneCallButtonTitle": "Kuva kõnenuppu",
+    "showPhoneCallButtonDesc": "Kuva telefonikõne nupp avakuval",
     "phoneCallsSubtitle": "Helistage reaalajas transkriptsiooniga",
     "phoneCallsWithOmi": "Koned Omiga",
     "phoneContactsTab": "Kontaktid",

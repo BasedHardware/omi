@@ -8306,6 +8306,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Samtalsinstellningar';
 
   @override
+  String get showPhoneCallButtonTitle => 'Visa samtalsknapp';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Visa telefonsamtalsknapp på startskärmen';
+
+  @override
   String get yourVerifiedNumbers => 'Dina verifierade nummer';
 
   @override

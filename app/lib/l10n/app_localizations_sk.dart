@@ -8293,6 +8293,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastavenia hovorov';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobraziť tlačidlo hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobraziť tlačidlo telefonického hovoru na domovskej obrazovke';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overene cisla';
 
   @override

@@ -8260,6 +8260,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ตั้งค่าการโทร';
 
   @override
+  String get showPhoneCallButtonTitle => 'แสดงปุ่มโทรศัพท์';
+
+  @override
+  String get showPhoneCallButtonDesc => 'แสดงปุ่มโทรศัพท์บนหน้าจอหลัก';
+
+  @override
   String get yourVerifiedNumbers => 'หมายเลขที่ยืนยันแล้วของคุณ';
 
   @override

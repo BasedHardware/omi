@@ -8313,6 +8313,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Pengaturan panggilan';
 
   @override
+  String get showPhoneCallButtonTitle => 'Tampilkan Tombol Panggilan';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Tampilkan tombol panggilan telepon di layar utama';
+
+  @override
   String get yourVerifiedNumbers => 'Nomor terverifikasi Anda';
 
   @override

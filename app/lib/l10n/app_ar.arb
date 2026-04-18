@@ -2647,6 +2647,8 @@
     "phoneSpeaker": "مكبر الصوت",
     "phoneEndCall": "إنهاء",
     "phoneCallSettingsTitle": "إعدادات المكالمات الهاتفية",
+    "showPhoneCallButtonTitle": "إظهار زر المكالمة الهاتفية",
+    "showPhoneCallButtonDesc": "عرض زر المكالمة الهاتفية على الشاشة الرئيسية",
     "yourVerifiedNumbers": "أرقامك المتحقق منها",
     "verifiedNumbersDescription": "عند الاتصال بشخص ما، سيرى هذا الرقم على هاتفه",
     "noVerifiedNumbers": "لا توجد أرقام متحقق منها",

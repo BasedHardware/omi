@@ -8354,6 +8354,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Impostazioni chiamate';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostra pulsante chiamata';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostra il pulsante di chiamata telefonica nella schermata principale';
+
+  @override
   String get yourVerifiedNumbers => 'I tuoi numeri verificati';
 
   @override

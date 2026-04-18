@@ -8281,6 +8281,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'कॉल सेटिंग्स';
 
   @override
+  String get showPhoneCallButtonTitle => 'फ़ोन कॉल बटन दिखाएं';
+
+  @override
+  String get showPhoneCallButtonDesc => 'होम स्क्रीन पर फ़ोन कॉल बटन प्रदर्शित करें';
+
+  @override
   String get yourVerifiedNumbers => 'आपके सत्यापित नंबर';
 
   @override

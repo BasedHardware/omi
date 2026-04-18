@@ -8381,6 +8381,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Parametres d\'appel';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afficher le bouton d\'appel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afficher le bouton d\'appel téléphonique sur l\'écran d\'accueil';
+
+  @override
   String get yourVerifiedNumbers => 'Vos numeros verifies';
 
   @override

@@ -8163,6 +8163,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override

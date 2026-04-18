@@ -2624,6 +2624,8 @@
     "onTheCallEnterThisCode": "Geben Sie diesen Code waehrend des Anrufs ein",
     "phoneAllow": "Erlauben",
     "phoneCallSettingsTitle": "Anrufeinstellungen",
+    "showPhoneCallButtonTitle": "Anruf-Schaltfläche anzeigen",
+    "showPhoneCallButtonDesc": "Anruf-Schaltfläche auf dem Startbildschirm anzeigen",
     "phoneCallsSubtitle": "Telefonieren mit Echtzeit-Transkription",
     "phoneCallsWithOmi": "Telefonate mit Omi",
     "phoneContactsTab": "Kontakte",

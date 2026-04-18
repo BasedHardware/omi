@@ -2691,6 +2691,8 @@
     "onTheCallEnterThisCode": "Arama sirasinda bu kodu girin",
     "phoneAllow": "Izin ver",
     "phoneCallSettingsTitle": "Arama ayarlari",
+    "showPhoneCallButtonTitle": "Arama Düğmesini Göster",
+    "showPhoneCallButtonDesc": "Ana ekranda telefon arama düğmesini göster",
     "phoneCallsSubtitle": "Gercek zamanli transkripsiyon ile arayin",
     "phoneCallsWithOmi": "Omi ile aramalar",
     "phoneContactsTab": "Kisiler",

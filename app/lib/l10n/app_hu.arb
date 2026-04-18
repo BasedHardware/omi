@@ -2752,6 +2752,8 @@
     "onTheCallEnterThisCode": "A hivas soran adja meg ezt a kodot",
     "phoneAllow": "Engedelyezes",
     "phoneCallSettingsTitle": "Hivasbeallitasok",
+    "showPhoneCallButtonTitle": "Telefonhívás gomb megjelenítése",
+    "showPhoneCallButtonDesc": "Telefonhívás gomb megjelenítése a főképernyőn",
     "phoneCallsSubtitle": "Hivjon valos ideju atirassal",
     "phoneCallsWithOmi": "Hivasok az Omival",
     "phoneContactsTab": "Nevjegyek",

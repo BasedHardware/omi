@@ -2656,6 +2656,8 @@
     "onTheCallEnterThisCode": "Under samtalen, tast inn denne koden",
     "phoneAllow": "Tillat",
     "phoneCallSettingsTitle": "Samtaleinnstillinger",
+    "showPhoneCallButtonTitle": "Vis anropsknapp",
+    "showPhoneCallButtonDesc": "Vis telefonanropsknapp på startskjermen",
     "phoneCallsSubtitle": "Ring med sanntids transkripsjon",
     "phoneCallsWithOmi": "Samtaler med Omi",
     "phoneContactsTab": "Kontakter",

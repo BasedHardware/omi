@@ -2656,6 +2656,8 @@
     "onTheCallEnterThisCode": "Voer tijdens het gesprek deze code in",
     "phoneAllow": "Toestaan",
     "phoneCallSettingsTitle": "Gespreksinstellingen",
+    "showPhoneCallButtonTitle": "Toon belknop",
+    "showPhoneCallButtonDesc": "Toon de telefoonbelknop op het startscherm",
     "phoneCallsSubtitle": "Bel met realtime transcriptie",
     "phoneCallsWithOmi": "Bellen met Omi",
     "phoneContactsTab": "Contacten",

@@ -8165,6 +8165,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSettingsTitle => '통화 설정';
 
   @override
+  String get showPhoneCallButtonTitle => '통화 버튼 표시';
+
+  @override
+  String get showPhoneCallButtonDesc => '홈 화면에 전화 통화 버튼 표시';
+
+  @override
   String get yourVerifiedNumbers => '인증된 번호';
 
   @override

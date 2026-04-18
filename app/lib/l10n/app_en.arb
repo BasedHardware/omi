@@ -10015,6 +10015,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "End",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Show Phone Call Button",
+    "showPhoneCallButtonDesc": "Display phone call button on home screen",
     "yourVerifiedNumbers": "Your Verified Numbers",
     "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
     "noVerifiedNumbers": "No verified numbers",

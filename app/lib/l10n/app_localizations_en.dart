@@ -8299,6 +8299,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Show Phone Call Button';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Display phone call button on home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Your Verified Numbers';
 
   @override
