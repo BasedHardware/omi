@@ -2004,6 +2004,56 @@ workflows:
           fi
           echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
+      - name: Prepare universal libwebp (arm64 + x86_64)
+        script: |
+          # Homebrew's libwebp is arm64-only on M2 runners, but we build a universal app.
+          # Build each arch separately (multi-arch cmake fails with _Float16 on x86_64),
+          # then lipo them into universal dylibs.
+          WEBP_VERSION="1.5.0"
+          TEMP_DIR="/tmp/libwebp-build-$$"
+          CMAKE_COMMON="-DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF \
+            -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
+            -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF \
+            -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
+            -DWEBP_BUILD_WEBPMUX=OFF"
+          mkdir -p "$TEMP_DIR"
+          curl -sL "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-$WEBP_VERSION.tar.gz" \
+            | tar xz -C "$TEMP_DIR"
+          SRC="$TEMP_DIR/libwebp-$WEBP_VERSION"
+
+          # Build arm64
+          mkdir "$SRC/build-arm64" && cd "$SRC/build-arm64"
+          cmake .. -DCMAKE_OSX_ARCHITECTURES=arm64 $CMAKE_COMMON
+          make -j$(sysctl -n hw.ncpu)
+
+          # Build x86_64
+          mkdir "$SRC/build-x86_64" && cd "$SRC/build-x86_64"
+          cmake .. -DCMAKE_OSX_ARCHITECTURES=x86_64 $CMAKE_COMMON
+          make -j$(sysctl -n hw.ncpu)
+
+          # Lipo into universal dylibs
+          mkdir -p /tmp/libwebp-universal
+          ARM64_WEBP=$(find "$SRC/build-arm64" -name "libwebp.7.*.dylib" -not -type l | head -1)
+          X86_WEBP=$(find "$SRC/build-x86_64" -name "libwebp.7.*.dylib" -not -type l | head -1)
+          lipo -create "$ARM64_WEBP" "$X86_WEBP" -output /tmp/libwebp-universal/libwebp.7.dylib
+
+          ARM64_SY=$(find "$SRC/build-arm64" -name "libsharpyuv.0.*.dylib" -not -type l | head -1)
+          X86_SY=$(find "$SRC/build-x86_64" -name "libsharpyuv.0.*.dylib" -not -type l | head -1)
+          lipo -create "$ARM64_SY" "$X86_SY" -output /tmp/libwebp-universal/libsharpyuv.0.dylib
+
+          # Verify both architectures are present
+          for lib in /tmp/libwebp-universal/*.dylib; do
+            echo "$(basename "$lib"): $(file "$lib" | sed 's/.*: //')"
+            file "$lib" | grep -q "universal binary" || {
+              echo "ERROR: $(basename "$lib") is not a universal binary"
+              exit 1
+            }
+          done
+
+          rm -rf "$TEMP_DIR"
+
       - name: Resolve SPM packages
         script: |
           # Unset TOOLCHAINS to use Xcode's default toolchain
@@ -2116,17 +2166,28 @@ workflows:
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 
-          # Bundle libwebp dylibs
-          WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
-          if [ -f "$WEBP_LIB" ]; then
-            cp "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-            SHARPYUV_LIB="$(dirname "$WEBP_LIB")/libsharpyuv.0.dylib"
-            [ -f "$SHARPYUV_LIB" ] && cp "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+          # Bundle universal libwebp dylibs (built from source in earlier step)
+          BREW_WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+          if [ -f "/tmp/libwebp-universal/libwebp.7.dylib" ]; then
+            cp /tmp/libwebp-universal/libwebp.7.dylib "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            [ -f /tmp/libwebp-universal/libsharpyuv.0.dylib ] && \
+              cp /tmp/libwebp-universal/libsharpyuv.0.dylib "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
             install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-            [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ] && install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
-            install_name_tool -change "$WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+            [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ] && \
+              install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+            # Fix libwebp's reference to libsharpyuv (source build uses local path)
+            SHARPYUV_REF=$(otool -L "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" | grep libsharpyuv | awk '{print $1}')
+            if [ -n "$SHARPYUV_REF" ] && [ "$SHARPYUV_REF" != "@rpath/libsharpyuv.0.dylib" ]; then
+              install_name_tool -change "$SHARPYUV_REF" "@rpath/libsharpyuv.0.dylib" \
+                "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            fi
+            # Fix main binary's reference to libwebp (linked against Homebrew path)
+            install_name_tool -change "$BREW_WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+            echo "Bundled universal libwebp: $(file "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" | grep -oE 'arm64|x86_64' | tr '\n' '+' | sed 's/+$//')"
           else
-            echo "WARNING: libwebp not found — install with: brew install webp"
+            echo "ERROR: universal libwebp not found at /tmp/libwebp-universal/"
+            echo "Ensure 'Prepare universal libwebp' step ran successfully"
+            exit 1
           fi
 
           # Copy app icon
