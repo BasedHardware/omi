@@ -198,14 +198,15 @@
 
     <script>
         // These values are passed from the backend template rendering
-        const appId = "{{ app_id }}";
-        const state = "{{ state }}";
+        // Using tojson filter to properly escape for JavaScript context (prevents XSS)
+        const appId = {{ app_id | tojson }};
+        const state = {{ state | tojson }};
 
         // Firebase configuration
         const firebaseConfig = {
-            apiKey: "{{ firebase_api_key }}",
-            authDomain: "{{ firebase_auth_domain }}",
-            projectId: "{{ firebase_project_id }}"
+            apiKey: {{ firebase_api_key | tojson }},
+            authDomain: {{ firebase_auth_domain | tojson }},
+            projectId: {{ firebase_project_id | tojson }}
         };
 
         // Initialize Firebase

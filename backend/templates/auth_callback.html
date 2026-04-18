@@ -93,9 +93,10 @@
 
     <script>
         // Get values from template variables (passed from backend)
-        const code = "{{ code }}";
-        const state = "{{ state }}";
-        const error = "{{ error if error is defined else '' }}";
+        // Using tojson filter to properly escape for JavaScript context (prevents XSS)
+        const code = {{ code | tojson }};
+        const state = {{ state | tojson }};
+        const error = {{ (error if error is defined else '') | tojson }};
 
         const errorElement = document.getElementById('error');
         const messageElement = document.getElementById('message');
