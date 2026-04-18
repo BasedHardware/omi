@@ -2009,6 +2009,7 @@ workflows:
           # Homebrew's libwebp is arm64-only on M2 runners, but we build a universal app.
           # Build each arch separately (multi-arch cmake fails with _Float16 on x86_64),
           # then lipo them into universal dylibs.
+          command -v cmake >/dev/null 2>&1 || brew install cmake
           WEBP_VERSION="1.5.0"
           TEMP_DIR="/tmp/libwebp-build-$$"
           CMAKE_COMMON="-DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release \
