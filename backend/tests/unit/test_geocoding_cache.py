@@ -10,10 +10,27 @@ Verifies that:
 
 import json
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 # Mock database._client before importing anything that touches GCP
 sys.modules.setdefault("database._client", MagicMock())
+
+# Stub database.redis_db with r attribute (needed by location.py)
+if "database.redis_db" not in sys.modules:
+    _redis_mod = types.ModuleType("database.redis_db")
+    _redis_mod.r = MagicMock()
+    sys.modules["database.redis_db"] = _redis_mod
+elif not hasattr(sys.modules["database.redis_db"], 'r'):
+    sys.modules["database.redis_db"].r = MagicMock()
+
+# Stub utils.http_client (needed by location.py)
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is None:
+    _http_mod = types.ModuleType("utils.http_client")
+    sys.modules["utils.http_client"] = _http_mod
+_http_mod.get_maps_client = MagicMock()
+_http_mod.get_webhook_client = MagicMock()
 
 from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location

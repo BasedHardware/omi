@@ -9047,4 +9047,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Nem sikerült törölni a fiókodat. Próbáld újra.';
+
+  @override
+  String get planUpdate => 'Csomag frissítés';
+
+  @override
+  String get planDeprecationMessage =>
+      'Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók \$49/hó áron. A jelenlegi csomagja addig is tovább működik.';
+
+  @override
+  String get upgradeYourPlan => 'Frissítsd a csomagodat';
+
+  @override
+  String get youAreOnAPaidPlan => 'Fizetős csomagod van.';
 }

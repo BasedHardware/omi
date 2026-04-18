@@ -2935,5 +2935,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Οριστική διαγραφή λογαριασμού",
     "keepMyAccount": "Διατήρηση λογαριασμού μου",
-    "deleteAccountFailed": "Δεν ήταν δυνατή η διαγραφή του λογαριασμού σας. Δοκιμάστε ξανά."
+    "deleteAccountFailed": "Δεν ήταν δυνατή η διαγραφή του λογαριασμού σας. Δοκιμάστε ξανά.",
+    "planUpdate": "Ενημέρωση πλάνου",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Το πλάνο Unlimited σας καταργείται. Μεταβείτε στο πλάνο Operator — ίδιες εξαιρετικές λειτουργίες στα $49/μήνα. Το τρέχον πλάνο σας θα συνεχίσει να λειτουργεί στο μεταξύ.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Αναβαθμίστε το πλάνο σας",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Είστε σε πληρωμένο πλάνο.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -2935,5 +2935,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Visam laikui ištrinti paskyrą",
     "keepMyAccount": "Palikti mano paskyrą",
-    "deleteAccountFailed": "Nepavyko ištrinti tavo paskyros. Bandyk dar kartą."
+    "deleteAccountFailed": "Nepavyko ištrinti tavo paskyros. Bandyk dar kartą.",
+    "planUpdate": "Plano atnaujinimas",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už $49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Atnaujinkite savo planą",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Jūs naudojate mokamą planą.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

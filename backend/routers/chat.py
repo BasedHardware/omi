@@ -3,10 +3,11 @@ import json
 import uuid
 import re
 import base64
-import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
+
+from utils.executors import critical_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -142,7 +143,7 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
+        critical_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None

@@ -8996,4 +8996,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Váš účet sa nepodarilo odstrániť. Skúste to znova.';
+
+  @override
+  String get planUpdate => 'Aktualizácia plánu';
+
+  @override
+  String get planDeprecationMessage =>
+      'Váš plán Unlimited sa ruší. Prejdite na plán Operator — rovnaké skvelé funkcie za \$49/mes. Váš súčasný plán bude zatiaľ naďalej fungovať.';
+
+  @override
+  String get upgradeYourPlan => 'Vylepšite svoj plán';
+
+  @override
+  String get youAreOnAPaidPlan => 'Máte platený plán.';
 }

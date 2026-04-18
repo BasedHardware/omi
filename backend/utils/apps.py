@@ -1,11 +1,13 @@
+import asyncio
+import hashlib
 import math
 import os
-import threading
+import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
-import hashlib
-import secrets
+
+import httpx
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -721,30 +723,20 @@ def update_personas_async(uid: str):
     if personas:
         set_persona_update_timestamp(uid)
 
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
 
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_batch())
+        except Exception as e:
+            logger.error(f"Error in persona batch update for uid={uid}: {str(e)}")
+        finally:
+            loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
     else:
         logger.info(f"[PERSONAS] No personas found for uid={uid}")
-
-
-def sync_update_persona_prompt(persona: dict):
-    """Synchronous wrapper for update_persona_prompt"""
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(update_persona_prompt(persona))
-    except Exception as e:
-        logger.error(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
-        return None
-    finally:
-        loop.close()
 
 
 async def update_persona_prompt(persona: dict):
@@ -1349,8 +1341,6 @@ def fetch_app_chat_tools_from_manifest(
         }
     }
     """
-    import requests
-
     if not manifest_url:
         return None
 
@@ -1365,8 +1355,10 @@ def fetch_app_chat_tools_from_manifest(
     try:
         logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
-        response = requests.get(
-            manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
+        response = httpx.get(
+            manifest_url,
+            timeout=float(timeout),
+            headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'},
         )
 
         if response.status_code != 200:
@@ -1419,10 +1411,10 @@ def fetch_app_chat_tools_from_manifest(
 
         return result
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
         return None
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"⚠️ Manifest fetch request error: {e}")
         return None
     except ValueError as e:

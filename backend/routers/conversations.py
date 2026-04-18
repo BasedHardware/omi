@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -90,7 +92,7 @@ def process_in_progress_conversation(
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
-    messages = trigger_external_integrations(uid, conversation)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
@@ -628,23 +630,6 @@ def get_shared_conversation_by_id(conversation_id: str):
     response_dict = conversation_to_dict(conversation)
     response_dict['people'] = [p.dict() for p in people]
     return response_dict
-
-
-@router.get("/v1/public-conversations", response_model=List[Conversation], tags=['conversations'])
-def get_public_conversations(offset: int = 0, limit: int = 1000):
-    conversations = redis_db.get_public_conversations()
-    data = []
-
-    conversation_uids = redis_db.get_conversation_uids(conversations)
-
-    data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
-    # TODO: sort in some way to have proper pagination
-
-    conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
-    conversations = [c for c in conversations if not c.get('is_locked', False)]
-    for conversation in conversations:
-        conversation['geolocation'] = None
-    return conversations
 
 
 @router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])

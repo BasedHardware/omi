@@ -9073,4 +9073,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Δεν ήταν δυνατή η διαγραφή του λογαριασμού σας. Δοκιμάστε ξανά.';
+
+  @override
+  String get planUpdate => 'Ενημέρωση πλάνου';
+
+  @override
+  String get planDeprecationMessage =>
+      'Το πλάνο Unlimited σας καταργείται. Μεταβείτε στο πλάνο Operator — ίδιες εξαιρετικές λειτουργίες στα \$49/μήνα. Το τρέχον πλάνο σας θα συνεχίσει να λειτουργεί στο μεταξύ.';
+
+  @override
+  String get upgradeYourPlan => 'Αναβαθμίστε το πλάνο σας';
+
+  @override
+  String get youAreOnAPaidPlan => 'Είστε σε πληρωμένο πλάνο.';
 }

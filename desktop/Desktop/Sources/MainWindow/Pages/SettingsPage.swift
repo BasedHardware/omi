@@ -73,6 +73,9 @@ struct SubscriptionPlanCatalogMerger {
         mergedById[plan.id] = SubscriptionPlanOption(
           id: plan.id,
           title: plan.title.isEmpty ? existing.title : plan.title,
+          subtitle: plan.subtitle ?? existing.subtitle,
+          description: plan.description ?? existing.description,
+          eyebrow: plan.eyebrow ?? existing.eyebrow,
           features: plan.features.isEmpty ? existing.features : plan.features,
           prices: mergePrices(primary: plan.prices, fallback: existing.prices)
         )
@@ -1799,6 +1802,42 @@ struct SettingsContentView: View {
         }
       }
 
+      if let subscription = userSubscription?.subscription,
+        subscription.deprecated == true
+      {
+        settingsCard(settingId: "planusage.deprecation") {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+                .scaledFont(size: 16)
+              Text("Plan Retiring")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+
+            Text(
+              subscription.deprecationMessage
+                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo."
+            )
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+              selectedPlanIdForCheckout = "operator"
+            }) {
+              Text("Try Operator")
+                .scaledFont(size: 13, weight: .semibold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(OmiColors.success)
+          }
+        }
+      }
+
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: 18) {
@@ -1812,9 +1851,12 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textTertiary)
             }
 
-            HStack(alignment: .top, spacing: 14) {
-              ForEach(subscriptionPlansForDisplay) { plan in
-                subscriptionPlanCard(plan)
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(alignment: .top, spacing: 14) {
+                ForEach(subscriptionPlansForDisplay) { plan in
+                  subscriptionPlanCard(plan)
+                    .frame(minWidth: 220)
+                }
               }
             }
           }
@@ -5654,17 +5696,20 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Oracle (mass-market, green) on the left, Architect/Pro (premium, purple)
-    // on the right, legacy Unlimited last if the user is still on it.
-    let order = ["operator": 0, "pro": 1, "unlimited": 2]
-    return mergedPlanCatalog.sorted { lhs, rhs in
-      let lhsOrder = order[lhs.id, default: Int.max]
-      let rhsOrder = order[rhs.id, default: Int.max]
-      if lhsOrder != rhsOrder {
-        return lhsOrder < rhsOrder
+    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // on the right. Hide the user's current plan — they already see it above.
+    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
+    let order = ["unlimited": 0, "operator": 1, "architect": 2]
+    return mergedPlanCatalog
+      .filter { !isCurrentSubscriptionPlan($0) }
+      .sorted { lhs, rhs in
+        let lhsOrder = order[lhs.id, default: Int.max]
+        let rhsOrder = order[rhs.id, default: Int.max]
+        if lhsOrder != rhsOrder {
+          return lhsOrder < rhsOrder
+        }
+        return lhs.title < rhs.title
       }
-      return lhs.title < rhs.title
-    }
   }
 
   private var currentPlanTitle: String {
@@ -5682,8 +5727,8 @@ struct SettingsContentView: View {
       if isCurrentSubscriptionOperator() {
         return "Operator"
       }
-      return "Unlimited (legacy)"
-    case .pro:
+      return "Neo"
+    case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
@@ -5749,9 +5794,11 @@ struct SettingsContentView: View {
 
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "200 questions per month"
+    case "operator":
       return "500 questions per month"
-    case "pro":
+    case "architect":
       return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
@@ -5759,9 +5806,9 @@ struct SettingsContentView: View {
   }
 
   private func planAccentColor(for planId: String) -> Color {
-    // Architect (pro) is the premium/purple tier; Oracle + legacy Unlimited
+    // Architect is the premium/purple tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
+    planId == "architect" ? OmiColors.purplePrimary : OmiColors.success
   }
 
   private func planSummaryText(for plan: SubscriptionPlanOption) -> String {
@@ -5782,9 +5829,11 @@ struct SettingsContentView: View {
 
   private func planEyebrow(for planId: String) -> String {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "Starter"
+    case "operator":
       return "Most popular"
-    case "pro":
+    case "architect":
       return "Automation + coding"
     default:
       return "Plan"
@@ -5793,9 +5842,11 @@ struct SettingsContentView: View {
 
   private func planDescription(for planId: String) -> String {
     switch planId {
-    case "operator", "unlimited":
+    case "unlimited":
+      return "100 chat questions per month. Shared with mobile and web."
+    case "operator":
       return "500 chat questions per month. Shared with mobile and web."
-    case "pro":
+    case "architect":
       return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
@@ -5833,16 +5884,23 @@ struct SettingsContentView: View {
 
   private func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
-    case "pro":
+    case "architect":
       return [
         "Automations and vibe coding",
         "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
         "~$400 of monthly AI compute included (fair-use cap)",
       ]
-    case "operator", "unlimited":
+    case "operator":
       return [
         "500 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
+      ]
+    case "unlimited":
+      return [
+        "200 chat questions per month",
         "Unlimited listening and transcription",
         "Unlimited memories and insights",
         "Shared with mobile and web",
@@ -5857,8 +5915,8 @@ struct SettingsContentView: View {
     if normalized.contains("unlimited") {
       return "unlimited"
     }
-    if normalized.contains("pro") {
-      return "pro"
+    if normalized.contains("architect") || normalized.contains("pro") {
+      return "architect"
     }
     return nil
   }
@@ -5875,8 +5933,8 @@ struct SettingsContentView: View {
       switch planId {
       case "unlimited":
         title = "Plus"
-      case "pro":
-        title = "Omi Pro"
+      case "architect":
+        title = "Architect"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -5904,14 +5962,16 @@ struct SettingsContentView: View {
     let isSelected = selectedPlanIdForCheckout == plan.id
     let accent = planAccentColor(for: plan.id)
     let isCurrentPlan = isCurrentSubscriptionPlan(plan)
-    let isProUser = userSubscription?.subscription.plan == .pro
-    let isDowngrade = isProUser && plan.id == "unlimited"
+    let isArchitectUser =
+      userSubscription?.subscription.plan == .architect
+      || userSubscription?.subscription.plan == .pro
+    let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 6) {
-          Text(planEyebrow(for: plan.id).uppercased())
+          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
             .scaledFont(size: 10, weight: .bold)
             .foregroundColor(accent)
             .tracking(0.8)
@@ -5920,7 +5980,7 @@ struct SettingsContentView: View {
             .scaledFont(size: 18, weight: .bold)
             .foregroundColor(OmiColors.textPrimary)
 
-          if let subtitle = planSubtitle(for: plan.id) {
+          if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
@@ -5943,7 +6003,7 @@ struct SettingsContentView: View {
         .fixedSize(horizontal: true, vertical: false)
       }
 
-      Text(planDescription(for: plan.id))
+      Text(plan.description ?? planDescription(for: plan.id))
         .scaledFont(size: 13)
         .foregroundColor(OmiColors.textSecondary)
 
@@ -6521,11 +6581,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              FloatingBarUsageLimiter.shared.applyPlan(
-                plan: subscription.subscription.plan,
-                status: subscription.subscription.status
-              )
               userSubscription = subscription
               subscriptionError = nil
               pendingSubscriptionPriceId = nil

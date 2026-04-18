@@ -3871,7 +3871,8 @@ struct NotificationSettingsResponse: Codable {
 enum SubscriptionPlanType: String, Codable {
   case basic      // display "Free"
   case unlimited  // legacy — display "Unlimited (legacy)"
-  case pro        // display "Architect" — same Stripe IDs, pure rename
+  case architect  // display "Architect" ($400/mo, cost_usd quota)
+  case pro        // backward compat: old Firestore docs may still say "pro"
   case `operator` // new — display "Operator"
 }
 
@@ -3903,13 +3904,16 @@ struct UserSubscriptionInfo: Codable {
   let features: [String]
   let cancelAtPeriodEnd: Bool
   let limits: SubscriptionLimitsResponse
+  let deprecated: Bool?
+  let deprecationMessage: String?
 
   enum CodingKeys: String, CodingKey {
-    case plan, status, features, limits
+    case plan, status, features, limits, deprecated
     case currentPeriodEnd = "current_period_end"
     case stripeSubscriptionId = "stripe_subscription_id"
     case currentPriceId = "current_price_id"
     case cancelAtPeriodEnd = "cancel_at_period_end"
+    case deprecationMessage = "deprecation_message"
   }
 }
 
@@ -3928,8 +3932,21 @@ struct SubscriptionPriceOption: Codable, Identifiable {
 struct SubscriptionPlanOption: Codable, Identifiable {
   let id: String
   let title: String
+  let subtitle: String?
+  let description: String?
+  let eyebrow: String?
   let features: [String]
   let prices: [SubscriptionPriceOption]
+
+  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+    self.id = id
+    self.title = title
+    self.subtitle = subtitle
+    self.description = description
+    self.eyebrow = eyebrow
+    self.features = features
+    self.prices = prices
+  }
 }
 
 struct UserSubscriptionResponse: Codable {
@@ -4930,7 +4947,7 @@ extension APIClient {
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
   struct ChatUsageQuota: Decodable {
     let plan: String       // display name: "Free" | "Plus" | "Pro"
-    let planType: String   // internal id: "basic" | "unlimited" | "pro"
+    let planType: String   // internal id: "basic" | "unlimited" | "architect"
     let unit: String       // "questions" | "cost_usd"
     let used: Double
     let limit: Double?     // nil means unlimited

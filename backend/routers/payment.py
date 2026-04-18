@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 from pydantic import BaseModel
@@ -231,6 +233,20 @@ def get_available_plans_endpoint(
         all_definitions = get_paid_plan_definitions()
         if not new_plans_enabled:
             all_definitions = adapt_plans_for_legacy_client(all_definitions)
+            # Operator subscriber on old client: map their Stripe prices to Unlimited
+            # so is_active detection works against the legacy catalog.
+            if current_subscription and current_subscription.plan == PlanType.operator:
+                op_monthly = os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID', '')
+                op_annual = os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID', '')
+                unlim_monthly = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID', '')
+                unlim_annual = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID', '')
+                price_map = {}
+                if op_monthly and unlim_monthly:
+                    price_map[op_monthly] = unlim_monthly
+                if op_annual and unlim_annual:
+                    price_map[op_annual] = unlim_annual
+                current_price_id = price_map.get(current_price_id, current_price_id)
+                scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
@@ -341,14 +357,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        # Block downgrades from Pro to Unlimited
-        if current_plan == PlanType.pro and target_plan == PlanType.unlimited:
+        # Block downgrades from Architect to Unlimited
+        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
             raise HTTPException(
                 status_code=400,
-                detail="Downgrading from Pro to Unlimited is not available. Please contact support if you need to change your plan.",
+                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
             )
 
-        # Cross-plan change (e.g. Unlimited→Pro): immediate swap with proration
+        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
             updated_sub = stripe.Subscription.modify(
                 stripe_sub['id'],

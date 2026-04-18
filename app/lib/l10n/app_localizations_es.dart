@@ -9029,4 +9029,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'No se pudo eliminar tu cuenta. Inténtalo de nuevo.';
+
+  @override
+  String get planUpdate => 'Actualización del plan';
+
+  @override
+  String get planDeprecationMessage =>
+      'Su plan Unlimited está siendo retirado. Cambie al plan Operator — las mismas excelentes funciones a \$49/mes. Su plan actual seguirá funcionando mientras tanto.';
+
+  @override
+  String get upgradeYourPlan => 'Mejora tu plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Estás en un plan de pago.';
 }

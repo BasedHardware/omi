@@ -1473,7 +1473,7 @@ class FloatingControlBarManager {
             barWindow.state.isAILoading = false
             barWindow.state.showingAIResponse = true
             barWindow.state.currentAIMessage = ChatMessage(
-                text: "You've hit your monthly limit of \(FloatingBarUsageLimiter.monthlyFreeLimit) free messages. Upgrade to keep chatting without restrictions.",
+                text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
                 sender: .ai
             )
             barWindow.resizeToResponseHeightPublic(animated: true)

@@ -2935,5 +2935,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "ลบบัญชีถาวร",
     "keepMyAccount": "เก็บบัญชีของฉันไว้",
-    "deleteAccountFailed": "ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง"
+    "deleteAccountFailed": "ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง",
+    "planUpdate": "อัปเดตแผน",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา $49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "อัปเกรดแผนของคุณ",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "คุณอยู่ในแผนชำระเงิน",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

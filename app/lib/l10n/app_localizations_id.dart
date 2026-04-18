@@ -9018,4 +9018,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Tidak dapat menghapus akun Anda. Silakan coba lagi.';
+
+  @override
+  String get planUpdate => 'Pembaruan Paket';
+
+  @override
+  String get planDeprecationMessage =>
+      'Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga \$49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.';
+
+  @override
+  String get upgradeYourPlan => 'Tingkatkan Paket Anda';
+
+  @override
+  String get youAreOnAPaidPlan => 'Anda menggunakan paket berbayar.';
 }

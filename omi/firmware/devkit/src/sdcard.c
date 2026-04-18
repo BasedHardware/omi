@@ -109,7 +109,7 @@ int mount_sd_card(void)
 
     res = move_write_pointer(file_count);
     if (res) {
-        LOG_ERR("erro while moving the write pointer");
+        LOG_ERR("error while moving the write pointer");
         return -1;
     }
 
@@ -415,27 +415,27 @@ void sd_off()
         pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
     }
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 15, GPIO_DISCONNECTED); // MOSI
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_DISCONNECTED); // MISO  
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_DISCONNECTED); // MISO
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 13, GPIO_DISCONNECTED); // SCK
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio0)), 2, GPIO_DISCONNECTED); // CS
     gpio_pin_set_dt(&sd_en_gpio_pin, 0);
-    
-    sd_enabled = false; 
+
+    sd_enabled = false;
 }
 
 
 void sd_on()
 {
-    gpio_pin_set_dt(&sd_en_gpio_pin, 1);  
+    gpio_pin_set_dt(&sd_en_gpio_pin, 1);
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 15, GPIO_OUTPUT); // MOSI
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_INPUT); // MISO  
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_INPUT); // MISO
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 13, GPIO_OUTPUT); // SCK
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio0)), 2, GPIO_OUTPUT_HIGH); // CS
     const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
     if (device_is_ready(spi_dev)) {
         pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
     }
-    sd_enabled = true; 
+    sd_enabled = true;
 }
 
 bool is_sd_on()

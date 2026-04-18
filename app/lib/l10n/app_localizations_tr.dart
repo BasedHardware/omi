@@ -9021,4 +9021,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Hesabınız silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get planUpdate => 'Plan Güncellemesi';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler \$49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.';
+
+  @override
+  String get upgradeYourPlan => 'Planınızı Yükseltin';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ücretli bir plandasınız.';
 }

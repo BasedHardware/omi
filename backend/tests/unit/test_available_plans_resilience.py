@@ -18,13 +18,13 @@ os.environ.setdefault(
 # Real Stripe dev price IDs
 UNLIM_MONTHLY = "price_1RrxXL1F8wnoWYvwIddzR902"
 UNLIM_ANNUAL = "price_1RrxXL1F8wnoWYvw3kDbWmjs"
-PRO_MONTHLY = "price_1TAznX1F8wnoWYvwyaSVQbZW"
-PRO_ANNUAL = "price_1TAznX1F8wnoWYvwN8YmzbiC"
+ARCH_MONTHLY = "price_1TAznX1F8wnoWYvwyaSVQbZW"
+ARCH_ANNUAL = "price_1TAznX1F8wnoWYvwN8YmzbiC"
 
 os.environ["STRIPE_UNLIMITED_MONTHLY_PRICE_ID"] = UNLIM_MONTHLY
 os.environ["STRIPE_UNLIMITED_ANNUAL_PRICE_ID"] = UNLIM_ANNUAL
-os.environ["STRIPE_PRO_MONTHLY_PRICE_ID"] = PRO_MONTHLY
-os.environ["STRIPE_PRO_ANNUAL_PRICE_ID"] = PRO_ANNUAL
+os.environ["STRIPE_ARCHITECT_MONTHLY_PRICE_ID"] = ARCH_MONTHLY
+os.environ["STRIPE_ARCHITECT_ANNUAL_PRICE_ID"] = ARCH_ANNUAL
 
 # --- Stub heavy infrastructure before importing any project modules ---
 
@@ -52,11 +52,27 @@ for _name in [
     "database.redis_db",
     "database.user_usage",
     "database.cache",
+    "database.announcements",
 ]:
     _m = types.ModuleType(_name)
     sys.modules[_name] = _m
     # Set as attribute on database package so `from database import X` works
     setattr(_db_mod, _name.split(".")[-1], _m)
+
+# database.announcements needs _compare_versions for should_show_new_plans()
+_announcements_mod = sys.modules["database.announcements"]
+
+
+def _compare_versions(a, b):
+    a_parts = [int(x) for x in a.split('.')]
+    b_parts = [int(x) for x in b.split('.')]
+    for x, y in zip(a_parts, b_parts):
+        if x != y:
+            return 1 if x > y else -1
+    return len(a_parts) - len(b_parts)
+
+
+_announcements_mod._compare_versions = _compare_versions
 
 # database.users needs the functions payment.py imports by name
 _users_mod = sys.modules["database.users"]
@@ -140,12 +156,12 @@ def _make_stripe_price(price_id, amount, interval):
     return price
 
 
-def test_invalid_pro_price_skips_pro_but_unlimited_remains():
-    """When stripe.Price.retrieve fails for Pro prices, only Unlimited plans are returned."""
+def test_invalid_architect_price_skips_architect_but_unlimited_remains():
+    """When stripe.Price.retrieve fails for Architect prices, only Unlimited plans are returned."""
     _users_mod.get_user_subscription.return_value = None
 
     def _mock_retrieve(price_id):
-        if price_id in (PRO_MONTHLY, PRO_ANNUAL):
+        if price_id in (ARCH_MONTHLY, ARCH_ANNUAL):
             raise Exception(f"No such price: {price_id}")
         if price_id == UNLIM_MONTHLY:
             return _make_stripe_price(price_id, 1900, "month")
@@ -166,9 +182,9 @@ def test_invalid_pro_price_skips_pro_but_unlimited_remains():
     assert UNLIM_MONTHLY in plan_ids
     assert UNLIM_ANNUAL in plan_ids
 
-    # Pro prices should be absent (their retrieval failed)
-    assert PRO_MONTHLY not in plan_ids
-    assert PRO_ANNUAL not in plan_ids
+    # Architect prices should be absent (their retrieval failed)
+    assert ARCH_MONTHLY not in plan_ids
+    assert ARCH_ANNUAL not in plan_ids
 
     assert len(plans) == 2
 
@@ -178,8 +194,8 @@ def test_all_valid_prices_returns_all_plans():
     _users_mod.get_user_subscription.return_value = None
 
     def _mock_retrieve(price_id):
-        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", PRO_MONTHLY: "month", PRO_ANNUAL: "year"}
-        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, PRO_MONTHLY: 990, PRO_ANNUAL: 9900}
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", ARCH_MONTHLY: "month", ARCH_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, ARCH_MONTHLY: 990, ARCH_ANNUAL: 9900}
         if price_id not in intervals:
             raise Exception(f"Unexpected price_id: {price_id}")
         return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
@@ -191,8 +207,95 @@ def test_all_valid_prices_returns_all_plans():
     assert response.status_code == 200
     plans = response.json()["plans"]
     plan_ids = {p["id"] for p in plans}
-    assert plan_ids == {UNLIM_MONTHLY, UNLIM_ANNUAL, PRO_MONTHLY, PRO_ANNUAL}
+    assert plan_ids == {UNLIM_MONTHLY, UNLIM_ANNUAL, ARCH_MONTHLY, ARCH_ANNUAL}
     assert len(plans) == 4
+
+
+def test_legacy_unlimited_subscriber_sees_is_active():
+    """Legacy Unlimited subscriber gets their plan with is_active=True in catalog."""
+    from models.users import Subscription, SubscriptionStatus, PlanType
+
+    sub = Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_legacy_123",
+        cancel_at_period_end=False,
+    )
+    _users_mod.get_user_subscription.return_value = sub
+
+    # Mock Stripe subscription retrieval to return the monthly price
+    stripe_sub = MagicMock()
+    stripe_sub.to_dict.return_value = {
+        "items": {"data": [{"price": {"id": UNLIM_MONTHLY}}]},
+        "customer": "cus_123",
+    }
+    stripe.Subscription.retrieve = MagicMock(return_value=stripe_sub)
+    stripe.SubscriptionSchedule.list = MagicMock(return_value=MagicMock(data=[]))
+
+    def _mock_retrieve(price_id):
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", ARCH_MONTHLY: "month", ARCH_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, ARCH_MONTHLY: 990, ARCH_ANNUAL: 9900}
+        if price_id not in intervals:
+            raise Exception(f"Unexpected price_id: {price_id}")
+        return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
+
+    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+
+    response = client.get("/v1/payments/available-plans")
+
+    assert response.status_code == 200
+    plans = response.json()["plans"]
+
+    # Legacy unlimited subscriber should have their monthly plan marked active
+    active_plans = [p for p in plans if p["is_active"]]
+    assert len(active_plans) == 1
+    assert active_plans[0]["id"] == UNLIM_MONTHLY
+    assert active_plans[0]["interval"] == "month"
+
+
+def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
+    """Operator subscriber on old client (no platform header) gets price remapped to Unlimited."""
+    from models.users import Subscription, SubscriptionStatus, PlanType
+
+    OP_MONTHLY = "price_operator_monthly_test"
+    monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", OP_MONTHLY)
+
+    sub = Subscription(
+        plan=PlanType.operator,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_operator_123",
+        cancel_at_period_end=False,
+    )
+    _users_mod.get_user_subscription.return_value = sub
+
+    stripe_sub = MagicMock()
+    stripe_sub.to_dict.return_value = {
+        "items": {"data": [{"price": {"id": OP_MONTHLY}}]},
+        "customer": "cus_456",
+    }
+    stripe.Subscription.retrieve = MagicMock(return_value=stripe_sub)
+    stripe.SubscriptionSchedule.list = MagicMock(return_value=MagicMock(data=[]))
+
+    def _mock_retrieve(price_id):
+        intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", ARCH_MONTHLY: "month", ARCH_ANNUAL: "year"}
+        amounts = {UNLIM_MONTHLY: 1900, UNLIM_ANNUAL: 18000, ARCH_MONTHLY: 990, ARCH_ANNUAL: 9900}
+        if price_id not in intervals:
+            raise Exception(f"Unexpected price_id: {price_id}")
+        return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
+
+    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+
+    # No platform header → old client → adapt_plans_for_legacy_client + price remap
+    response = client.get("/v1/payments/available-plans")
+
+    assert response.status_code == 200
+    plans = response.json()["plans"]
+
+    # Operator price should be remapped to Unlimited monthly, so is_active is set
+    active_plans = [p for p in plans if p["is_active"]]
+    assert len(active_plans) == 1
+    assert active_plans[0]["id"] == UNLIM_MONTHLY
+    assert active_plans[0]["interval"] == "month"
 
 
 def test_all_prices_fail_returns_500():

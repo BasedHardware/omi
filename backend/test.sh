@@ -88,7 +88,19 @@ pytest tests/unit/test_desktop_migration.py -v
 pytest tests/unit/test_staged_tasks_batch_scores.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 pytest tests/unit/test_available_plans_resilience.py -v
+pytest tests/unit/test_subscription_restructure.py -v
+pytest tests/unit/test_subscription_plans.py -v
+pytest tests/unit/test_payment_available_plans_source.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
+pytest tests/unit/test_async_webhooks.py -v
+pytest tests/unit/test_async_app_integrations.py -v
+pytest tests/unit/test_async_geocoding.py -v
+pytest tests/unit/test_geocoding_cache.py -v
+pytest tests/unit/test_realtime_integrations_usage_tracking.py -v
+pytest tests/unit/test_async_auth.py -v
+pytest tests/unit/test_thread_join_elimination.py -v
+pytest tests/unit/test_async_http_infrastructure.py -v
+pytest tests/unit/test_clean_sweep_migrations.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

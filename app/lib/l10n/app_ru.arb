@@ -2970,5 +2970,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Удалить аккаунт навсегда",
     "keepMyAccount": "Оставить аккаунт",
-    "deleteAccountFailed": "Не удалось удалить аккаунт. Попробуйте ещё раз."
+    "deleteAccountFailed": "Не удалось удалить аккаунт. Попробуйте ещё раз.",
+    "planUpdate": "Обновление плана",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ваш план Unlimited прекращается. Перейдите на план Operator — те же отличные функции за $49/мес. Ваш текущий план продолжит работать тем временем.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Улучшите свой план",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Вы на платном плане.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

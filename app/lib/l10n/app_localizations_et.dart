@@ -9005,4 +9005,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Sinu kontot ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get planUpdate => 'Plaani uuendus';
+
+  @override
+  String get planDeprecationMessage =>
+      'Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga \$49/kuus. Teie praegune plaan jätkab vahepeal tööd.';
+
+  @override
+  String get upgradeYourPlan => 'Uuenda oma plaani';
+
+  @override
+  String get youAreOnAPaidPlan => 'Oled tasulisel plaanil.';
 }

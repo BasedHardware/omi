@@ -10658,5 +10658,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "اکاؤنٹ مستقل طور پر حذف کریں",
     "keepMyAccount": "میرا اکاؤنٹ برقرار رکھیں",
-    "deleteAccountFailed": "آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+    "deleteAccountFailed": "آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "planUpdate": "پلان اپ ڈیٹ",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز $49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "اپنا پلان اپ گریڈ کریں",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "آپ ایک ادا شدہ پلان پر ہیں۔",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

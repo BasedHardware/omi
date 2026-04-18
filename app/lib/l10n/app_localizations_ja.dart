@@ -8859,4 +8859,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'アカウントを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get planUpdate => 'プラン更新';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
+
+  @override
+  String get upgradeYourPlan => 'プランをアップグレード';
+
+  @override
+  String get youAreOnAPaidPlan => '有料プランをご利用中です。';
 }

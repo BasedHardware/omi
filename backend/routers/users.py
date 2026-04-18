@@ -815,14 +815,20 @@ def get_user_subscription_endpoint(
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
-    # Backward-compat guard: old mobile builds (Flutter PlanType in
-    # app/lib/models/subscription.dart is a fixed {basic, unlimited, pro})
-    # will throw a Dart decoding exception on any new plan enum value. Map
-    # Operator subscribers -> "unlimited" for wire serialization so existing
-    # deployed clients keep working. Desktop/web clients distinguish Operator
-    # from Unlimited by matching current_price_id against Operator price IDs,
-    # which is unchanged.
-    if subscription.plan == PlanType.operator:
+    new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+
+    # Mark deprecated plans
+    if subscription.plan == PlanType.unlimited:
+        subscription.deprecated = True
+        subscription.deprecation_message = (
+            "Your Unlimited plan is being retired. Switch to the Operator plan "
+            "— same great features at $49/mo. Your current plan will continue "
+            "to work in the meantime."
+        )
+
+    # Backward-compat: old clients without the `operator` enum value would crash
+    # on deserialization. Only send the real plan type to clients that understand it.
+    if not new_plans_enabled and subscription.plan == PlanType.operator:
         subscription.plan = PlanType.unlimited
 
     # Get current usage
@@ -840,14 +846,8 @@ def get_user_subscription_endpoint(
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading. Two gates applied in order:
-    #   1. Version-gate: only macOS desktop clients at NEW_PLANS_MIN_DESKTOP_VERSION
-    #      or newer see the new Operator + Architect catalog. Everyone else
-    #      (mobile, older desktop builds) gets the pre-v0.11.324 plan shape
-    #      so we don't break them while the beta rollout bakes.
-    #   2. Legacy-filter: existing Unlimited subscribers still see their plan;
-    #      brand-new users don't.
-    new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+    # Build available plans. Version-gated: new clients see Operator + Architect,
+    # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
     all_definitions = get_paid_plan_definitions()
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
@@ -912,6 +912,9 @@ def get_user_subscription_endpoint(
                 SubscriptionPlan(
                     id=definition["plan_id"],
                     title=definition["title"],
+                    subtitle=definition.get("subtitle"),
+                    description=definition.get("description"),
+                    eyebrow=definition.get("eyebrow"),
                     features=features,
                     prices=plan_prices,
                     legacy=bool(definition.get("legacy")),

@@ -10658,5 +10658,21 @@
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "حذف دائمی حساب",
     "keepMyAccount": "حفظ حساب من",
-    "deleteAccountFailed": "حذف حساب شما ممکن نشد. لطفاً دوباره تلاش کنید."
+    "deleteAccountFailed": "حذف حساب شما ممکن نشد. لطفاً دوباره تلاش کنید.",
+    "planUpdate": "به‌روزرسانی طرح",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با $49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "طرح خود را ارتقا دهید",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "شما در یک طرح پولی هستید.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }
