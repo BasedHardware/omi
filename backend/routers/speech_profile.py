@@ -6,14 +6,12 @@ import av
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
-from database.conversations import get_conversation
 from database.redis_db import set_speech_profile_duration
-from database.users import get_person, set_user_speaker_embedding
+from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
-    get_conversation_recording_if_exists,
     delete_additional_profile_audio,
     get_additional_profile_recordings,
     delete_user_person_speech_sample,

@@ -75,7 +75,7 @@ from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
+from utils.social import get_twitter_timeline
 import logging
 
 logger = logging.getLogger(__name__)
