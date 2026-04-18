@@ -305,8 +305,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -314,6 +313,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (provider.isLoading && !hasAnyData) {
             return Column(
               children: [
+                _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 const Expanded(
                   child: Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
@@ -325,6 +325,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (provider.error != null && !hasAnyData) {
             return Column(
               children: [
+                _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 Expanded(
                   child: Center(
@@ -345,6 +346,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (!provider.isLoading && !hasAnyData && provider.error == null) {
             return Column(
               children: [
+                _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 Expanded(child: _buildEmptyState()),
               ],
@@ -398,16 +400,60 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   Widget _buildSubscriptionInfo(BuildContext context, UsageProvider provider) {
-    if (provider.isLoading && provider.subscription == null) {
-      return const SizedBox.shrink();
-    }
-
     if (provider.subscription?.showSubscriptionUi == false) {
       return const SizedBox.shrink();
     }
 
+    // Show shimmer while subscription is loading
+    if (provider.isSubscriptionLoading && provider.subscription == null) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+        padding: const EdgeInsets.all(16),
+        height: 60,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: const Center(child: CircularProgressIndicator(color: Colors.deepPurple, strokeWidth: 2)),
+      );
+    }
+
+    // If subscription failed to load, show basic card with View Plans button
     if (provider.subscription == null) {
-      return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: _isUpgrading ? null : _showPlansSheet,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  context.l10n.upgradeToUnlimited,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward, size: 18),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     final plan = provider.subscription!.subscription.plan;
@@ -1048,8 +1094,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
