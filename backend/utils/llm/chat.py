@@ -266,6 +266,14 @@ def _get_answer_simple_message_prompt(
     Conversation History:
     {conversation_history}
 
+    <genui_instructions>
+    When the user asks a location-based question (nearest X, where is Y, find me Z nearby), respond with ONLY this JSON:
+    {{"type":"genui","component":"location_prompt","message":"Can you share your location?","actions":["yes","no"]}}
+    When the user provides coordinates (lat/lng) in a follow-up, respond with:
+    {{"type":"genui","component":"map_result","message":"<answer>","location":{{"lat":0.0,"lng":0.0,"label":"<place name>"}}}}
+    For all other queries respond with plain text. Never wrap genui JSON in markdown code fences.
+    </genui_instructions>
+
     Answer:
     """.replace("    ", "").strip()
 
@@ -391,7 +399,7 @@ Never wrap genui JSON in markdown code fences.
 
     <question>
     {question}
-    <question>
+    </question>
 
     <memories>
     {context}
@@ -676,48 +684,11 @@ When the user asks to "show a graph", "chart", "plot", or "visualize" data:
 </chart_visualization>
 
 <genui_instructions>
-**Generative UI (GenUI) - Interactive Components:**
-
-When responding to location-based or interactive queries, return structured JSON instead of plain text to enable interactive UI components on the user's device.
-
-**When to use GenUI:**
-- User asks about places, locations, or directions ("where is the nearest...?", "how do I get to...?", "what restaurants are nearby?")
-- User asks about conversation locations ("where was I when I talked to X?")
-- You need to ask the user to confirm an action or share information
-- User requests interactive prompts (yes/no questions, confirmations)
-
-**GenUI JSON Formats:**
-
-1. **Location Prompt** (ask user to share location):
-```json
-{"type": "genui", "component": "location_prompt", "message": "Can you share your location?", "actions": ["yes", "no"]}
-```
-
-2. **Map Result** (show a location on a map):
-```json
-{"type": "genui", "component": "map_result", "message": "Nearest 7-Eleven is 200m away", "location": {"lat": 37.7749, "lng": -122.4194, "label": "7-Eleven"}}
-```
-
-3. **Location Answer** (plain answer with embedded map):
-```json
-{"type": "genui", "component": "location_answer", "message": "You were at St. Mary Hospital", "location": {"lat": 37.7749, "lng": -122.4194, "label": "St. Mary Hospital"}}
-```
-
-4. **Result Card** (structured information with optional actions):
-```json
-{"type": "genui", "component": "result_card", "title": "Coffee Shop", "description": "Great espresso", "distance": "500m", "location": {"lat": 37.78, "lng": -122.41, "label": "Coffee Shop"}, "actions": ["yes", "no"]}
-```
-
-5. **Confirm Prompt** (generic yes/no prompt):
-```json
-{"type": "genui", "component": "confirm_prompt", "message": "Do you want to save this?", "actions": ["yes", "no"]}
-```
-
-**Rules:**
-- Only use GenUI when the response involves locations, directions, or interactive prompts
-- For regular questions, return plain text as usual
-- The JSON must be valid and complete with all required fields
-- After user clicks "yes", you can use their location in a follow-up response
+When the user asks a location-based question (nearest X, where is Y, find me Z nearby), respond with ONLY this JSON:
+{"type":"genui","component":"location_prompt","message":"Can you share your location?","actions":["yes","no"]}
+When the user provides coordinates (lat/lng) in a follow-up, respond with:
+{"type":"genui","component":"map_result","message":"<answer>","location":{"lat":0.0,"lng":0.0,"label":"<place name>"}}
+For all other queries respond with plain text. Never wrap genui JSON in markdown code fences.
 </genui_instructions>
 
 <conversation_retrieval_strategies>

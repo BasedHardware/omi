@@ -560,7 +560,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi, sendMessage: widget.sendMessage),
+                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi, sendMessage: widget.sendMessage),
                     );
                   },
                 ),

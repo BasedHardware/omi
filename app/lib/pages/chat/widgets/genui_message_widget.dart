@@ -202,7 +202,7 @@ class MapCard extends StatelessWidget {
                 children: [
                   TileLayer(
                     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.friend.ios',
+                    userAgentPackageName: 'com.based.omi',
                   ),
                   MarkerLayer(
                     markers: [
@@ -343,7 +343,7 @@ class ResultCard extends StatelessWidget {
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.friend.ios',
+                      userAgentPackageName: 'com.based.omi',
                     ),
                     MarkerLayer(
                       markers: [

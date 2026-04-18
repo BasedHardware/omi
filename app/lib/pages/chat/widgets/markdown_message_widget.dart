@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'genui_widget.dart';
-import 'genui_message_widget.dart';
 
 Widget getMarkdownWidget(
   BuildContext context, 
@@ -13,20 +11,6 @@ Widget getMarkdownWidget(
   Function(String)? onAskOmi,
   Function(String)? sendMessage,
 }) {
-  try {
-    // Strip markdown fences (```json ... ```) that LLMs sometimes add
-    var cleaned = message.trim();
-    final fencePattern = RegExp(r'^```(?:json)?\s*\n?(.*?)\n?\s*```$', dotAll: true);
-    final fenceMatch = fencePattern.firstMatch(cleaned);
-    if (fenceMatch != null) {
-      cleaned = fenceMatch.group(1)?.trim() ?? cleaned;
-    }
-    final decoded = jsonDecode(cleaned);
-    if (decoded is Map && decoded['type'] == 'genui' && decoded['component'] == 'location_prompt') {
-      return GenUIMessageWidget(message: cleaned, sendMessage: sendMessage ?? (s) {});
-    }
-  } catch (_) {}
-  
   final genui = GenUIMessage.tryParse(message);
   
   if (genui != null) {
