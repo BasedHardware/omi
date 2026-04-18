@@ -362,7 +362,7 @@ def connect_to_deepgram(
             smart_format=True,
             profanity_filter=False,
             diarize=True,
-            filler_words=False,
+            filler_words=language == 'multi',
             channels=channels,
             multichannel=channels > 1,
             model=model,
