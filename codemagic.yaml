@@ -310,13 +310,10 @@ workflows:
 
       - name: Flutter build macOS
         script: |
-          # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\2/')
           flutter build macos \
             --release \
-            --build-name=$BUILD_NAME \
-            --build-number=$BUILD_NUMBER \
+            --build-name=1.0.80 \
+            --build-number=500 \
             --flavor prod
 
       - name: Package application for App Store
