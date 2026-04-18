@@ -454,6 +454,21 @@ if [ -d "$CSPROTOBUF_FRAMEWORK" ]; then
     cp -R "$CSPROTOBUF_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
+# Copy libwebp dylibs and rewrite load paths
+WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+if [ -f "$WEBP_LIB" ]; then
+    substep "Bundling libwebp"
+    cp "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+    # Find libsharpyuv (libwebp dependency)
+    SHARPYUV_LIB="$(dirname "$WEBP_LIB")/libsharpyuv.0.dylib"
+    if [ -f "$SHARPYUV_LIB" ]; then
+        cp "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+        install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+    fi
+    install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+    install_name_tool -change "$WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+fi
+
 substep "Copying Info.plist"
 cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
@@ -596,6 +611,14 @@ if [ -n "$SIGN_IDENTITY" ]; then
     if [ -d "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework" ]; then
         substep "Signing CSSwiftProtobuf framework"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
+    fi
+    if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
+        substep "Signing libsharpyuv"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+    fi
+    if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
+        substep "Signing libwebp"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
     fi
     if [ -d "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework" ]; then
         substep "Signing HeapSwiftCore framework"

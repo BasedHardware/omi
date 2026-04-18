@@ -24,10 +24,19 @@ let package = Package(
       path: "ObjCExceptionCatcher",
       publicHeadersPath: "include"
     ),
+    .systemLibrary(
+      name: "CWebP",
+      path: "CWebP",
+      pkgConfig: "libwebp",
+      providers: [
+        .brew(["webp"])
+      ]
+    ),
     .executableTarget(
       name: "Omi Computer",
       dependencies: [
         "ObjCExceptionCatcher",
+        "CWebP",
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "Mixpanel", package: "mixpanel-swift"),
