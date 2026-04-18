@@ -127,16 +127,10 @@ describe("PiMonoAdapter prompt correlation", () => {
   });
 });
 
-describe("PiMonoAdapter OMI_API_KEY header invariant", () => {
-  // Regression guard for the double-Bearer header bug discovered in live
-  // testing: pi's openai-completions client prepends `Authorization: Bearer `
-  // to whatever `apiKey` the extension registers, so the adapter MUST pass
-  // the raw Firebase ID token — never `Bearer <token>`. Double-Bearer
-  // produces a backend 401 "invalid_token" with no visible stack trace.
-  //
-  // We assert on the source file rather than spawning pi: the env mutation
-  // sits in start(), which launches a real subprocess and is awkward to mock.
-  // A source-level assertion is enough to catch regressions at review time.
+describe("PiMonoAdapter source-level invariants", () => {
+  // Source-level assertions verify security and integration invariants that
+  // are hard to test via mocking (start() spawns a real subprocess). Reading
+  // the source file is enough to catch regressions at review time.
   const piMonoSrc = readFileSync(
     fileURLToPath(new URL("../src/adapters/pi-mono.ts", import.meta.url)),
     "utf8"
@@ -151,5 +145,35 @@ describe("PiMonoAdapter OMI_API_KEY header invariant", () => {
 
   it("always scrubs ANTHROPIC_API_KEY from the child env", () => {
     expect(piMonoSrc).toMatch(/delete\s+env\.ANTHROPIC_API_KEY\s*;?/);
+  });
+
+  it("does NOT include --no-extensions in spawn args (auto-discovery enabled)", () => {
+    // Pi-mono should auto-discover extensions and MCP servers from the user's
+    // machine to maximize capability. The --no-extensions flag was intentionally
+    // removed; this test guards against re-adding it.
+    expect(piMonoSrc).not.toMatch(/["']--no-extensions["']/);
+  });
+});
+
+describe("runPiMonoMode tool_use event filtering", () => {
+  // The event callback in runPiMonoMode() must filter out tool_use events
+  // from the adapter before forwarding to Swift. Without this filter, Swift
+  // would double-execute tools that pi-mono already handles internally
+  // (built-in tools) or via the Unix socket relay (OMI extension tools).
+  const indexSrc = readFileSync(
+    fileURLToPath(new URL("../src/index.ts", import.meta.url)),
+    "utf8"
+  );
+
+  it("filters tool_use events in the pi-mono event callback", () => {
+    // The callback must check event.type === "tool_use" and return early.
+    // Match the pattern: if ((event as any).type === "tool_use") return;
+    expect(indexSrc).toMatch(/\.type\s*===\s*["']tool_use["']\)\s*return/);
+  });
+
+  it("still forwards non-tool_use events via send()", () => {
+    // After the filter, events should still reach send().
+    // The pattern is: send(event as OutboundMessage)
+    expect(indexSrc).toMatch(/send\(event\s+as\s+OutboundMessage\)/);
   });
 });
