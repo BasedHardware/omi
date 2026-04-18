@@ -605,13 +605,13 @@ async def get_calendar_events_tool(
                         try:
                             start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                             events_with_time.append((start_dt, event))
-                        except:
+                        except (ValueError, TypeError):
                             events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
                     elif 'date' in start:
                         try:
                             start_dt = datetime.fromisoformat(start['date'] + 'T00:00:00+00:00')
                             events_with_time.append((start_dt, event))
-                        except:
+                        except (ValueError, TypeError):
                             events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
                     else:
                         events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
@@ -693,7 +693,7 @@ async def get_calendar_events_tool(
                 try:
                     start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                     result += f"   Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                except:
+                except (ValueError, TypeError):
                     result += f"   Start: {start.get('dateTime', 'Unknown')}\n"
             elif 'date' in start:
                 result += f"   Date: {start.get('date', 'Unknown')}\n"
@@ -704,7 +704,7 @@ async def get_calendar_events_tool(
                 try:
                     end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
                     result += f"   End: {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                except:
+                except (ValueError, TypeError):
                     result += f"   End: {end.get('dateTime', 'Unknown')}\n"
             elif 'date' in end:
                 result += f"   End Date: {end.get('date', 'Unknown')}\n"
@@ -1107,7 +1107,7 @@ async def delete_calendar_event_tool(
                         try:
                             start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                             result += f"   - {summary} ({start_dt.strftime('%Y-%m-%d %H:%M')})\n"
-                        except:
+                        except (ValueError, TypeError):
                             result += f"   - {summary}\n"
                     else:
                         result += f"   - {summary}\n"
@@ -1169,8 +1169,8 @@ async def delete_calendar_event_tool(
                                 try:
                                     await delete_google_calendar_event(new_token, event_id)
                                     deleted_count += 1
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.warning(f"Failed to delete event {event_id} after token refresh: {sanitize(str(e))}")
 
                         if deleted_count > 0:
                             return f"✅ Successfully deleted {deleted_count} calendar event(s)"
