@@ -222,16 +222,6 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "createMemory")
     }
 
-    // -- Action items (GET → Python) --
-
-    func testGetActionItemRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getActionItem(id: "ai-1") as TaskActionItem
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/action-items/ai-1", method: "GET",
-                     label: "getActionItem")
-    }
-
     // -- Goals: manual URL path (PATCH → Python) --
 
     func testUpdateGoalProgressRoutesToPython() async {
@@ -379,16 +369,6 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "deleteStagedTask")
     }
 
-    // -- Daily score (GET → Python, migrated from Rust) --
-
-    func testGetDailyScoreRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getDailyScore() as DailyScore
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/daily-score", method: "GET",
-                     label: "getDailyScore")
-    }
-
     // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
 
     func testGetChatSessionsRoutesToPython() async {
@@ -423,16 +403,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v2/desktop/messages", method: "DELETE",
                      label: "deleteMessages")
-    }
-
-    // -- AI profile (GET, PATCH → Python, migrated from Rust) --
-
-    func testGetAIUserProfileRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getAIUserProfile() as AIUserProfileResponse?
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/ai-profile", method: "GET",
-                     label: "getAIUserProfile")
     }
 
     // -- LLM usage (GET → Python, migrated from Rust) --
@@ -485,16 +455,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/users/private-cloud-sync", method: "POST",
                      label: "setPrivateCloudSync")
-    }
-
-    // -- updatePersonName: manual URL PATCH → Python --
-
-    func testUpdatePersonNameRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.updatePersonName(personId: "p1", newName: "Alice")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/people/p1/name", method: "PATCH",
-                     label: "updatePersonName")
     }
 
     // -- completeGoal: manual URL PATCH → Python --

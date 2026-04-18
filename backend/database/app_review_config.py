@@ -5,7 +5,7 @@ platform and app version.
 Stored in Firestore so the flag can be flipped without a redeploy:
 
   Collection: app_review_config
-  Document ID: ios | android
+  Document ID: ios | android | macos
   Fields:
     hidden_versions: list[str]   # e.g. ["1.0.531", "1.0.531+607"]
     reviewer_uids:   list[str]   # specific UIDs to always hide for
@@ -36,12 +36,16 @@ def get_review_config(platform: str) -> dict:
     return get_memory_cache().get_or_fetch(cache_key, lambda: _fetch_review_config(platform), ttl=_CACHE_TTL_SECONDS)
 
 
+_SUPPORTED_PLATFORMS = {"ios", "macos"}
+
+
 def should_hide_subscription_ui(uid: str, platform: Optional[str], app_version: Optional[str]) -> bool:
     """True when subscription surfaces should be hidden for this caller."""
-    if not platform or platform.lower() != "ios":
+    normalized = (platform or "").lower()
+    if normalized not in _SUPPORTED_PLATFORMS:
         return False
 
-    cfg = get_review_config("ios") or {}
+    cfg = get_review_config(normalized) or {}
 
     if uid and uid in (cfg.get("reviewer_uids") or []):
         return True

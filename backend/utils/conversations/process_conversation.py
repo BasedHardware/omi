@@ -47,7 +47,6 @@ from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
     should_discard_conversation,
-    select_best_app_for_conversation,
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
     assign_conversation_to_folder,

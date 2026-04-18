@@ -9,7 +9,6 @@ from ulid import ULID
 
 from models.app import UsageHistoryType
 from ._client import db
-from .redis_db import get_app_reviews
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,18 +20,6 @@ logger = logging.getLogger(__name__)
 apps_collection = 'plugins_data'
 app_analytics_collection = 'plugins'
 testers_collection = 'testers'
-
-
-def migrate_reviews_from_redis_to_firestore():
-    apps_ref = db.collection(apps_collection).stream()
-    for app in apps_ref:
-        logger.info(f'migrating reviews for app: {app.id}')
-        app_id = app.id
-        reviews = get_app_reviews(app_id)
-        for uid, review in reviews.items():
-            review['app_id'] = app_id
-            new_app_ref = db.collection(apps_collection).document(app_id).collection('reviews').document(uid)
-            new_app_ref.set(review)
 
 
 def get_app_by_id_db(app_id: str):
@@ -63,20 +50,6 @@ def get_unapproved_public_apps_db() -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False)]
     public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
-
-
-# This returns all unapproved apps of all users including private apps
-def get_all_unapproved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', False)]
-    all_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
-    return [doc.to_dict() for doc in all_apps]
-
-
-def get_public_apps_db(uid: str) -> List:
-    public_apps = db.collection(apps_collection).stream()
-    data = [doc.to_dict() for doc in public_apps]
-
-    return [app for app in data if app.get('approved') == True or app.get('uid') == uid]
 
 
 def get_public_approved_apps_db() -> List:
@@ -440,13 +413,6 @@ def get_user_persona_by_uid(uid: str):
     return {'id': doc.id, **doc.to_dict()}
 
 
-def create_user_persona_db(persona_data: dict):
-    """Create a new user persona in the database"""
-    persona_ref = db.collection(apps_collection)
-    persona_ref.add(persona_data, persona_data['id'])
-    return persona_data
-
-
 def get_persona_by_twitter_handle_db(handle: str):
     filters = [FieldFilter('category', '==', 'personality-emulation'), FieldFilter('twitter.username', '==', handle)]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
@@ -495,11 +461,6 @@ def get_omi_persona_apps_by_uid_db(uid: str):
     return docs
 
 
-def add_persona_to_db(persona_data: dict):
-    persona_ref = db.collection(apps_collection)
-    persona_ref.add(persona_data, persona_data['id'])
-
-
 def update_persona_in_db(persona_data: dict):
     persona_ref = db.collection(apps_collection).document(persona_data['id'])
     persona_ref.update(persona_data)
@@ -518,15 +479,6 @@ def create_api_key_db(app_id: str, api_key_data: dict):
     api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(api_key_data['id'])
     api_key_ref.set(api_key_data)
     return api_key_data
-
-
-def get_api_key_by_id_db(app_id: str, key_id: str):
-    """Get an API key by its ID"""
-    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
-    doc = api_key_ref.get()
-    if doc.exists:
-        return doc.to_dict()
-    return None
 
 
 def get_api_key_by_hash_db(app_id: str, hashed_key: str):

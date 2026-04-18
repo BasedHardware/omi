@@ -61,9 +61,8 @@ Future<List<ServerConversation>> getConversations({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {
@@ -139,21 +138,6 @@ Future<bool> updateConversationSegmentText(String conversationId, String segment
   return response.statusCode == 200;
 }
 
-Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/photos',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return [];
-  Logger.debug('getConversationPhotos: ${response.body}');
-  if (response.statusCode == 200) {
-    return (jsonDecode(response.body) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList();
-  }
-  return [];
-}
-
 class TranscriptsResponse {
   List<TranscriptSegment> deepgram;
   List<TranscriptSegment> soniox;
@@ -172,9 +156,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics: (json['speechmatics'] as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
@@ -193,21 +176,6 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
     return TranscriptsResponse.fromJson(transcripts);
   }
   return TranscriptsResponse();
-}
-
-Future<bool> hasConversationRecording(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/recording',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('hasConversationRecording: ${response.body}');
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body)['has_recording'] ?? false;
-  }
-  return false;
 }
 
 Future<bool> assignBulkConversationTranscriptSegments(
@@ -261,19 +229,6 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
   return response.statusCode == 200;
 }
 
-Future<bool> setConversationEventsState(String conversationId, List<int> eventsIdx, List<bool> values) async {
-  print(jsonEncode({'events_idx': eventsIdx, 'values': values}));
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/events',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode({'events_idx': eventsIdx, 'values': values}),
-  );
-  if (response == null) return false;
-  Logger.debug('setConversationEventsState: ${response.body}');
-  return response.statusCode == 200;
-}
-
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
   print(jsonEncode({'items_idx': actionItemsIdx, 'values': values, 'conversation_id': conversationId}));
   var response = await makeApiCall(
@@ -315,34 +270,6 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   if (response == null) return false;
   Logger.debug('deleteConversationActionItem: ${response.body}');
   return response.statusCode == 204;
-}
-
-//this is expected to return complete memories
-Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
-  try {
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString',
-      files: [file],
-      fileFieldName: 'file',
-    );
-
-    if (response.statusCode == 200) {
-      Logger.debug('storageSend Response body: ${jsonDecode(response.body)}');
-    } else {
-      Logger.debug('Failed to storageSend. Status code: ${response.statusCode}');
-      return [];
-    }
-
-    var memories = (jsonDecode(response.body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
-    Logger.debug('getMemories length: ${memories.length}');
-
-    return memories;
-  } catch (e) {
-    Logger.debug('An error occurred storageSend: $e');
-    return [];
-  }
 }
 
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
@@ -572,10 +499,6 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
     return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
   }
   return [];
-}
-
-Future<bool> updateActionItemStateByMetadata(String conversationId, int itemIndex, bool newState) async {
-  return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
 }
 
 // *********************************

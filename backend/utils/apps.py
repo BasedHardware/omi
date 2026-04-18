@@ -38,7 +38,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-import database.users as users_db
 from database.memories import get_memories, get_user_public_memories
 from database.redis_db import (
     get_enabled_apps,
@@ -71,11 +70,10 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
-from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
+from utils.social import get_twitter_timeline
 import logging
 
 logger = logging.getLogger(__name__)
@@ -975,28 +973,6 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Summary Apps', 'id': 'memories'},
         {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
         {'title': 'Tasks', 'id': 'tasks'},
-    ]
-
-
-def get_categories_list() -> List[dict]:
-    """Get the list of app categories for grouping."""
-    return [
-        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-        {'title': 'Personality Clone', 'id': 'personality-emulation'},
-        {'title': 'Health', 'id': 'health-and-wellness'},
-        {'title': 'Education', 'id': 'education-and-learning'},
-        {'title': 'Communication', 'id': 'communication-improvement'},
-        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
-        {'title': 'Productivity', 'id': 'productivity-and-organization'},
-        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
-        {'title': 'Financial', 'id': 'financial'},
-        {'title': 'Travel', 'id': 'travel-and-exploration'},
-        {'title': 'Safety', 'id': 'safety-and-security'},
-        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
-        {'title': 'Social', 'id': 'social-and-relationships'},
-        {'title': 'News', 'id': 'news-and-information'},
-        {'title': 'Utilities', 'id': 'utilities-and-tools'},
-        {'title': 'Other', 'id': 'other'},
     ]
 
 

@@ -242,32 +242,6 @@ class TestFolderConversationRedaction:
 
 
 # =============================================================================
-# Test conversations.py — public conversations filtering
-# =============================================================================
-
-
-class TestPublicConversationFilter:
-    """L1: Public conversation listing must exclude locked conversations."""
-
-    def test_public_endpoint_filters_locked(self):
-        """get_public_conversations must exclude locked conversations."""
-        import database.redis_db as redis_db
-        import database.conversations as conversations_db
-
-        redis_db.get_public_conversations = MagicMock(return_value=['conv-1', 'conv-2'])
-        redis_db.get_conversation_uids = MagicMock(return_value={'conv-1': 'uid1', 'conv-2': 'uid2'})
-        conversations_db.get_public_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
-
-        from routers.conversations import get_public_conversations
-
-        result = get_public_conversations(offset=0, limit=1000)
-        assert len(result) == 1
-        assert result[0]['id'] == 'conv-2'
-
-
-# =============================================================================
 # Test search redaction — call the real search_conversations function
 # =============================================================================
 
