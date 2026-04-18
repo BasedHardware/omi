@@ -2027,6 +2027,9 @@ workflows:
 
       - name: Build Swift app (arm64 + x86_64)
         script: |
+          # Install libwebp (required for screenshot encoding)
+          brew install webp
+
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
@@ -2112,6 +2115,19 @@ workflows:
           # Add rpath so Sparkle can be found at runtime
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+
+          # Bundle libwebp dylibs
+          WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+          if [ -f "$WEBP_LIB" ]; then
+            cp "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            SHARPYUV_LIB="$(dirname "$WEBP_LIB")/libsharpyuv.0.dylib"
+            [ -f "$SHARPYUV_LIB" ] && cp "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+            install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ] && install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+            install_name_tool -change "$WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+          else
+            echo "WARNING: libwebp not found — install with: brew install webp"
+          fi
 
           # Copy app icon
           [ -f "omi_icon.icns" ] && cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
@@ -2245,6 +2261,14 @@ workflows:
           HEAP_FW="$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
           if [ -d "$HEAP_FW" ]; then
             codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$HEAP_FW"
+          fi
+
+          # Sign libwebp dylibs (must be before main app bundle)
+          if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+          fi
+          if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
           fi
 
           # Sign the main app bundle with release entitlements
