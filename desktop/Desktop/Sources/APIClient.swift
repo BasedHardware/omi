@@ -1046,7 +1046,6 @@ struct MoveToFolderRequest: Encodable {
     case folderId = "folder_id"
   }
 }
-
 // MARK: - Memory Models
 
 enum MemoryCategory: String, Codable, CaseIterable {
@@ -1795,7 +1794,6 @@ struct ShareTasksResponse: Codable {
   let url: String
   let token: String
 }
-
 // MARK: - Staged Tasks API
 
 extension APIClient {
@@ -2632,7 +2630,6 @@ struct Goal: Codable, Identifiable {
 struct GoalsListResponse: Codable {
   let goals: [Goal]
 }
-
 /// Daily score calculation result
 struct DailyScore: Codable {
   let score: Double
@@ -2944,9 +2941,82 @@ struct OmiAppReview: Codable, Identifiable {
   }
 }
 
+// MARK: - V2 Apps Response Types
+
+/// Capability info in v2/apps response
+struct OmiCapabilityInfo: Codable, Sendable {
+  let id: String
+  let title: String
+}
+
+/// Pagination metadata in v2/apps response
+struct OmiPaginationMeta: Codable, Sendable {
+  let total: Int
+  let count: Int
+  let offset: Int
+  let limit: Int
+}
+
+/// A single group in the v2/apps response
+struct OmiAppGroup: Codable, Sendable {
+  let capability: OmiCapabilityInfo
+  let data: [OmiApp]
+  let pagination: OmiPaginationMeta
+}
+
+/// Metadata in v2/apps response
+struct OmiAppsV2Meta: Codable, Sendable {
+  let capabilities: [OmiCapabilityInfo]
+  let groupCount: Int
+  let limit: Int
+  let offset: Int
+}
+
+/// Full v2/apps grouped response
+struct OmiAppsV2Response: Codable, Sendable {
+  let groups: [OmiAppGroup]
+  let meta: OmiAppsV2Meta
+}
+
 // MARK: - Apps API
 
 extension APIClient {
+
+  /// Fetches apps from the API
+  func getApps(
+    capability: String? = nil,
+    category: String? = nil,
+    limit: Int = 50,
+    offset: Int = 0
+  ) async throws -> [OmiApp] {
+    var queryItems: [String] = [
+      "limit=\(limit)",
+      "offset=\(offset)",
+    ]
+
+    if let capability = capability {
+      queryItems.append("capability=\(capability)")
+    }
+
+    if let category = category {
+      queryItems.append("category=\(category)")
+    }
+
+    let endpoint = "v1/apps?\(queryItems.joined(separator: "&"))"
+    return try await get(endpoint)
+  }
+
+  /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
+  /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
+  /// Fetches all apps with real rating data from v1/apps
+  func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
+    return try await get("v1/apps?limit=\(limit)")
+  }
+
+  func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
+    let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
+    return try await get(endpoint)
+  }
 
   /// Searches apps with filters
   func searchApps(
@@ -3003,6 +3073,29 @@ extension APIClient {
     return try await get("v1/apps/\(appId)/reviews")
   }
 
+  /// Fetches user's enabled apps
+  func getEnabledApps() async throws -> [OmiApp] {
+    return try await get("v1/apps/enabled")
+  }
+
+  /// Enables an app for the current user
+  func enableApp(appId: String) async throws {
+    struct ToggleResponse: Decodable {
+      let status: String?
+      let detail: String?
+    }
+    let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
+  }
+
+  /// Disables an app for the current user
+  func disableApp(appId: String) async throws {
+    struct ToggleResponse: Decodable {
+      let status: String?
+      let detail: String?
+    }
+    let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
+  }
+
   /// Checks if an external integration app's setup is complete
   func isAppSetupCompleted(url: String, uid: String) async -> Bool {
     guard !url.isEmpty else { return true }
@@ -3027,6 +3120,16 @@ extension APIClient {
     }
     let body = ReviewRequest(app_id: appId, score: score, review: review)
     return try await post("v1/apps/review", body: body)
+  }
+
+  /// Fetches all app categories
+  func getAppCategories() async throws -> [OmiAppCategory] {
+    return try await get("v1/app-categories")
+  }
+
+  /// Fetches all app capabilities
+  func getAppCapabilities() async throws -> [OmiAppCapability] {
+    return try await get("v1/app-capabilities")
   }
 
   // MARK: - Conversation Reprocessing
@@ -3875,7 +3978,19 @@ struct AssistantSettingsResponse: Codable {
   }
 }
 
+// MARK: - Focus Sessions API
 
+extension APIClient {
+
+}
+
+// MARK: - Insight API
+
+extension APIClient {
+
+}
+
+// MARK: - Insight Models
 /// Empty body for POST requests with no body
 struct EmptyBody: Encodable {}
 
