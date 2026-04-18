@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import asyncio
@@ -13,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from utils.apps import fetch_app_chat_tools_from_manifest
 from utils.executors import storage_executor
 from utils.http_client import get_webhook_client
-from utils.other.ssrf_guard import SSRFError, safe_get_json
+from utils.other.ssrf_guard import SSRFError, safe_get_json, validate_url
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -488,14 +489,36 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         # Trigger on
         if external_integration.get('triggers_on'):
             external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            # Validate at storage time so we never persist a URL that points
+            # at internal infra. Runtime fetches are SSRF-guarded too, but
+            # rejecting upfront gives the creator immediate feedback and
+            # prevents poisoned entries from living in the DB.
+            try:
+                validate_url(external_integration['webhook_url'])
+            except SSRFError as e:
+                raise HTTPException(status_code=422, detail=f'webhook_url rejected: {e}')
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
                     'setup_instructions_file_path'
                 ].strip()
                 if external_integration['setup_instructions_file_path'].startswith('http'):
                     external_integration['is_instructions_url'] = True
+                    try:
+                        validate_url(external_integration['setup_instructions_file_path'])
+                    except SSRFError as e:
+                        raise HTTPException(
+                            status_code=422, detail=f'setup_instructions_file_path rejected: {e}'
+                        )
                 else:
                     external_integration['is_instructions_url'] = False
+        # setup_completed_url is fetched at runtime (oauth.py / apps.enable);
+        # validate at creation too so we fail fast.
+        if external_integration.get('setup_completed_url'):
+            external_integration['setup_completed_url'] = external_integration['setup_completed_url'].strip()
+            try:
+                validate_url(external_integration['setup_completed_url'])
+            except SSRFError as e:
+                raise HTTPException(status_code=422, detail=f'setup_completed_url rejected: {e}')
 
         # Actions
         if actions := external_integration.get('actions'):
@@ -1790,7 +1813,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 
 @router.post('/v1/apps/tester', tags=['v1'])
 def add_new_tester(data: dict, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=422, detail='uid is required')
@@ -1803,7 +1826,7 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'])
 def add_app_access_tester(data: dict, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=422, detail='uid is required')
@@ -1815,7 +1838,7 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
 
 @router.delete('/v1/apps/tester/access', tags=['v1'])
 def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=422, detail='uid is required')
@@ -1834,7 +1857,7 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
@@ -1842,7 +1865,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'])
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
@@ -1852,7 +1875,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'])
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
@@ -1868,7 +1891,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'])
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
@@ -1918,7 +1941,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     personas = get_persona_by_id_db(persona_id)
     if not personas:
@@ -1929,7 +1952,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     persona = get_personas_by_username_db(persona_id)
     if not persona:

@@ -6,6 +6,7 @@ import time
 
 import httpx
 
+from utils.other.ssrf_guard import SSRFError, safe_post_json, validate_url
 from utils.http_client import (
     get_webhook_client,
     get_webhook_circuit_breaker,
@@ -146,10 +147,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             payload = serialize_datetimes(conversation_dict)
             async with get_webhook_semaphore():
                 client = get_webhook_client()
-                response = await client.post(
-                    url,
-                    json=payload,
-                )
+                response = await safe_post_json(client, url, json=payload)
             if response.status_code != 200:
                 cb.record_failure()
                 logger.info(
@@ -174,6 +172,10 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
             if message := response.json().get('message', ''):
                 results[app.id] = message
+        except SSRFError as e:
+            cb.record_failure()
+            logger.warning(f"trigger_external_integrations SSRF-blocked app={app.id}: {e}")
+            return
         except Exception as e:
             cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
@@ -515,15 +517,22 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         try:
+            validate_url(url)
             async with get_webhook_semaphore():
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
                 response = await client.post(
-                    url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
+                    url,
+                    content=bytes(data),
+                    headers={'Content-Type': 'application/octet-stream'},
+                    follow_redirects=False,
                 )
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             cb.record_success()
+        except SSRFError as e:
+            cb.record_failure()
+            logger.warning(f"trigger_realtime_audio_bytes SSRF-blocked app={app.id}: {e}")
         except Exception as e:
             cb.record_failure()
             logger.error(f"Plugin integration error: {e}")
@@ -582,7 +591,7 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
         try:
             async with get_webhook_semaphore():
                 client = get_webhook_client()
-                response = await client.post(url, json={"session_id": uid, "segments": segments})
+                response = await safe_post_json(client, url, json={"session_id": uid, "segments": segments})
             if response.status_code != 200:
                 cb.record_failure()
                 logger.info(
@@ -618,6 +627,10 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
                 if message:
                     results[app.id] = message
 
+        except SSRFError as e:
+            cb.record_failure()
+            logger.warning(f"trigger_realtime_integrations SSRF-blocked app={app.id}: {e}")
+            return
         except Exception as e:
             cb.record_failure()
             logger.error(f"App integration error: {e}")

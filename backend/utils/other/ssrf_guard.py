@@ -124,3 +124,35 @@ async def safe_get_json(
     if resp.content is not None and len(resp.content) > max_bytes:
         raise SSRFError(f"response exceeds {max_bytes} bytes")
     return resp
+
+
+async def safe_post_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    json: Optional[dict] = None,
+    params: Optional[dict] = None,
+    headers: Optional[dict] = None,
+    timeout: Optional[float] = None,
+    allowed_hosts: Optional[Iterable[str]] = None,
+    max_bytes: int = _MAX_RESPONSE_BYTES,
+) -> httpx.Response:
+    """SSRF-safe POST used for user- or app-supplied webhook URLs.
+
+    Same validation contract as safe_get_json, but for POST. Used by the
+    user webhook handlers (memory_created, day_summary, realtime_transcript,
+    audio_bytes) and the app integration webhooks — any of which could
+    otherwise be pointed at internal infra by a malicious URL.
+    """
+    validate_url(url, allowed_hosts=allowed_hosts)
+    resp = await client.post(
+        url,
+        json=json,
+        params=params,
+        headers=headers,
+        timeout=timeout if timeout is not None else _DEFAULT_TIMEOUT,
+        follow_redirects=False,
+    )
+    if resp.content is not None and len(resp.content) > max_bytes:
+        raise SSRFError(f"response exceeds {max_bytes} bytes")
+    return resp

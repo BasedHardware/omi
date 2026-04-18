@@ -2,15 +2,19 @@ from flask import Flask, request, jsonify
 import logging
 import time
 import os
+import sys
 from collections import defaultdict
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 from pathlib import Path
 
-# Instead, set the API key directly
-api_key = "your_openaikey_here"
-
-print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
+# Read the key from the environment — never bake literals into a plugin that
+# will land in someone's git fork. If you absolutely need a local-only file,
+# use a .env (gitignored) and python-dotenv.
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    print("ERROR: set OPENAI_API_KEY in the environment before running.", file=sys.stderr)
+    sys.exit(1)
 
 client = OpenAI(api_key=api_key)
 

@@ -65,6 +65,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+// Escape sequences that would let a malicious plugin field (name, description,
+// author) break out of a <script type="application/ld+json"> block. JSON.stringify
+// does NOT escape '<', '>', or '&', so a description containing '</script>'
+// would otherwise terminate the tag and start arbitrary JS.
+function escapeForScript(s: string): string {
+  return s
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 // Add a separate function to handle JSON-LD
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
@@ -135,7 +148,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
           },
         ],
       },
-    ]),
+    ]).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'),
   };
 }
 
