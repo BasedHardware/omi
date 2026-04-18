@@ -213,6 +213,11 @@ export class PiMonoAdapter implements HarnessAdapter {
       "omi-sonnet",
       // Auto-discover extensions and MCP servers from the user's machine
       // to maximize pi-mono's capabilities (e.g. Playwright, filesystem tools).
+      // SECURITY NOTE: auto-discovered extensions run in the pi subprocess and
+      // can read process.env (including OMI_API_KEY). This is acceptable because:
+      // 1. OMI_API_KEY is a short-lived Firebase ID token (~1 hour expiry)
+      // 2. Extensions are user-installed — the trust boundary is the user's machine
+      // 3. ANTHROPIC_API_KEY is always scrubbed (never exposed to extensions)
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
