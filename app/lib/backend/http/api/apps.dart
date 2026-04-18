@@ -64,34 +64,8 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
   }
 }
 
-Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? capability})> retrieveAppsByCapability({
-  required String capability,
-  int offset = 0,
-  int limit = 20,
-  bool includeReviews = false,
-}) async {
-  final url =
-      '${Env.apiBaseUrl}v2/apps?capability=$capability&offset=$offset&limit=$limit&include_reviews=$includeReviews';
-  final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
-  try {
-    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
-      return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
-    }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
-    final cap = (data['capability'] as Map<String, dynamic>?);
-    return (apps: apps, pagination: pagination, capability: cap);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
-  }
-}
-
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -285,23 +259,6 @@ Future<bool> replyToAppReview(String appId, String reply, String reviewerUid) as
   }
 }
 
-Future<List<AppReview>> getAppReviews(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/$appId/reviews',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return [];
-    log('getAppReviews: ${response.body}');
-    return AppReview.fromJsonList(jsonDecode(response.body));
-  } catch (e) {
-    Logger.debug(e.toString());
-    return [];
-  }
-}
-
 Future<String> getAppMarkdown(String appMarkdownPath) async {
   var response = await makeApiCall(url: appMarkdownPath, method: 'GET', headers: {}, body: '');
   return response?.body ?? '';
@@ -405,25 +362,6 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
     log('getAppCapabilities: ${response.body}');
     var res = jsonDecode(response.body);
     return AppCapability.fromJsonList(res);
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
-  }
-}
-
-Future<List<NotificationScope>> getNotificationScopesServer() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/proactive-notification-scopes',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return [];
-    log('getNotificationScopes: ${response.body}');
-    var res = jsonDecode(response.body);
-    return NotificationScope.fromJsonList(res);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -714,25 +652,6 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
     } catch (_) {
       return {'error': 'Failed to add MCP server (${response.statusCode})'};
     }
-  } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return null;
-  }
-}
-
-/// Re-discover tools from an MCP server.
-Future<Map<String, dynamic>?> refreshMcpTools(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/$appId/mcp/refresh',
-    headers: {},
-    body: '',
-    method: 'POST',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return null;
-    Logger.debug('refreshMcpTools: ${response.body}');
-    return jsonDecode(response.body);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

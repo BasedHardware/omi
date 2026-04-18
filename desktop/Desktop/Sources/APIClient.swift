@@ -534,15 +534,6 @@ extension APIClient {
     }
   }
 
-  /// Bulk moves conversations to a folder
-  func bulkMoveConversationsToFolder(folderId: String, conversationIds: [String]) async throws
-    -> Int
-  {
-    let body = BulkMoveRequest(conversationIds: conversationIds)
-    let response: BulkMoveResponse = try await post(
-      "v1/folders/\(folderId)/conversations/bulk-move", body: body)
-    return response.movedCount
-  }
 }
 
 // MARK: - Conversation Models (matching Flutter app)
@@ -1056,22 +1047,6 @@ struct MoveToFolderRequest: Encodable {
   }
 }
 
-struct BulkMoveRequest: Encodable {
-  let conversationIds: [String]
-
-  enum CodingKeys: String, CodingKey {
-    case conversationIds = "conversation_ids"
-  }
-}
-
-struct BulkMoveResponse: Codable {
-  let movedCount: Int
-
-  enum CodingKeys: String, CodingKey {
-    case movedCount = "moved_count"
-  }
-}
-
 // MARK: - Memory Models
 
 enum MemoryCategory: String, Codable, CaseIterable {
@@ -1405,15 +1380,6 @@ extension APIClient {
     let _: MemoryStatusResponse = try await patch("v3/memories/\(id)/visibility", body: body)
   }
 
-  /// Reviews/approves a memory
-  func reviewMemory(id: String, value: Bool) async throws {
-    struct ReviewRequest: Encodable {
-      let value: Bool
-    }
-    let body = ReviewRequest(value: value)
-    let _: MemoryStatusResponse = try await post("v3/memories/\(id)/review", body: body)
-  }
-
   /// Updates memory read/dismissed status
   func updateMemoryReadStatus(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil)
     async throws -> ServerMemory
@@ -1621,11 +1587,6 @@ extension APIClient {
     return try await get(endpoint)
   }
 
-  /// Fetches a single action item by ID
-  func getActionItem(id: String) async throws -> TaskActionItem {
-    return try await get("v1/action-items/\(id)")
-  }
-
   /// Updates an action item
   func updateActionItem(
     id: String,
@@ -1715,26 +1676,6 @@ extension APIClient {
     try await delete("v1/action-items/\(id)")
   }
 
-  /// Soft-deletes an action item (marks as deleted without removing from Firestore)
-  func softDeleteActionItem(
-    id: String, deletedBy: String, reason: String = "", keptTaskId: String = ""
-  ) async throws -> TaskActionItem {
-    struct SoftDeleteRequest: Encodable {
-      let deletedBy: String
-      let reason: String
-      let keptTaskId: String
-
-      enum CodingKeys: String, CodingKey {
-        case deletedBy = "deleted_by"
-        case reason
-        case keptTaskId = "kept_task_id"
-      }
-    }
-
-    let request = SoftDeleteRequest(deletedBy: deletedBy, reason: reason, keptTaskId: keptTaskId)
-    return try await post("v1/action-items/\(id)/soft-delete", body: request)
-  }
-
   /// Creates a new action item
   func createActionItem(
     description: String,
@@ -1795,16 +1736,6 @@ extension APIClient {
     return try await post("v1/action-items", body: request)
   }
 
-  /// Creates multiple action items at once
-  func batchCreateActionItems(_ items: [CreateActionItemRequest]) async throws -> [TaskActionItem] {
-    struct BatchRequest: Encodable {
-      let items: [CreateActionItemRequest]
-    }
-
-    let request = BatchRequest(items: items)
-    return try await post("v1/action-items/batch", body: request)
-  }
-
   /// Batch update relevance scores for multiple action items
   func batchUpdateScores(_ scores: [(id: String, score: Int)]) async throws {
     struct ScoreUpdate: Encodable {
@@ -1857,91 +1788,12 @@ extension APIClient {
     return try await post("v1/action-items/share", body: ShareRequest(taskIds: taskIds))
   }
 
-  /// Gets shared task info by token (public, no auth required)
-  func getSharedTasks(token: String) async throws -> SharedTasksResponse {
-    return try await get("v1/action-items/shared/\(token)", requireAuth: false)
-  }
-
-  /// Accepts shared tasks into the current user's task list
-  func acceptSharedTasks(token: String) async throws -> AcceptTasksResponse {
-    struct AcceptRequest: Encodable {
-      let token: String
-    }
-    return try await post("v1/action-items/accept", body: AcceptRequest(token: token))
-  }
 }
 
 /// Response types for task sharing
 struct ShareTasksResponse: Codable {
   let url: String
   let token: String
-}
-
-struct SharedTaskInfo: Codable {
-  let description: String
-  let dueAt: Date?
-
-  enum CodingKeys: String, CodingKey {
-    case description
-    case dueAt = "due_at"
-  }
-}
-
-struct SharedTasksResponse: Codable {
-  let senderName: String
-  let tasks: [SharedTaskInfo]
-  let count: Int
-
-  enum CodingKeys: String, CodingKey {
-    case senderName = "sender_name"
-    case tasks, count
-  }
-}
-
-struct AcceptTasksResponse: Codable {
-  let created: [String]
-  let count: Int
-}
-
-/// Request body for creating an action item (used in batch operations)
-struct CreateActionItemRequest: Encodable {
-  let description: String
-  let dueAt: String?
-  let source: String?
-  let priority: String?
-  let metadata: String?
-
-  enum CodingKeys: String, CodingKey {
-    case description
-    case dueAt = "due_at"
-    case source, priority, metadata
-  }
-
-  init(
-    description: String,
-    dueAt: Date? = nil,
-    source: String? = nil,
-    priority: String? = nil,
-    metadata: [String: Any]? = nil
-  ) {
-    self.description = description
-
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    self.dueAt = dueAt.map { formatter.string(from: $0) }
-
-    self.source = source
-    self.priority = priority
-
-    if let metadata = metadata,
-      let data = try? JSONSerialization.data(withJSONObject: metadata),
-      let str = String(data: data, encoding: .utf8)
-    {
-      self.metadata = str
-    } else {
-      self.metadata = nil
-    }
-  }
 }
 
 // MARK: - Staged Tasks API
@@ -2215,23 +2067,6 @@ extension APIClient {
   func deleteGoal(id: String) async throws {
     try await delete("v1/goals/\(id)")
     goalsCache = nil
-  }
-
-  /// Gets progress history for a goal
-  func getGoalHistory(goalId: String, days: Int = 30) async throws -> [GoalHistoryEntry] {
-    let response: GoalHistoryResponse = try await get("v1/goals/\(goalId)/history?days=\(days)")
-    return response.history
-  }
-
-  /// Gets the daily score for a specific date (defaults to today)
-  func getDailyScore(date: Date? = nil) async throws -> DailyScore {
-    var endpoint = "v1/daily-score"
-    if let date = date {
-      let formatter = DateFormatter()
-      formatter.dateFormat = "yyyy-MM-dd"
-      endpoint += "?date=\(formatter.string(from: date))"
-    }
-    return try await get(endpoint)
   }
 
   /// Get all scores (daily, weekly, overall) with default tab selection
@@ -2798,25 +2633,6 @@ struct GoalsListResponse: Codable {
   let goals: [Goal]
 }
 
-/// A single progress history entry for a goal
-struct GoalHistoryEntry: Codable, Identifiable {
-  let date: String
-  let value: Double
-  let recordedAt: Date
-
-  var id: String { date }
-
-  enum CodingKeys: String, CodingKey {
-    case date, value
-    case recordedAt = "recorded_at"
-  }
-}
-
-/// Response wrapper for goal history
-struct GoalHistoryResponse: Codable {
-  let history: [GoalHistoryEntry]
-}
-
 /// Daily score calculation result
 struct DailyScore: Codable {
   let score: Double
@@ -3128,93 +2944,9 @@ struct OmiAppReview: Codable, Identifiable {
   }
 }
 
-// MARK: - V2 Apps Response Types
-
-/// Capability info in v2/apps response
-struct OmiCapabilityInfo: Codable, Sendable {
-  let id: String
-  let title: String
-}
-
-/// Pagination metadata in v2/apps response
-struct OmiPaginationMeta: Codable, Sendable {
-  let total: Int
-  let count: Int
-  let offset: Int
-  let limit: Int
-}
-
-/// A single group in the v2/apps response
-struct OmiAppGroup: Codable, Sendable {
-  let capability: OmiCapabilityInfo
-  let data: [OmiApp]
-  let pagination: OmiPaginationMeta
-}
-
-/// Metadata in v2/apps response
-struct OmiAppsV2Meta: Codable, Sendable {
-  let capabilities: [OmiCapabilityInfo]
-  let groupCount: Int
-  let limit: Int
-  let offset: Int
-}
-
-/// Full v2/apps grouped response
-struct OmiAppsV2Response: Codable, Sendable {
-  let groups: [OmiAppGroup]
-  let meta: OmiAppsV2Meta
-}
-
 // MARK: - Apps API
 
 extension APIClient {
-
-  /// Fetches apps from the API
-  func getApps(
-    capability: String? = nil,
-    category: String? = nil,
-    limit: Int = 50,
-    offset: Int = 0
-  ) async throws -> [OmiApp] {
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    if let capability = capability {
-      queryItems.append("capability=\(capability)")
-    }
-
-    if let category = category {
-      queryItems.append("category=\(category)")
-    }
-
-    let endpoint = "v1/apps?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
-  /// Fetches popular apps
-  func getPopularApps() async throws -> [OmiApp] {
-    return try await get("v1/apps/popular")
-  }
-
-  /// Fetches apps grouped by capability (v2 API - matches Flutter/Python backend)
-  /// Returns groups: Featured, Integrations, Chat Assistants, Summary Apps, Realtime Notifications
-  /// Fetches all apps with real rating data from v1/apps
-  func getAppsWithRatings(limit: Int = 200) async throws -> [OmiApp] {
-    return try await get("v1/apps?limit=\(limit)")
-  }
-
-  func getAppsV2(offset: Int = 0, limit: Int = 50) async throws -> OmiAppsV2Response {
-    let endpoint = "v2/apps?offset=\(offset)&limit=\(limit)"
-    return try await get(endpoint)
-  }
-
-  /// Fetches approved public apps
-  func getApprovedApps(limit: Int = 50, offset: Int = 0) async throws -> [OmiApp] {
-    let endpoint = "v1/approved-apps?limit=\(limit)&offset=\(offset)"
-    return try await get(endpoint)
-  }
 
   /// Searches apps with filters
   func searchApps(
@@ -3271,29 +3003,6 @@ extension APIClient {
     return try await get("v1/apps/\(appId)/reviews")
   }
 
-  /// Fetches user's enabled apps
-  func getEnabledApps() async throws -> [OmiApp] {
-    return try await get("v1/apps/enabled")
-  }
-
-  /// Enables an app for the current user
-  func enableApp(appId: String) async throws {
-    struct ToggleResponse: Decodable {
-      let status: String?
-      let detail: String?
-    }
-    let _: ToggleResponse = try await post("v1/apps/enable?app_id=\(appId)")
-  }
-
-  /// Disables an app for the current user
-  func disableApp(appId: String) async throws {
-    struct ToggleResponse: Decodable {
-      let status: String?
-      let detail: String?
-    }
-    let _: ToggleResponse = try await post("v1/apps/disable?app_id=\(appId)")
-  }
-
   /// Checks if an external integration app's setup is complete
   func isAppSetupCompleted(url: String, uid: String) async -> Bool {
     guard !url.isEmpty else { return true }
@@ -3318,16 +3027,6 @@ extension APIClient {
     }
     let body = ReviewRequest(app_id: appId, score: score, review: review)
     return try await post("v1/apps/review", body: body)
-  }
-
-  /// Fetches all app categories
-  func getAppCategories() async throws -> [OmiAppCategory] {
-    return try await get("v1/app-categories")
-  }
-
-  /// Fetches all app capabilities
-  func getAppCapabilities() async throws -> [OmiAppCapability] {
-    return try await get("v1/app-capabilities")
   }
 
   // MARK: - Conversation Reprocessing
@@ -4176,192 +3875,6 @@ struct AssistantSettingsResponse: Codable {
   }
 }
 
-// MARK: - Focus Sessions API
-
-extension APIClient {
-
-  /// Fetch focus sessions with optional date filter
-  func getFocusSessions(limit: Int = 100, date: String? = nil) async throws
-    -> [FocusSessionResponse]
-  {
-    var endpoint = "v1/focus-sessions?limit=\(limit)"
-    if let date = date {
-      endpoint += "&date=\(date)"
-    }
-    return try await get(endpoint)
-  }
-
-  /// Create a new focus session
-  func createFocusSession(_ request: CreateFocusSessionRequest) async throws -> FocusSessionResponse
-  {
-    return try await post("v1/focus-sessions", body: request)
-  }
-
-  /// Delete a focus session
-  func deleteFocusSession(_ id: String) async throws {
-    try await delete("v1/focus-sessions/\(id)")
-  }
-
-  /// Get focus statistics for a date
-  func getFocusStats(date: String? = nil) async throws -> FocusStatsResponse {
-    var endpoint = "v1/focus-stats"
-    if let date = date {
-      endpoint += "?date=\(date)"
-    }
-    return try await get(endpoint)
-  }
-}
-
-// MARK: - Insight API
-
-extension APIClient {
-
-  /// Fetches insight history from the backend
-  func getInsights(
-    limit: Int = 100,
-    offset: Int = 0,
-    category: String? = nil,
-    includeDismissed: Bool = false
-  ) async throws -> [ServerInsight] {
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-      "include_dismissed=\(includeDismissed)",
-    ]
-
-    if let category = category {
-      queryItems.append("category=\(category)")
-    }
-
-    let endpoint = "v1/advice?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
-  /// Creates a new insight entry
-  func createInsight(_ request: CreateInsightRequest) async throws -> ServerInsight {
-    return try await post("v1/advice", body: request)
-  }
-
-  /// Updates insight (mark as read/dismissed)
-  func updateInsight(id: String, isRead: Bool? = nil, isDismissed: Bool? = nil) async throws
-    -> ServerInsight
-  {
-    struct UpdateRequest: Encodable {
-      let is_read: Bool?
-      let is_dismissed: Bool?
-    }
-    let body = UpdateRequest(is_read: isRead, is_dismissed: isDismissed)
-    return try await patch("v1/advice/\(id)", body: body)
-  }
-
-  /// Deletes insight permanently
-  func deleteInsight(id: String) async throws {
-    try await delete("v1/advice/\(id)")
-  }
-
-  /// Marks all insights as read
-  func markAllInsightsAsRead() async throws {
-    struct StatusResponse: Decodable {
-      let status: String
-    }
-    let _: StatusResponse = try await post("v1/advice/mark-all-read", body: EmptyBody())
-  }
-}
-
-// MARK: - Insight Models
-
-/// Server insight model matching Rust InsightDB
-struct ServerInsight: Codable, Identifiable {
-  let id: String
-  let content: String
-  let category: ServerInsightCategory
-  let reasoning: String?
-  let sourceApp: String?
-  let confidence: Double
-  let contextSummary: String?
-  let currentActivity: String?
-  let createdAt: Date
-  let updatedAt: Date?
-  let isRead: Bool
-  let isDismissed: Bool
-
-  enum CodingKeys: String, CodingKey {
-    case id, content, category, reasoning, confidence
-    case sourceApp = "source_app"
-    case contextSummary = "context_summary"
-    case currentActivity = "current_activity"
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-    case isRead = "is_read"
-    case isDismissed = "is_dismissed"
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-    category =
-      try container.decodeIfPresent(ServerInsightCategory.self, forKey: .category) ?? .other
-    reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
-    sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
-    confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
-    contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
-    currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
-    isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
-  }
-}
-
-/// Server advice category enum matching Rust InsightCategory
-enum ServerInsightCategory: String, Codable {
-  case productivity
-  case health
-  case communication
-  case learning
-  case other
-
-  /// Convert to local InsightCategory
-  var toLocal: InsightCategory {
-    switch self {
-    case .productivity: return .productivity
-    case .health: return .health
-    case .communication: return .communication
-    case .learning: return .learning
-    case .other: return .other
-    }
-  }
-}
-
-/// Request to create new insight
-struct CreateInsightRequest: Encodable {
-  let content: String
-  let category: String?
-  let reasoning: String?
-  let source_app: String?
-  let confidence: Double?
-  let context_summary: String?
-  let current_activity: String?
-
-  init(
-    content: String,
-    category: InsightCategory? = nil,
-    reasoning: String? = nil,
-    sourceApp: String? = nil,
-    confidence: Double? = nil,
-    contextSummary: String? = nil,
-    currentActivity: String? = nil
-  ) {
-    self.content = content
-    self.category = category?.rawValue
-    self.reasoning = reasoning
-    self.source_app = sourceApp
-    self.confidence = confidence
-    self.context_summary = contextSummary
-    self.current_activity = currentActivity
-  }
-}
 
 /// Empty body for POST requests with no body
 struct EmptyBody: Encodable {}
@@ -4478,16 +3991,6 @@ extension APIClient {
     return try await post("v2/messages/share", body: body)
   }
 
-  /// Convenience: get a share link for the current floating bar conversation
-  func getChatShareLink(sessionId: String) async throws -> String {
-    // For session-based chats, share the session
-    struct ShareSessionRequest: Encodable {
-      let session_id: String
-    }
-    let body = ShareSessionRequest(session_id: sessionId)
-    let response: ShareChatResponse = try await post("v2/messages/share", body: body)
-    return response.url
-  }
 }
 
 /// Response from rating a message
@@ -4539,11 +4042,6 @@ extension APIClient {
 
     let endpoint = "v2/chat-sessions?\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
-  }
-
-  /// Get a single chat session
-  func getChatSession(sessionId: String) async throws -> ChatSession {
-    return try await get("v2/chat-sessions/\(sessionId)")
   }
 
   /// Update a chat session (title, starred)
@@ -4703,11 +4201,6 @@ struct AIUserProfileResponse: Codable {
 
 extension APIClient {
 
-  /// Fetch AI-generated user profile from backend
-  func getAIUserProfile() async throws -> AIUserProfileResponse? {
-    return try await get("v1/users/ai-profile")
-  }
-
   /// Sync AI-generated user profile to backend
   func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws
   {
@@ -4826,28 +4319,6 @@ extension APIClient {
       let name: String
     }
     return try await post("v1/users/people", body: CreatePersonRequest(name: name))
-  }
-
-  /// Updates a person's name
-  func updatePersonName(personId: String, newName: String) async throws {
-    let encodedName =
-      newName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? newName
-    let url = URL(string: baseURL + "v1/users/people/\(personId)/name?value=\(encodedName)")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "PATCH"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
-  }
-
-  /// Deletes a person
-  func deletePerson(personId: String) async throws {
-    try await delete("v1/users/people/\(personId)")
   }
 
   /// Bulk assigns segments to a person or user

@@ -96,29 +96,6 @@ Future<ImportJobResponse?> startLimitlessImport(File zipFile, {String language =
   }
 }
 
-/// Get the status of a specific import job
-Future<ImportJobResponse?> getImportJobStatus(String jobId) async {
-  try {
-    var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/import/jobs/$jobId',
-      headers: {},
-      method: 'GET',
-      body: '',
-    );
-
-    if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      return ImportJobResponse.fromJson(data);
-    } else {
-      Logger.debug('Failed to get import job status. Response: ${response?.body}');
-      return null;
-    }
-  } catch (e) {
-    Logger.debug('Error getting import job status: $e');
-    return null;
-  }
-}
-
 /// Get all import jobs for the current user
 Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
   try {
