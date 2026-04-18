@@ -1271,7 +1271,12 @@ async function runPiMonoMode(): Promise<void> {
             [], // tools
             qm.mode ?? "act",
             (event) => {
-              // Forward adapter events to Swift via stdout
+              // Forward adapter events to Swift via stdout, but skip tool_use
+              // events — pi-mono executes tools internally (built-in tools like
+              // bash/Read/Write) or via the OMI extension (which routes through
+              // the Unix socket relay). Forwarding tool_use here would cause
+              // Swift to double-execute the tool.
+              if ((event as any).type === "tool_use") return;
               send(event as OutboundMessage);
             },
             async (_name, _input) => {
