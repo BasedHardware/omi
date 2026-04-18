@@ -689,6 +689,19 @@ export const OMI_TOOLS = [
     },
     required: ["action_item_id"],
   }),
+  omiTool({
+    name: "capture_screen",
+    label: "Capture Screen",
+    description: "Capture a screenshot of the user's current screen. Returns the file path to the saved JPEG image. Use the Read tool to view the image after capturing.",
+    promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
+    promptGuidelines: [
+      "Call capture_screen when the user asks about what's on their screen or what they're looking at.",
+      "After capture_screen returns a file path, use Read to view the image.",
+      "Do NOT use bash screencapture — always use this tool instead.",
+    ],
+    properties: {},
+    required: [],
+  }),
 ];
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
