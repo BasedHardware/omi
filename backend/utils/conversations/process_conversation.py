@@ -78,6 +78,59 @@ from utils.other.storage import precache_conversation_audio
 logger = logging.getLogger(__name__)
 
 
+_FALLBACK_TITLE_MONTH_ABBR = (
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+)
+
+
+def _fallback_title_for_empty_llm_response(
+    structured: Structured,
+    started_at: Optional[datetime],
+) -> str:
+    """
+    Produce a deterministic fallback title when the conversation-processing
+    LLM returns an empty title for a conversation with substantive content.
+
+    Preference order:
+      1. First sentence of the LLM-generated overview (if >= 2 words and <= 60 chars).
+      2. Date-stamped label (e.g. "Conversation on Apr 15, 2026").
+      3. Static fallback "Untitled Conversation" when no date is available.
+
+    Notes:
+      * The 2-word minimum avoids producing noisy one-word titles when overview
+        begins with an abbreviation ("Dr. Smith met..." → first_sentence=="Dr").
+        Decimal-split fragments like "Scored 3.5..." → first_sentence=="Scored 3"
+        are 2 words and still pass through as the title — accepted as a
+        known cosmetic caveat of naive period-splitting; raising the threshold
+        higher would block legitimate short titles like "Team meeting".
+      * Month name is hard-coded in English rather than using strftime('%b')
+        so the label is locale-independent (strftime is locale-sensitive and
+        would return "avr." on an fr_FR.UTF-8 system).
+
+    No LLM retry — intentionally cheap and deterministic. See #5668.
+    """
+    overview = (structured.overview or '').strip()
+    if overview:
+        first_sentence = overview.split('.')[0].strip()
+        if len(first_sentence.split()) >= 2 and len(first_sentence) <= 60:
+            return first_sentence
+    if started_at:
+        month_abbr = _FALLBACK_TITLE_MONTH_ABBR[started_at.month - 1]
+        return f"Conversation on {month_abbr} {started_at.day}, {started_at.year}"
+    return "Untitled Conversation"
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -210,6 +263,15 @@ def _get_structured(
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
             )
+
+        # Belt-and-suspenders: the signal fix in `_get_conversation_obj`
+        # guarantees this conversation is not silently discarded, but an
+        # empty LLM title would still render as '' in the UI and break
+        # search indexing. Apply a deterministic fallback for substantive
+        # transcripts (>=100 words) so users always see a label. See #5668.
+        if not structured.title.strip() and len(transcript_text.split()) >= 100:
+            structured.title = _fallback_title_for_empty_llm_response(structured, conversation.started_at)
+
         return structured, False
     except Exception as e:
         logger.error(e)
@@ -220,8 +282,15 @@ def _get_conversation_obj(
     uid: str,
     structured: Structured,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    discarded: bool = False,
 ):
-    discarded = structured.title == ''
+    # The authoritative `discarded` signal is passed by the caller from
+    # `_get_structured`, which already applies the `should_discard_conversation`
+    # heuristic to transcript content. Previously this function re-derived
+    # `discarded = structured.title == ''`, which silently dropped valid
+    # conversations whenever the LLM returned an empty title (see #5668).
+    # The default `False` is a safety net: any future caller that forgets to
+    # pass a value will preserve the conversation rather than silently drop it.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
@@ -661,7 +730,7 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
-    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation = _get_conversation_obj(uid, structured, conversation, discarded=discarded)
 
     # AI-based folder assignment
     assigned_folder_id = None

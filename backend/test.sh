@@ -20,6 +20,7 @@ pytest tests/unit/test_user_speaker_embedding.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
+pytest tests/unit/test_empty_title_no_discard.py -v
 pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
