@@ -10,7 +10,6 @@ from urllib.parse import urljoin
 
 from database import (
     users as users_db,
-    notifications as notifications_db,
     conversations as conversations_db,
     memories as memories_db,
     action_items as action_items_db,
