@@ -1,0 +1,76 @@
+---
+title: "Examples"
+icon: "code"
+description: "Example prompts and integrations with the Omi MCP server"
+---
+
+## Example Prompts
+
+Once connected, try these prompts with your AI assistant:
+
+<AccordionGroup>
+  <Accordion title="Search and recall" icon="magnifying-glass">
+    ```
+    "What do you know about my work projects?"
+    "Find conversations where I discussed travel plans"
+    "Search my memories for anything about fitness goals"
+    "What did I talk about last Tuesday?"
+    ```
+  </Accordion>
+  <Accordion title="Memory management" icon="brain">
+    ```
+    "Remember that I prefer morning meetings before 10am"
+    "Update my memory about my favorite restaurant — it's now Sushi Nakazawa"
+    "Delete the memory about my old phone number"
+    "What are all my memories in the 'work' category?"
+    ```
+  </Accordion>
+  <Accordion title="Conversation analysis" icon="chart-line">
+    ```
+    "Summarize my conversations from this week"
+    "Find the conversation where I brainstormed app ideas"
+    "What topics come up most in my recent conversations?"
+    "Show me the full transcript of my last meeting"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Integration Examples
+
+<CardGroup cols={3}>
+  <Card title="LangChain" icon="link" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Build chains with Omi data
+  </Card>
+  <Card title="OpenAI Agents" icon="robot" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Create AI agents using Omi
+  </Card>
+  <Card title="DSPy" icon="code" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Programmatic LLM pipelines
+  </Card>
+</CardGroup>
+
+---
+
+## Python SDK Example
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+async with MultiServerMCPClient({
+    "omi": {
+        "url": "https://api.omi.me/v1/mcp/sse",
+        "transport": "streamable_http",
+        "headers": {"Authorization": "Bearer omi_mcp_YOUR_KEY"},
+    }
+}) as client:
+    tools = client.get_tools()
+
+    # Search memories
+    result = await client.call_tool("omi", "search_memories", {
+        "query": "morning routine",
+        "limit": 5,
+    })
+    print(result)
+```

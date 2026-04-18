@@ -638,9 +638,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saving => 'Nase-save...';
 
   @override
-  String get personaConfig => 'I-configure ang iyong AI persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2446,12 +2443,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createKeyToGetStarted => 'Lumikha ng key upang magsimula';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'I-configure ang iyong AI persona';
-
-  @override
   String get configureSttProvider => 'I-configure ang STT provider';
 
   @override
@@ -2969,9 +2960,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Tungkol sa App';
-
-  @override
-  String get aboutThePersona => 'Tungkol sa Persona';
 
   @override
   String get chatPersonality => 'Chat Personality';
@@ -3512,9 +3500,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get changeYourName => 'Baguhin ang Iyong Pangalan';
 
   @override
-  String get manageYourOmiPersona => 'Pamahalaan ang iyong Omi persona';
-
-  @override
   String get voiceAndPeople => 'Boses & Tao';
 
   @override
@@ -3929,9 +3914,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'I-click sa isang shortcut upang baguhin ito. Pindutin ang Escape upang kanselahin.';
 
   @override
-  String get configurePersonaDescription => 'I-configure ang iyong AI persona';
-
-  @override
   String get configureSTTProvider => 'I-configure ang STT provider';
 
   @override
@@ -4286,16 +4268,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createAndShareYourApp => 'Lumikha at ibahagi ang iyong app';
 
   @override
-  String get createMyClone => 'Lumikha ng Aking Clone';
-
-  @override
-  String get createYourDigitalClone => 'Lumikha ng iyong digital clone';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4324,9 +4297,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get manageApp => 'Pamahalaan ang App';
-
-  @override
-  String get updatePersonaDetails => 'I-update ang Persona Details';
 
   @override
   String deleteItemTitle(String item) {
@@ -5866,9 +5836,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get chooseFile => 'Pumili ng File';
 
   @override
-  String get configureAiPersona => 'I-configure ang iyong AI persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Ikonekta ang AI assistants sa iyong data';
 
   @override
@@ -6585,29 +6552,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get sharePublicLink => 'Ibahagi ang Public Link';
 
   @override
-  String get makePersonaPublic => 'Gawing Public ang Persona';
-
-  @override
   String get connectedKnowledgeData => 'Connected Knowledge Data';
 
   @override
   String get enterName => 'Lagyan ng pangalan';
-
-  @override
-  String get disconnectTwitter => 'Idiskonekta ang Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Sigurado ka ba na gusto mong idiskonekta ang iyong Twitter account? Ang iyong persona ay hindi na may access sa iyong Twitter data.';
-
-  @override
-  String get getOmiDeviceDescription => 'Lumikha ng mas accurate na clone na may iyong personal na mga pag-usap';
-
-  @override
-  String get getOmi => 'Kunin ang Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mayroon akong Omi device';
 
   @override
   String get goal => 'LAYUNIN';
@@ -7166,50 +7114,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi maaaring piliin ang Persona kasama ang iba pang capabilities';
 
   @override
-  String get personaTwitterHandleNotFound => 'Ang Twitter handle ay hindi nahanap';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Ang Twitter handle ay suspended';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Nabigo ang pag-verify ng Twitter handle';
-
-  @override
-  String get personaFailedToFetch => 'Nabigo ang pagkuha ng iyong persona';
-
-  @override
-  String get personaFailedToCreate => 'Nabigo ang paglikha ng iyong persona';
-
-  @override
-  String get personaConnectKnowledgeSource =>
-      'Mangyaring kumonekta sa hindi bababa sa isang knowledge data source (Omi o Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Matagumpay na na-update ang persona';
-
-  @override
-  String get personaFailedToUpdate => 'Nabigo ang pag-update ng persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Mangyaring pumili ng imahe';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Nabigo ang paglikha ng iyong persona. Mangyaring subukan ulit mamaya.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Nabigo ang paglikha ng persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Nabigo ang pag-enable ng persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Nagkamalian sa pag-enable ng persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries =>
       'Nabigo ang pagkuha ng mga supported countries. Mangyaring subukan ulit mamaya.';
 
@@ -7284,21 +7188,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Mangyaring maggenerate ng app muna';
-
-  @override
-  String get xHandleTitle => 'Ano ang iyong X handle?';
-
-  @override
-  String get xHandleDescription => 'Kami ay pre-train ang iyong Omi clone\nbatay sa activity ng iyong account';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Mangyaring magpasok ng iyong X handle';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Mangyaring magpasok ng valid na X handle';
 
   @override
   String get nextButton => 'Susunod';
@@ -7916,9 +7805,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Conversation Analysis';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
-
-  @override
   String get categoryHealth => 'Kalusugan';
 
   @override
@@ -8019,9 +7905,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrations';
-
-  @override
-  String get categoryPersonalityClones => 'Personality Clones';
 
   @override
   String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
@@ -9090,4 +8973,137 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Magpatuloy';
+
+  @override
+  String get tasksClearCompleted => 'Linisin ang natapos';
+
+  @override
+  String get tasksSelectAll => 'Piliin lahat';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Burahin ang $count gawain';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Minarkahan bilang kumpleto';
+
+  @override
+  String get appleHealthManageNote =>
+      'Ina-access ng Omi ang Apple Health sa pamamagitan ng HealthKit framework ng Apple. Maaari mong bawiin ang access anumang oras sa iOS Settings.';
+
+  @override
+  String get appleHealthConnectCta => 'Ikonekta sa Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Idiskonekta ang Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Nakakonekta';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Kumustahin ang iyong kalusugan';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Tanungin ang Omi tungkol sa iyong hakbang, tulog, tibok ng puso, at mga ehersisyo.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Access na pambasa lamang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Hindi kailanman nagsusulat ang Omi sa Apple Health o nagbabago ng iyong datos.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Ligtas na sync';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'Ang iyong datos sa Apple Health ay pribadong sinisync sa iyong Omi account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Tinanggihan ang access sa Apple Health';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Walang pahintulot ang Omi na basahin ang iyong Apple Health data. I-enable ito sa iOS Settings → Privacy & Security → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Bakit ka aalis?';
+
+  @override
+  String get deleteFlowReasonSubtitle =>
+      'Ang iyong feedback ay tumutulong sa amin na pagbutihin ang Omi para sa lahat.';
+
+  @override
+  String get deleteReasonPrivacy => 'Mga alalahanin sa privacy';
+
+  @override
+  String get deleteReasonNotUsing => 'Hindi sapat ang paggamit';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Kulang sa mga feature na kailangan ko';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Masyadong maraming teknikal na problema';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Gumagamit ng iba';
+
+  @override
+  String get deleteReasonTakingBreak => 'Nagpapahinga lang';
+
+  @override
+  String get deleteReasonOther => 'Iba pa';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Sabihin mo sa amin ang higit pa';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Ano ang magiging dahilan para gumana ang Omi para sa iyo?';
+
+  @override
+  String get deleteFlowFeedbackHint =>
+      'Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ito ay permanente';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Ang anumang aktibong subscription ay ikakansela.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Hindi maibabalik ang iyong account — kahit ng support team.';
+
+  @override
+  String get deleteTypeToConfirm => 'I-type ang DELETE para kumpirmahin';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Tanggalin nang permanente ang account';
+
+  @override
+  String get keepMyAccount => 'Panatilihin ang aking account';
+
+  @override
+  String get deleteAccountFailed => 'Hindi ma-delete ang iyong account. Pakisubukan muli.';
+
+  @override
+  String get planUpdate => 'Update ng Plano';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa \$49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.';
+
+  @override
+  String get upgradeYourPlan => 'I-upgrade ang Iyong Plano';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ikaw ay nasa bayad na plano.';
 }

@@ -638,9 +638,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get saving => 'Запазване...';
 
   @override
-  String get personaConfig => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get beta => 'БЕТА';
 
   @override
@@ -2430,12 +2427,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get createKeyToGetStarted => 'Създайте ключ, за да започнете';
 
   @override
-  String get persona => 'Персона';
-
-  @override
-  String get configureYourAiPersona => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get configureSttProvider => 'Конфигуриране на доставчик на STT';
 
   @override
@@ -2951,9 +2942,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'За приложението';
-
-  @override
-  String get aboutThePersona => 'За персоната';
 
   @override
   String get chatPersonality => 'Личност на чата';
@@ -3492,9 +3480,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get changeYourName => 'Променете вашето име';
 
   @override
-  String get manageYourOmiPersona => 'Управлявайте вашата Omi персона';
-
-  @override
   String get voiceAndPeople => 'Глас и Хора';
 
   @override
@@ -3908,9 +3893,6 @@ class AppLocalizationsBg extends AppLocalizations {
       'Щракнете върху пряк път, за да го промените. Натиснете Escape, за да отмените.';
 
   @override
-  String get configurePersonaDescription => 'Конфигурирайте вашата AI персона';
-
-  @override
   String get configureSTTProvider => 'Конфигуриране на доставчик на STT';
 
   @override
@@ -4265,16 +4247,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get createAndShareYourApp => 'Създайте и споделете вашето приложение';
 
   @override
-  String get createMyClone => 'Създай моя клонинг';
-
-  @override
-  String get createYourDigitalClone => 'Създайте вашия цифров клонинг';
-
-  @override
   String get itemApp => 'Приложение';
-
-  @override
-  String get itemPersona => 'Персона';
 
   @override
   String keepItemPublic(String item) {
@@ -4303,9 +4276,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get manageApp => 'Управление на приложението';
-
-  @override
-  String get updatePersonaDetails => 'Актуализиране на детайлите на персоната';
 
   @override
   String deleteItemTitle(String item) {
@@ -5836,9 +5806,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chooseFile => 'Избери файл';
 
   @override
-  String get configureAiPersona => 'Конфигурирай своята AI персона';
-
-  @override
   String get connectAiAssistantsToYourData => 'Свържи AI асистенти към твоите данни';
 
   @override
@@ -6553,29 +6520,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get sharePublicLink => 'Сподели публична връзка';
 
   @override
-  String get makePersonaPublic => 'Направи персоната публична';
-
-  @override
   String get connectedKnowledgeData => 'Свързани данни от знания';
 
   @override
   String get enterName => 'Въведете име';
-
-  @override
-  String get disconnectTwitter => 'Прекъсни връзката с Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Сигурни ли сте, че искате да прекъснете връзката с Twitter акаунта си? Вашата персона вече няма да има достъп до вашите Twitter данни.';
-
-  @override
-  String get getOmiDeviceDescription => 'Създайте по-точен клонинг с вашите лични разговори';
-
-  @override
-  String get getOmi => 'Вземете Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Имам Omi устройство';
 
   @override
   String get goal => 'ЦЕЛ';
@@ -7129,49 +7077,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona не може да бъде избрана с други способности';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter акаунт не е намерен';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter акаунтът е спрян';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Неуспешна проверка на Twitter акаунт';
-
-  @override
-  String get personaFailedToFetch => 'Неуспешно извличане на вашата персона';
-
-  @override
-  String get personaFailedToCreate => 'Неуспешно създаване на персона';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Моля, свържете поне един източник на данни (Omi или Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Персоната е актуализирана успешно';
-
-  @override
-  String get personaFailedToUpdate => 'Неуспешна актуализация на персона';
-
-  @override
-  String get personaPleaseSelectImage => 'Моля, изберете изображение';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Неуспешно създаване на персона. Опитайте по-късно.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Неуспешно създаване на персона: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Неуспешно активиране на персона';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Грешка при активиране на персона: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Неуспешно извличане на поддържани държави. Опитайте по-късно.';
 
   @override
@@ -7244,22 +7149,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Моля, първо генерирайте приложение';
-
-  @override
-  String get xHandleTitle => 'Какъв е вашият X профил?';
-
-  @override
-  String get xHandleDescription =>
-      'Ще предварително обучим вашия Omi клонинг\nвъз основа на активността на вашия акаунт';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Моля, въведете вашия X профил';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Моля, въведете валиден X профил';
 
   @override
   String get nextButton => 'Напред';
@@ -7875,9 +7764,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get categoryConversationAnalysis => 'Анализ на разговори';
 
   @override
-  String get categoryPersonalityClone => 'Клониране на личност';
-
-  @override
   String get categoryHealth => 'Здраве';
 
   @override
@@ -7978,9 +7864,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Интеграции';
-
-  @override
-  String get categoryPersonalityClones => 'Клонове на личности';
 
   @override
   String get categoryProductivityLifestyle => 'Продуктивност и начин на живот';
@@ -9051,4 +8934,132 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Продължи';
+
+  @override
+  String get tasksClearCompleted => 'Изчисти завършените';
+
+  @override
+  String get tasksSelectAll => 'Избери всички';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Изтрий $count задача(и)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Отбелязано като завършено';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi осъществява достъп до Apple Health чрез рамката HealthKit на Apple. Можете да отмените достъпа по всяко време от Настройките на iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Свързване с Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Прекратяване на връзката с Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Свързано';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Разговаряйте за здравето си';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Питайте Omi за стъпките, съня, сърдечния ритъм и тренировките.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Достъп само за четене';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi никога не записва в Apple Health и не променя данните ви.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Сигурна синхронизация';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Данните от Apple Health се синхронизират поверително с акаунта ви.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Достъпът до Apple Health е отказан';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi няма разрешение да чете данните ви от Apple Health. Активирайте го в Настройки на iOS → Поверителност и сигурност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Защо си тръгвате?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Вашата обратна връзка ни помага да направим Omi по-добър за всички.';
+
+  @override
+  String get deleteReasonPrivacy => 'Притеснения за поверителността';
+
+  @override
+  String get deleteReasonNotUsing => 'Не го използвам достатъчно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Липсват функции, които са ми нужни';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Твърде много технически проблеми';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Използвам нещо друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Просто правя почивка';
+
+  @override
+  String get deleteReasonOther => 'Друго';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Разкажете ни повече';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Какво би накарало Omi да работи за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'По избор — вашите мисли ни помагат да изградим по-добър продукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Това е окончателно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'След като изтриете акаунта си, той не може да бъде възстановен.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Всеки активен абонамент ще бъде отменен.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Акаунтът ви не може да бъде възстановен — дори от поддръжката.';
+
+  @override
+  String get deleteTypeToConfirm => 'Въведете DELETE за потвърждение';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Изтрий акаунта окончателно';
+
+  @override
+  String get keepMyAccount => 'Запази акаунта ми';
+
+  @override
+  String get deleteAccountFailed => 'Акаунтът ви не може да бъде изтрит. Моля, опитайте отново.';
+
+  @override
+  String get planUpdate => 'Актуализация на плана';
+
+  @override
+  String get planDeprecationMessage =>
+      'Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за \$49/мес. Текущият ви план ще продължи да работи междувременно.';
+
+  @override
+  String get upgradeYourPlan => 'Надградете плана си';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вие сте на платен план.';
 }

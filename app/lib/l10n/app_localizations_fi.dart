@@ -634,9 +634,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saving => 'Tallennetaan...';
 
   @override
-  String get personaConfig => 'Määritä AI-persoonasi';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2424,12 +2421,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get createKeyToGetStarted => 'Luo avain aloittaaksesi';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Määritä AI-persoonasi';
-
-  @override
   String get configureSttProvider => 'Määritä STT-palveluntarjoaja';
 
   @override
@@ -2943,9 +2934,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Tietoja sovelluksesta';
-
-  @override
-  String get aboutThePersona => 'Tietoja persoonasta';
 
   @override
   String get chatPersonality => 'Chat-persoonallisuus';
@@ -3483,9 +3471,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get changeYourName => 'Vaihda nimesi';
 
   @override
-  String get manageYourOmiPersona => 'Hallinnoi Omi-personaasi';
-
-  @override
   String get voiceAndPeople => 'Ääni ja Ihmiset';
 
   @override
@@ -3895,9 +3880,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get shortcutChangeInstruction => 'Napsauta pikanäppäintä muuttaaksesi sitä. Peruuta painamalla Escape.';
 
   @override
-  String get configurePersonaDescription => 'Määritä AI-persoonasi';
-
-  @override
   String get configureSTTProvider => 'Määritä STT-palveluntarjoaja';
 
   @override
@@ -4252,16 +4234,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get createAndShareYourApp => 'Luo ja jaa sovelluksesi';
 
   @override
-  String get createMyClone => 'Luo kloonini';
-
-  @override
-  String get createYourDigitalClone => 'Luo digitaalinen kloonisi';
-
-  @override
   String get itemApp => 'Sovellus';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4290,9 +4263,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get manageApp => 'Hallitse sovellusta';
-
-  @override
-  String get updatePersonaDetails => 'Päivitä persona-tiedot';
 
   @override
   String deleteItemTitle(String item) {
@@ -5817,9 +5787,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chooseFile => 'Valitse tiedosto';
 
   @override
-  String get configureAiPersona => 'Määritä tekoälypersoona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Yhdistä tekoälyavustajat tietoihisi';
 
   @override
@@ -6531,29 +6498,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get sharePublicLink => 'Jaa julkinen linkki';
 
   @override
-  String get makePersonaPublic => 'Tee persoonasta julkinen';
-
-  @override
   String get connectedKnowledgeData => 'Yhdistetty tietolähteisiin';
 
   @override
   String get enterName => 'Syötä nimi';
-
-  @override
-  String get disconnectTwitter => 'Katkaise Twitter-yhteys';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Haluatko varmasti katkaista Twitter-tilisi yhteyden? Persoonallasi ei ole enää pääsyä Twitter-tietoihisi.';
-
-  @override
-  String get getOmiDeviceDescription => 'Luo tarkempi klooni henkilökohtaisilla keskusteluillasi';
-
-  @override
-  String get getOmi => 'Hanki Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Minulla on Omi-laite';
 
   @override
   String get goal => 'TAVOITE';
@@ -7104,49 +7052,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Personaa ei voi valita muiden toimintojen kanssa';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-tiliä ei löytynyt';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-tili on jäädytetty';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter-tilin vahvistus epäonnistui';
-
-  @override
-  String get personaFailedToFetch => 'Personan haku epäonnistui';
-
-  @override
-  String get personaFailedToCreate => 'Personan luonti epäonnistui';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Yhdistä vähintään yksi tietolähde (Omi tai Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona päivitetty onnistuneesti';
-
-  @override
-  String get personaFailedToUpdate => 'Personan päivitys epäonnistui';
-
-  @override
-  String get personaPleaseSelectImage => 'Valitse kuva';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Personan luonti epäonnistui. Yritä myöhemmin uudelleen.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Personan luonti epäonnistui: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Personan käyttöönotto epäonnistui';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Virhe personan käyttöönotossa: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Tuettujen maiden haku epäonnistui. Yritä myöhemmin uudelleen.';
 
   @override
@@ -7219,21 +7124,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Luo ensin sovellus';
-
-  @override
-  String get xHandleTitle => 'Mikä on X-käyttäjätunnuksesi?';
-
-  @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Syötä X-käyttäjätunnuksesi';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Syötä kelvollinen X-käyttäjätunnus';
 
   @override
   String get nextButton => 'Seuraava';
@@ -7842,9 +7732,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get categoryConversationAnalysis => 'Keskusteluanalyysi';
 
   @override
-  String get categoryPersonalityClone => 'Persoonallisuusklooni';
-
-  @override
   String get categoryHealth => 'Terveys';
 
   @override
@@ -7945,9 +7832,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integraatiot';
-
-  @override
-  String get categoryPersonalityClones => 'Persoonallisuuskloonit';
 
   @override
   String get categoryProductivityLifestyle => 'Tuottavuus ja elämäntapa';
@@ -9014,4 +8898,132 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Jatka';
+
+  @override
+  String get tasksClearCompleted => 'Tyhjennä valmiit';
+
+  @override
+  String get tasksSelectAll => 'Valitse kaikki';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Poista $count tehtävä(ä)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Merkitty valmiiksi';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi käyttää Apple Healthia Applen HealthKit-kehyksen kautta. Voit perua käyttöoikeuden milloin tahansa iOS-asetuksista.';
+
+  @override
+  String get appleHealthConnectCta => 'Yhdistä Apple Healthiin';
+
+  @override
+  String get appleHealthDisconnectCta => 'Katkaise yhteys Apple Healthiin';
+
+  @override
+  String get appleHealthConnectedBadge => 'Yhdistetty';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Keskustele terveydestäsi';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Kysy Omilta askelista, unesta, sykkeestä ja harjoituksista.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Vain lukuoikeus';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ei koskaan kirjoita Apple Healthiin tai muuta tietojasi.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Turvallinen synkronointi';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health -tietosi synkronoidaan yksityisesti Omi-tilillesi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health -käyttöoikeus evätty';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omilla ei ole oikeutta lukea Apple Health -tietojasi. Ota se käyttöön: iOS-asetukset → Yksityisyys ja turvallisuus → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Miksi lähdet?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Palautteesi auttaa meitä parantamaan Omia kaikille.';
+
+  @override
+  String get deleteReasonPrivacy => 'Yksityisyyteen liittyvät huolet';
+
+  @override
+  String get deleteReasonNotUsing => 'En käytä sitä tarpeeksi';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Tarvitsemiani ominaisuuksia puuttuu';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Liian monta teknistä ongelmaa';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Käytän jotain muuta';
+
+  @override
+  String get deleteReasonTakingBreak => 'Pidän vain tauon';
+
+  @override
+  String get deleteReasonOther => 'Muu';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Kerro lisää';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Mikä olisi saanut Omin toimimaan sinulle?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tämä on lopullista';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kun poistat tilisi, sitä ei voi enää palauttaa.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Mahdolliset aktiiviset tilaukset peruutetaan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tiliäsi ei voi palauttaa — ei edes tuki voi tehdä sitä.';
+
+  @override
+  String get deleteTypeToConfirm => 'Kirjoita DELETE vahvistaaksesi';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Poista tili pysyvästi';
+
+  @override
+  String get keepMyAccount => 'Säilytä tilini';
+
+  @override
+  String get deleteAccountFailed => 'Tiliäsi ei voitu poistaa. Yritä uudelleen.';
+
+  @override
+  String get planUpdate => 'Tilauksen päivitys';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan \$49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.';
+
+  @override
+  String get upgradeYourPlan => 'Päivitä tilauksesi';
+
+  @override
+  String get youAreOnAPaidPlan => 'Sinulla on maksullinen tilaus.';
 }

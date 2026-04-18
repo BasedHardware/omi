@@ -1,19 +1,33 @@
 import Foundation
 
-/// Mixes microphone and system audio into a stereo stream for multichannel transcription
-/// Channel 0 (left) = Microphone (user)
-/// Channel 1 (right) = System audio (others)
+/// Mixes microphone and system audio into a single stream for transcription.
+///
+/// Two output modes:
+///  - `.mono`: mic and system are summed (with clip protection) into a single
+///    16kHz mono Int16 stream. Use when the backend is configured for `channels=1`.
+///  - `.stereo`: mic on left, system on right, interleaved. Use when the backend
+///    accepts multichannel audio with per-channel speaker mapping.
 class AudioMixer {
 
     // MARK: - Types
 
-    /// Callback for receiving stereo audio chunks
-    typealias StereoAudioHandler = (Data) -> Void
+    /// Callback for receiving mixed audio chunks (mono or interleaved stereo)
+    typealias AudioChunkHandler = (Data) -> Void
+
+    enum OutputMode {
+        case mono
+        case stereo
+    }
 
     // MARK: - Properties
 
-    private var onStereoChunk: StereoAudioHandler?
+    private let outputMode: OutputMode
+    private var onMixedChunk: AudioChunkHandler?
     private var isRunning = false
+
+    init(outputMode: OutputMode = .mono) {
+        self.outputMode = outputMode
+    }
 
     // Audio buffers (16kHz mono Int16 PCM)
     private var micBuffer = Data()
@@ -29,15 +43,16 @@ class AudioMixer {
     // MARK: - Public Methods
 
     /// Start the mixer
-    /// - Parameter onStereoChunk: Callback receiving interleaved stereo 16-bit PCM at 16kHz
-    func start(onStereoChunk: @escaping StereoAudioHandler) {
+    /// - Parameter onChunk: Callback receiving mono (summed) or stereo (interleaved)
+    ///   16-bit PCM at 16kHz depending on `outputMode`.
+    func start(onChunk: @escaping AudioChunkHandler) {
         bufferLock.lock()
-        self.onStereoChunk = onStereoChunk
+        self.onMixedChunk = onChunk
         self.isRunning = true
         micBuffer = Data()
         systemBuffer = Data()
         bufferLock.unlock()
-        log("AudioMixer: Started")
+        log("AudioMixer: Started (mode=\(outputMode == .mono ? "mono" : "stereo"))")
     }
 
     /// Stop the mixer and flush remaining audio
@@ -48,7 +63,7 @@ class AudioMixer {
         processBuffers(flush: true)
         micBuffer = Data()
         systemBuffer = Data()
-        onStereoChunk = nil
+        onMixedChunk = nil
         bufferLock.unlock()
         log("AudioMixer: Stopped")
     }
@@ -137,11 +152,45 @@ class AudioMixer {
             systemBuffer = Data()
         }
 
-        // Interleave into stereo
-        let stereoData = interleave(mic: micData, system: sysData)
+        // Produce mixed output in the configured mode
+        let mixed: Data
+        switch outputMode {
+        case .mono:
+            mixed = sumToMono(mic: micData, system: sysData)
+        case .stereo:
+            mixed = interleave(mic: micData, system: sysData)
+        }
 
         // Send to callback
-        onStereoChunk?(stereoData)
+        onMixedChunk?(mixed)
+    }
+
+    /// Sum two mono Int16 streams into a single mono Int16 stream.
+    /// Summed amplitude is clipped to Int16 range to prevent wrap-around overflow.
+    /// This is a straight sum, not an average — speech from both sources stays at
+    /// its natural loudness, and speech-on-speech overlap saturates cleanly instead
+    /// of halving into unintelligibility.
+    private func sumToMono(mic: Data, system: Data) -> Data {
+        let sampleCount = mic.count / 2  // Int16 = 2 bytes
+        var monoSamples = [Int16]()
+        monoSamples.reserveCapacity(sampleCount)
+
+        mic.withUnsafeBytes { micPtr in
+            system.withUnsafeBytes { sysPtr in
+                let micSamples = micPtr.bindMemory(to: Int16.self)
+                let sysSamples = sysPtr.bindMemory(to: Int16.self)
+
+                for i in 0..<sampleCount {
+                    let m = i < micSamples.count ? Int32(micSamples[i]) : 0
+                    let s = i < sysSamples.count ? Int32(sysSamples[i]) : 0
+                    let summed = m + s
+                    let clamped = max(Int32(Int16.min), min(Int32(Int16.max), summed))
+                    monoSamples.append(Int16(clamped))
+                }
+            }
+        }
+
+        return monoSamples.withUnsafeBufferPointer { Data(buffer: $0) }
     }
 
     /// Interleave two mono Int16 streams into stereo

@@ -623,9 +623,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get saving => '저장 중...';
 
   @override
-  String get personaConfig => 'AI 페르소나 구성';
-
-  @override
   String get beta => '베타';
 
   @override
@@ -2384,12 +2381,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createKeyToGetStarted => '시작하려면 키를 만드세요';
 
   @override
-  String get persona => '페르소나';
-
-  @override
-  String get configureYourAiPersona => 'AI 페르소나 구성';
-
-  @override
   String get configureSttProvider => 'STT 제공업체 구성';
 
   @override
@@ -2892,9 +2883,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get aboutTheApp => '앱 정보';
-
-  @override
-  String get aboutThePersona => '페르소나 정보';
 
   @override
   String get chatPersonality => '채팅 성격';
@@ -3424,9 +3412,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get changeYourName => '이름 변경';
 
   @override
-  String get manageYourOmiPersona => 'Omi 페르소나 관리';
-
-  @override
   String get voiceAndPeople => '음성 및 사람';
 
   @override
@@ -3831,9 +3816,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get shortcutChangeInstruction => '단축키를 클릭하여 변경합니다. Escape를 눌러 취소합니다.';
 
   @override
-  String get configurePersonaDescription => 'AI 페르소나 구성';
-
-  @override
   String get configureSTTProvider => 'STT 제공업체 구성';
 
   @override
@@ -4178,16 +4160,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createAndShareYourApp => '앱을 만들고 공유하세요';
 
   @override
-  String get createMyClone => '내 클론 만들기';
-
-  @override
-  String get createYourDigitalClone => '디지털 클론을 만드세요';
-
-  @override
   String get itemApp => '앱';
-
-  @override
-  String get itemPersona => '페르소나';
 
   @override
   String keepItemPublic(String item) {
@@ -4216,9 +4189,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get manageApp => '앱 관리';
-
-  @override
-  String get updatePersonaDetails => '페르소나 세부 정보 업데이트';
 
   @override
   String deleteItemTitle(String item) {
@@ -5712,9 +5682,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chooseFile => '파일 선택';
 
   @override
-  String get configureAiPersona => 'AI 페르소나 구성하기';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI 어시스턴트를 데이터에 연결하기';
 
   @override
@@ -6416,28 +6383,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get sharePublicLink => '공개 링크 공유';
 
   @override
-  String get makePersonaPublic => '페르소나 공개하기';
-
-  @override
   String get connectedKnowledgeData => '연결된 지식 데이터';
 
   @override
   String get enterName => '이름 입력';
-
-  @override
-  String get disconnectTwitter => 'Twitter 연결 해제';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Twitter 계정 연결을 해제하시겠습니까? 페르소나가 더 이상 Twitter 데이터에 액세스할 수 없게 됩니다.';
-
-  @override
-  String get getOmiDeviceDescription => '개인 대화로 더 정확한 클론을 생성하세요';
-
-  @override
-  String get getOmi => 'Omi 받기';
-
-  @override
-  String get iHaveOmiDevice => 'Omi 장치가 있습니다';
 
   @override
   String get goal => '목표';
@@ -6980,49 +6929,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => '페르소나는 다른 기능과 함께 선택할 수 없습니다';
 
   @override
-  String get personaTwitterHandleNotFound => '트위터 핸들을 찾을 수 없습니다';
-
-  @override
-  String get personaTwitterHandleSuspended => '트위터 핸들이 정지되었습니다';
-
-  @override
-  String get personaFailedToVerifyTwitter => '트위터 핸들 확인에 실패했습니다';
-
-  @override
-  String get personaFailedToFetch => '페르소나를 가져오는데 실패했습니다';
-
-  @override
-  String get personaFailedToCreate => '페르소나 생성에 실패했습니다';
-
-  @override
-  String get personaConnectKnowledgeSource => '최소 하나의 데이터 소스(Omi 또는 Twitter)를 연결해주세요';
-
-  @override
-  String get personaUpdatedSuccessfully => '페르소나가 성공적으로 업데이트되었습니다';
-
-  @override
-  String get personaFailedToUpdate => '페르소나 업데이트에 실패했습니다';
-
-  @override
-  String get personaPleaseSelectImage => '이미지를 선택해주세요';
-
-  @override
-  String get personaFailedToCreateTryLater => '페르소나 생성에 실패했습니다. 나중에 다시 시도해주세요.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return '페르소나 생성 실패: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => '페르소나 활성화에 실패했습니다';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return '페르소나 활성화 오류: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => '지원 국가를 가져오는데 실패했습니다. 나중에 다시 시도해주세요.';
 
   @override
@@ -7095,21 +7001,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '먼저 앱을 생성해 주세요';
-
-  @override
-  String get xHandleTitle => 'X 핸들이 무엇인가요?';
-
-  @override
-  String get xHandleDescription => '계정 활동을 기반으로\nOmi 클론을 사전 학습합니다';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'X 핸들을 입력해 주세요';
-
-  @override
-  String get xHandlePleaseEnterValid => '유효한 X 핸들을 입력해 주세요';
 
   @override
   String get nextButton => '다음';
@@ -7711,9 +7602,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get categoryConversationAnalysis => '대화 분석';
 
   @override
-  String get categoryPersonalityClone => '성격 복제';
-
-  @override
   String get categoryHealth => '건강';
 
   @override
@@ -7814,9 +7702,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '연동';
-
-  @override
-  String get categoryPersonalityClones => '성격 복제';
 
   @override
   String get categoryProductivityLifestyle => '생산성 및 라이프스타일';
@@ -8867,4 +8752,131 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get continueAnyway => '계속';
+
+  @override
+  String get tasksClearCompleted => '완료된 항목 지우기';
+
+  @override
+  String get tasksSelectAll => '모두 선택';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count개 작업 삭제';
+  }
+
+  @override
+  String get tasksMarkComplete => '완료로 표시됨';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi는 Apple의 HealthKit 프레임워크를 통해 Apple Health에 접근합니다. iOS 설정에서 언제든지 접근 권한을 철회할 수 있습니다.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health에 연결';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health 연결 해제';
+
+  @override
+  String get appleHealthConnectedBadge => '연결됨';
+
+  @override
+  String get appleHealthFeatureChatTitle => '건강에 대해 대화하기';
+
+  @override
+  String get appleHealthFeatureChatDesc => '걸음 수, 수면, 심박수, 운동에 대해 Omi에게 물어보세요.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '읽기 전용 접근';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi는 Apple Health에 쓰거나 데이터를 수정하지 않습니다.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '보안 동기화';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health 데이터는 비공개로 Omi 계정과 동기화됩니다.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health 접근이 거부됨';
+
+  @override
+  String get appleHealthDeniedBody => 'Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요.';
+
+  @override
+  String get deleteFlowReasonTitle => '왜 떠나시나요?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '여러분의 의견은 모두를 위한 Omi를 개선하는 데 도움이 됩니다.';
+
+  @override
+  String get deleteReasonPrivacy => '개인정보 보호에 대한 우려';
+
+  @override
+  String get deleteReasonNotUsing => '충분히 사용하지 않음';
+
+  @override
+  String get deleteReasonMissingFeatures => '필요한 기능이 없음';
+
+  @override
+  String get deleteReasonTechnicalIssues => '기술적인 문제가 너무 많음';
+
+  @override
+  String get deleteReasonFoundAlternative => '다른 것을 사용 중';
+
+  @override
+  String get deleteReasonTakingBreak => '잠시 쉬고 싶을 뿐';
+
+  @override
+  String get deleteReasonOther => '기타';
+
+  @override
+  String get deleteFlowFeedbackTitle => '더 자세히 알려주세요';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '무엇이 있었다면 Omi가 여러분께 도움이 되었을까요?';
+
+  @override
+  String get deleteFlowFeedbackHint => '선택 사항 — 여러분의 의견은 더 나은 제품을 만드는 데 도움이 됩니다.';
+
+  @override
+  String get deleteFlowConfirmTitle => '이 작업은 영구적입니다';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '계정을 삭제하면 복구할 방법이 없습니다.';
+
+  @override
+  String get deleteConsequenceSubscription => '활성 구독은 모두 취소됩니다.';
+
+  @override
+  String get deleteConsequenceNoRecovery => '계정은 복구할 수 없습니다 — 고객 지원으로도 불가능합니다.';
+
+  @override
+  String get deleteTypeToConfirm => '확인하려면 DELETE를 입력하세요';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '계정 영구 삭제';
+
+  @override
+  String get keepMyAccount => '내 계정 유지';
+
+  @override
+  String get deleteAccountFailed => '계정을 삭제할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get planUpdate => '플랜 업데이트';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
+
+  @override
+  String get upgradeYourPlan => '플랜 업그레이드';
+
+  @override
+  String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
 }

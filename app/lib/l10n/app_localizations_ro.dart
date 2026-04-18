@@ -639,9 +639,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get saving => 'Se salvează...';
 
   @override
-  String get personaConfig => 'Configurează personalitatea AI';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2437,12 +2434,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createKeyToGetStarted => 'Creează o cheie pentru a începe';
 
   @override
-  String get persona => 'Personaj';
-
-  @override
-  String get configureYourAiPersona => 'Configurează-ți personajul AI';
-
-  @override
   String get configureSttProvider => 'Configurare furnizor STT';
 
   @override
@@ -2961,9 +2952,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Despre aplicație';
-
-  @override
-  String get aboutThePersona => 'Despre persona';
 
   @override
   String get chatPersonality => 'Personalitate chat';
@@ -3503,9 +3491,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get changeYourName => 'Schimbați numele';
 
   @override
-  String get manageYourOmiPersona => 'Gestionați persona Omi';
-
-  @override
   String get voiceAndPeople => 'Voce și Oameni';
 
   @override
@@ -3918,9 +3903,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Faceți clic pe o comandă rapidă pentru a o modifica. Apăsați Escape pentru a anula.';
 
   @override
-  String get configurePersonaDescription => 'Configurați-vă persona AI';
-
-  @override
   String get configureSTTProvider => 'Configurați furnizorul STT';
 
   @override
@@ -4275,16 +4257,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createAndShareYourApp => 'Creează și partajează aplicația ta';
 
   @override
-  String get createMyClone => 'Creează clona mea';
-
-  @override
-  String get createYourDigitalClone => 'Creează clona ta digitală';
-
-  @override
   String get itemApp => 'Aplicație';
-
-  @override
-  String get itemPersona => 'Personaj';
 
   @override
   String keepItemPublic(String item) {
@@ -4313,9 +4286,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get manageApp => 'Gestionează aplicația';
-
-  @override
-  String get updatePersonaDetails => 'Actualizează detaliile persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5845,9 +5815,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chooseFile => 'Alege fișier';
 
   @override
-  String get configureAiPersona => 'Configurează-ți personajul AI';
-
-  @override
   String get connectAiAssistantsToYourData => 'Conectează asistenții AI la datele tale';
 
   @override
@@ -6561,29 +6528,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get sharePublicLink => 'Partajează link public';
 
   @override
-  String get makePersonaPublic => 'Fă personajul public';
-
-  @override
   String get connectedKnowledgeData => 'Date de cunoștințe conectate';
 
   @override
   String get enterName => 'Introdu numele';
-
-  @override
-  String get disconnectTwitter => 'Deconectare Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Sunteți sigur că doriți să deconectați contul Twitter? Persona dvs. nu va mai avea acces la datele Twitter.';
-
-  @override
-  String get getOmiDeviceDescription => 'Creează o clonă mai precisă cu conversațiile tale personale';
-
-  @override
-  String get getOmi => 'Obține Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Am un dispozitiv Omi';
 
   @override
   String get goal => 'OBIECTIV';
@@ -7137,49 +7085,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nu poate fi selectată cu alte capacități';
 
   @override
-  String get personaTwitterHandleNotFound => 'Cont Twitter negăsit';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Cont Twitter suspendat';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Verificarea contului Twitter a eșuat';
-
-  @override
-  String get personaFailedToFetch => 'Nu s-a putut obține persona dvs.';
-
-  @override
-  String get personaFailedToCreate => 'Nu s-a putut crea persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Conectați cel puțin o sursă de date (Omi sau Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona actualizată cu succes';
-
-  @override
-  String get personaFailedToUpdate => 'Actualizarea personei a eșuat';
-
-  @override
-  String get personaPleaseSelectImage => 'Selectați o imagine';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Crearea personei a eșuat. Încercați mai târziu.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Crearea personei a eșuat: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Activarea personei a eșuat';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Eroare la activarea personei: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nu s-au putut obține țările acceptate. Încercați mai târziu.';
 
   @override
@@ -7252,21 +7157,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vă rugăm să generați mai întâi o aplicație';
-
-  @override
-  String get xHandleTitle => 'Care este numele tău de utilizator X?';
-
-  @override
-  String get xHandleDescription => 'Vom pre-antrena clona dvs. Omi\npe baza activității contului dvs.';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Te rugăm să introduci numele tău de utilizator X';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Te rugăm să introduci un nume de utilizator X valid';
 
   @override
   String get nextButton => 'Următorul';
@@ -7882,9 +7772,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analiză conversații';
 
   @override
-  String get categoryPersonalityClone => 'Clonă de personalitate';
-
-  @override
   String get categoryHealth => 'Sănătate';
 
   @override
@@ -7985,9 +7872,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrări';
-
-  @override
-  String get categoryPersonalityClones => 'Clone de personalitate';
 
   @override
   String get categoryProductivityLifestyle => 'Productivitate și stil de viață';
@@ -9058,4 +8942,132 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Continuă';
+
+  @override
+  String get tasksClearCompleted => 'Șterge finalizate';
+
+  @override
+  String get tasksSelectAll => 'Selectează tot';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Șterge $count sarcină(i)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Marcat ca finalizat';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi accesează Apple Health prin framework-ul HealthKit de la Apple. Poți revoca accesul oricând din Setările iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Conectează-te la Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Deconectează Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Conectat';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Discută despre sănătatea ta';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Întreabă Omi despre pașii, somnul, ritmul cardiac și antrenamentele tale.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Acces doar pentru citire';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nu scrie niciodată în Apple Health și nu modifică datele tale.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sincronizare sigură';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Datele tale Apple Health se sincronizează privat cu contul tău Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Acces la Apple Health refuzat';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nu are permisiunea de a citi datele tale Apple Health. Activează din Setări iOS → Confidențialitate și securitate → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'De ce pleci?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Feedbackul tău ne ajută să îmbunătățim Omi pentru toți.';
+
+  @override
+  String get deleteReasonPrivacy => 'Probleme de confidențialitate';
+
+  @override
+  String get deleteReasonNotUsing => 'Nu îl folosesc suficient';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Lipsesc funcții de care am nevoie';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Prea multe probleme tehnice';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Folosesc altceva';
+
+  @override
+  String get deleteReasonTakingBreak => 'Iau doar o pauză';
+
+  @override
+  String get deleteReasonOther => 'Altul';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Spune-ne mai multe';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Ce ar fi făcut ca Omi să funcționeze pentru tine?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opțional — ideile tale ne ajută să construim un produs mai bun.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Acest lucru este permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Odată ce îți ștergi contul, nu mai poate fi recuperat.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Orice abonament activ va fi anulat.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Contul tău nu poate fi restaurat — nici măcar de echipa de suport.';
+
+  @override
+  String get deleteTypeToConfirm => 'Scrie DELETE pentru a confirma';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Șterge contul definitiv';
+
+  @override
+  String get keepMyAccount => 'Păstrează contul meu';
+
+  @override
+  String get deleteAccountFailed => 'Nu am putut șterge contul tău. Încearcă din nou.';
+
+  @override
+  String get planUpdate => 'Actualizare plan';
+
+  @override
+  String get planDeprecationMessage =>
+      'Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la \$49/lună. Planul dvs. actual va continua să funcționeze între timp.';
+
+  @override
+  String get upgradeYourPlan => 'Îmbunătățește-ți planul';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ești pe un plan plătit.';
 }

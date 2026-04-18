@@ -641,9 +641,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get saving => 'Wird gespeichert...';
 
   @override
-  String get personaConfig => 'Konfigurieren Sie Ihre KI-Persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2446,12 +2443,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get createKeyToGetStarted => 'Erstellen Sie einen Schlüssel, um zu beginnen';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurieren Sie Ihre KI-Persona';
-
-  @override
   String get configureSttProvider => 'STT-Anbieter konfigurieren';
 
   @override
@@ -2969,9 +2960,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Über die App';
-
-  @override
-  String get aboutThePersona => 'Über die Persona';
 
   @override
   String get chatPersonality => 'Chat-Persönlichkeit';
@@ -3512,9 +3500,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get changeYourName => 'Namen ändern';
 
   @override
-  String get manageYourOmiPersona => 'Verwalten Sie Ihre Omi-Persona';
-
-  @override
   String get voiceAndPeople => 'Stimme & Personen';
 
   @override
@@ -3927,9 +3912,6 @@ class AppLocalizationsDe extends AppLocalizations {
       'Klicken Sie auf eine Tastenkombination, um sie zu ändern. Drücken Sie Escape, um abzubrechen.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurieren Sie Ihre KI-Persona';
-
-  @override
   String get configureSTTProvider => 'STT-Anbieter konfigurieren';
 
   @override
@@ -4286,16 +4268,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get createAndShareYourApp => 'Erstellen und teilen Sie Ihre App';
 
   @override
-  String get createMyClone => 'Meinen Klon erstellen';
-
-  @override
-  String get createYourDigitalClone => 'Erstellen Sie Ihren digitalen Klon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4324,9 +4297,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get manageApp => 'App verwalten';
-
-  @override
-  String get updatePersonaDetails => 'Persona-Details aktualisieren';
 
   @override
   String deleteItemTitle(String item) {
@@ -5861,9 +5831,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chooseFile => 'Datei auswählen';
 
   @override
-  String get configureAiPersona => 'KI-Persona konfigurieren';
-
-  @override
   String get connectAiAssistantsToYourData => 'KI-Assistenten mit deinen Daten verbinden';
 
   @override
@@ -6579,28 +6546,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sharePublicLink => 'Öffentlichen Link teilen';
 
   @override
-  String get makePersonaPublic => 'Persona öffentlich machen';
-
-  @override
   String get connectedKnowledgeData => 'Verbundene Wissensdaten';
 
   @override
   String get enterName => 'Name eingeben';
-
-  @override
-  String get disconnectTwitter => 'X trennen';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Bist du sicher, dass du X trennen möchtest?';
-
-  @override
-  String get getOmiDeviceDescription => 'Hol dir ein Omi-Gerät, um Gespräche automatisch aufzuzeichnen';
-
-  @override
-  String get getOmi => 'Omi holen';
-
-  @override
-  String get iHaveOmiDevice => 'Ich habe ein Omi-Gerät';
 
   @override
   String get goal => 'ZIEL';
@@ -7155,51 +7104,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kann nicht mit anderen Fähigkeiten ausgewählt werden';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-Handle nicht gefunden';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-Handle ist gesperrt';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter-Handle konnte nicht verifiziert werden';
-
-  @override
-  String get personaFailedToFetch => 'Persona konnte nicht abgerufen werden';
-
-  @override
-  String get personaFailedToCreate => 'Persona konnte nicht erstellt werden';
-
-  @override
-  String get personaConnectKnowledgeSource =>
-      'Bitte verbinden Sie mindestens eine Wissensdatenquelle (Omi oder Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona erfolgreich aktualisiert';
-
-  @override
-  String get personaFailedToUpdate => 'Persona-Aktualisierung fehlgeschlagen';
-
-  @override
-  String get personaPleaseSelectImage => 'Bitte wählen Sie ein Bild aus';
-
-  @override
-  String get personaFailedToCreateTryLater =>
-      'Persona konnte nicht erstellt werden. Bitte versuchen Sie es später erneut.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona-Erstellung fehlgeschlagen: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona konnte nicht aktiviert werden';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Fehler beim Aktivieren der Persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries =>
       'Unterstützte Länder konnten nicht abgerufen werden. Bitte versuchen Sie es später erneut.';
 
@@ -7275,21 +7179,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Bitte generiere zuerst eine App';
-
-  @override
-  String get xHandleTitle => 'X-Handle';
-
-  @override
-  String get xHandleDescription => 'Verknüpfe dein X-Konto, um Inhalte deines Profils in deiner Persona zu verwenden';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Bitte gib dein X-Handle ein';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Bitte gib ein gültiges X-Handle ein';
 
   @override
   String get nextButton => 'Weiter';
@@ -7909,9 +7798,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get categoryConversationAnalysis => 'Gesprächsanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Persönlichkeitsklon';
-
-  @override
   String get categoryHealth => 'Gesundheit';
 
   @override
@@ -8012,9 +7898,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrationen';
-
-  @override
-  String get categoryPersonalityClones => 'Persönlichkeitsklone';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivität & Lebensstil';
@@ -9091,4 +8974,134 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Fortfahren';
+
+  @override
+  String get tasksClearCompleted => 'Erledigte löschen';
+
+  @override
+  String get tasksSelectAll => 'Alle auswählen';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count Aufgabe(n) löschen';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Als erledigt markiert';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi greift über Apples HealthKit-Framework auf Apple Health zu. Du kannst den Zugriff jederzeit in den iOS-Einstellungen widerrufen.';
+
+  @override
+  String get appleHealthConnectCta => 'Mit Apple Health verbinden';
+
+  @override
+  String get appleHealthDisconnectCta => 'Verbindung zu Apple Health trennen';
+
+  @override
+  String get appleHealthConnectedBadge => 'Verbunden';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chatte über deine Gesundheit';
+
+  @override
+  String get appleHealthFeatureChatDesc =>
+      'Frage Omi nach deinen Schritten, deinem Schlaf, deiner Herzfrequenz und deinen Workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Nur Lesezugriff';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi schreibt nie in Apple Health und ändert deine Daten nicht.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sichere Synchronisierung';
+
+  @override
+  String get appleHealthFeatureSecureDesc =>
+      'Deine Apple Health-Daten werden privat mit deinem Omi-Konto synchronisiert.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-Zugriff verweigert';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi hat keine Berechtigung, deine Apple Health-Daten zu lesen. Aktiviere sie unter iOS Einstellungen → Datenschutz & Sicherheit → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Warum verlässt du uns?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Dein Feedback hilft uns, Omi für alle zu verbessern.';
+
+  @override
+  String get deleteReasonPrivacy => 'Datenschutzbedenken';
+
+  @override
+  String get deleteReasonNotUsing => 'Ich nutze es nicht oft genug';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Funktionen, die ich brauche, fehlen';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Zu viele technische Probleme';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Ich nutze etwas anderes';
+
+  @override
+  String get deleteReasonTakingBreak => 'Ich mache nur eine Pause';
+
+  @override
+  String get deleteReasonOther => 'Sonstiges';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Erzähl uns mehr';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Was hätte Omi für dich besser gemacht?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Optional — deine Gedanken helfen uns, ein besseres Produkt zu bauen.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Das ist endgültig';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Sobald du dein Konto löschst, kann es nicht wiederhergestellt werden.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Alle aktiven Abonnements werden gekündigt.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Dein Konto kann nicht wiederhergestellt werden — auch nicht vom Support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Tippe DELETE zur Bestätigung';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Konto endgültig löschen';
+
+  @override
+  String get keepMyAccount => 'Mein Konto behalten';
+
+  @override
+  String get deleteAccountFailed => 'Dein Konto konnte nicht gelöscht werden. Bitte versuche es erneut.';
+
+  @override
+  String get planUpdate => 'Plan-Aktualisierung';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ihr Unlimited-Plan wird eingestellt. Wechseln Sie zum Operator-Plan — dieselben großartigen Funktionen für \$49/Monat. Ihr aktueller Plan funktioniert in der Zwischenzeit weiterhin.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade deinen Plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du hast einen kostenpflichtigen Plan.';
 }

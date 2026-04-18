@@ -1,6 +1,7 @@
-import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+
+from utils.executors import critical_executor
 from enum import Enum
 from typing import List, Optional
 
@@ -13,6 +14,7 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+from database.vector_db import upsert_memory_vectors_batch
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
@@ -22,6 +24,7 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from models.geolocation import Geolocation
+from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.conversation import Conversation as ConversationModel
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
@@ -210,7 +213,7 @@ def create_memory(
 
     # Update personas asynchronously if visibility is public
     if memory.visibility == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
     return MemoryResponse(
         id=memory_db.id,
@@ -270,9 +273,24 @@ def create_memories_batch(
     # Save all memories to database
     memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])
 
+    # Upsert vectors in a single Pinecone call so these memories show up in
+    # semantic search. Previously the dev batch endpoint skipped this step and
+    # batch-created memories were invisible to RAG retrieval.
+    upsert_memory_vectors_batch(
+        uid,
+        [
+            {
+                "memory_id": mem.id,
+                "content": mem.content,
+                "category": mem.category.value,
+            }
+            for mem in memory_dbs
+        ],
+    )
+
     # Update personas if any memory is public
     if has_public:
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [
@@ -653,6 +671,8 @@ class Conversation(BaseModel):
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
     geolocation: Optional[Geolocation] = None
+    folder_id: Optional[str] = None
+    folder_name: Optional[str] = None
 
 
 class CreateConversationRequest(BaseModel):
@@ -713,32 +733,6 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
 
 
-def _add_speaker_names_to_segments(uid, conversations: list):
-    """Add speaker_name to transcript segments based on person_id mappings."""
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
-
-    all_person_ids = set()
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('person_id'):
-                all_person_ids.add(seg['person_id'])
-
-    people_map = {}
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-        people_map = {p['id']: p['name'] for p in people_data}
-
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('is_user'):
-                seg['speaker_name'] = user_name
-            elif seg.get('person_id') and seg['person_id'] in people_map:
-                seg['speaker_name'] = people_map[seg['person_id']]
-            else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
-
-
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
@@ -778,7 +772,9 @@ def get_conversations(
         for conv in unlocked_conversations:
             conv.pop('transcript_segments', None)
     else:
-        _add_speaker_names_to_segments(uid, unlocked_conversations)
+        populate_speaker_names(uid, unlocked_conversations)
+
+    populate_folder_names(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -885,7 +881,9 @@ def get_conversation_endpoint(
     if not include_transcript:
         conversation.pop('transcript_segments', None)
     else:
-        _add_speaker_names_to_segments(uid, [conversation])
+        populate_speaker_names(uid, [conversation])
+
+    populate_folder_names(uid, [conversation])
 
     return conversation
 
@@ -1077,7 +1075,10 @@ def update_conversation_endpoint(
         else:
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
-    return conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if conversation:
+        populate_folder_names(uid, [conversation])
+    return conversation
 
 
 # ******************************************************

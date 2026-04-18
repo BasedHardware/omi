@@ -15,7 +15,6 @@ from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
-from models.conversation import Conversation
 from models.conversation_enums import CategoryEnum
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event
@@ -849,15 +848,18 @@ def qa_rag_stream(
 # **************************************************
 
 
-def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
-    person_ids = memory.get_person_ids()
+def retrieve_memory_context_params(
+    uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]
+) -> List[str]:
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
     user_name = get_user_name(uid, use_default=False)
-    transcript = memory.get_transcript(False, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+    )
     if len(transcript) == 0:
         return []
 
@@ -880,16 +882,19 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
         return []
 
 
-def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
+def obtain_emotional_message(
+    uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str], context: str, emotion: str
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
-    person_ids = memory.get_person_ids()
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = memory.get_transcript(False, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+    )
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}

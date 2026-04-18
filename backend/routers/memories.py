@@ -1,12 +1,18 @@
+import asyncio
 import logging
-import threading
 from typing import List, Optional
 
+from utils.executors import critical_executor
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
-from database.vector_db import upsert_memory_vector, delete_memory_vector
+from database.vector_db import (
+    delete_memory_vector,
+    upsert_memory_vector,
+    upsert_memory_vectors_batch,
+)
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.other import endpoints as auth
@@ -14,6 +20,22 @@ from utils.other import endpoints as auth
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Hard cap on memories per batch request. Keep aligned with the corresponding
+# Pydantic max_length validator below and with the Swift client chunker.
+MEMORIES_BATCH_MAX = 100
+
+
+class BatchMemoriesRequest(BaseModel):
+    memories: List[Memory] = Field(
+        description="List of memories to create in a single batch request",
+        max_length=MEMORIES_BATCH_MAX,
+    )
+
+
+class BatchMemoriesResponse(BaseModel):
+    memories: List[MemoryDB]
+    created_count: int
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -36,8 +58,67 @@ def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid))
     upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
 
     if memory.visibility == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
     return memory_db
+
+
+@router.post(
+    '/v3/memories/batch',
+    tags=['memories'],
+    response_model=BatchMemoriesResponse,
+)
+async def create_memories_batch(
+    request: BatchMemoriesRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:batch")),
+):
+    """
+    Create many memories in a single request.
+
+    Solves the Cloud Armor throttling seen on onboarding: the desktop client
+    used to fan out one `POST /v3/memories` per local-file memory (up to 2800
+    per user), blowing through the 120 req/min per-Authorization Cloud Armor
+    rule and collaterally 429-ing unrelated calls (goals, sync, chat).
+
+    One HTTP request here = one Firestore batch write + one embeddings call +
+    one Pinecone upsert, regardless of batch size.
+    """
+    if not request.memories:
+        return BatchMemoriesResponse(memories=[], created_count=0)
+
+    # Hardcode category to manual to match the single-create endpoint. Callers
+    # that need auto-categorization should use the dev API.
+    memory_dbs: List[MemoryDB] = []
+    has_public = False
+    for memory in request.memories:
+        memory.category = MemoryCategory.manual
+        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        memory_dbs.append(memory_db)
+        if memory.visibility == 'public':
+            has_public = True
+
+    # Firestore batch write + Pinecone batch upsert run on a worker thread so a
+    # slow embeddings/Pinecone call can't starve the FastAPI sync threadpool.
+    def _persist():
+        memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
+        upsert_memory_vectors_batch(
+            uid,
+            [
+                {
+                    "memory_id": m.id,
+                    "content": m.content,
+                    "category": m.category.value,
+                }
+                for m in memory_dbs
+            ],
+        )
+
+    await asyncio.to_thread(_persist)
+
+    if has_public:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(critical_executor, update_personas_async, uid)
+
+    return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
@@ -103,5 +184,5 @@ def update_memory_visibility(memory_id: str, value: str, uid: str = Depends(auth
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    critical_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

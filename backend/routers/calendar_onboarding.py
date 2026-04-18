@@ -1,10 +1,11 @@
+import asyncio
 import json
 import logging
 import os
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -13,6 +14,8 @@ import database.memories as memories_db
 import database.users as users_db
 from database.vector_db import upsert_memory_vector
 from models.memories import Memory, MemoryDB, MemoryCategory
+from utils.executors import critical_executor
+from utils.http_client import get_auth_client
 from utils.llm.clients import llm_mini
 from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
@@ -38,15 +41,16 @@ def calendar_sync_memories(
     - With server_auth_code: exchange code for tokens, store integration, then sync (mobile onboarding)
     - Without: use existing stored google_calendar integration tokens (desktop, post-OAuth)
     """
-    threading.Thread(
-        target=_background_calendar_sync,
-        args=(uid, request.server_auth_code),
-        daemon=True,
-    ).start()
+    critical_executor.submit(_background_calendar_sync_runner, uid, request.server_auth_code)
     return {'status': 'accepted', 'message': 'Calendar sync started'}
 
 
-def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
+def _background_calendar_sync_runner(uid: str, server_auth_code: Optional[str] = None):
+    """Sync wrapper that runs the async function in a new event loop."""
+    asyncio.run(_background_calendar_sync(uid, server_auth_code))
+
+
+async def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
     try:
         if server_auth_code:
             # Mobile flow: exchange auth code for tokens
@@ -56,7 +60,7 @@ def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
                     f"Calendar sync: user {uid} already has google_calendar integration, skipping code exchange"
                 )
             else:
-                tokens = _exchange_auth_code(server_auth_code)
+                tokens = await _exchange_auth_code(server_auth_code)
                 if not tokens:
                     logger.info(f"Calendar sync: code exchange failed for {uid}")
                     return
@@ -85,7 +89,7 @@ def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
         # Fetch calendar events (last 30 days + next 14 days)
         now = datetime.now(timezone.utc)
         try:
-            events = get_google_calendar_events(
+            events = await get_google_calendar_events(
                 access_token=access_token,
                 time_min=now - timedelta(days=30),
                 time_max=now + timedelta(days=14),
@@ -95,10 +99,10 @@ def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
             error_msg = str(e)
             if '401' in error_msg:
                 # Token expired, try refresh
-                new_token = refresh_google_token(uid, integration)
+                new_token = await refresh_google_token(uid, integration)
                 if new_token:
                     try:
-                        events = get_google_calendar_events(
+                        events = await get_google_calendar_events(
                             access_token=new_token,
                             time_min=now - timedelta(days=30),
                             time_max=now + timedelta(days=14),
@@ -140,9 +144,7 @@ def _background_calendar_sync(uid: str, server_auth_code: Optional[str] = None):
         logger.error(f"Calendar sync error for {uid}: {e}")
 
 
-def _exchange_auth_code(server_auth_code: str) -> dict | None:
-    import requests
-
+async def _exchange_auth_code(server_auth_code: str) -> dict | None:
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
 
@@ -151,7 +153,8 @@ def _exchange_auth_code(server_auth_code: str) -> dict | None:
         return None
 
     try:
-        response = requests.post(
+        client = get_auth_client()
+        response = await client.post(
             'https://oauth2.googleapis.com/token',
             data={
                 'code': server_auth_code,
@@ -160,7 +163,6 @@ def _exchange_auth_code(server_auth_code: str) -> dict | None:
                 'grant_type': 'authorization_code',
                 'redirect_uri': '',
             },
-            timeout=10.0,
         )
 
         if response.status_code != 200:

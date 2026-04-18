@@ -638,9 +638,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get saving => 'Opslaan...';
 
   @override
-  String get personaConfig => 'Configureer je AI-persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2433,12 +2430,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createKeyToGetStarted => 'Maak een sleutel aan om te beginnen';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Configureer je AI-persona';
-
-  @override
   String get configureSttProvider => 'STT-provider configureren';
 
   @override
@@ -2953,9 +2944,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Over de app';
-
-  @override
-  String get aboutThePersona => 'Over de persona';
 
   @override
   String get chatPersonality => 'Chatpersoonlijkheid';
@@ -3494,9 +3482,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get changeYourName => 'Wijzig uw naam';
 
   @override
-  String get manageYourOmiPersona => 'Beheer uw Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Stem & Mensen';
 
   @override
@@ -3908,9 +3893,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klik op een sneltoets om deze te wijzigen. Druk op Escape om te annuleren.';
 
   @override
-  String get configurePersonaDescription => 'Configureer je AI-persona';
-
-  @override
   String get configureSTTProvider => 'STT-provider configureren';
 
   @override
@@ -4265,16 +4247,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createAndShareYourApp => 'Maak en deel uw app';
 
   @override
-  String get createMyClone => 'Mijn kloon maken';
-
-  @override
-  String get createYourDigitalClone => 'Maak uw digitale kloon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4303,9 +4276,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get manageApp => 'App beheren';
-
-  @override
-  String get updatePersonaDetails => 'Persona-details bijwerken';
 
   @override
   String deleteItemTitle(String item) {
@@ -5833,9 +5803,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get chooseFile => 'Bestand kiezen';
 
   @override
-  String get configureAiPersona => 'Configureer je AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Verbind AI-assistenten met je gegevens';
 
   @override
@@ -6550,29 +6517,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get sharePublicLink => 'Openbare link delen';
 
   @override
-  String get makePersonaPublic => 'Persona openbaar maken';
-
-  @override
   String get connectedKnowledgeData => 'Verbonden kennisgegevens';
 
   @override
   String get enterName => 'Voer naam in';
-
-  @override
-  String get disconnectTwitter => 'Twitter ontkoppelen';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Weet je zeker dat je je Twitter-account wilt ontkoppelen? Je persona heeft dan geen toegang meer tot je Twitter-gegevens.';
-
-  @override
-  String get getOmiDeviceDescription => 'Maak een nauwkeuriger kloon met je persoonlijke gesprekken';
-
-  @override
-  String get getOmi => 'Omi aanschaffen';
-
-  @override
-  String get iHaveOmiDevice => 'Ik heb een Omi-apparaat';
 
   @override
   String get goal => 'DOEL';
@@ -7124,49 +7072,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan niet worden geselecteerd met andere functies';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-handle niet gevonden';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-handle is geschorst';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter-handle verificatie mislukt';
-
-  @override
-  String get personaFailedToFetch => 'Ophalen van persona mislukt';
-
-  @override
-  String get personaFailedToCreate => 'Aanmaken van persona mislukt';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Verbind minstens één gegevensbron (Omi of Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona succesvol bijgewerkt';
-
-  @override
-  String get personaFailedToUpdate => 'Bijwerken van persona mislukt';
-
-  @override
-  String get personaPleaseSelectImage => 'Selecteer een afbeelding';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Aanmaken van persona mislukt. Probeer het later opnieuw.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Aanmaken van persona mislukt: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Activeren van persona mislukt';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Fout bij activeren persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Ophalen van ondersteunde landen mislukt. Probeer het later opnieuw.';
 
   @override
@@ -7239,21 +7144,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Genereer eerst een app';
-
-  @override
-  String get xHandleTitle => 'Wat is je X-handle?';
-
-  @override
-  String get xHandleDescription => 'We trainen je Omi-kloon voor\nop basis van de activiteit van je account';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Voer je X-handle in';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Voer een geldige X-handle in';
 
   @override
   String get nextButton => 'Volgende';
@@ -7868,9 +7758,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get categoryConversationAnalysis => 'Gesprekanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
-
-  @override
   String get categoryHealth => 'Gezondheid';
 
   @override
@@ -7971,9 +7858,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integraties';
-
-  @override
-  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
 
   @override
   String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';
@@ -9043,4 +8927,132 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Doorgaan';
+
+  @override
+  String get tasksClearCompleted => 'Verwijder voltooide';
+
+  @override
+  String get tasksSelectAll => 'Alles selecteren';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count taak/taken verwijderen';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Gemarkeerd als voltooid';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi heeft toegang tot Apple Health via Apple\'s HealthKit-framework. Je kunt de toegang op elk moment intrekken in de iOS-instellingen.';
+
+  @override
+  String get appleHealthConnectCta => 'Verbinden met Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health loskoppelen';
+
+  @override
+  String get appleHealthConnectedBadge => 'Verbonden';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat over je gezondheid';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Vraag Omi over je stappen, slaap, hartslag en workouts.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Alleen-lezen toegang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi schrijft nooit naar Apple Health en wijzigt je gegevens niet.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Veilige synchronisatie';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Je Apple Health-gegevens synchroniseren privé naar je Omi-account.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-toegang geweigerd';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Waarom vertrek je?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Jouw feedback helpt ons Omi voor iedereen te verbeteren.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privacyzorgen';
+
+  @override
+  String get deleteReasonNotUsing => 'Ik gebruik het niet genoeg';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Functies die ik nodig heb ontbreken';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Te veel technische problemen';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Ik gebruik iets anders';
+
+  @override
+  String get deleteReasonTakingBreak => 'Ik neem gewoon een pauze';
+
+  @override
+  String get deleteReasonOther => 'Anders';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Vertel ons meer';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Wat zou Omi voor jou hebben laten werken?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Optioneel — jouw inzichten helpen ons een beter product te bouwen.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dit is definitief';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Zodra je je account verwijdert, is herstel niet meer mogelijk.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Een actief abonnement wordt geannuleerd.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Je account kan niet worden hersteld — zelfs niet door support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Typ DELETE om te bevestigen';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Account definitief verwijderen';
+
+  @override
+  String get keepMyAccount => 'Mijn account behouden';
+
+  @override
+  String get deleteAccountFailed => 'Je account kon niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get planUpdate => 'Abonnement bijwerken';
+
+  @override
+  String get planDeprecationMessage =>
+      'Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor \$49/maand. Uw huidige abonnement blijft in de tussentijd werken.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade je abonnement';
+
+  @override
+  String get youAreOnAPaidPlan => 'Je hebt een betaald abonnement.';
 }

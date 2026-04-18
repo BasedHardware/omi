@@ -633,9 +633,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get saving => 'กำลังบันทึก...';
 
   @override
-  String get personaConfig => 'กำหนดค่าบุคลิก AI ของคุณ';
-
-  @override
   String get beta => 'เบต้า';
 
   @override
@@ -2413,12 +2410,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get createKeyToGetStarted => 'สร้างคีย์เพื่อเริ่มต้น';
 
   @override
-  String get persona => 'บุคลิกภาพ';
-
-  @override
-  String get configureYourAiPersona => 'กำหนดค่าบุคลิก AI ของคุณ';
-
-  @override
   String get configureSttProvider => 'กำหนดค่าผู้ให้บริการ STT';
 
   @override
@@ -2928,9 +2919,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'เกี่ยวกับแอป';
-
-  @override
-  String get aboutThePersona => 'เกี่ยวกับเพอร์โซน่า';
 
   @override
   String get chatPersonality => 'บุคลิกแชท';
@@ -3466,9 +3454,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get changeYourName => 'เปลี่ยนชื่อของคุณ';
 
   @override
-  String get manageYourOmiPersona => 'จัดการบุคลิกภาพ Omi ของคุณ';
-
-  @override
   String get voiceAndPeople => 'เสียงและบุคคล';
 
   @override
@@ -3875,9 +3860,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get shortcutChangeInstruction => 'คลิกที่ทางลัดเพื่อเปลี่ยน กด Escape เพื่อยกเลิก';
 
   @override
-  String get configurePersonaDescription => 'กำหนดค่าบุคลิกภาพ AI ของคุณ';
-
-  @override
   String get configureSTTProvider => 'กำหนดค่าผู้ให้บริการ STT';
 
   @override
@@ -4229,16 +4211,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get createAndShareYourApp => 'สร้างและแชร์แอปของคุณ';
 
   @override
-  String get createMyClone => 'สร้างโคลนของฉัน';
-
-  @override
-  String get createYourDigitalClone => 'สร้างโคลนดิจิทัลของคุณ';
-
-  @override
   String get itemApp => 'แอป';
-
-  @override
-  String get itemPersona => 'เพอร์โซน่า';
 
   @override
   String keepItemPublic(String item) {
@@ -4267,9 +4240,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get manageApp => 'จัดการแอป';
-
-  @override
-  String get updatePersonaDetails => 'อัปเดตรายละเอียดเพอร์โซน่า';
 
   @override
   String deleteItemTitle(String item) {
@@ -5786,9 +5756,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chooseFile => 'เลือกไฟล์';
 
   @override
-  String get configureAiPersona => 'ตั้งค่าบุคลิก AI ของคุณ';
-
-  @override
   String get connectAiAssistantsToYourData => 'เชื่อมต่อผู้ช่วย AI กับข้อมูลของคุณ';
 
   @override
@@ -6496,29 +6463,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get sharePublicLink => 'แชร์ลิงก์สาธารณะ';
 
   @override
-  String get makePersonaPublic => 'ทำให้บุคลิกเป็นสาธารณะ';
-
-  @override
   String get connectedKnowledgeData => 'ข้อมูลความรู้ที่เชื่อมต่อแล้ว';
 
   @override
   String get enterName => 'ป้อนชื่อ';
-
-  @override
-  String get disconnectTwitter => 'ยกเลิกการเชื่อมต่อ Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการเชื่อมต่อบัญชี Twitter? บุคลิกของคุณจะไม่สามารถเข้าถึงข้อมูล Twitter ของคุณได้อีกต่อไป';
-
-  @override
-  String get getOmiDeviceDescription => 'สร้างโคลนที่แม่นยำยิ่งขึ้นด้วยบทสนทนาส่วนตัวของคุณ';
-
-  @override
-  String get getOmi => 'รับ Omi';
-
-  @override
-  String get iHaveOmiDevice => 'ฉันมีอุปกรณ์ Omi';
 
   @override
   String get goal => 'เป้าหมาย';
@@ -7067,49 +7015,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'ไม่สามารถเลือก Persona พร้อมกับความสามารถอื่นได้';
 
   @override
-  String get personaTwitterHandleNotFound => 'ไม่พบบัญชี Twitter';
-
-  @override
-  String get personaTwitterHandleSuspended => 'บัญชี Twitter ถูกระงับ';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'ไม่สามารถยืนยันบัญชี Twitter ได้';
-
-  @override
-  String get personaFailedToFetch => 'ไม่สามารถดึงข้อมูล Persona ของคุณได้';
-
-  @override
-  String get personaFailedToCreate => 'ไม่สามารถสร้าง Persona ของคุณได้';
-
-  @override
-  String get personaConnectKnowledgeSource => 'โปรดเชื่อมต่อแหล่งข้อมูลอย่างน้อยหนึ่งแหล่ง (Omi หรือ Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'อัปเดต Persona สำเร็จ';
-
-  @override
-  String get personaFailedToUpdate => 'อัปเดต Persona ล้มเหลว';
-
-  @override
-  String get personaPleaseSelectImage => 'โปรดเลือกรูปภาพ';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ไม่สามารถสร้าง Persona ได้ โปรดลองอีกครั้งภายหลัง';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'สร้าง Persona ล้มเหลว: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'ไม่สามารถเปิดใช้งาน Persona ได้';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'เกิดข้อผิดพลาดในการเปิดใช้งาน Persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'ไม่สามารถดึงรายชื่อประเทศที่รองรับได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
@@ -7182,21 +7087,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'กรุณาสร้างแอปก่อน';
-
-  @override
-  String get xHandleTitle => 'บัญชี X ของคุณคืออะไร?';
-
-  @override
-  String get xHandleDescription => 'เราจะฝึกโคลน Omi ของคุณล่วงหน้า\nตามกิจกรรมของบัญชีคุณ';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'กรุณาป้อนบัญชี X ของคุณ';
-
-  @override
-  String get xHandlePleaseEnterValid => 'กรุณาป้อนบัญชี X ที่ถูกต้อง';
 
   @override
   String get nextButton => 'ถัดไป';
@@ -7806,9 +7696,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
 
   @override
-  String get categoryPersonalityClone => 'โคลนบุคลิกภาพ';
-
-  @override
   String get categoryHealth => 'สุขภาพ';
 
   @override
@@ -7909,9 +7796,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'การเชื่อมต่อ';
-
-  @override
-  String get categoryPersonalityClones => 'โคลนบุคลิกภาพ';
 
   @override
   String get categoryProductivityLifestyle => 'ประสิทธิภาพและไลฟ์สไตล์';
@@ -8969,4 +8853,132 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get continueAnyway => 'ดำเนินการต่อ';
+
+  @override
+  String get tasksClearCompleted => 'ล้างรายการที่เสร็จแล้ว';
+
+  @override
+  String get tasksSelectAll => 'เลือกทั้งหมด';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'ลบ $count งาน';
+  }
+
+  @override
+  String get tasksMarkComplete => 'ทำเครื่องหมายว่าเสร็จสิ้น';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi เข้าถึง Apple Health ผ่านเฟรมเวิร์ก HealthKit ของ Apple คุณสามารถเพิกถอนการเข้าถึงได้ทุกเมื่อในการตั้งค่า iOS';
+
+  @override
+  String get appleHealthConnectCta => 'เชื่อมต่อ Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'ยกเลิกการเชื่อมต่อ Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'เชื่อมต่อแล้ว';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'สนทนาเกี่ยวกับสุขภาพของคุณ';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'ถาม Omi เกี่ยวกับก้าว การนอน อัตราการเต้นของหัวใจ และการออกกำลังกายของคุณ';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'สิทธิ์เข้าถึงแบบอ่านอย่างเดียว';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi ไม่เคยเขียนไปยัง Apple Health หรือแก้ไขข้อมูลของคุณ';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'ซิงค์อย่างปลอดภัย';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'ข้อมูล Apple Health ของคุณซิงค์อย่างเป็นส่วนตัวกับบัญชี Omi';
+
+  @override
+  String get appleHealthDeniedTitle => 'การเข้าถึง Apple Health ถูกปฏิเสธ';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi ไม่มีสิทธิ์อ่านข้อมูล Apple Health ของคุณ เปิดใช้งานในการตั้งค่า iOS → ความเป็นส่วนตัวและความปลอดภัย → Health → Omi';
+
+  @override
+  String get deleteFlowReasonTitle => 'ทำไมคุณถึงจะไป?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'ความคิดเห็นของคุณช่วยให้เราปรับปรุง Omi ให้ดีขึ้นสำหรับทุกคน';
+
+  @override
+  String get deleteReasonPrivacy => 'ความกังวลด้านความเป็นส่วนตัว';
+
+  @override
+  String get deleteReasonNotUsing => 'ใช้งานไม่มากพอ';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ขาดฟีเจอร์ที่ต้องการ';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'มีปัญหาทางเทคนิคมากเกินไป';
+
+  @override
+  String get deleteReasonFoundAlternative => 'กำลังใช้สิ่งอื่น';
+
+  @override
+  String get deleteReasonTakingBreak => 'แค่หยุดพักสักครู่';
+
+  @override
+  String get deleteReasonOther => 'อื่นๆ';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'อะไรจะทำให้ Omi ใช้งานได้ดีสำหรับคุณ?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น';
+
+  @override
+  String get deleteFlowConfirmTitle => 'การกระทำนี้ถาวร';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'เมื่อคุณลบบัญชีของคุณแล้ว จะไม่สามารถกู้คืนได้';
+
+  @override
+  String get deleteConsequenceSubscription => 'การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
+
+  @override
+  String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'ลบบัญชีถาวร';
+
+  @override
+  String get keepMyAccount => 'เก็บบัญชีของฉันไว้';
+
+  @override
+  String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get planUpdate => 'อัปเดตแผน';
+
+  @override
+  String get planDeprecationMessage =>
+      'แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา \$49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้';
+
+  @override
+  String get upgradeYourPlan => 'อัปเกรดแผนของคุณ';
+
+  @override
+  String get youAreOnAPaidPlan => 'คุณอยู่ในแผนชำระเงิน';
 }

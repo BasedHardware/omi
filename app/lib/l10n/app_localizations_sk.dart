@@ -638,9 +638,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saving => 'Ukladanie...';
 
   @override
-  String get personaConfig => 'Nakonfigurujte svoju AI persónu';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2431,12 +2428,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createKeyToGetStarted => 'Vytvorte kľúč pre začatie';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Nakonfigurujte svoju AI osobnosť';
-
-  @override
   String get configureSttProvider => 'Konfigurácia poskytovateľa STT';
 
   @override
@@ -2948,9 +2939,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'O aplikácii';
-
-  @override
-  String get aboutThePersona => 'O persóne';
 
   @override
   String get chatPersonality => 'Osobnosť chatu';
@@ -3487,9 +3475,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get changeYourName => 'Zmeniť svoje meno';
 
   @override
-  String get manageYourOmiPersona => 'Spravovať svoju Omi personu';
-
-  @override
   String get voiceAndPeople => 'Hlas a Ľudia';
 
   @override
@@ -3898,9 +3883,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get shortcutChangeInstruction => 'Kliknite na skratku a zmeňte ju. Stlačením Escape zrušíte.';
 
   @override
-  String get configurePersonaDescription => 'Nakonfigurujte svoju AI personu';
-
-  @override
   String get configureSTTProvider => 'Nakonfigurujte poskytovateľa STT';
 
   @override
@@ -4252,16 +4234,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createAndShareYourApp => 'Vytvorte a zdieľajte svoju aplikáciu';
 
   @override
-  String get createMyClone => 'Vytvoriť môj klon';
-
-  @override
-  String get createYourDigitalClone => 'Vytvorte si digitálny klon';
-
-  @override
   String get itemApp => 'Aplikácia';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4290,9 +4263,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get manageApp => 'Spravovať aplikáciu';
-
-  @override
-  String get updatePersonaDetails => 'Aktualizovať detaily persony';
 
   @override
   String deleteItemTitle(String item) {
@@ -5815,9 +5785,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chooseFile => 'Vybrať súbor';
 
   @override
-  String get configureAiPersona => 'Nakonfigurovať AI osobnosť';
-
-  @override
   String get connectAiAssistantsToYourData => 'Pripojiť AI asistentov k vašim údajom';
 
   @override
@@ -6529,28 +6496,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get sharePublicLink => 'Zdieľať verejný odkaz';
 
   @override
-  String get makePersonaPublic => 'Zverejniť osobnosť';
-
-  @override
   String get connectedKnowledgeData => 'Pripojené znalostné údaje';
 
   @override
   String get enterName => 'Zadajte meno';
-
-  @override
-  String get disconnectTwitter => 'Odpojiť Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Naozaj chcete odpojiť Twitter?';
-
-  @override
-  String get getOmiDeviceDescription => 'Vytvorte presnejší klon s vašimi osobnými konverzáciami';
-
-  @override
-  String get getOmi => 'Získať Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Mám zariadenie Omi';
 
   @override
   String get goal => 'CIEĽ';
@@ -7100,49 +7049,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona nemôže byť vybraná s inými schopnosťami';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter účet nenájdený';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter účet je pozastavený';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Overenie Twitter účtu zlyhalo';
-
-  @override
-  String get personaFailedToFetch => 'Nepodarilo sa načítať vašu personu';
-
-  @override
-  String get personaFailedToCreate => 'Nepodarilo sa vytvoriť personu';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Pripojte aspoň jeden zdroj dát (Omi alebo Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona úspešne aktualizovaná';
-
-  @override
-  String get personaFailedToUpdate => 'Aktualizácia persony zlyhala';
-
-  @override
-  String get personaPleaseSelectImage => 'Vyberte obrázok';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Vytvorenie persony zlyhalo. Skúste to neskôr.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Vytvorenie persony zlyhalo: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Aktivácia persony zlyhala';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Chyba pri aktivácii persony: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nepodarilo sa načítať podporované krajiny. Skúste to neskôr.';
 
   @override
@@ -7215,21 +7121,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Najprv prosím vygenerujte aplikáciu';
-
-  @override
-  String get xHandleTitle => 'Vaša X (Twitter) prezývka';
-
-  @override
-  String get xHandleDescription => 'Zadajte vašu X prezývku pre prepojenie účtu';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Zadajte prosím vašu X prezývku';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Zadajte prosím platnú X prezývku';
 
   @override
   String get nextButton => 'Ďalej';
@@ -7833,9 +7724,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analýza konverzácií';
 
   @override
-  String get categoryPersonalityClone => 'Klon osobnosti';
-
-  @override
   String get categoryHealth => 'Zdravie';
 
   @override
@@ -7936,9 +7824,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrácie';
-
-  @override
-  String get categoryPersonalityClones => 'Klony osobností';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivita a životný štýl';
@@ -9002,4 +8887,132 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Pokračovať';
+
+  @override
+  String get tasksClearCompleted => 'Vymazať dokončené';
+
+  @override
+  String get tasksSelectAll => 'Vybrať všetko';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Odstrániť $count úlohu(y)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Označené ako dokončené';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pristupuje k Apple Health prostredníctvom frameworku HealthKit od spoločnosti Apple. Prístup môžete kedykoľvek zrušiť v Nastaveniach iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Pripojiť k Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Odpojiť Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Pripojené';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Hovorte o svojom zdraví';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Pýtajte sa Omi na kroky, spánok, tep a tréningy.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Prístup iba na čítanie';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi nikdy nezapisuje do Apple Health ani neupravuje vaše údaje.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Bezpečná synchronizácia';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Vaše údaje z Apple Health sa súkromne synchronizujú s účtom Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Prístup k Apple Health zamietnutý';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi nemá povolenie na čítanie vašich údajov Apple Health. Povoľte ho v Nastaveniach iOS → Súkromie a bezpečnosť → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Prečo odchádzate?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vaša spätná väzba nám pomáha zlepšovať Omi pre všetkých.';
+
+  @override
+  String get deleteReasonPrivacy => 'Obavy o súkromie';
+
+  @override
+  String get deleteReasonNotUsing => 'Nepoužívam to dostatočne často';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Chýbajú funkcie, ktoré potrebujem';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Príliš veľa technických problémov';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Používam niečo iné';
+
+  @override
+  String get deleteReasonTakingBreak => 'Len si dávam pauzu';
+
+  @override
+  String get deleteReasonOther => 'Iné';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Povedzte nám viac';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Čo by spôsobilo, že by Omi pre vás fungovalo?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlienky nám pomáhajú vytvoriť lepší produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Po odstránení účtu sa nedá obnoviť.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Akékoľvek aktívne predplatné bude zrušené.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Váš účet nie je možné obnoviť — ani podporou.';
+
+  @override
+  String get deleteTypeToConfirm => 'Pre potvrdenie napíšte DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Trvalo odstrániť účet';
+
+  @override
+  String get keepMyAccount => 'Ponechať môj účet';
+
+  @override
+  String get deleteAccountFailed => 'Váš účet sa nepodarilo odstrániť. Skúste to znova.';
+
+  @override
+  String get planUpdate => 'Aktualizácia plánu';
+
+  @override
+  String get planDeprecationMessage =>
+      'Váš plán Unlimited sa ruší. Prejdite na plán Operator — rovnaké skvelé funkcie za \$49/mes. Váš súčasný plán bude zatiaľ naďalej fungovať.';
+
+  @override
+  String get upgradeYourPlan => 'Vylepšite svoj plán';
+
+  @override
+  String get youAreOnAPaidPlan => 'Máte platený plán.';
 }

@@ -6,7 +6,6 @@ from typing import List
 
 from pinecone import Pinecone
 
-from models.conversation import Conversation
 from utils.llm.clients import embeddings
 import logging
 
@@ -31,13 +30,13 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
     }
 
 
-def upsert_vector(uid: str, conversation: Conversation, vector: List[float]):
-    res = index.upsert(vectors=[_get_data(uid, conversation.id, vector)], namespace="ns1")
+def upsert_vector(uid: str, conversation_id: str, vector: List[float]):
+    res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
 
-def upsert_vector2(uid: str, conversation: Conversation, vector: List[float], metadata: dict):
-    data = _get_data(uid, conversation.id, vector)
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: dict):
+    data = _get_data(uid, conversation_id, vector)
     data['metadata'].update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
     logger.info(f'upsert_vector {res}')
@@ -49,8 +48,8 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
     return index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
 
 
-def upsert_vectors(uid: str, vectors: List[List[float]], conversations: List[Conversation]):
-    data = [_get_data(uid, conversation.id, vector) for conversation, vector in zip(conversations, vectors)]
+def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]):
+    data = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     logger.info(f'upsert_vectors {res}')
 
@@ -175,6 +174,44 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
+
+
+def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
+    """
+    Upsert many memory embeddings to Pinecone in a single request.
+
+    Each item must be a dict with keys: 'memory_id', 'content', 'category'.
+    Batching cuts latency from N embedding calls + N upserts to one embedding
+    call + one upsert. Used by POST /v3/memories/batch and the dev batch API.
+    Returns the number of vectors written (0 if Pinecone is not configured).
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping memory vector batch upsert')
+        return 0
+
+    if not items:
+        return 0
+
+    contents = [item['content'] for item in items]
+    vectors = embeddings.embed_documents(contents)
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    payload = [
+        {
+            "id": f"{uid}-{item['memory_id']}",
+            "values": vectors[i],
+            "metadata": {
+                "uid": uid,
+                "memory_id": item['memory_id'],
+                "category": item['category'],
+                "created_at": now_ts,
+            },
+        }
+        for i, item in enumerate(items)
+    ]
+    res = index.upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
+    logger.info(f'upsert_memory_vectors_batch count={len(payload)} {res}')
+    return len(payload)
 
 
 def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit: int = 5) -> List[dict]:

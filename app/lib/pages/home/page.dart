@@ -523,6 +523,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _onCaptureProviderChanged() {
     if (!mounted || _captureProvider == null) return;
 
+    if (!context.read<UsageProvider>().showSubscriptionUI) return;
+
     _freemiumHandler.checkAndShowDialog(context, _captureProvider!).catchError((e) {
       Logger.debug('[Freemium] Error checking dialog: $e');
       return false;
@@ -679,7 +681,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 },
                               ),
                               // Phone calls button - bottom left
-                              if (home.selectedIndex == 0)
+                              if (home.selectedIndex == 0 && context.watch<UsageProvider>().showSubscriptionUI)
                                 Consumer<DeveloperModeProvider>(
                                   builder: (context, devProvider, _) {
                                     if (!devProvider.showPhoneCallButton) return const SizedBox.shrink();
@@ -694,8 +696,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           if (usageProvider.subscription == null) {
                                             await usageProvider.fetchSubscription();
                                           }
-                                          var isUnlimited =
-                                              usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                                          final p = usageProvider.subscription?.subscription.plan;
+                                          var isUnlimited = p == PlanType.unlimited ||
+                                              p == PlanType.operator ||
+                                              p == PlanType.architect;
                                           if (!isUnlimited) {
                                             MixpanelManager().phoneCallUpsellShown(source: 'home');
                                             if (!context.mounted) return;

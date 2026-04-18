@@ -637,9 +637,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get saving => 'Lagrer...';
 
   @override
-  String get personaConfig => 'Konfigurer din AI-persona';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2424,12 +2421,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get createKeyToGetStarted => 'Opprett en nøkkel for å komme i gang';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSttProvider => 'Konfigurer STT-leverandør';
 
   @override
@@ -2944,9 +2935,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Om appen';
-
-  @override
-  String get aboutThePersona => 'Om personaen';
 
   @override
   String get chatPersonality => 'Chat-personlighet';
@@ -3484,9 +3472,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get changeYourName => 'Endre navnet ditt';
 
   @override
-  String get manageYourOmiPersona => 'Administrer din Omi-persona';
-
-  @override
   String get voiceAndPeople => 'Stemme og Personer';
 
   @override
@@ -3896,9 +3881,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klikk på en snarvei for å endre den. Trykk Escape for å avbryte.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurer din AI-persona';
-
-  @override
   String get configureSTTProvider => 'Konfigurer STT-leverandør';
 
   @override
@@ -4253,16 +4235,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get createAndShareYourApp => 'Lag og del appen din';
 
   @override
-  String get createMyClone => 'Lag min klon';
-
-  @override
-  String get createYourDigitalClone => 'Lag din digitale klon';
-
-  @override
   String get itemApp => 'App';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4291,9 +4264,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get manageApp => 'Administrer app';
-
-  @override
-  String get updatePersonaDetails => 'Oppdater persona-detaljer';
 
   @override
   String deleteItemTitle(String item) {
@@ -5816,9 +5786,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get chooseFile => 'Velg fil';
 
   @override
-  String get configureAiPersona => 'Konfigurer din AI-persona';
-
-  @override
   String get connectAiAssistantsToYourData => 'Koble AI-assistenter til dataene dine';
 
   @override
@@ -6527,29 +6494,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get sharePublicLink => 'Del offentlig lenke';
 
   @override
-  String get makePersonaPublic => 'Gjør persona offentlig';
-
-  @override
   String get connectedKnowledgeData => 'Tilkoblet kunnskapsdata';
 
   @override
   String get enterName => 'Skriv inn navn';
-
-  @override
-  String get disconnectTwitter => 'Koble fra Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Er du sikker på at du vil koble fra Twitter-kontoen din? Personaen din vil ikke lenger ha tilgang til Twitter-dataene dine.';
-
-  @override
-  String get getOmiDeviceDescription => 'Lag en mer nøyaktig klon med dine personlige samtaler';
-
-  @override
-  String get getOmi => 'Skaff Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Jeg har en Omi-enhet';
 
   @override
   String get goal => 'MÅL';
@@ -7099,49 +7047,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona kan ikke velges med andre funksjoner';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter-konto ikke funnet';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter-konto er suspendert';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Kunne ikke verifisere Twitter-konto';
-
-  @override
-  String get personaFailedToFetch => 'Kunne ikke hente din persona';
-
-  @override
-  String get personaFailedToCreate => 'Kunne ikke opprette persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Koble til minst én datakilde (Omi eller Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona oppdatert';
-
-  @override
-  String get personaFailedToUpdate => 'Kunne ikke oppdatere persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Velg et bilde';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Kunne ikke opprette persona. Prøv igjen senere.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Kunne ikke opprette persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Kunne ikke aktivere persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Feil ved aktivering av persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Kunne ikke hente støttede land. Prøv igjen senere.';
 
   @override
@@ -7214,21 +7119,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vennligst generer en app først';
-
-  @override
-  String get xHandleTitle => 'Hva er X-håndtaket ditt?';
-
-  @override
-  String get xHandleDescription => 'Vi vil forhåndstrene Omi-klonen din\\nbasert på kontoens aktivitet';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Vennligst skriv inn X-håndtaket ditt';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Vennligst skriv inn et gyldig X-håndtak';
 
   @override
   String get nextButton => 'Neste';
@@ -7839,9 +7729,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get categoryConversationAnalysis => 'Samtaleanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Personlighetsklon';
-
-  @override
   String get categoryHealth => 'Helse';
 
   @override
@@ -7942,9 +7829,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrasjoner';
-
-  @override
-  String get categoryPersonalityClones => 'Personlighetskloner';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
@@ -9011,4 +8895,132 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Fortsett';
+
+  @override
+  String get tasksClearCompleted => 'Fjern fullførte';
+
+  @override
+  String get tasksSelectAll => 'Velg alle';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Slett $count oppgave(r)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Merket som fullført';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi får tilgang til Apple Health gjennom Apples HealthKit-rammeverk. Du kan når som helst trekke tilbake tilgangen i iOS-innstillingene.';
+
+  @override
+  String get appleHealthConnectCta => 'Koble til Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Koble fra Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Tilkoblet';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Chat om helsen din';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Spør Omi om skritt, søvn, puls og treningsøkter.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Kun lesetilgang';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi skriver aldri til Apple Health eller endrer dataene dine.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sikker synkronisering';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health-dataene dine synkroniseres privat til Omi-kontoen din.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health-tilgang avvist';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Hvorfor forlater du oss?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tilbakemeldingen din hjelper oss å gjøre Omi bedre for alle.';
+
+  @override
+  String get deleteReasonPrivacy => 'Personvernhensyn';
+
+  @override
+  String get deleteReasonNotUsing => 'Bruker den ikke nok';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Mangler funksjoner jeg trenger';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'For mange tekniske problemer';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Bruker noe annet';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tar bare en pause';
+
+  @override
+  String get deleteReasonOther => 'Annet';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Fortell oss mer';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Hva ville fått Omi til å fungere for deg?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valgfritt — tankene dine hjelper oss å bygge et bedre produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dette er permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Når du sletter kontoen din, kan den ikke gjenopprettes.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Aktive abonnementer vil bli kansellert.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Kontoen din kan ikke gjenopprettes — ikke engang av kundestøtte.';
+
+  @override
+  String get deleteTypeToConfirm => 'Skriv DELETE for å bekrefte';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Slett kontoen permanent';
+
+  @override
+  String get keepMyAccount => 'Behold kontoen min';
+
+  @override
+  String get deleteAccountFailed => 'Kunne ikke slette kontoen din. Prøv igjen.';
+
+  @override
+  String get planUpdate => 'Planoppdatering';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ditt Unlimited-abonnement avvikles. Bytt til Operator-abonnementet — samme flotte funksjoner til \$49/md. Ditt nåværende abonnement vil fortsette å fungere i mellomtiden.';
+
+  @override
+  String get upgradeYourPlan => 'Oppgrader planen din';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du er på en betalt plan.';
 }

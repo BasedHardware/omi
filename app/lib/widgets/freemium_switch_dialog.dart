@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 
 /// Handler for freemium transcription switching
@@ -15,6 +17,8 @@ class FreemiumSwitchHandler {
   /// Returns true if plans sheet was shown
   Future<bool> checkAndShowPaywall(BuildContext context, CaptureProvider captureProvider) async {
     if (_freemiumService.dialogShownThisSession) return false;
+
+    if (!context.read<UsageProvider>().showSubscriptionUI) return false;
 
     if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
       _freemiumService.markDialogShown();

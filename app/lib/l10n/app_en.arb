@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Configure your AI persona",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Persona",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Configure your AI persona",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Configure STT provider",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "About the Persona",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Chat Personality",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Your Information",
     "setYourName": "Set Your Name",
     "changeYourName": "Change Your Name",
-    "manageYourOmiPersona": "Manage your Omi persona",
     "voiceAndPeople": "Voice & People",
     "teachOmiYourVoice": "Teach Omi your voice",
     "tellOmiWhoSaidIt": "Tell Omi who said it 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Checking the next 7 days",
     "shortcuts": "Shortcuts",
     "shortcutChangeInstruction": "Click on a shortcut to change it. Press Escape to cancel.",
-    "configurePersonaDescription": "Configure your AI persona",
     "configureSTTProvider": "Configure STT provider",
     "setConversationEndDescription": "Set when conversations auto-end",
     "importDataDescription": "Import data from other sources",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Create my Clone",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Create your digital clone",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "App",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Persona",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Keep {item} Public",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Manage App",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Update Persona Details",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Delete {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Configure your AI persona",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Connect AI assistants to your data",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "Share Public Link",
-    "makePersonaPublic": "Make Persona Public",
     "connectedKnowledgeData": "Connected Knowledge Data",
     "enterName": "Enter name",
-    "disconnectTwitter": "Disconnect Twitter",
-    "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
-    "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
-    "getOmi": "Get Omi",
-    "iHaveOmiDevice": "I have Omi device",
     "goal": "GOAL",
     "tapToTrackThisGoal": "Tap to track this goal",
     "tapToSetAGoal": "Tap to set a goal",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter handle not found",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter handle is suspended",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Failed to verify Twitter handle",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Failed to fetch your persona",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Failed to create your persona",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Please connect at least one knowledge data source (Omi or Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona updated successfully",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Failed to update persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Please select an image",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Failed to create your persona. Please try again later.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Failed to create persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Failed to enable persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Error enabling persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Failed to fetch supported countries. Please try again later.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "Please generate an app first",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "What's your X handle?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Please enter your X handle",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Please enter a valid X handle",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Next",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "Daily Recaps",
     "removeFilter": "Remove Filter",
     "categoryConversationAnalysis": "Conversation Analysis",
-    "categoryPersonalityClone": "Personality Clone",
     "categoryHealth": "Health",
     "categoryEducation": "Education",
     "categoryCommunication": "Communication",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "Featured",
     "capabilityTasks": "Tasks",
     "capabilityIntegrations": "Integrations",
-    "categoryPersonalityClones": "Personality Clones",
     "categoryProductivityLifestyle": "Productivity & Lifestyle",
     "categorySocialEntertainment": "Social & Entertainment",
     "categoryProductivityTools": "Productivity & Tools",
@@ -10751,5 +10623,128 @@
     },
     "firmwareWarningTitle": "Important: Read Before Updating",
     "firmwareFormatWarning": "This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device's clock hasn't been synced yet.",
-    "continueAnyway": "Continue"
+    "continueAnyway": "Continue",
+    "tasksClearCompleted": "Clear Completed",
+    "tasksSelectAll": "Select All",
+    "tasksDeleteSelected": "Delete {count} task(s)",
+    "@tasksDeleteSelected": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "tasksMarkComplete": "Marked as complete",
+    "appleHealthManageNote": "Omi accesses Apple Health through Apple's HealthKit framework. You can revoke access anytime in iOS Settings.",
+    "appleHealthConnectCta": "Connect to Apple Health",
+    "appleHealthDisconnectCta": "Disconnect Apple Health",
+    "appleHealthConnectedBadge": "Connected",
+    "appleHealthFeatureChatTitle": "Chat about your health",
+    "appleHealthFeatureChatDesc": "Ask Omi about your steps, sleep, heart rate, and workouts.",
+    "appleHealthFeatureReadOnlyTitle": "Read-only access",
+    "appleHealthFeatureReadOnlyDesc": "Omi never writes to Apple Health or modifies your data.",
+    "appleHealthFeatureSecureTitle": "Secure sync",
+    "appleHealthFeatureSecureDesc": "Your Apple Health data syncs privately to your Omi account.",
+    "appleHealthDeniedTitle": "Apple Health access denied",
+    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.",
+    "deleteFlowReasonTitle": "Why are you leaving?",
+    "@deleteFlowReasonTitle": {
+        "description": "Title on delete-account flow reason step"
+    },
+    "deleteFlowReasonSubtitle": "Your feedback helps us improve Omi for everyone.",
+    "@deleteFlowReasonSubtitle": {
+        "description": "Subtitle on delete-account flow reason step"
+    },
+    "deleteReasonPrivacy": "Privacy concerns",
+    "@deleteReasonPrivacy": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonNotUsing": "Not using it enough",
+    "@deleteReasonNotUsing": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonMissingFeatures": "Missing features I need",
+    "@deleteReasonMissingFeatures": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTechnicalIssues": "Too many technical issues",
+    "@deleteReasonTechnicalIssues": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonFoundAlternative": "Using something else",
+    "@deleteReasonFoundAlternative": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTakingBreak": "Just taking a break",
+    "@deleteReasonTakingBreak": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonOther": "Other",
+    "@deleteReasonOther": {
+        "description": "Delete reason option"
+    },
+    "deleteFlowFeedbackTitle": "Tell us more",
+    "@deleteFlowFeedbackTitle": {
+        "description": "Title on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackSubtitle": "What would have made Omi work for you?",
+    "@deleteFlowFeedbackSubtitle": {
+        "description": "Subtitle on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackHint": "Optional — your thoughts help us build a better product.",
+    "@deleteFlowFeedbackHint": {
+        "description": "TextField hint on delete feedback step"
+    },
+    "deleteFlowConfirmTitle": "This is permanent",
+    "@deleteFlowConfirmTitle": {
+        "description": "Title on final delete confirmation step"
+    },
+    "deleteFlowConfirmSubtitle": "Once you delete your account, there is no way to recover it.",
+    "@deleteFlowConfirmSubtitle": {
+        "description": "Subtitle on final delete confirmation step"
+    },
+    "deleteConsequenceSubscription": "Any active subscription will be cancelled.",
+    "@deleteConsequenceSubscription": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteConsequenceNoRecovery": "Your account cannot be restored — not even by support.",
+    "@deleteConsequenceNoRecovery": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteTypeToConfirm": "Type DELETE to confirm",
+    "@deleteTypeToConfirm": {
+        "description": "Instruction to type DELETE to confirm"
+    },
+    "deleteConfirmationWord": "DELETE",
+    "@deleteConfirmationWord": {
+        "description": "The literal word users type to confirm deletion. Keep uppercase."
+    },
+    "deleteAccountPermanently": "Delete account permanently",
+    "@deleteAccountPermanently": {
+        "description": "Primary destructive action label"
+    },
+    "keepMyAccount": "Keep my account",
+    "@keepMyAccount": {
+        "description": "Secondary action to back out of deletion"
+    },
+    "deleteAccountFailed": "Could not delete your account. Please try again.",
+    "@deleteAccountFailed": {
+        "description": "Error shown when deletion API fails"
+    },
+    "planUpdate": "Plan Update",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Your Unlimited plan is being retired. Switch to the Operator plan — same great features at $49/mo. Your current plan will continue to work in the meantime.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Upgrade Your Plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "You are on a paid plan.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

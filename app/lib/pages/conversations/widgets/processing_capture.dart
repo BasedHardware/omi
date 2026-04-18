@@ -13,7 +13,6 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
@@ -131,9 +130,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   Widget? _getConversationHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
-    var connectivityProvider = context.read<ConnectivityProvider>();
-
-    bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
@@ -225,26 +221,23 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
-    } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
-      var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
-      if (lastEvent is MessageServiceStatusEvent) {
-        if (lastEvent.status == "ready") {
-          stateText = context.l10n.listening;
-          statusIndicator = const RecordingStatusIndicator();
-        } else {
+    } else if (isUsingPhoneMic || isHavingRecordingDevice) {
+      // Show "Listening" for all active recording states — WAL ensures audio is
+      // saved locally regardless of transcription connection status.
+      if (transcriptServiceStateOk) {
+        var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
+        if (lastEvent is MessageServiceStatusEvent) {
           bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-          stateText = transcriptionDiagnosticEnabled ? (lastEvent.statusText ?? "") : "Connecting";
+          stateText = transcriptionDiagnosticEnabled
+              ? (lastEvent.statusText ?? context.l10n.listening)
+              : context.l10n.listening;
+        } else {
+          stateText = context.l10n.listening;
         }
       } else {
-        stateText = "Connecting";
+        stateText = context.l10n.listening;
       }
-    } else if (!internetConnectionStateOk) {
-      stateText = "Waiting for network";
-    } else if (!transcriptServiceStateOk && isUsingPhoneMic) {
-      stateText = context.l10n.transcriptionPaused;
-      statusIndicator = const ReconnectingStatusIndicator();
-    } else if (!transcriptServiceStateOk) {
-      stateText = "Connecting";
+      statusIndicator = const RecordingStatusIndicator();
     }
     Widget right = stateText.isNotEmpty || statusIndicator != null
         ? Row(
@@ -295,13 +288,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
-    bool transcriptServiceStateOk = provider.transcriptServiceReady;
-    bool isReconnecting = !isPaused && !hasPhotos && !transcriptServiceStateOk;
+    // Show "Listening" for all active recording states — WAL ensures audio is
+    // saved locally regardless of transcription connection status.
     String statusText = isPaused
         ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
         : hasPhotos
         ? 'Capturing'
-        : (transcriptServiceStateOk ? context.l10n.listening : context.l10n.transcriptionPaused);
+        : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -319,23 +312,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(width: 6),
-                if (isReconnecting) ...[
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(color: Color(0xFFFE5D50), shape: BoxShape.circle),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 3),
-                  const Icon(Icons.cloud_off, color: Color(0xFFFF9500), size: 12),
-                ] else
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
@@ -547,45 +531,6 @@ class _PausedStatusIndicatorState extends State<PausedStatusIndicator> with Sing
     return FadeTransition(
       opacity: _opacityAnim,
       child: const Icon(Icons.fiber_manual_record, color: Colors.orange, size: 16.0),
-    );
-  }
-}
-
-/// Shows a red recording dot with a blinking wifi-off icon to indicate
-/// recording continues but transcription connection is lost.
-class ReconnectingStatusIndicator extends StatefulWidget {
-  const ReconnectingStatusIndicator({super.key});
-
-  @override
-  State<ReconnectingStatusIndicator> createState() => _ReconnectingStatusIndicatorState();
-}
-
-class _ReconnectingStatusIndicatorState extends State<ReconnectingStatusIndicator> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this)..repeat(reverse: true);
-    _opacityAnim = Tween<double>(begin: 1.0, end: 0.3).animate(_controller);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 16,
-      height: 16,
-      child: FadeTransition(
-        opacity: _opacityAnim,
-        child: const Icon(Icons.cloud_off, color: Colors.orange, size: 16.0),
-      ),
     );
   }
 }

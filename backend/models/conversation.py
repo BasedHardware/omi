@@ -4,10 +4,9 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from models.audio_file import AudioFile
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
 from models.conversation_enums import (
-    CategoryEnum,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -18,13 +17,12 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
-from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
+from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 
-# Re-export moved symbols so that `from models.conversation import CategoryEnum` etc. still works.
-# Wildcard imports have been migrated to explicit imports (Phase 3, #6423), so __all__ is safe now.
+# Only locally-defined symbols are exported. Use canonical modules for moved types:
+#   models.conversation_enums, models.structured, models.audio_file, etc.
 __all__ = [
-    # Defined here
     'AppResult',
     'BulkAssignSegmentsRequest',
     'Conversation',
@@ -44,26 +42,6 @@ __all__ = [
     'UpdateActionItemDescriptionRequest',
     'UpdateConversation',
     'UpdateSegmentTextRequest',
-    # Re-exports (backward compat — prefer importing from the canonical module)
-    'ActionItem',
-    'ActionItemsExtraction',
-    'AudioFile',
-    'CalendarMeetingContext',
-    'CategoryEnum',
-    'ConversationPhoto',
-    'ConversationSource',
-    'ConversationStatus',
-    'ConversationVisibility',
-    'Event',
-    'ExternalIntegrationConversationSource',
-    'Geolocation',
-    'MeetingParticipant',
-    'Message',
-    'Person',
-    'PostProcessingModel',
-    'PostProcessingStatus',
-    'Structured',
-    'TranscriptSegment',
 ]
 
 
@@ -135,78 +113,6 @@ class Conversation(BaseModel):
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
-
-    @staticmethod
-    def conversations_to_string(
-        conversations: List['Conversation'],
-        use_transcript: bool = False,
-        include_timestamps: bool = False,
-        people: List[Person] = None,
-        user_name: str = None,
-    ) -> str:
-        result = []
-        people_map = {p.id: p for p in people} if people else {}
-        for i, conversation in enumerate(conversations):
-            if isinstance(conversation, dict):
-                conversation = Conversation(**conversation)
-            formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
-            conversation_str = (
-                f"Conversation #{i + 1}\n"
-                f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
-            )
-
-            # Add started_at and finished_at if available
-            if conversation.started_at:
-                formatted_started = (
-                    conversation.started_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
-                )
-                conversation_str += f"Started: {formatted_started}\n"
-            if conversation.finished_at:
-                formatted_finished = (
-                    conversation.finished_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
-                )
-                conversation_str += f"Finished: {formatted_finished}\n"
-
-            conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
-
-            if (
-                conversation.apps_results
-                and len(conversation.apps_results) > 0
-                and conversation.apps_results[0].content.strip()
-            ):
-                conversation_str += f"{conversation.apps_results[0].content}\n"
-            else:
-                conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
-
-            # attendees
-            if people_map:
-                conv_person_ids = set(conversation.get_person_ids())
-                if conv_person_ids:
-                    attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
-                    if attendees_names:
-                        attendees = ", ".join(attendees_names)
-                        conversation_str += f"Attendees: {attendees}\n"
-
-            if conversation.structured.action_items:
-                conversation_str += "Action Items:\n"
-                for item in conversation.structured.action_items:
-                    conversation_str += f"- {item.description}\n"
-
-            if conversation.structured.events:
-                conversation_str += "Events:\n"
-                for event in conversation.structured.events:
-                    conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
-
-            if use_transcript:
-                conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"
-                # photos
-                photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
-                if photo_descriptions != 'None':
-                    conversation_str += f"Photo Descriptions from a wearable camera:\n{photo_descriptions}\n"
-
-            result.append(conversation_str.strip())
-
-        return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source

@@ -67,6 +67,10 @@ for attr in ["record_app_usage", "get_omi_personas_by_uid_db", "get_app_by_id_db
 llm_usage_mod = sys.modules["database.llm_usage"]
 llm_usage_mod.record_llm_usage = MagicMock()
 
+users_mod = sys.modules["database.users"]
+for attr in ["get_user_language_preference", "get_people_by_ids"]:
+    setattr(users_mod, attr, MagicMock(return_value=None))
+
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
@@ -94,7 +98,7 @@ for name in [
         sys.modules[name] = types.ModuleType(name)
 
 utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "sync_update_persona_prompt"]:
+for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt"]:
     setattr(utils_apps, attr, MagicMock())
 
 utils_analytics = sys.modules["utils.analytics"]

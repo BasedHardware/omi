@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
-import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
@@ -32,22 +31,18 @@ import 'device_settings.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
 
-enum SettingsMode { no_device, omi }
-
 class SettingsDrawer extends StatefulWidget {
-  final SettingsMode mode;
-
-  const SettingsDrawer({super.key, this.mode = SettingsMode.omi});
+  const SettingsDrawer({super.key});
 
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
 
-  static void show(BuildContext context, {SettingsMode mode = SettingsMode.omi}) {
+  static void show(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => SettingsDrawer(mode: mode),
+      builder: (context) => const SettingsDrawer(),
     );
   }
 }
@@ -301,7 +296,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
-                    final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                    final sp = usageProvider.subscription?.subscription.plan;
+                    final isUnlimited = sp == PlanType.unlimited || sp == PlanType.operator || sp == PlanType.architect;
                     return _buildSettingsItem(
                       title: context.l10n.planAndUsage,
                       icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
@@ -469,8 +465,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.signOut,
                   icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    // Capture the provider reference before any navigation
-                    final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
                     final navigator = Navigator.of(context);
 
                     navigator.pop(); // Close the settings drawer
@@ -485,7 +479,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             Navigator.of(ctx).pop();
                             await SharedPreferencesUtil().clear();
                             await AuthService.instance.signOut();
-                            personaProvider.setRouting(PersonaProfileRouting.no_device);
                             if (context.mounted) {
                               routeToPage(context, const AppShell(), replace: true);
                             }
@@ -507,70 +500,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ],
         );
       },
-    );
-  }
-
-  Widget _buildNoDeviceModeContent(BuildContext context) {
-    return Column(
-      children: [
-        // Support Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: context.l10n.needHelpChatWithUs,
-              icon: const FaIcon(FontAwesomeIcons.solidComments, color: Color(0xFF8E8E93), size: 20),
-              onTap: () async {
-                await Intercom.instance.displayMessenger();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Sign Out Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: context.l10n.signOut,
-              icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
-              onTap: () async {
-                // Capture the provider reference before any navigation
-                final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                final navigator = Navigator.of(context);
-
-                navigator.pop(); // Close the settings drawer
-
-                await showDialog(
-                  context: context,
-                  builder: (ctx) {
-                    return getDialog(
-                      ctx,
-                      () => Navigator.of(ctx).pop(),
-                      () async {
-                        Navigator.of(ctx).pop(); // Close dialog first
-                        SharedPreferencesUtil().hasOmiDevice = null;
-                        SharedPreferencesUtil().verifiedPersonaId = null;
-                        personaProvider.setRouting(PersonaProfileRouting.no_device);
-                        await AuthService.instance.signOut();
-                        if (context.mounted) {
-                          routeToPage(context, const AppShell(), replace: true);
-                        }
-                      },
-                      context.l10n.signOutQuestion,
-                      context.l10n.signOutConfirmation,
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Version Info
-        _buildVersionInfoSection(),
-        const SizedBox(height: 24),
-      ],
     );
   }
 
@@ -622,8 +551,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child:
-                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
+              child: _buildOmiModeContent(context),
             ),
           ),
         ],

@@ -1,7 +1,7 @@
 import asyncio
-import concurrent.futures
-import threading
 from datetime import datetime, time, timedelta
+
+from utils.executors import storage_executor
 
 import pytz
 
@@ -11,6 +11,7 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
+from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
@@ -129,7 +130,9 @@ def _send_summary_notification(user_data: tuple):
     if not conversations_data or len(conversations_data) == 0:
         return
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')]
+    conversations = [
+        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
+    ]
     if not conversations:
         return
 
@@ -154,8 +157,8 @@ def _send_summary_notification(user_data: tuple):
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    # Also send webhook with the full summary data
-    threading.Thread(target=day_summary_webhook, args=(uid, str(summary_data))).start()
+    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run)
+    storage_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -165,9 +168,8 @@ def _send_summary_notification(user_data: tuple):
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [loop.run_in_executor(pool, _send_summary_notification, user_tokens) for user_tokens in users]
-        await asyncio.gather(*tasks)
+    tasks = [loop.run_in_executor(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
+    await asyncio.gather(*tasks)
 
 
 async def send_daily_notification():

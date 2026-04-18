@@ -636,9 +636,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saving => 'Išsaugoma...';
 
   @override
-  String get personaConfig => 'Konfigūruokite savo DI asmens charakteristikų';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2425,12 +2422,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createKeyToGetStarted => 'Sukurkite raktą, kad pradėtumėte';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Sukonfigūruokite savo AI asmenybę';
-
-  @override
   String get configureSttProvider => 'Konfigūruoti STT teikėją';
 
   @override
@@ -2945,9 +2936,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Apie programą';
-
-  @override
-  String get aboutThePersona => 'Apie asmenybę';
 
   @override
   String get chatPersonality => 'Pokalbio asmenybė';
@@ -3484,9 +3472,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get changeYourName => 'Pakeisti savo vardą';
 
   @override
-  String get manageYourOmiPersona => 'Valdyti savo Omi personą';
-
-  @override
   String get voiceAndPeople => 'Balsas ir Žmonės';
 
   @override
@@ -3896,9 +3881,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Spustelėkite spartųjį klavišą, kad jį pakeistumėte. Paspauskite Escape, kad atšauktumėte.';
 
   @override
-  String get configurePersonaDescription => 'Sukonfigūruokite savo AI personą';
-
-  @override
   String get configureSTTProvider => 'Sukonfigūruoti STT teikėją';
 
   @override
@@ -4251,16 +4233,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createAndShareYourApp => 'Sukurkite ir dalinkitės savo programėle';
 
   @override
-  String get createMyClone => 'Sukurti mano kloną';
-
-  @override
-  String get createYourDigitalClone => 'Sukurkite savo skaitmeninį kloną';
-
-  @override
   String get itemApp => 'Programėlė';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4289,9 +4262,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get manageApp => 'Valdyti programėlę';
-
-  @override
-  String get updatePersonaDetails => 'Atnaujinti personas informaciją';
 
   @override
   String deleteItemTitle(String item) {
@@ -5817,9 +5787,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get chooseFile => 'Pasirinkti failą';
 
   @override
-  String get configureAiPersona => 'Konfigūruoti savo AI personą';
-
-  @override
   String get connectAiAssistantsToYourData => 'Prijungti AI asistentus prie savo duomenų';
 
   @override
@@ -6532,29 +6499,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get sharePublicLink => 'Bendrinti viešą nuorodą';
 
   @override
-  String get makePersonaPublic => 'Padaryti personą viešą';
-
-  @override
   String get connectedKnowledgeData => 'Susieti žinių duomenys';
 
   @override
   String get enterName => 'Įveskite vardą';
-
-  @override
-  String get disconnectTwitter => 'Atjungti Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Ar tikrai norite atjungti savo Twitter paskyrą? Jūsų persona nebegalės pasiekti jūsų Twitter duomenų.';
-
-  @override
-  String get getOmiDeviceDescription => 'Sukurkite tikslesnį kloną naudodami savo asmeninius pokalbius';
-
-  @override
-  String get getOmi => 'Gauti Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Turiu Omi įrenginį';
 
   @override
   String get goal => 'TIKSLAS';
@@ -7106,49 +7054,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona negalima pasirinkti su kitomis galimybėmis';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter paskyra nerasta';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter paskyra sustabdyta';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Nepavyko patvirtinti Twitter paskyros';
-
-  @override
-  String get personaFailedToFetch => 'Nepavyko gauti jūsų persona';
-
-  @override
-  String get personaFailedToCreate => 'Nepavyko sukurti persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Prijunkite bent vieną duomenų šaltinį (Omi arba Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona sėkmingai atnaujinta';
-
-  @override
-  String get personaFailedToUpdate => 'Nepavyko atnaujinti persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Pasirinkite vaizdą';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Nepavyko sukurti persona. Bandykite vėliau.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Nepavyko sukurti persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Nepavyko įjungti persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Klaida įjungiant persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Nepavyko gauti palaikomų šalių. Bandykite vėliau.';
 
   @override
@@ -7221,21 +7126,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Pirmiausia sugeneruokite programėlę';
-
-  @override
-  String get xHandleTitle => 'Koks jūsų X vardas?';
-
-  @override
-  String get xHandleDescription => 'Mes iš anksto apmokysime jūsų Omi kloną';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Įveskite savo X vardą';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Įveskite teisingą X vardą';
 
   @override
   String get nextButton => 'Toliau';
@@ -7849,9 +7739,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get categoryConversationAnalysis => 'Pokalbių analizė';
 
   @override
-  String get categoryPersonalityClone => 'Asmenybės klonas';
-
-  @override
   String get categoryHealth => 'Sveikata';
 
   @override
@@ -7952,9 +7839,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integracijos';
-
-  @override
-  String get categoryPersonalityClones => 'Asmenybių klonai';
 
   @override
   String get categoryProductivityLifestyle => 'Produktyvumas ir gyvenimo būdas';
@@ -9023,4 +8907,132 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Tęsti';
+
+  @override
+  String get tasksClearCompleted => 'Išvalyti atliktus';
+
+  @override
+  String get tasksSelectAll => 'Pasirinkti viską';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Ištrinti $count užduotį(is)';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Pažymėta kaip atlikta';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi pasiekia Apple Health per Apple HealthKit sistemą. Prieigą galite bet kada atšaukti iOS nustatymuose.';
+
+  @override
+  String get appleHealthConnectCta => 'Prijungti Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Atjungti Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Prijungta';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Kalbėkitės apie savo sveikatą';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Klauskite Omi apie žingsnius, miegą, pulsą ir treniruotes.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Prieiga tik skaitymui';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi niekada nerašo į Apple Health ir nekeičia jūsų duomenų.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Saugus sinchronizavimas';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Jūsų Apple Health duomenys privačiai sinchronizuojami su Omi paskyra.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Prieiga prie Apple Health atmesta';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi neturi leidimo skaityti jūsų Apple Health duomenis. Įjunkite: iOS Nustatymai → Privatumas ir sauga → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Kodėl išeini?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Tavo atsiliepimai padeda mums tobulinti Omi visiems.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privatumo problemos';
+
+  @override
+  String get deleteReasonNotUsing => 'Naudoju nepakankamai dažnai';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Trūksta funkcijų, kurių man reikia';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Per daug techninių problemų';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Naudoju kažką kita';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tiesiog darau pertrauką';
+
+  @override
+  String get deleteReasonOther => 'Kita';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Papasakok daugiau';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Kas būtų padarę Omi tinkamą tau?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Neprivaloma — tavo mintys padeda mums sukurti geresnį produktą.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Tai negrįžtama';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Ištrynus paskyrą jos nebus galima atkurti.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Bet kokia aktyvi prenumerata bus atšaukta.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tavo paskyros negalima atkurti — net ir palaikymo komandai.';
+
+  @override
+  String get deleteTypeToConfirm => 'Norėdami patvirtinti, įveskite DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Visam laikui ištrinti paskyrą';
+
+  @override
+  String get keepMyAccount => 'Palikti mano paskyrą';
+
+  @override
+  String get deleteAccountFailed => 'Nepavyko ištrinti tavo paskyros. Bandyk dar kartą.';
+
+  @override
+  String get planUpdate => 'Plano atnaujinimas';
+
+  @override
+  String get planDeprecationMessage =>
+      'Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už \$49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.';
+
+  @override
+  String get upgradeYourPlan => 'Atnaujinkite savo planą';
+
+  @override
+  String get youAreOnAPaidPlan => 'Jūs naudojate mokamą planą.';
 }

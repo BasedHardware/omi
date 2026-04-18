@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "Конфигурирај ја твојата AI личност",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "БЕТА",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "Персона",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Конфигурирај твоја AI персона",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "Конфигурирај STT обезбедувач",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "За персоната",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "Личност на разговор",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "Твоите информации",
     "setYourName": "Постави го твоето име",
     "changeYourName": "Промени го твоето име",
-    "manageYourOmiPersona": "Управувај со твоја Omi персона",
     "voiceAndPeople": "Глас и луѓе",
     "teachOmiYourVoice": "Научи го Omi твој глас",
     "tellOmiWhoSaidIt": "Кажи му на Omi кој го рече тоа 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "Проверување на следните 7 дена",
     "shortcuts": "Кратенки",
     "shortcutChangeInstruction": "Кликни на кратенка за да је промениш. Притисни Escape за откажување.",
-    "configurePersonaDescription": "Конфигурирај твоја AI персона",
     "configureSTTProvider": "Конфигурирај STT добавувач",
     "setConversationEndDescription": "Постави кога разговорите автоматски завршува",
     "importDataDescription": "Увезување податоци од други извори",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Создај мој клон",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Создај твој дигитален клон",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "Апликација",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Персона",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Держи {item} јавна",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "Управувај апликација",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Ажурирај детали на персона",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Избриши {item}",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Конфигурирајте ја вашата ИИ личност",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Поврзи ИИ асистенти со твојите податоци",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "Дели јавна врска",
-    "makePersonaPublic": "Направи личност јавна",
     "connectedKnowledgeData": "Поврзани податоци на знаење",
     "enterName": "Внеси име",
-    "disconnectTwitter": "Откажи врска со Twitter",
-    "disconnectTwitterConfirmation": "Си ли сигурен дека сакаш да го откажеш твојот Twitter сметка? Твојата личност повеќе нема пристап до твоите Twitter податоци.",
-    "getOmiDeviceDescription": "Создај пошточен клон со твои лични разговори",
-    "getOmi": "Земи Omi",
-    "iHaveOmiDevice": "Имам Omi уред",
     "goal": "ЦЕЛ",
     "tapToTrackThisGoal": "Тапни за да ја следиш оваа цел",
     "tapToSetAGoal": "Тапни за да поставиш цел",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter рачка не е пронајдена",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter рачката е суспендирана",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Неуспешна проверка на Twitter рачката",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Неуспешно преземање на вашата persona",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Неуспешно создавање на вашата persona",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Ве молиме поврзете најмалку еден извор на знаење (Omi или Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona е успешно ажурирана",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Неуспешно ажурирање на persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Ве молиме одберете слика",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Неуспешно создавање на вашата persona. Ве молиме обидете се подоцна.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Неуспешно создавање на persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Неуспешна активирање на persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Грешка при активирање на persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Неуспешно преземање на поддржани держави. Ве молиме обидете се подоцна.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "Ве молиме прво генерирајте апликација",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "Која е вашата X рачка?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "Ние ќе предвое вашиот Omi клон\nврз основа на активноста на вашата сметка",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Ве молиме внесете вашата X рачка",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Ве молиме внесете валидна X рачка",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "Следно",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "Дневни Резимеа",
     "removeFilter": "Отстрани Филтер",
     "categoryConversationAnalysis": "Анализа на Разговор",
-    "categoryPersonalityClone": "Клон на Личност",
     "categoryHealth": "Здравје",
     "categoryEducation": "Образование",
     "categoryCommunication": "Комуникација",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "Избраңо",
     "capabilityTasks": "Задачи",
     "capabilityIntegrations": "Интеграции",
-    "categoryPersonalityClones": "Клонови на Личност",
     "categoryProductivityLifestyle": "Продуктивност и Начин на Живот",
     "categorySocialEntertainment": "Социјално и Забава",
     "categoryProductivityTools": "Продуктивност и Алатки",
@@ -10749,5 +10621,58 @@
     },
     "firmwareWarningTitle": "Важно: Прочитајте пред ажурирање",
     "firmwareFormatWarning": "Овој фирмвер ќе ја форматира SD картичката. Ве молиме осигурајте се дека сите офлајн податоци се синхронизирани пред надградба.\n\nАко видите трепкачко црвено светло по инсталирањето на оваа верзија, не грижете се. Едноставно поврзете го уредот со апликацијата и треба да стане сино. Црвеното светло значи дека часовникот на уредот сè уште не е синхронизиран.",
-    "continueAnyway": "Продолжи"
+    "continueAnyway": "Продолжи",
+    "tasksClearCompleted": "Исчисти завршени",
+    "tasksSelectAll": "Избери сè",
+    "tasksDeleteSelected": "Избриши {count} задача(и)",
+    "tasksMarkComplete": "Означено како завршено",
+    "appleHealthManageNote": "Omi пристапува до Apple Health преку HealthKit рамката на Apple. Пристапот можете да го повлечете во секое време во поставките на iOS.",
+    "appleHealthConnectCta": "Поврзи со Apple Health",
+    "appleHealthDisconnectCta": "Прекини врска со Apple Health",
+    "appleHealthConnectedBadge": "Поврзано",
+    "appleHealthFeatureChatTitle": "Разговарајте за своето здравје",
+    "appleHealthFeatureChatDesc": "Прашајте го Omi за вашите чекори, сон, срцев ритам и тренинзи.",
+    "appleHealthFeatureReadOnlyTitle": "Пристап само за читање",
+    "appleHealthFeatureReadOnlyDesc": "Omi никогаш не запишува во Apple Health и не ги менува вашите податоци.",
+    "appleHealthFeatureSecureTitle": "Безбедна синхронизација",
+    "appleHealthFeatureSecureDesc": "Вашите Apple Health податоци приватно се синхронизираат со Omi сметката.",
+    "appleHealthDeniedTitle": "Пристапот до Apple Health е одбиен",
+    "appleHealthDeniedBody": "Omi нема дозвола да ги чита вашите Apple Health податоци. Овозможете го во iOS Поставки → Приватност и безбедност → Health → Omi.",
+    "deleteFlowReasonTitle": "Зошто си одите?",
+    "deleteFlowReasonSubtitle": "Вашите повратни информации ни помагаат да го подобриме Omi за сите.",
+    "deleteReasonPrivacy": "Грижи за приватноста",
+    "deleteReasonNotUsing": "Не го користам доволно често",
+    "deleteReasonMissingFeatures": "Недостасуваат функции што ми се потребни",
+    "deleteReasonTechnicalIssues": "Премногу технички проблеми",
+    "deleteReasonFoundAlternative": "Користам нешто друго",
+    "deleteReasonTakingBreak": "Само правам пауза",
+    "deleteReasonOther": "Друго",
+    "deleteFlowFeedbackTitle": "Кажете ни повеќе",
+    "deleteFlowFeedbackSubtitle": "Што би направило Omi да работи за вас?",
+    "deleteFlowFeedbackHint": "Опционално — вашите мисли ни помагаат да изградиме подобар производ.",
+    "deleteFlowConfirmTitle": "Ова е трајно",
+    "deleteFlowConfirmSubtitle": "Откако ќе ја избришете сметката, не може да се врати.",
+    "deleteConsequenceSubscription": "Секоја активна претплата ќе биде откажана.",
+    "deleteConsequenceNoRecovery": "Вашата сметка не може да се обнови — ниту од поддршката.",
+    "deleteTypeToConfirm": "Внесете DELETE за потврда",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Трајно избриши ја сметката",
+    "keepMyAccount": "Задржи ја мојата сметка",
+    "deleteAccountFailed": "Не успеавме да ја избришеме вашата сметка. Обидете се повторно.",
+    "planUpdate": "Ажурирање на планот",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Вашиот Unlimited план се укинува. Преминете на Operator план — истите одлични функции за $49/мес. Вашиот тековен план ќе продолжи да работи во меѓувреме.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Надградете го вашиот план",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Вие сте на платен план.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

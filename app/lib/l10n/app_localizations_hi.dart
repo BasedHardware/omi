@@ -633,9 +633,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get saving => 'सहेजा जा रहा है...';
 
   @override
-  String get personaConfig => 'अपना AI व्यक्तित्व कॉन्फ़िगर करें';
-
-  @override
   String get beta => 'बीटा';
 
   @override
@@ -2399,12 +2396,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createKeyToGetStarted => 'शुरू करने के लिए एक कुंजी बनाएं';
 
   @override
-  String get persona => 'व्यक्तित्व';
-
-  @override
-  String get configureYourAiPersona => 'अपना AI व्यक्तित्व कॉन्फ़िगर करें';
-
-  @override
   String get configureSttProvider => 'STT प्रदाता कॉन्फ़िगर करें';
 
   @override
@@ -2919,9 +2910,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'ऐप के बारे में';
-
-  @override
-  String get aboutThePersona => 'पर्सोना के बारे में';
 
   @override
   String get chatPersonality => 'चैट व्यक्तित्व';
@@ -3459,9 +3447,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get changeYourName => 'अपना नाम बदलें';
 
   @override
-  String get manageYourOmiPersona => 'अपने Omi व्यक्तित्व को प्रबंधित करें';
-
-  @override
   String get voiceAndPeople => 'आवाज़ और लोग';
 
   @override
@@ -3871,9 +3856,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get shortcutChangeInstruction => 'इसे बदलने के लिए शॉर्टकट पर क्लिक करें। रद्द करने के लिए Escape दबाएं।';
 
   @override
-  String get configurePersonaDescription => 'अपना AI व्यक्तित्व कॉन्फ़िगर करें';
-
-  @override
   String get configureSTTProvider => 'STT प्रदाता कॉन्फ़िगर करें';
 
   @override
@@ -4228,16 +4210,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createAndShareYourApp => 'अपना ऐप बनाएं और साझा करें';
 
   @override
-  String get createMyClone => 'मेरा क्लोन बनाएं';
-
-  @override
-  String get createYourDigitalClone => 'अपना डिजिटल क्लोन बनाएं';
-
-  @override
   String get itemApp => 'ऐप';
-
-  @override
-  String get itemPersona => 'पर्सोना';
 
   @override
   String keepItemPublic(String item) {
@@ -4266,9 +4239,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get manageApp => 'ऐप प्रबंधित करें';
-
-  @override
-  String get updatePersonaDetails => 'पर्सोना विवरण अपडेट करें';
 
   @override
   String deleteItemTitle(String item) {
@@ -5792,9 +5762,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get chooseFile => 'फ़ाइल चुनें';
 
   @override
-  String get configureAiPersona => 'अपना AI व्यक्तित्व कॉन्फ़िगर करें';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI सहायकों को अपने डेटा से जोड़ें';
 
   @override
@@ -6506,29 +6473,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get sharePublicLink => 'सार्वजनिक लिंक साझा करें';
 
   @override
-  String get makePersonaPublic => 'व्यक्तित्व को सार्वजनिक बनाएं';
-
-  @override
   String get connectedKnowledgeData => 'कनेक्टेड ज्ञान डेटा';
 
   @override
   String get enterName => 'नाम दर्ज करें';
-
-  @override
-  String get disconnectTwitter => 'Twitter डिस्कनेक्ट करें';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'क्या आप वाकई अपना Twitter अकाउंट डिस्कनेक्ट करना चाहते हैं? आपका व्यक्तित्व अब आपके Twitter डेटा तक पहुंच नहीं पाएगा।';
-
-  @override
-  String get getOmiDeviceDescription => 'अपने Omi डिवाइस से वार्तालाप रिकॉर्ड करें';
-
-  @override
-  String get getOmi => 'Omi प्राप्त करें';
-
-  @override
-  String get iHaveOmiDevice => 'मेरे पास Omi डिवाइस है';
 
   @override
   String get goal => 'लक्ष्य';
@@ -7078,49 +7026,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'पर्सोना को अन्य क्षमताओं के साथ नहीं चुना जा सकता';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter हैंडल नहीं मिला';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter हैंडल निलंबित है';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter हैंडल सत्यापन विफल';
-
-  @override
-  String get personaFailedToFetch => 'आपका पर्सोना प्राप्त करने में विफल';
-
-  @override
-  String get personaFailedToCreate => 'पर्सोना बनाने में विफल';
-
-  @override
-  String get personaConnectKnowledgeSource => 'कृपया कम से कम एक डेटा स्रोत कनेक्ट करें (Omi या Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'पर्सोना सफलतापूर्वक अपडेट हुआ';
-
-  @override
-  String get personaFailedToUpdate => 'पर्सोना अपडेट विफल';
-
-  @override
-  String get personaPleaseSelectImage => 'कृपया एक छवि चुनें';
-
-  @override
-  String get personaFailedToCreateTryLater => 'पर्सोना बनाने में विफल। कृपया बाद में पुनः प्रयास करें।';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'पर्सोना बनाने में विफल: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'पर्सोना सक्षम करने में विफल';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'पर्सोना सक्षम करने में त्रुटि: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'समर्थित देश प्राप्त करने में विफल। कृपया बाद में पुनः प्रयास करें।';
 
   @override
@@ -7193,22 +7098,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'कृपया पहले एक ऐप जनरेट करें';
-
-  @override
-  String get xHandleTitle => 'आपका X हैंडल क्या है?';
-
-  @override
-  String get xHandleDescription =>
-      'अपना X (Twitter) हैंडल दर्ज करें ताकि हम आपके व्यक्तित्व को आपके सोशल मीडिया से जोड़ सकें।';
-
-  @override
-  String get xHandleHint => '@username';
-
-  @override
-  String get xHandlePleaseEnter => 'कृपया अपना X हैंडल दर्ज करें';
-
-  @override
-  String get xHandlePleaseEnterValid => 'कृपया एक वैध X हैंडल दर्ज करें';
 
   @override
   String get nextButton => 'अगला';
@@ -7822,9 +7711,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get categoryConversationAnalysis => 'वार्तालाप विश्लेषण';
 
   @override
-  String get categoryPersonalityClone => 'व्यक्तित्व क्लोन';
-
-  @override
   String get categoryHealth => 'स्वास्थ्य';
 
   @override
@@ -7925,9 +7811,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'एकीकरण';
-
-  @override
-  String get categoryPersonalityClones => 'व्यक्तित्व क्लोन';
 
   @override
   String get categoryProductivityLifestyle => 'उत्पादकता और जीवनशैली';
@@ -8996,4 +8879,132 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get continueAnyway => 'जारी रखें';
+
+  @override
+  String get tasksClearCompleted => 'पूर्ण हटाएं';
+
+  @override
+  String get tasksSelectAll => 'सभी चुनें';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count कार्य हटाएं';
+  }
+
+  @override
+  String get tasksMarkComplete => 'पूर्ण के रूप में चिह्नित';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi Apple के HealthKit फ्रेमवर्क के माध्यम से Apple Health तक पहुँचता है। आप किसी भी समय iOS सेटिंग्स से एक्सेस रद्द कर सकते हैं।';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health से कनेक्ट करें';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health डिस्कनेक्ट करें';
+
+  @override
+  String get appleHealthConnectedBadge => 'कनेक्टेड';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'अपने स्वास्थ्य के बारे में चैट करें';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Omi से अपने कदम, नींद, हृदय गति और वर्कआउट के बारे में पूछें।';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'केवल पढ़ने का एक्सेस';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi कभी Apple Health में नहीं लिखता या आपका डेटा नहीं बदलता।';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'सुरक्षित सिंक';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'आपका Apple Health डेटा निजी रूप से आपके Omi खाते से सिंक होता है।';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health एक्सेस अस्वीकृत';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi के पास आपका Apple Health डेटा पढ़ने की अनुमति नहीं है। iOS सेटिंग्स → गोपनीयता और सुरक्षा → Health → Omi में इसे सक्षम करें।';
+
+  @override
+  String get deleteFlowReasonTitle => 'आप क्यों जा रहे हैं?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'आपकी प्रतिक्रिया हमें सभी के लिए Omi को बेहतर बनाने में मदद करती है।';
+
+  @override
+  String get deleteReasonPrivacy => 'गोपनीयता संबंधी चिंताएँ';
+
+  @override
+  String get deleteReasonNotUsing => 'पर्याप्त उपयोग नहीं कर रहा';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ज़रूरी फ़ीचर उपलब्ध नहीं हैं';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'बहुत ज़्यादा तकनीकी समस्याएँ';
+
+  @override
+  String get deleteReasonFoundAlternative => 'कुछ और इस्तेमाल कर रहा हूँ';
+
+  @override
+  String get deleteReasonTakingBreak => 'बस थोड़ा ब्रेक ले रहा हूँ';
+
+  @override
+  String get deleteReasonOther => 'अन्य';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'हमें और बताएँ';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'क्या बात Omi को आपके लिए उपयोगी बनाती?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'वैकल्पिक — आपके विचार हमें बेहतर उत्पाद बनाने में मदद करते हैं।';
+
+  @override
+  String get deleteFlowConfirmTitle => 'यह स्थायी है';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'खाता हटाने के बाद, उसे पुनर्प्राप्त करने का कोई तरीका नहीं है।';
+
+  @override
+  String get deleteConsequenceSubscription => 'कोई भी सक्रिय सदस्यता रद्द कर दी जाएगी।';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'आपका खाता पुनर्स्थापित नहीं किया जा सकता — सहायता टीम भी नहीं कर सकती।';
+
+  @override
+  String get deleteTypeToConfirm => 'पुष्टि के लिए DELETE लिखें';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'खाता स्थायी रूप से हटाएँ';
+
+  @override
+  String get keepMyAccount => 'मेरा खाता रखें';
+
+  @override
+  String get deleteAccountFailed => 'आपका खाता हटाया नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get planUpdate => 'प्लान अपडेट';
+
+  @override
+  String get planDeprecationMessage =>
+      'आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ \$49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।';
+
+  @override
+  String get upgradeYourPlan => 'अपना प्लान अपग्रेड करें';
+
+  @override
+  String get youAreOnAPaidPlan => 'आप एक सशुल्क प्लान पर हैं।';
 }

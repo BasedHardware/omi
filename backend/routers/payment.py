@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 from pydantic import BaseModel
@@ -39,6 +41,7 @@ from fastapi.responses import HTMLResponse
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
+from utils.log_sanitizer import sanitize
 import os
 import logging
 
@@ -167,7 +170,11 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
-def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_available_plans_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
         # Get user's current subscription to determine which plan is active
@@ -206,44 +213,84 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                                                 scheduled_price_id = phase_dict['items'][0]['price']
                                                 break
                         except Exception as e:
-                            logger.error(f"Error checking subscription schedules: {e}")
+                            logger.error(f"Error checking subscription schedules: {sanitize(str(e))}")
 
             except Exception as e:
-                logger.error(f"Error retrieving current subscription: {e}")
+                logger.error(f"Error retrieving current subscription: {sanitize(str(e))}")
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
+        # Version-gate the new Operator + Architect catalog. Mobile and older
+        # desktop builds see the pre-rollout plan shape. Then legacy-filter so
+        # existing subscribers still see their current plan.
+        from utils.subscription import (
+            filter_plans_for_user,
+            should_show_new_plans,
+            adapt_plans_for_legacy_client,
+        )
+
+        new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+        all_definitions = get_paid_plan_definitions()
+        if not new_plans_enabled:
+            all_definitions = adapt_plans_for_legacy_client(all_definitions)
+            # Operator subscriber on old client: map their Stripe prices to Unlimited
+            # so is_active detection works against the legacy catalog.
+            if current_subscription and current_subscription.plan == PlanType.operator:
+                op_monthly = os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID', '')
+                op_annual = os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID', '')
+                unlim_monthly = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID', '')
+                unlim_annual = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID', '')
+                price_map = {}
+                if op_monthly and unlim_monthly:
+                    price_map[op_monthly] = unlim_monthly
+                if op_annual and unlim_annual:
+                    price_map[op_annual] = unlim_annual
+                current_price_id = price_map.get(current_price_id, current_price_id)
+                scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
+
+        current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
-        for definition in get_paid_plan_definitions():
+        for definition in filter_plans_for_user(all_definitions, current_plan):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
-            if not monthly_price_id or not annual_price_id:
-                continue
-
-            monthly_price = stripe.Price.retrieve(monthly_price_id)
-            annual_price = stripe.Price.retrieve(annual_price_id)
-            pricing_options.append(
-                PricingOption(
-                    id=monthly_price.id,
-                    title=f'{definition["title"]} Monthly',
-                    price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                    description=None,
-                    interval=monthly_price.recurring.interval,
-                    unit_amount=monthly_price.unit_amount,
-                    is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
-                )
-            )
-            pricing_options.append(
-                PricingOption(
-                    id=annual_price.id,
-                    title=f'{definition["title"]} Annual',
-                    price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                    description=definition["annual_description"],
-                    interval=annual_price.recurring.interval,
-                    unit_amount=annual_price.unit_amount,
-                    is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
-                )
-            )
+            if monthly_price_id:
+                try:
+                    monthly_price = stripe.Price.retrieve(monthly_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=monthly_price.id,
+                            title=f'{definition["title"]} Monthly',
+                            price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                            description=None,
+                            interval=monthly_price.recurring.interval,
+                            unit_amount=monthly_price.unit_amount,
+                            is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                        )
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving monthly price from Stripe for {definition['plan_id']} "
+                        f"(price_id={monthly_price_id}): {sanitize(str(e))}"
+                    )
+            if annual_price_id:
+                try:
+                    annual_price = stripe.Price.retrieve(annual_price_id)
+                    pricing_options.append(
+                        PricingOption(
+                            id=annual_price.id,
+                            title=f'{definition["title"]} Annual',
+                            price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                            description=definition["annual_description"],
+                            interval=annual_price.recurring.interval,
+                            unit_amount=annual_price.unit_amount,
+                            is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                        )
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error retrieving annual price from Stripe for {definition['plan_id']} "
+                        f"(price_id={annual_price_id}): {sanitize(str(e))}"
+                    )
 
         if not pricing_options:
             raise HTTPException(status_code=500, detail="Price configuration not found")
@@ -251,7 +298,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         return AvailablePlansResponse(plans=pricing_options)
 
     except Exception as e:
-        logger.error(f"Error fetching available plans: {e}")
+        logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
 
 
@@ -277,7 +324,13 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
 
 @router.post('/v1/payments/upgrade-subscription')
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Schedule an upgrade/downgrade to take effect at the end of the current billing period."""
+    """Upgrade or change a user's subscription plan.
+
+    - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
+      Stripe prorates automatically. User gets new features right away.
+    - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
+      takes effect at end of current billing period.
+    """
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
@@ -290,6 +343,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
+        current_item_id = stripe_sub['items']['data'][0]['id']
 
         # Check if user is trying to upgrade to the same plan
         if current_price_id == request.price_id:
@@ -298,19 +352,60 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
             )
 
-        # Create a subscription schedule from the existing subscription
+        target_plan = get_plan_type_from_price_id(request.price_id)
+        target_price = stripe.Price.retrieve(request.price_id)
+        target_interval = target_price.recurring.interval  # "month" or "year"
+        current_plan = get_plan_type_from_price_id(current_price_id)
+
+        # Block downgrades from Architect to Unlimited
+        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
+            raise HTTPException(
+                status_code=400,
+                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
+            )
+
+        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
+        if current_plan != target_plan:
+            updated_sub = stripe.Subscription.modify(
+                stripe_sub['id'],
+                items=[{'id': current_item_id, 'price': request.price_id}],
+                proration_behavior='always_invoice',
+                metadata={'uid': uid, 'sub_type': target_plan.value},
+            )
+
+            # Update our database immediately
+            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            if new_subscription:
+                users_db.update_user_subscription(uid, new_subscription.dict())
+                set_credits_invalidation_signal(uid)
+                if is_paid_plan(new_subscription.plan):
+                    conversations_db.unlock_all_conversations(uid)
+                    memories_db.unlock_all_memories(uid)
+                    action_items_db.unlock_all_action_items(uid)
+                    clear_fair_use_on_upgrade(uid)
+
+            logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
+
+            return {
+                "status": "success",
+                "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
+                "subscription": new_subscription.dict() if new_subscription else current_subscription.dict(),
+                "days_remaining": 0,
+                "schedule_id": None,
+            }
+
+        # Same plan, different interval (e.g. monthly→annual): schedule for end of period
         schedule = stripe.SubscriptionSchedule.create(
             from_subscription=stripe_sub['id'],
         )
 
-        # Update the schedule with the new phase (annual plan)
         updated_schedule = stripe.SubscriptionSchedule.modify(
             schedule.id,
             phases=[
                 {
                     'items': [
                         {
-                            'price': current_price_id,  # Keep current monthly plan
+                            'price': current_price_id,
                             'quantity': 1,
                         }
                     ],
@@ -320,33 +415,22 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 {
                     'items': [
                         {
-                            'price': request.price_id,  # New annual plan
+                            'price': request.price_id,
                         }
                     ],
                 },
             ],
-            metadata={'uid': uid, 'upgrade_type': 'monthly_to_annual'},
+            metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
         )
 
-        logger.info(f"updated_schedule: {updated_schedule}")
+        logger.info(f"Scheduled interval change for user {uid}: {current_plan.value} monthly -> {target_interval}")
 
-        # Update the subscription in our database to reflect the scheduled change
-        # The current_period_end will be extended to include the annual period
-        monthly_period_end = stripe_sub['current_period_end']
-        annual_end_timestamp = monthly_period_end + 31536000  # 12 months after monthly ends
-        current_subscription.current_period_end = annual_end_timestamp
-
-        logger.info(f"Updated subscription: {current_subscription.dict()}")
-
-        users_db.update_user_subscription(uid, current_subscription.dict())
-
-        # Calculate remaining days
         remaining_seconds = stripe_sub['current_period_end'] - int(time.time())
-        remaining_days = max(0, remaining_seconds // 86400)  # Convert seconds to days
+        remaining_days = max(0, remaining_seconds // 86400)
 
         return {
             "status": "success",
-            "message": f"Upgrade scheduled successfully! Your monthly plan continues until {remaining_days} days from now, then automatically switches to annual. You'll get 13 months of coverage total.",
+            "message": f"Upgrade scheduled! Your monthly plan continues for {remaining_days} more days, then automatically switches to annual.",
             "subscription": current_subscription.dict(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
@@ -355,8 +439,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error scheduling subscription upgrade: {e}")
-        raise HTTPException(status_code=500, detail="Failed to schedule subscription upgrade. Please try again.")
+        logger.error(f"Error processing subscription change: {sanitize(str(e))}")
+        raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
 
 
 class CancelSubscriptionRequest(BaseModel):
@@ -486,9 +570,18 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
                 else:
+                    # Cancel the old subscription to prevent double-charging
+                    old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
-                        f"User {uid} has existing subscription {existing_subscription.stripe_subscription_id}, processing new subscription {session.get('subscription')}"
+                        f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
                     )
+                    try:
+                        stripe.Subscription.cancel(old_sub_id)
+                        logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
+                        )
 
             _update_subscription_from_session(uid, session)
             set_credits_invalidation_signal(uid)

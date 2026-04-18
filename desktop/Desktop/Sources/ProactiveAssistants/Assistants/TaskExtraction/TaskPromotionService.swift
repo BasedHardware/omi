@@ -46,7 +46,7 @@ actor TaskPromotionService {
     /// (either cap reached or no staged tasks available).
     /// Returns the list of promoted tasks so callers can insert them directly.
     @discardableResult
-    func promoteIfNeeded() async -> [TaskActionItem] {
+    func promoteIfNeeded(shouldNotify: Bool = true) async -> [TaskActionItem] {
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
             return []
@@ -78,13 +78,15 @@ actor TaskPromotionService {
                     let notificationsEnabled = await MainActor.run {
                         TaskAssistantSettings.shared.notificationsEnabled
                     }
-                    if notificationsEnabled {
-                        let message = promotedTask.description
+                    if shouldNotify && notificationsEnabled {
+                        let message = "New task: \(promotedTask.description)"
+                        let context = Self.buildNotificationContext(from: promotedTask)
                         await MainActor.run {
                             NotificationService.shared.sendNotification(
                                 title: "Task",
                                 message: message,
-                                assistantId: "task"
+                                assistantId: "task",
+                                context: context
                             )
                         }
                     }
@@ -114,6 +116,53 @@ actor TaskPromotionService {
     @discardableResult
     func ensureMinimumOnStartup() async -> [TaskActionItem] {
         log("TaskPromotion: Checking minimum on startup")
-        return await promoteIfNeeded()
+        return await promoteIfNeeded(shouldNotify: false)
+    }
+
+    // MARK: - Notification Context
+
+    /// Build a `FloatingBarNotificationContext` so the floating bar follow-up chat
+    /// can explain exactly which task the notification was about, rather than guessing
+    /// from recent conversation history.
+    private static func buildNotificationContext(from task: TaskActionItem) -> FloatingBarNotificationContext {
+        let sourceApp = Self.parseSourceApp(from: task.metadata)
+        let reasoning = Self.buildReasoning(from: task)
+        return FloatingBarNotificationContext(
+            sourceTitle: "Task",
+            assistantId: "task",
+            sourceApp: sourceApp,
+            windowTitle: nil,
+            contextSummary: task.contextSummary,
+            currentActivity: task.currentActivity,
+            reasoning: reasoning,
+            detail: task.description
+        )
+    }
+
+    private static func parseSourceApp(from metadataJson: String?) -> String? {
+        guard let json = metadataJson,
+              let data = json.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        let app = parsed["source_app"] as? String
+        return (app?.isEmpty == false) ? app : nil
+    }
+
+    private static func buildReasoning(from task: TaskActionItem) -> String? {
+        var parts: [String] = []
+        if let priority = task.priority, !priority.isEmpty {
+            parts.append("priority=\(priority)")
+        }
+        if let category = task.category, !category.isEmpty {
+            parts.append("category=\(category)")
+        }
+        if let dueAt = task.dueAt {
+            let formatter = ISO8601DateFormatter()
+            parts.append("due=\(formatter.string(from: dueAt))")
+        }
+        if let source = task.source, !source.isEmpty {
+            parts.append("source=\(source)")
+        }
+        return parts.isEmpty ? nil : "Promoted from staged tasks (" + parts.joined(separator: ", ") + ")"
     }
 }

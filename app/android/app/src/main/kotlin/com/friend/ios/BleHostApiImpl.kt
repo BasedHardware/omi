@@ -112,7 +112,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             callback(Result.success(BleDeviceDiagnostics(
                 disconnectHistory = emptyList(),
                 reconnectionCount = 0,
-                connectedAt = 0
+                connectedAt = 0,
+                failToConnectCount = 0
             )))
         }
     }

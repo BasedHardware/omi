@@ -63,14 +63,22 @@ struct FloatingControlBarView: View {
                 Button {
                     onCloseAI()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-                        .frame(width: 16, height: 16)
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                            .frame(width: 16, height: 16)
+
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(6)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .padding(2)
                 .transition(.opacity)
             }
         }

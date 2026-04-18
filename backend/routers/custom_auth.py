@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from firebase_admin import auth
 import os
-import requests
 import logging
 
+from utils.http_client import get_auth_client
 from utils.other.endpoints import rate_limit_dependency
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class UserCredentials(BaseModel):
     "/v1/signin",
     dependencies=[Depends(rate_limit_dependency(endpoint="signin", requests_per_window=5, window_seconds=60))],
 )
-def sign_in(credentials: UserCredentials):
+async def sign_in(credentials: UserCredentials):
     try:
         api_key = os.getenv("CUSTOM_AUTH_FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
@@ -30,7 +30,8 @@ def sign_in(credentials: UserCredentials):
             "password": credentials.password,
             "returnSecureToken": True,
         }
-        response = requests.post(url, json=payload)
+        client = get_auth_client()
+        response = await client.post(url, json=payload)
         if response.status_code != 200:
             # print(response.json())
             raise HTTPException(status_code=401, detail="Invalid credentials")

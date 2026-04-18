@@ -4,8 +4,9 @@ Wrapped 2025 API endpoints.
 Provides generation and retrieval of yearly recap data.
 """
 
-import threading
 from datetime import datetime, timezone
+
+from utils.executors import critical_executor
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 import database.wrapped as wrapped_db
 from database.wrapped import WrappedStatus
 from utils.other import endpoints as auth
+from utils.wrapped.generate_2025 import generate_wrapped_2025
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,12 +37,9 @@ class GenerateWrappedResponse(BaseModel):
     message: str
 
 
-# Background generation function (imported lazily to avoid circular imports)
 def _run_wrapped_generation(uid: str, year: int):
-    """Run wrapped generation in a background thread."""
+    """Run wrapped generation in background executor."""
     try:
-        from utils.wrapped.generate_2025 import generate_wrapped_2025
-
         generate_wrapped_2025(uid, year)
     except Exception as e:
         logger.error(f"Error in wrapped generation for user {uid}: {e}")
@@ -110,8 +109,7 @@ def generate_wrapped(
         if wrapped_db.is_wrapped_stuck(wrapped):
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            thread = threading.Thread(target=_run_wrapped_generation, args=(uid, year))
-            thread.start()
+            critical_executor.submit(_run_wrapped_generation, uid, year)
             return GenerateWrappedResponse(
                 status=WrappedStatus.PROCESSING,
                 message="Restarting stuck generation...",
@@ -129,8 +127,7 @@ def generate_wrapped(
         wrapped_db.create_wrapped(uid, year)
 
     # Start generation in background
-    thread = threading.Thread(target=_run_wrapped_generation, args=(uid, year))
-    thread.start()
+    critical_executor.submit(_run_wrapped_generation, uid, year)
 
     return GenerateWrappedResponse(
         status=WrappedStatus.PROCESSING,

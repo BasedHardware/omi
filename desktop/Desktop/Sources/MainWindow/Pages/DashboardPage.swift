@@ -201,6 +201,7 @@ struct DashboardPage: View {
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var isLoadingCitation = false
+    @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
 
     private var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -359,72 +360,169 @@ struct DashboardPage: View {
         }
     }
 
+    // MARK: - Summary counts for collapsed bar
+
+    private var incompleteTaskCount: Int {
+        viewModel.overdueTasks.count + viewModel.todaysTasks.count + viewModel.recentTasks.count
+    }
+
+    private var activeGoalCount: Int {
+        viewModel.goals.count
+    }
+
+    // MARK: - Dashboard Widgets (collapsible)
+
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: widgetsCollapsed ? 0 : 20) {
             if shouldShowSuggestionBanner {
                 PromptSuggestionBanner(
                     suggestions: postOnboardingSuggestions,
-                    onOpen: { NotificationCenter.default.post(name: .showTryAskingPopup, object: nil) },
+                    onOpen: {
+                        dismissSuggestionBanner()
+                        NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
+                    },
                     onAsk: handleSuggestedPrompt,
                     onDismiss: dismissSuggestionBanner
                 )
             }
 
-            Grid(horizontalSpacing: 20, verticalSpacing: 20) {
-                // Top row: Tasks + Goals
-                GridRow {
-                    TasksWidget(
-                        overdueTasks: viewModel.overdueTasks,
-                        todaysTasks: viewModel.todaysTasks,
-                        recentTasks: viewModel.recentTasks,
-                        onToggleCompletion: { task in
-                            Task {
-                                await viewModel.toggleTaskCompletion(task)
-                            }
-                        }
-                    )
-                        .frame(minWidth: 0, maxWidth: .infinity)
+            if widgetsCollapsed {
+                // Collapsed: slim summary bar
+                collapsedWidgetBar
+            } else {
+                // Expanded: full Tasks + Goals cards
+                expandedWidgets
 
-                    GoalsWidget(
-                        goals: viewModel.goals,
-                        onCreateGoal: { title, current, target in
-                            Task {
-                                await viewModel.createGoal(
-                                    title: title,
-                                    goalType: .numeric,
-                                    targetValue: target,
-                                    unit: nil
-                                )
-                            }
-                        },
-                        onUpdateGoal: { goal, title, current, target in
-                            Task {
-                                await viewModel.updateGoal(
-                                    goal,
-                                    title: title,
-                                    currentValue: current,
-                                    targetValue: target
-                                )
-                            }
-                        },
-                        onUpdateProgress: { goal, value in
-                            Task {
-                                await viewModel.updateGoalProgress(goal, currentValue: value)
-                            }
-                        },
-                        onDeleteGoal: { goal in
-                            Task {
-                                await viewModel.deleteGoal(goal)
-                            }
-                        }
-                    )
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
+                // Collapse button centered below widgets
+                collapseButton
             }
         }
         .padding(.horizontal, 30)
-        .padding(.top, 32)
-        .padding(.bottom, 12)
+        .padding(.top, widgetsCollapsed ? 20 : 32)
+        .padding(.bottom, 8)
+        .animation(.easeInOut(duration: 0.25), value: widgetsCollapsed)
+    }
+
+    private var collapsedWidgetBar: some View {
+        Button(action: { widgetsCollapsed = false }) {
+            HStack(spacing: 16) {
+                // Tasks summary
+                HStack(spacing: 6) {
+                    Image(systemName: "checklist")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                    Text(incompleteTaskCount == 0
+                        ? "No tasks"
+                        : "\(incompleteTaskCount) task\(incompleteTaskCount == 1 ? "" : "s")")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textSecondary)
+                }
+
+                // Subtle divider dot
+                Circle()
+                    .fill(OmiColors.textQuaternary)
+                    .frame(width: 3, height: 3)
+
+                // Goals summary
+                HStack(spacing: 6) {
+                    Image(systemName: "target")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                    Text(activeGoalCount == 0
+                        ? "No goals"
+                        : "\(activeGoalCount) goal\(activeGoalCount == 1 ? "" : "s")")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textSecondary)
+                }
+
+                Spacer()
+
+                // Expand chevron
+                Image(systemName: "chevron.down")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundColor(OmiColors.textQuaternary)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(OmiColors.backgroundSecondary.opacity(0.6))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(OmiColors.border.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var expandedWidgets: some View {
+        Grid(horizontalSpacing: 20, verticalSpacing: 20) {
+            GridRow {
+                TasksWidget(
+                    overdueTasks: viewModel.overdueTasks,
+                    todaysTasks: viewModel.todaysTasks,
+                    recentTasks: viewModel.recentTasks,
+                    onToggleCompletion: { task in
+                        Task {
+                            await viewModel.toggleTaskCompletion(task)
+                        }
+                    }
+                )
+                .frame(minWidth: 0, maxWidth: .infinity)
+
+                GoalsWidget(
+                    goals: viewModel.goals,
+                    onCreateGoal: { title, current, target in
+                        Task {
+                            await viewModel.createGoal(
+                                title: title,
+                                goalType: .numeric,
+                                targetValue: target,
+                                unit: nil
+                            )
+                        }
+                    },
+                    onUpdateGoal: { goal, title, current, target in
+                        Task {
+                            await viewModel.updateGoal(
+                                goal,
+                                title: title,
+                                currentValue: current,
+                                targetValue: target
+                            )
+                        }
+                    },
+                    onUpdateProgress: { goal, value in
+                        Task {
+                            await viewModel.updateGoalProgress(goal, currentValue: value)
+                        }
+                    },
+                    onDeleteGoal: { goal in
+                        Task {
+                            await viewModel.deleteGoal(goal)
+                        }
+                    }
+                )
+                .frame(minWidth: 0, maxWidth: .infinity)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var collapseButton: some View {
+        HStack {
+            Spacer()
+            Button(action: { widgetsCollapsed = true }) {
+                Image(systemName: "chevron.up")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundColor(OmiColors.textQuaternary)
+                    .frame(width: 48, height: 20)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
     }
 
     private var postOnboardingSuggestions: [String] {

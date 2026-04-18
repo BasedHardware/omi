@@ -30,6 +30,11 @@ export interface InterruptMessage {
   type: "interrupt";
 }
 
+export interface InvalidateSessionMessage {
+  type: "invalidate_session";
+  sessionKey: string;
+}
+
 /** Swift tells the bridge which auth method the user chose */
 export interface AuthenticateMessage {
   type: "authenticate";
@@ -56,6 +61,7 @@ export type InboundMessage =
   | ToolResultMessage
   | StopMessage
   | InterruptMessage
+  | InvalidateSessionMessage
   | AuthenticateMessage
   | WarmupMessage;
 

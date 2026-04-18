@@ -1360,6 +1360,28 @@ extension APIClient {
     return try await post("v3/memories", body: body)
   }
 
+  /// Max memories per POST /v3/memories/batch call. Must match the
+  /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
+  static let memoriesBatchMaxSize = 100
+
+  /// Creates many memories in a single HTTP call. Used by the onboarding
+  /// local-file import flow to avoid fanning out N requests and tripping
+  /// Cloud Armor's per-Authorization 120/min throttle.
+  ///
+  /// Caller is responsible for chunking input into groups of at most
+  /// `memoriesBatchMaxSize`. Returns the created count from the server.
+  func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+    precondition(
+      memories.count <= Self.memoriesBatchMaxSize,
+      "createMemoriesBatch received \(memories.count) memories, max is \(Self.memoriesBatchMaxSize)"
+    )
+    struct BatchRequest: Encodable {
+      let memories: [MemoryBatchItem]
+    }
+    let body = BatchRequest(memories: memories)
+    return try await post("v3/memories/batch", body: body)
+  }
+
   /// Deletes a memory by ID
   func deleteMemory(id: String) async throws {
     try await delete("v3/memories/\(id)")
@@ -1468,6 +1490,42 @@ extension APIClient {
 struct CreateMemoryResponse: Codable {
   let id: String
   let message: String?
+}
+
+/// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
+/// in `backend/models/memories.py` (the server hardcodes category=manual on
+/// batch creation, so we intentionally don't send it).
+struct MemoryBatchItem: Encodable {
+  let content: String
+  let visibility: String
+  let tags: [String]
+  let headline: String?
+
+  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
+  {
+    self.content = content
+    self.visibility = visibility
+    self.tags = tags
+    self.headline = headline
+  }
+}
+
+/// Response from POST /v3/memories/batch. The server returns the full
+/// created memories list; we only care about `createdCount` for onboarding
+/// telemetry, but keep `memories` available for future callers.
+struct BatchMemoriesResponse: Decodable {
+  let memories: [BatchMemory]
+  let createdCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case memories
+    case createdCount = "created_count"
+  }
+
+  struct BatchMemory: Decodable {
+    let id: String
+    let content: String
+  }
 }
 
 struct MemoryStatusResponse: Codable {
@@ -3811,9 +3869,11 @@ struct NotificationSettingsResponse: Codable {
 }
 
 enum SubscriptionPlanType: String, Codable {
-  case basic
-  case unlimited
-  case pro
+  case basic      // display "Free"
+  case unlimited  // legacy — display "Unlimited (legacy)"
+  case architect  // display "Architect" ($400/mo, cost_usd quota)
+  case pro        // backward compat: old Firestore docs may still say "pro"
+  case `operator` // new — display "Operator"
 }
 
 enum SubscriptionStatusType: String, Codable {
@@ -3844,13 +3904,16 @@ struct UserSubscriptionInfo: Codable {
   let features: [String]
   let cancelAtPeriodEnd: Bool
   let limits: SubscriptionLimitsResponse
+  let deprecated: Bool?
+  let deprecationMessage: String?
 
   enum CodingKeys: String, CodingKey {
-    case plan, status, features, limits
+    case plan, status, features, limits, deprecated
     case currentPeriodEnd = "current_period_end"
     case stripeSubscriptionId = "stripe_subscription_id"
     case currentPriceId = "current_price_id"
     case cancelAtPeriodEnd = "cancel_at_period_end"
+    case deprecationMessage = "deprecation_message"
   }
 }
 
@@ -3869,8 +3932,21 @@ struct SubscriptionPriceOption: Codable, Identifiable {
 struct SubscriptionPlanOption: Codable, Identifiable {
   let id: String
   let title: String
+  let subtitle: String?
+  let description: String?
+  let eyebrow: String?
   let features: [String]
   let prices: [SubscriptionPriceOption]
+
+  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+    self.id = id
+    self.title = title
+    self.subtitle = subtitle
+    self.description = description
+    self.eyebrow = eyebrow
+    self.features = features
+    self.prices = prices
+  }
 }
 
 struct UserSubscriptionResponse: Codable {
@@ -3910,6 +3986,19 @@ struct CheckoutSessionResponse: Codable {
   enum CodingKeys: String, CodingKey {
     case url, status, message
     case sessionId = "session_id"
+  }
+}
+
+struct UpgradeSubscriptionResponse: Codable {
+  let status: String
+  let message: String
+  let daysRemaining: Int?
+  let scheduleId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case status, message
+    case daysRemaining = "days_remaining"
+    case scheduleId = "schedule_id"
   }
 }
 
@@ -4061,12 +4150,10 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
-  var elevenLabsApiKey: String?
   var elevenLabsVoiceID: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
-    case elevenLabsApiKey = "elevenlabs_api_key"
     case elevenLabsVoiceID = "elevenlabs_voice_id"
   }
 }
@@ -4374,8 +4461,10 @@ extension APIClient {
   func rateMessage(messageId: String, rating: Int?) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
+      let app_version: String?
     }
-    let body = RateRequest(rating: rating)
+    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    let body = RateRequest(rating: rating, app_version: version)
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }
@@ -4710,6 +4799,18 @@ extension APIClient {
     return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
   }
 
+  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+    struct Request: Encodable {
+      let priceId: String
+
+      enum CodingKeys: String, CodingKey {
+        case priceId = "price_id"
+      }
+    }
+
+    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
+  }
+
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
     return try await post("v1/payments/customer-portal")
   }
@@ -4840,13 +4941,51 @@ extension APIClient {
     }
   }
 
+  // MARK: - Chat Usage Quota
+
+  /// Current-month chat usage + the plan's cap. Backed by Python backend
+  /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
+  struct ChatUsageQuota: Decodable {
+    let plan: String       // display name: "Free" | "Plus" | "Pro"
+    let planType: String   // internal id: "basic" | "unlimited" | "architect"
+    let unit: String       // "questions" | "cost_usd"
+    let used: Double
+    let limit: Double?     // nil means unlimited
+    let percent: Double
+    let allowed: Bool
+    let resetAt: Int?      // unix seconds — start of next UTC month
+
+    enum CodingKeys: String, CodingKey {
+      case plan
+      case planType = "plan_type"
+      case unit
+      case used
+      case limit
+      case percent
+      case allowed
+      case resetAt = "reset_at"
+    }
+  }
+
+  func fetchChatUsageQuota() async -> ChatUsageQuota? {
+    do {
+      let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
+      log(
+        "APIClient: Quota plan=\(res.plan) unit=\(res.unit) used=\(res.used) limit=\(res.limit ?? -1) allowed=\(res.allowed)"
+      )
+      return res
+    } catch {
+      log("APIClient: Chat quota fetch failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   // MARK: - API Keys
 
   struct ApiKeysResponse: Decodable {
     let deepgramApiKey: String?
     let geminiApiKey: String?
     let anthropicApiKey: String?
-    let elevenLabsApiKey: String?
     let firebaseApiKey: String?
     let googleCalendarApiKey: String?
 
@@ -4854,7 +4993,6 @@ extension APIClient {
       case deepgramApiKey = "deepgram_api_key"
       case geminiApiKey = "gemini_api_key"
       case anthropicApiKey = "anthropic_api_key"
-      case elevenLabsApiKey = "elevenlabs_api_key"
       case firebaseApiKey = "firebase_api_key"
       case googleCalendarApiKey = "google_calendar_api_key"
     }
@@ -4862,6 +5000,79 @@ extension APIClient {
 
   func fetchApiKeys() async throws -> ApiKeysResponse {
     return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
+  }
+
+  // MARK: - TTS Proxy (issue #6622)
+
+  struct TtsSynthesizeRequest: Encodable {
+    let text: String
+    let voiceId: String
+    let modelId: String
+    let outputFormat: String
+    let voiceSettings: TtsVoiceSettings
+
+    enum CodingKeys: String, CodingKey {
+      case text
+      case voiceId = "voice_id"
+      case modelId = "model_id"
+      case outputFormat = "output_format"
+      case voiceSettings = "voice_settings"
+    }
+  }
+
+  struct TtsVoiceSettings: Encodable {
+    let stability: Double
+    let similarityBoost: Double
+    let style: Double
+    let useSpeakerBoost: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case stability
+      case similarityBoost = "similarity_boost"
+      case style
+      case useSpeakerBoost = "use_speaker_boost"
+    }
+  }
+
+  /// Synthesize speech via the backend TTS proxy (ElevenLabs key stays server-side).
+  /// Returns raw audio data (audio/mpeg).
+  func synthesizeSpeech(request: TtsSynthesizeRequest) async throws -> Data {
+    let base = rustBackendURL
+    let url = URL(string: base + "v1/tts/synthesize")!
+    var urlRequest = URLRequest(url: url)
+    urlRequest.httpMethod = "POST"
+    urlRequest.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    urlRequest.httpBody = try JSONEncoder().encode(request)
+    urlRequest.timeoutInterval = 60
+
+    let (data, response) = try await session.data(for: urlRequest)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      // Retry with refreshed token
+      let authService = await MainActor.run { AuthService.shared }
+      _ = try await authService.getIdToken(forceRefresh: true)
+
+      var retryRequest = urlRequest
+      retryRequest.setValue(
+        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+
+      let (retryData, retryResponse) = try await session.data(for: retryRequest)
+      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
+        throw APIError.invalidResponse
+      }
+      guard (200...299).contains(retryHttpResponse.statusCode) else {
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+      }
+      return retryData
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
+    }
+    return data
   }
 
   // MARK: - Platform Tools (backend RAG)

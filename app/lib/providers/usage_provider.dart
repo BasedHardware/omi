@@ -10,6 +10,10 @@ import 'package:omi/utils/logger.dart';
 class UsageProvider with ChangeNotifier {
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
+
+  /// Defaults to true when the subscription response hasn't loaded yet, so a
+  /// network blip doesn't silently hide paid surfaces from real users.
+  bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
 
@@ -53,7 +57,8 @@ class UsageProvider with ChangeNotifier {
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
-    if (_subscription!.subscription.plan == PlanType.unlimited) return false;
+    final plan = _subscription!.subscription.plan;
+    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect) return false;
     // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {

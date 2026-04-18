@@ -105,6 +105,8 @@ description: "Create and retrieve conversations via the Developer API"
           ],
           "events": []
         },
+        "folder_id": "folder_uuid",
+        "folder_name": "Work",
         "geolocation": {
           "latitude": 37.7749295,
           "longitude": -122.4194155,
@@ -152,6 +154,8 @@ description: "Create and retrieve conversations via the Developer API"
             "end": 5.8
           }
         ],
+        "folder_id": "folder_uuid",
+        "folder_name": "Work",
         "geolocation": {
           "latitude": 37.7749295,
           "longitude": -122.4194155,
@@ -174,6 +178,8 @@ description: "Create and retrieve conversations via the Developer API"
     | `source` | string | Source device/app |
     | `structured` | object | AI-generated structured data |
     | `transcript_segments` | array | Transcript segments (if `include_transcript=true`) |
+    | `folder_id` | string | Folder ID the conversation belongs to (optional) |
+    | `folder_name` | string | Folder name, resolved from the user's folder settings. Null if no folder is assigned. (optional) |
     | `geolocation` | object | Location where conversation occurred (if available) |
   </Accordion>
   <Accordion title="Transcript Segment Fields" icon="waveform-lines">

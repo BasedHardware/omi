@@ -77,8 +77,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
     switch (category) {
       case 'conversation-analysis':
         return FontAwesomeIcons.solidComments;
-      case 'personality-emulation':
-        return FontAwesomeIcons.solidUser;
       case 'health-and-wellness':
         return FontAwesomeIcons.solidHeart;
       case 'education-and-learning':
@@ -744,19 +742,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   ? box.localToGlobal(Offset.zero) & box.size
                                   : null;
 
-                              if (app.isNotPersona()) {
-                                await Share.share(
-                                  'https://h.omi.me/apps/${app.id}',
-                                  subject: app.name,
-                                  sharePositionOrigin: sharePositionOrigin,
-                                );
-                              } else {
-                                await Share.share(
-                                  'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                                  subject: app.name,
-                                  sharePositionOrigin: sharePositionOrigin,
-                                );
-                              }
+                              await Share.share(
+                                'https://h.omi.me/apps/${app.id}',
+                                subject: app.name,
+                                sharePositionOrigin: sharePositionOrigin,
+                              );
                             },
                           ),
                         );
@@ -1480,14 +1470,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       if (app.description.decodeString.characters.length > 200) {
                         routeToPage(
                           context,
-                          MarkdownViewer(
-                            title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
-                            markdown: app.description.decodeString,
-                          ),
+                          MarkdownViewer(title: context.l10n.aboutTheApp, markdown: app.description.decodeString),
                         );
                       }
                     },
-                    title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
+                    title: context.l10n.aboutTheApp,
                     description: app.description,
                     showChips: false,
                   ),

@@ -22,7 +22,9 @@ from utils.other.endpoints import check_rate_limit_inline
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
+import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
+from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 
@@ -144,6 +146,32 @@ MCP_TOOLS = [
             "required": ["conversation_id"],
         },
     },
+    {
+        "name": "search_memories",
+        "description": "Semantic search across the user's memories. Returns memories ranked by relevance to the query.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_conversations",
+        "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "start_date": {"type": "string", "description": "Filter after this date (yyyy-mm-dd)"},
+                "end_date": {"type": "string", "description": "Filter before this date (yyyy-mm-dd)"},
+                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 
@@ -199,6 +227,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+
         memories_db.delete_memory(user_id, memory_id)
         return {"success": True}
 
@@ -207,6 +241,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        memory = memories_db.get_memory(user_id, memory_id)
+        if not memory:
+            raise ToolExecutionError("Memory not found", code=-32001)
+        if memory.get('is_locked', False):
+            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
 
         memories_db.edit_memory(user_id, memory_id, content)
         return {"success": True}
@@ -256,17 +296,13 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         # Simplify conversation data
         simple_conversations = []
         for conv in conversations:
-            structured = conv.get("structured")
-            if conv.get("is_locked", False) and structured:
-                structured = dict(structured)
-                structured['action_items'] = []
-                structured['events'] = []
+            redact_conversation_for_list(conv)
             simple_conversations.append(
                 {
                     "id": conv.get("id"),
                     "started_at": conv.get("started_at"),
                     "finished_at": conv.get("finished_at"),
-                    "structured": structured,
+                    "structured": conv.get("structured"),
                     "language": conv.get("language"),
                 }
             )
@@ -286,6 +322,86 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
 
         return {"conversation": conversation}
+
+    elif tool_name == "search_memories":
+        query = arguments.get("query")
+        if not query:
+            raise ToolExecutionError("query is required")
+
+        limit = arguments.get("limit", 10)
+
+        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=limit)
+        if not matches:
+            return {"memories": []}
+
+        memory_ids = [m['memory_id'] for m in matches]
+        memories = memories_db.get_memories_by_ids(user_id, memory_ids)
+
+        # Build score lookup and filter locked
+        score_map = {m['memory_id']: m.get('score', 0) for m in matches}
+        results = []
+        for mem in memories:
+            if mem.get('is_locked', False):
+                content = mem.get('content', '')
+                mem['content'] = (content[:70] + '...') if len(content) > 70 else content
+            mem['relevance_score'] = round(score_map.get(mem.get('id'), 0), 4)
+            results.append(mem)
+
+        # Sort by relevance
+        results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+
+        return {"memories": results}
+
+    elif tool_name == "search_conversations":
+        query = arguments.get("query")
+        if not query:
+            raise ToolExecutionError("query is required")
+
+        limit = arguments.get("limit", 10)
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+
+        # Parse dates to epoch for vector search
+        starts_at = None
+        ends_at = None
+        if start_date:
+            try:
+                starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+            except ValueError:
+                raise ToolExecutionError(
+                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
+                )
+        if end_date:
+            try:
+                ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+            except ValueError:
+                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+
+        conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
+        if not conversation_ids:
+            return {"conversations": []}
+
+        conversations = conversations_db.get_conversations_by_id(user_id, conversation_ids)
+
+        # Simplify and handle locked content
+        results = []
+        for conv in conversations:
+            structured = conv.get("structured")
+            if conv.get("is_locked", False) and structured:
+                structured = dict(structured)
+                structured['action_items'] = []
+                structured['events'] = []
+            results.append(
+                {
+                    "id": conv.get("id"),
+                    "started_at": conv.get("started_at"),
+                    "finished_at": conv.get("finished_at"),
+                    "structured": structured,
+                    "language": conv.get("language"),
+                }
+            )
+
+        return {"conversations": results}
 
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)

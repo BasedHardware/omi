@@ -637,9 +637,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saving => 'Đang lưu...';
 
   @override
-  String get personaConfig => 'Cấu hình nhân cách AI của bạn';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2429,12 +2426,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createKeyToGetStarted => 'Tạo khóa để bắt đầu';
 
   @override
-  String get persona => 'Nhân cách';
-
-  @override
-  String get configureYourAiPersona => 'Cấu hình nhân vật AI của bạn';
-
-  @override
   String get configureSttProvider => 'Cấu hình nhà cung cấp STT';
 
   @override
@@ -2950,9 +2941,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Về ứng dụng';
-
-  @override
-  String get aboutThePersona => 'Về persona';
 
   @override
   String get chatPersonality => 'Tính cách chat';
@@ -3491,9 +3479,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get changeYourName => 'Thay đổi tên của bạn';
 
   @override
-  String get manageYourOmiPersona => 'Quản lý persona Omi của bạn';
-
-  @override
   String get voiceAndPeople => 'Giọng nói & Con người';
 
   @override
@@ -3903,9 +3888,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get shortcutChangeInstruction => 'Nhấp vào phím tắt để thay đổi. Nhấn Escape để hủy.';
 
   @override
-  String get configurePersonaDescription => 'Cấu hình nhân vật AI của bạn';
-
-  @override
   String get configureSTTProvider => 'Cấu hình nhà cung cấp STT';
 
   @override
@@ -4259,16 +4241,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createAndShareYourApp => 'Tạo và chia sẻ ứng dụng của bạn';
 
   @override
-  String get createMyClone => 'Tạo bản sao của tôi';
-
-  @override
-  String get createYourDigitalClone => 'Tạo bản sao kỹ thuật số của bạn';
-
-  @override
   String get itemApp => 'Ứng dụng';
-
-  @override
-  String get itemPersona => 'Nhân cách';
 
   @override
   String keepItemPublic(String item) {
@@ -4297,9 +4270,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get manageApp => 'Quản lý ứng dụng';
-
-  @override
-  String get updatePersonaDetails => 'Cập nhật chi tiết persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5824,9 +5794,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chooseFile => 'Chọn tệp';
 
   @override
-  String get configureAiPersona => 'Cấu hình nhân cách AI của bạn';
-
-  @override
   String get connectAiAssistantsToYourData => 'Kết nối trợ lý AI với dữ liệu của bạn';
 
   @override
@@ -6535,29 +6502,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get sharePublicLink => 'Chia sẻ Liên kết Công khai';
 
   @override
-  String get makePersonaPublic => 'Công khai Nhân cách';
-
-  @override
   String get connectedKnowledgeData => 'Dữ liệu Kiến thức Đã Kết nối';
 
   @override
   String get enterName => 'Nhập tên';
-
-  @override
-  String get disconnectTwitter => 'Ngắt kết nối Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Bạn có chắc chắn muốn ngắt kết nối tài khoản Twitter? Nhân cách của bạn sẽ không còn được huấn luyện từ hoạt động Twitter của bạn nữa.';
-
-  @override
-  String get getOmiDeviceDescription => 'Tạo bản sao chính xác hơn với các cuộc trò chuyện cá nhân của bạn';
-
-  @override
-  String get getOmi => 'Nhận Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Tôi có thiết bị Omi';
 
   @override
   String get goal => 'MỤC TIÊU';
@@ -7109,49 +7057,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Không thể chọn Persona cùng với các khả năng khác';
 
   @override
-  String get personaTwitterHandleNotFound => 'Không tìm thấy tài khoản Twitter';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Tài khoản Twitter đã bị đình chỉ';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Xác minh tài khoản Twitter thất bại';
-
-  @override
-  String get personaFailedToFetch => 'Không thể lấy persona của bạn';
-
-  @override
-  String get personaFailedToCreate => 'Không thể tạo persona của bạn';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Vui lòng kết nối ít nhất một nguồn dữ liệu (Omi hoặc Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Cập nhật persona thành công';
-
-  @override
-  String get personaFailedToUpdate => 'Cập nhật persona thất bại';
-
-  @override
-  String get personaPleaseSelectImage => 'Vui lòng chọn một hình ảnh';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Không thể tạo persona. Vui lòng thử lại sau.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Tạo persona thất bại: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Không thể kích hoạt persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Lỗi kích hoạt persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Không thể lấy danh sách quốc gia hỗ trợ. Vui lòng thử lại sau.';
 
   @override
@@ -7224,22 +7129,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Vui lòng tạo ứng dụng trước';
-
-  @override
-  String get xHandleTitle => 'Tên X của bạn là gì?';
-
-  @override
-  String get xHandleDescription =>
-      'Chúng tôi sẽ huấn luyện trước bản sao Omi của bạn\ndựa trên hoạt động tài khoản của bạn';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Vui lòng nhập tên X của bạn';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Vui lòng nhập tên X hợp lệ';
 
   @override
   String get nextButton => 'Tiếp';
@@ -7845,9 +7734,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
 
   @override
-  String get categoryPersonalityClone => 'Nhân bản tính cách';
-
-  @override
   String get categoryHealth => 'Sức khỏe';
 
   @override
@@ -7948,9 +7834,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Tích hợp';
-
-  @override
-  String get categoryPersonalityClones => 'Nhân bản tính cách';
 
   @override
   String get categoryProductivityLifestyle => 'Năng suất & Phong cách sống';
@@ -9016,4 +8899,132 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Tiếp tục';
+
+  @override
+  String get tasksClearCompleted => 'Xóa hoàn thành';
+
+  @override
+  String get tasksSelectAll => 'Chọn tất cả';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Xóa $count nhiệm vụ';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Đã đánh dấu hoàn thành';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi truy cập Apple Health thông qua framework HealthKit của Apple. Bạn có thể thu hồi quyền truy cập bất cứ lúc nào trong Cài đặt iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Kết nối với Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Ngắt kết nối Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Đã kết nối';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Trò chuyện về sức khỏe của bạn';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Hỏi Omi về số bước, giấc ngủ, nhịp tim và bài tập của bạn.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Quyền chỉ đọc';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi không bao giờ ghi vào Apple Health hoặc thay đổi dữ liệu của bạn.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Đồng bộ an toàn';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Dữ liệu Apple Health của bạn được đồng bộ riêng tư vào tài khoản Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Truy cập Apple Health bị từ chối';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Vì sao bạn rời đi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Phản hồi của bạn giúp chúng tôi cải thiện Omi cho mọi người.';
+
+  @override
+  String get deleteReasonPrivacy => 'Lo ngại về quyền riêng tư';
+
+  @override
+  String get deleteReasonNotUsing => 'Không sử dụng đủ nhiều';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Thiếu các tính năng tôi cần';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Quá nhiều vấn đề kỹ thuật';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Đang dùng thứ khác';
+
+  @override
+  String get deleteReasonTakingBreak => 'Chỉ nghỉ một thời gian';
+
+  @override
+  String get deleteReasonOther => 'Khác';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Điều gì sẽ khiến Omi phù hợp với bạn?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Đây là vĩnh viễn';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Khi bạn xóa tài khoản, không có cách nào để khôi phục.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Mọi gói đăng ký đang hoạt động sẽ bị hủy.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.';
+
+  @override
+  String get deleteTypeToConfirm => 'Nhập DELETE để xác nhận';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Xóa tài khoản vĩnh viễn';
+
+  @override
+  String get keepMyAccount => 'Giữ tài khoản của tôi';
+
+  @override
+  String get deleteAccountFailed => 'Không thể xóa tài khoản của bạn. Vui lòng thử lại.';
+
+  @override
+  String get planUpdate => 'Cập nhật gói';
+
+  @override
+  String get planDeprecationMessage =>
+      'Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá \$49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.';
+
+  @override
+  String get upgradeYourPlan => 'Nâng cấp gói của bạn';
+
+  @override
+  String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
 }

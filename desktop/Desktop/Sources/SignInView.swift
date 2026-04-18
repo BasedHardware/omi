@@ -42,6 +42,10 @@ struct SignInView: View {
                         Task {
                             do {
                                 try await AuthService.shared.signInWithApple()
+                            } catch is CancellationError {
+                                // swallow — user initiated
+                            } catch AuthError.cancelled {
+                                // swallow — user initiated
                             } catch {
                                 let errorMsg = "Error: \(error.localizedDescription)"
                                 authState.error = errorMsg
@@ -69,6 +73,10 @@ struct SignInView: View {
                         Task {
                             do {
                                 try await AuthService.shared.signInWithGoogle()
+                            } catch is CancellationError {
+                                // swallow — user initiated
+                            } catch AuthError.cancelled {
+                                // swallow — user initiated
                             } catch {
                                 let errorMsg = "Error: \(error.localizedDescription)"
                                 authState.error = errorMsg
@@ -100,6 +108,20 @@ struct SignInView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: OmiColors.textPrimary))
                             .padding(.top, 8)
+
+                        // Minimal escape hatch so a failed web sign-in (closed tab,
+                        // denied on Apple/Google, etc.) doesn't trap the user with
+                        // permanently disabled buttons waiting for a callback that
+                        // will never arrive.
+                        Button(action: {
+                            AuthService.shared.cancelSignIn()
+                        }) {
+                            Text("Cancel")
+                                .font(.caption)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
                     }
 
                     if let error = authState.error {

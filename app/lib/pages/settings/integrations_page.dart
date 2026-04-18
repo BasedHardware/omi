@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
@@ -139,15 +140,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     }
 
     if (app == IntegrationApp.appleHealth) {
-      await _handleAppleHealthConnect();
+      await _openAppleHealthDetail();
       return;
     }
   }
 
-  Future<void> _handleAppleHealthConnect() async {
-    final service = AppleHealthService();
-
-    if (!service.isAvailable) {
+  Future<void> _openAppleHealthDetail() async {
+    if (!AppleHealthService().isAvailable) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -159,39 +158,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       }
       return;
     }
-
-    final shouldAuth = await _showAuthDialog(IntegrationApp.appleHealth);
-    if (shouldAuth == true) {
-      if (!mounted) return;
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      final integrationProvider = context.read<IntegrationProvider>();
-
-      final result = await service.connect();
-      if (result.isSuccess) {
-        MixpanelManager().integrationConnectSucceeded(integrationName: 'Apple Health');
-        // Sync health data to the backend
-        final synced = await service.syncHealthDataToBackend(days: 7);
-        if (synced) {
-          Logger.debug('✓ Apple Health data synced to backend');
-        } else {
-          Logger.debug('⚠ Failed to sync Apple Health data, but connection succeeded');
-        }
-
-        // Save the connection status to the backend (this is a fallback in case sync partially failed)
-        await integrationProvider.saveConnection(IntegrationApp.appleHealth.key, {});
-        if (mounted) {
-          scaffoldMessenger.showSnackBar(SnackBar(content: Text(result.message), duration: const Duration(seconds: 2)));
-        }
-        await _loadFromBackend();
-      } else {
-        MixpanelManager().integrationConnectFailed(integrationName: 'Apple Health');
-        if (mounted) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text(result.message), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
-          );
-        }
-      }
-    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AppleHealthDetailPage()),
+    );
+    if (mounted) await _loadFromBackend();
   }
 
   Future<bool> _handleAuthFlow(IntegrationApp app, bool isAuthenticated, Future<bool> Function() authenticate) async {
@@ -372,6 +342,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       onTap: isAvailable
           ? () {
               if (isLoading) return;
+
+              if (app == IntegrationApp.appleHealth) {
+                _openAppleHealthDetail();
+                return;
+              }
 
               if (isConnected) {
                 // Show disconnect dialog

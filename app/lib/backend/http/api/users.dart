@@ -89,12 +89,13 @@ Future webhooksStatus() async {
   return null;
 }
 
-Future<bool> deleteAccount() async {
+Future<bool> deleteAccount({String? reason, String? reasonDetails}) async {
+  final hasFeedback = (reason != null && reason.isNotEmpty) || (reasonDetails != null && reasonDetails.isNotEmpty);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/delete-account',
-    headers: {},
+    headers: hasFeedback ? {'Content-Type': 'application/json'} : {},
     method: 'DELETE',
-    body: '',
+    body: hasFeedback ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
   );
   if (response == null) return false;
   Logger.debug('deleteAccount response: ${response.body}');

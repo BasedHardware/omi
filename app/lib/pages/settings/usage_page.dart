@@ -261,7 +261,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       context.read<UsageProvider>().fetchSubscription();
       _loadAvailablePlans();
       _loadFairUseStatus();
-      if (widget.showUpgradeDialog) {
+      if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
         _showPlansSheet();
       }
     });
@@ -305,7 +305,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData = provider.todayUsage != null ||
+          final hasAnyData =
+              provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -314,7 +315,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             return Column(
               children: [
                 _buildFairUseBanner(),
-                const Expanded(child: Center(child: CircularProgressIndicator(color: Colors.deepPurple))),
+                const Expanded(
+                  child: Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+                ),
               ],
             );
           }
@@ -407,7 +410,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+    final plan = provider.subscription!.subscription.plan;
+    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -481,6 +485,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   void _showPlansSheet() {
+    if (!context.read<UsageProvider>().showSubscriptionUI) {
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -533,17 +540,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Container(
-                key: const Key('fair_use_dot'),
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+              key: const Key('fair_use_dot'),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+            ),
             const SizedBox(width: 10),
             Text(
               context.l10n.fairUseBannerStatus(stageLabel),
@@ -1043,8 +1048,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage =
-                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
+                      .clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

@@ -96,9 +96,6 @@ class SettingsSyncManager {
             if let v = floatingBar.voiceAnswersEnabled {
                 ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = v
             }
-            if let v = floatingBar.elevenLabsApiKey {
-                UserDefaults.standard.set(v, forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey)
-            }
             UserDefaults.standard.removeObject(forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey)
             if let v = floatingBar.elevenLabsVoiceID?.trimmingCharacters(in: .whitespacesAndNewlines),
                !v.isEmpty {
@@ -168,7 +165,6 @@ class SettingsSyncManager {
 
         let floatingBar = FloatingBarSettingsResponse(
             voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled,
-            elevenLabsApiKey: UserDefaults.standard.string(forKey: FloatingBarVoicePlaybackService.devAPIKeyDefaultsKey) ?? "",
             elevenLabsVoiceID: ""
         )
 

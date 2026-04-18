@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "உங்கள் AI ஆளை கட்டமைக்கவும்",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "நபர்",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "உங்கள் AI நபரைக் கட்டமைக்கவும்",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT வழங்குநரைக் கட்டமைக்கவும்",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "நபரைப் பற்றி",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "சட்டப்பூர்வ ஆளுமை",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "உங்கள் தகவல்",
     "setYourName": "உங்கள் பெயரை அமைக்கவும்",
     "changeYourName": "உங்கள் பெயரை மாற்றவும்",
-    "manageYourOmiPersona": "உங்கள் Omi நபர்த்துவத்தை நிர்வகிக்கவும்",
     "voiceAndPeople": "குரல் மற்றும் மக்கள்",
     "teachOmiYourVoice": "Omi-க்கு உங்கள் குரலைக் கற்பிக்கவும்",
     "tellOmiWhoSaidIt": "Omi-க்கு யார் சொன்னது என்று சொல்லவும் 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "அடுத்த 7 நாட்களைச் சரிபார்க்கிறது",
     "shortcuts": "குறுக்குவழிகள்",
     "shortcutChangeInstruction": "மாற்ற குறுக்குவழியைக் கிளிக் செய்யவும். ரத்து செய்ய Escape ஐ அழுத்தவும்.",
-    "configurePersonaDescription": "உங்கள் AI நபர்த்துவத்தை கட்டமைக்கவும்",
     "configureSTTProvider": "STT வழங்குநரை கட்டமைக்கவும்",
     "setConversationEndDescription": "உரையாடல்கள் தானாக முடியும் நேரத்தை அமைக்கவும்",
     "importDataDescription": "மற்ற மூலங்களிலிருந்து தரவை இறக்குமதி செய்யவும்",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "என் நகலை உருவாக்கவும்",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "உங்கள் டிஜிட்டல் நகலை உருவாக்கவும்",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "பயன்பாடு",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "நபர்த்துவம்",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} பொதுவாக வைக்கவும்",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "பயன்பாட்டை நிர்வகிக்கவும்",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "நபர்த்துவ விவரங்களைப் புதுப்பிக்கவும்",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} ஐ நீக்கவும்",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "உங்கள் AI ஆளுமையை கட்டமைக்கவும்",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI உதவியாளர்களை உங்கள் தரவுக்கு இணைக்கவும்",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "பொதுவான இணைப்பைப் பகிர்ந்து கொள்ளுங்கள்",
-    "makePersonaPublic": "பொது தகவல் பகிர்ந்து கொள்ளுங்கள்",
     "connectedKnowledgeData": "இணைக்கப்பட்ட ஞ்ஞான தரவு",
     "enterName": "பெயரை உள்ளிடவும்",
-    "disconnectTwitter": "Twitter ஐ இணைப்பு கழிக்கவும்",
-    "disconnectTwitterConfirmation": "உங்கள் Twitter ખાता இணைப்பு கழிக்க உறுதியாக உள்ளீரா? உங்கள் தகவல் உங்கள் Twitter தரவுக்கு அணுக வேண்டாம்।",
-    "getOmiDeviceDescription": "உங்கள் தனிப்பட்ட உரையாடல்களுடன் மிகவும் துல்லியமான நகல் உருவாக்கவும்",
-    "getOmi": "Omi பெறவும்",
-    "iHaveOmiDevice": "என்னிடம் Omi சாதனம் உள்ளது",
     "goal": "லக்ష्य",
     "tapToTrackThisGoal": "இந்த লக்ష்யத்தைக் கண்காணிக்க தட்டவும்",
     "tapToSetAGoal": "ஒரு லக்ష்யம் அமைக்க தட்டவும்",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter கைப்பிடி கண்டறியப்படவில்லை",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter கைப்பிடி இடைநிறுத்தப்பட்டுள்ளது",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Twitter கைப்பிடிப்பை சரிசெய்ய தோல்வியுற்றது",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "உங்கள் Persona கொண்டு வர தோல்வியுற்றது",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "உங்கள் Persona உருவாக்க தோல்வியுற்றது",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "குறைந்தபட்சம் ஒரு அறிவு தரவு மூலமாக இணைக்கவும் (Omi அல்லது Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona வெற்றிகரமாக புதுப்பிக்கப்பட்டது",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Persona புதுப்பிக்க தோல்வியுற்றது",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "ஒரு படத்தைத் தேர்ந்தெடுக்கவும்",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "உங்கள் Persona உருவாக்க தோல்வியுற்றது. பின்னர் மீண்டும் முயற்சிக்கவும்.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Persona உருவாக்க தோல்வியுற்றது: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Persona செயல்படுத்த தோல்வியுற்றது",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Persona செயல்படுத்தும் போது பிழை: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "ஆதரிக்கப்படும் நாடுகளை கொண்டு வர தோல்வியுற்றது. பின்னர் மீண்டும் முயற்சிக்கவும்.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "முதலில் பயன்பாட்டை உருவாக்கவும்",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "உங்கள் X கைப்பிடி என்ன?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "உங்கள் Omi க்ளோனைப் பயிற்சி செய்வோம்\nஉங்கள் கணக்கின் செயல்பாடுகளை அடிப்படையாக",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "உங்கள் X கைப்பிடி உள்ளிடவும்",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "ஒரு செல்லுபடியான X கைப்பிடி உள்ளிடவும்",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "அடுத்தது",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "தினசரி சுருக்கங்கள்",
     "removeFilter": "வடிப்பிலை நீக்கவும்",
     "categoryConversationAnalysis": "உரையாடல் பகுப்பாய்வு",
-    "categoryPersonalityClone": "ஆளுமை க்ளோன்",
     "categoryHealth": "ஆரோக்கியம்",
     "categoryEducation": "கல்வி",
     "categoryCommunication": "தொடர்பாடல்",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "சிறப்பு",
     "capabilityTasks": "பணிகள்",
     "capabilityIntegrations": "ஒருங்கிணைப்புகள்",
-    "categoryPersonalityClones": "ஆளுமை க்ளோன்கள்",
     "categoryProductivityLifestyle": "உற்பादகத்வம் & வாழ்க்கைப் பாணி",
     "categorySocialEntertainment": "சமூக & பொழுதுபோக்கு",
     "categoryProductivityTools": "உற்பादகத்வம் & கருவிகள்",
@@ -10749,5 +10621,58 @@
     },
     "firmwareWarningTitle": "முக்கியம்: புதுப்பிக்கும் முன் படிக்கவும்",
     "firmwareFormatWarning": "இந்த firmware SD கார்டை வடிவமைக்கும். மேம்படுத்துவதற்கு முன் அனைத்து ஆஃப்லைன் தரவும் ஒத்திசைக்கப்பட்டிருப்பதை உறுதிசெய்யவும்.\n\nஇந்த பதிப்பை நிறுவிய பிறகு சிவப்பு விளக்கு ஒளிர்ந்தால் கவலைப்பட வேண்டாம். சாதனத்தை செயலியுடன் இணைக்கவும், அது நீல நிறமாக மாற வேண்டும். சிவப்பு விளக்கு என்பது சாதனத்தின் கடிகாரம் இன்னும் ஒத்திசைக்கப்படவில்லை என்று அர்த்தம்.",
-    "continueAnyway": "தொடரவும்"
+    "continueAnyway": "தொடரவும்",
+    "tasksClearCompleted": "முடிந்தவற்றை அழி",
+    "tasksSelectAll": "அனைத்தையும் தேர்ந்தெடு",
+    "tasksDeleteSelected": "{count} பணி(களை) நீக்கு",
+    "tasksMarkComplete": "முடிந்தது என குறிக்கப்பட்டது",
+    "appleHealthManageNote": "Omi, Apple இன் HealthKit கட்டமைப்பின் மூலம் Apple Health-ஐ அணுகுகிறது. iOS அமைப்புகளில் எந்த நேரத்திலும் அணுகலை ரத்து செய்யலாம்.",
+    "appleHealthConnectCta": "Apple Health-உடன் இணை",
+    "appleHealthDisconnectCta": "Apple Health-ஐ துண்டி",
+    "appleHealthConnectedBadge": "இணைக்கப்பட்டது",
+    "appleHealthFeatureChatTitle": "உங்கள் ஆரோக்கியம் பற்றி அரட்டை",
+    "appleHealthFeatureChatDesc": "Omi இடம் உங்கள் படிகள், தூக்கம், இதயத் துடிப்பு, உடற்பயிற்சிகள் பற்றி கேளுங்கள்.",
+    "appleHealthFeatureReadOnlyTitle": "படிக்க மட்டுமே அணுகல்",
+    "appleHealthFeatureReadOnlyDesc": "Omi ஒருபோதும் Apple Health-இல் எழுதாது அல்லது உங்கள் தரவை மாற்றாது.",
+    "appleHealthFeatureSecureTitle": "பாதுகாப்பான ஒத்திசைவு",
+    "appleHealthFeatureSecureDesc": "உங்கள் Apple Health தரவு உங்கள் Omi கணக்குடன் தனிப்பட்ட முறையில் ஒத்திசைக்கப்படுகிறது.",
+    "appleHealthDeniedTitle": "Apple Health அணுகல் மறுக்கப்பட்டது",
+    "appleHealthDeniedBody": "உங்கள் Apple Health தரவைப் படிக்க Omi க்கு அனுமதி இல்லை. iOS அமைப்புகள் → தனியுரிமை & பாதுகாப்பு → Health → Omi இல் இதை இயக்கவும்.",
+    "deleteFlowReasonTitle": "நீங்கள் ஏன் வெளியேறுகிறீர்கள்?",
+    "deleteFlowReasonSubtitle": "உங்கள் கருத்து அனைவருக்கும் Omi-ஐ சிறப்பாக்க எங்களுக்கு உதவுகிறது.",
+    "deleteReasonPrivacy": "தனியுரிமை கவலைகள்",
+    "deleteReasonNotUsing": "போதுமான அளவு பயன்படுத்தவில்லை",
+    "deleteReasonMissingFeatures": "எனக்குத் தேவையான அம்சங்கள் இல்லை",
+    "deleteReasonTechnicalIssues": "பல தொழில்நுட்பச் சிக்கல்கள்",
+    "deleteReasonFoundAlternative": "வேறு ஒன்றைப் பயன்படுத்துகிறேன்",
+    "deleteReasonTakingBreak": "சற்று இடைவேளை எடுக்கிறேன்",
+    "deleteReasonOther": "மற்றவை",
+    "deleteFlowFeedbackTitle": "மேலும் சொல்லுங்கள்",
+    "deleteFlowFeedbackSubtitle": "Omi உங்களுக்கு எவ்வாறு பயனுள்ளதாக இருந்திருக்கும்?",
+    "deleteFlowFeedbackHint": "விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.",
+    "deleteFlowConfirmTitle": "இது நிரந்தரமானது",
+    "deleteFlowConfirmSubtitle": "கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.",
+    "deleteConsequenceSubscription": "செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.",
+    "deleteConsequenceNoRecovery": "உங்கள் கணக்கை மீட்டெடுக்க முடியாது — ஆதரவுக் குழுவாலும் முடியாது.",
+    "deleteTypeToConfirm": "உறுதிப்படுத்த DELETE என தட்டச்சு செய்யவும்",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "கணக்கை நிரந்தரமாக நீக்கு",
+    "keepMyAccount": "என் கணக்கை வைத்திரு",
+    "deleteAccountFailed": "உங்கள் கணக்கை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+    "planUpdate": "திட்ட புதுப்பிப்பு",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் $49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "உங்கள் திட்டத்தை மேம்படுத்தவும்",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "நீங்கள் கட்டண திட்டத்தில் உள்ளீர்கள்.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

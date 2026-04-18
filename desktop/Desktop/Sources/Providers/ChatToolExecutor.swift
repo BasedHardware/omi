@@ -50,6 +50,9 @@ class ChatToolExecutor {
     case "get_daily_recap":
       return await executeDailyRecap(toolCall.arguments)
 
+    case "search_tasks":
+      return await executeSearchTasks(toolCall.arguments)
+
     case "complete_task":
       return await executeCompleteTask(toolCall.arguments)
 
@@ -366,6 +369,38 @@ class ChatToolExecutor {
             ORDER BY createdAt DESC
             """)
 
+        // Q4: Focus sessions
+        let focusSessions = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT status, appOrSite, description, durationSeconds FROM focus_sessions
+            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                AND createdAt < \(upperBound)
+            ORDER BY createdAt DESC
+            """)
+
+        // Q5: Memories created
+        let memories = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT content, category, source FROM memories
+            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                AND createdAt < \(upperBound)
+                AND deleted = 0
+            ORDER BY createdAt DESC
+            """)
+
+        // Q6: Observations (screen context summaries)
+        let observations = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT appName, currentActivity, contextSummary FROM observations
+            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                AND createdAt < \(upperBound)
+            ORDER BY createdAt DESC
+            LIMIT 20
+            """)
+
         // Format compact markdown
         var out = "# \(dateLabel) Recap\n\n"
 
@@ -413,8 +448,53 @@ class ChatToolExecutor {
           }
         }
 
+        // Focus sessions
+        let focused = focusSessions.filter { ($0["status"] as? String) == "focused" }
+        let distracted = focusSessions.filter { ($0["status"] as? String) == "distracted" }
+        if !focusSessions.isEmpty {
+          out += "\n## Focus (\(focused.count) focused, \(distracted.count) distracted)\n"
+          for session in focusSessions.prefix(10) {
+            let status = session["status"] as? String ?? ""
+            let app = session["appOrSite"] as? String ?? ""
+            let desc = session["description"] as? String ?? ""
+            let dur = session["durationSeconds"] as? Int ?? 0
+            let durStr = dur > 0 ? " (\(dur / 60)m)" : ""
+            let icon = status == "focused" ? "+" : "-"
+            out += "- \(icon) \(app)\(durStr): \(desc)\n"
+          }
+          if focusSessions.count > 10 {
+            out += "- ...and \(focusSessions.count - 10) more sessions\n"
+          }
+        }
+
+        // Memories
+        if !memories.isEmpty {
+          out += "\n## Memories Learned (\(memories.count))\n"
+          for memory in memories.prefix(10) {
+            let content = memory["content"] as? String ?? ""
+            let category = memory["category"] as? String ?? ""
+            let catStr = category.isEmpty ? "" : " [\(category)]"
+            out += "- \(content)\(catStr)\n"
+          }
+          if memories.count > 10 { out += "- ...and \(memories.count - 10) more\n" }
+        }
+
+        // Observations (context summaries)
+        if !observations.isEmpty {
+          out += "\n## Screen Context (\(observations.count) observations)\n"
+          for obs in observations.prefix(10) {
+            let app = obs["appName"] as? String ?? ""
+            let activity = obs["currentActivity"] as? String ?? ""
+            out += "- \(app): \(activity)\n"
+          }
+          if observations.count > 10 {
+            out += "- ...and \(observations.count - 10) more observations\n"
+          }
+        }
+
         log(
-          "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks")
+          "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
+        )
         return out
       }
     } catch {
@@ -495,6 +575,83 @@ class ChatToolExecutor {
     } catch {
       logError("Tool semantic_search failed", error: error)
       return "Failed to search: \(error.localizedDescription)"
+    }
+  }
+
+  // MARK: - Task Search
+
+  /// Vector similarity search on action_items + staged_tasks using EmbeddingService
+  private static func executeSearchTasks(_ args: [String: Any]) async -> String {
+    guard let query = args["query"] as? String, !query.isEmpty else {
+      return "Error: query is required"
+    }
+
+    let includeCompleted = (args["include_completed"] as? Bool) ?? false
+
+    do {
+      // Ensure index is loaded
+      if !(await EmbeddingService.shared.indexLoaded) {
+        await EmbeddingService.shared.loadIndex()
+      }
+
+      // Verify index actually has entries (loadIndex swallows errors)
+      if !(await EmbeddingService.shared.indexLoaded) {
+        return "Error: embedding index failed to load. Task vector search is unavailable."
+      }
+
+      // Embed the query text
+      // EmbeddingService uses a shared Int64-keyed index for both action_items and staged_tasks.
+      // loadIndex() loads action_items first, then staged_tasks — so for colliding IDs, the
+      // staged_task embedding overwrites the action_item one. We check staged_tasks first to
+      // match the actual embedding owner, then fall back to action_items for non-colliding IDs.
+      let queryEmbedding = try await EmbeddingService.shared.embed(
+        text: query, taskType: "RETRIEVAL_QUERY")
+
+      // Search the in-memory index (action_items + staged_tasks share this index)
+      let vectorResults = await EmbeddingService.shared.searchSimilar(
+        query: queryEmbedding, topK: 15)
+
+      var lines: [String] = []
+      var count = 0
+
+      for result in vectorResults where result.similarity > 0.3 {
+        // Try staged_tasks first (their embeddings overwrite action_items on ID collision),
+        // then fall back to action_items
+        if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+          if staged.deleted { continue }
+          if !includeCompleted && staged.completed { continue }
+          count += 1
+          let check = staged.completed ? "[x]" : "[ ]"
+          let sim = String(format: "%.2f", result.similarity)
+          lines.append(
+            "\(count). \(check) \(staged.description) (similarity: \(sim), id: \(result.id), source: staged_tasks)"
+          )
+        } else if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
+          if record.deleted { continue }
+          if !includeCompleted && record.completed { continue }
+          count += 1
+          let check = record.completed ? "[x]" : "[ ]"
+          let pri = (record.priority ?? "").isEmpty ? "" : " [\(record.priority!)]"
+          let sim = String(format: "%.2f", result.similarity)
+          lines.append(
+            "\(count). \(check) \(record.description)\(pri) (similarity: \(sim), id: \(result.id), source: action_items)"
+          )
+        }
+
+        if count >= 10 { break }
+      }
+
+      if lines.isEmpty {
+        return "No tasks found matching \"\(query)\". The embedding index may not be loaded yet, or no tasks have embeddings."
+      }
+
+      lines.insert("Found \(count) task(s) matching \"\(query)\":", at: 0)
+      log("Tool search_tasks returned \(count) results")
+      return lines.joined(separator: "\n")
+
+    } catch {
+      logError("Tool search_tasks failed", error: error)
+      return "Error: \(error.localizedDescription)"
     }
   }
 

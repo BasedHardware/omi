@@ -205,7 +205,11 @@ actor MemoryAssistant: ProactiveAssistant {
             MemoryAssistantSettings.shared.notificationsEnabled
         }
         if notificationsEnabled {
-            await sendMemoryNotification(memory: memory)
+            await sendMemoryNotification(
+                memory: memory,
+                result: memoryResult,
+                windowTitle: windowTitle
+            )
         }
 
         // Send event to Flutter
@@ -273,15 +277,30 @@ actor MemoryAssistant: ProactiveAssistant {
     }
 
     /// Send a notification for the extracted memory
-    private func sendMemoryNotification(memory: ExtractedMemory) async {
+    private func sendMemoryNotification(
+        memory: ExtractedMemory,
+        result: MemoryExtractionResult,
+        windowTitle: String?
+    ) async {
         let title = memory.category == .interesting ? "Wisdom Captured" : "Memory Saved"
-        let message = memory.content
+        let message = "New memory: \(memory.content)"
+        let context = FloatingBarNotificationContext(
+            sourceTitle: title,
+            assistantId: identifier,
+            sourceApp: memory.sourceApp.isEmpty ? nil : memory.sourceApp,
+            windowTitle: windowTitle,
+            contextSummary: result.contextSummary,
+            currentActivity: result.currentActivity,
+            reasoning: nil,
+            detail: memory.content
+        )
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
                 title: title,
                 message: message,
-                assistantId: identifier
+                assistantId: identifier,
+                context: context
             )
         }
     }

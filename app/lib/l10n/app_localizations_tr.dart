@@ -637,9 +637,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get saving => 'Kaydediliyor...';
 
   @override
-  String get personaConfig => 'Yapay zeka kişiliğinizi yapılandırın';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2432,12 +2429,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createKeyToGetStarted => 'Başlamak için bir anahtar oluşturun';
 
   @override
-  String get persona => 'Kişilik';
-
-  @override
-  String get configureYourAiPersona => 'AI kişiliğinizi yapılandırın';
-
-  @override
   String get configureSttProvider => 'STT sağlayıcısını yapılandır';
 
   @override
@@ -2952,9 +2943,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Uygulama Hakkında';
-
-  @override
-  String get aboutThePersona => 'Persona Hakkında';
 
   @override
   String get chatPersonality => 'Sohbet Kişiliği';
@@ -3491,9 +3479,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get changeYourName => 'Adınızı değiştirin';
 
   @override
-  String get manageYourOmiPersona => 'Omi personanızı yönetin';
-
-  @override
   String get voiceAndPeople => 'Ses ve İnsanlar';
 
   @override
@@ -3904,9 +3889,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get shortcutChangeInstruction => 'Değiştirmek için bir kısayola tıklayın. İptal etmek için Escape\'e basın.';
 
   @override
-  String get configurePersonaDescription => 'Yapay zeka kişiliğinizi yapılandırın';
-
-  @override
   String get configureSTTProvider => 'STT sağlayıcısını yapılandır';
 
   @override
@@ -4261,16 +4243,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createAndShareYourApp => 'Uygulamanızı oluşturun ve paylaşın';
 
   @override
-  String get createMyClone => 'Klonumu Oluştur';
-
-  @override
-  String get createYourDigitalClone => 'Dijital klonunuzu oluşturun';
-
-  @override
   String get itemApp => 'Uygulama';
-
-  @override
-  String get itemPersona => 'Kişilik';
 
   @override
   String keepItemPublic(String item) {
@@ -4299,9 +4272,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get manageApp => 'Uygulamayı Yönet';
-
-  @override
-  String get updatePersonaDetails => 'Persona Ayrıntılarını Güncelle';
 
   @override
   String deleteItemTitle(String item) {
@@ -5827,9 +5797,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chooseFile => 'Dosya Seç';
 
   @override
-  String get configureAiPersona => 'AI kişiliğinizi yapılandırın';
-
-  @override
   String get connectAiAssistantsToYourData => 'AI asistanlarını verilerinize bağlayın';
 
   @override
@@ -6541,29 +6508,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get sharePublicLink => 'Herkese Açık Bağlantıyı Paylaş';
 
   @override
-  String get makePersonaPublic => 'Kişiliği Herkese Açık Yap';
-
-  @override
   String get connectedKnowledgeData => 'Bağlı Bilgi Verisi';
 
   @override
   String get enterName => 'Ad girin';
-
-  @override
-  String get disconnectTwitter => 'Twitter\'ı Bağlantıdan Kes';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Twitter hesabınızı bağlantıdan kesmek istediğinizden emin misiniz? Kişiliğiniz artık Twitter verilerinize erişemeyecek.';
-
-  @override
-  String get getOmiDeviceDescription => 'Kişisel konuşmalarınızla daha doğru bir klon oluşturun';
-
-  @override
-  String get getOmi => 'Omi Edinin';
-
-  @override
-  String get iHaveOmiDevice => 'Omi cihazım var';
 
   @override
   String get goal => 'HEDEF';
@@ -7114,49 +7062,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona diğer yeteneklerle birlikte seçilemez';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter hesabı bulunamadı';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitter hesabı askıya alındı';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitter hesabı doğrulanamadı';
-
-  @override
-  String get personaFailedToFetch => 'Persona alınamadı';
-
-  @override
-  String get personaFailedToCreate => 'Persona oluşturulamadı';
-
-  @override
-  String get personaConnectKnowledgeSource => 'En az bir veri kaynağı bağlayın (Omi veya Twitter)';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona başarıyla güncellendi';
-
-  @override
-  String get personaFailedToUpdate => 'Persona güncellenemedi';
-
-  @override
-  String get personaPleaseSelectImage => 'Bir görsel seçin';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Persona oluşturulamadı. Daha sonra tekrar deneyin.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Persona oluşturulamadı: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Persona etkinleştirilemedi';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Persona etkinleştirilirken hata: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Desteklenen ülkeler alınamadı. Daha sonra tekrar deneyin.';
 
   @override
@@ -7229,21 +7134,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Lütfen önce bir uygulama oluşturun';
-
-  @override
-  String get xHandleTitle => 'X kullanıcı adınız nedir?';
-
-  @override
-  String get xHandleDescription => 'Omi klonunuzu hesabınızın\netkinliğine göre önceden eğiteceğiz';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Lütfen X kullanıcı adınızı girin';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Lütfen geçerli bir X kullanıcı adı girin';
 
   @override
   String get nextButton => 'İleri';
@@ -7857,9 +7747,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get categoryConversationAnalysis => 'Konuşma Analizi';
 
   @override
-  String get categoryPersonalityClone => 'Kişilik Klonu';
-
-  @override
   String get categoryHealth => 'Sağlık';
 
   @override
@@ -7960,9 +7847,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Entegrasyonlar';
-
-  @override
-  String get categoryPersonalityClones => 'Kişilik Klonları';
 
   @override
   String get categoryProductivityLifestyle => 'Verimlilik ve Yaşam Tarzı';
@@ -9028,4 +8912,132 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Devam Et';
+
+  @override
+  String get tasksClearCompleted => 'Tamamlananları temizle';
+
+  @override
+  String get tasksSelectAll => 'Tümünü seç';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count görevi sil';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Tamamlandı olarak işaretlendi';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi, Apple Health\'e Apple\'ın HealthKit çerçevesi üzerinden erişir. Erişimi istediğiniz zaman iOS Ayarlar\'dan iptal edebilirsiniz.';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health\'e Bağlan';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health Bağlantısını Kes';
+
+  @override
+  String get appleHealthConnectedBadge => 'Bağlandı';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Sağlığın hakkında sohbet et';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Adımların, uykun, kalp atışın ve antrenmanların hakkında Omi\'ye sor.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Yalnızca okuma erişimi';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi, Apple Health\'e asla yazmaz ve verilerini değiştirmez.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Güvenli senkronizasyon';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health verilerin Omi hesabına gizli şekilde senkronize edilir.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health erişimi reddedildi';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi\'nin Apple Health verilerinizi okuma izni yok. Bunu iOS Ayarlar → Gizlilik ve Güvenlik → Sağlık → Omi yolundan etkinleştirin.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Neden ayrılıyorsun?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Geri bildiriminiz Omi\'yi herkes için iyileştirmemize yardımcı olur.';
+
+  @override
+  String get deleteReasonPrivacy => 'Gizlilik endişeleri';
+
+  @override
+  String get deleteReasonNotUsing => 'Yeterince kullanmıyorum';
+
+  @override
+  String get deleteReasonMissingFeatures => 'İhtiyacım olan özellikler eksik';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Çok fazla teknik sorun';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Başka bir şey kullanıyorum';
+
+  @override
+  String get deleteReasonTakingBreak => 'Sadece ara veriyorum';
+
+  @override
+  String get deleteReasonOther => 'Diğer';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Daha fazlasını anlat';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Omi\'nin senin için işe yaramasını ne sağlardı?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'İsteğe bağlı — düşünceleriniz daha iyi bir ürün oluşturmamıza yardımcı olur.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Bu kalıcıdır';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Hesabınızı sildiğinizde, kurtarmanın bir yolu yoktur.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Etkin abonelik iptal edilecektir.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Hesabınız geri yüklenemez — destek ekibi bile yapamaz.';
+
+  @override
+  String get deleteTypeToConfirm => 'Onaylamak için DELETE yazın';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Hesabı kalıcı olarak sil';
+
+  @override
+  String get keepMyAccount => 'Hesabımı koru';
+
+  @override
+  String get deleteAccountFailed => 'Hesabınız silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get planUpdate => 'Plan Güncellemesi';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler \$49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.';
+
+  @override
+  String get upgradeYourPlan => 'Planınızı Yükseltin';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ücretli bir plandasınız.';
 }

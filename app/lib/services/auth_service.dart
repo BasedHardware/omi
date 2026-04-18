@@ -152,17 +152,6 @@ class AuthService {
     }
   }
 
-  Future<void> signInAnonymously() async {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      var user = FirebaseAuth.instance.currentUser!;
-      SharedPreferencesUtil().uid = user.uid;
-      await getIdToken();
-    } catch (e) {
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-    }
-  }
-
   Future<void> signOut() async {
     _clearCachedAuth();
     await FirebaseAuth.instance.signOut();
@@ -274,7 +263,7 @@ class AuthService {
       });
 
       // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         linkSubscription.cancel();
@@ -573,7 +562,7 @@ class AuthService {
 
       Logger.debug('Authorization URL: $authUrl');
 
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         throw Exception('Failed to launch authentication URL');

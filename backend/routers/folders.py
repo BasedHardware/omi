@@ -12,6 +12,7 @@ from models.folder import (
     ReorderFoldersRequest,
 )
 from models.conversation import Conversation
+from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -111,15 +112,7 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
-    for conv in conversations:
-        if conv.get('is_locked', False):
-            if 'structured' in conv:
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-            conv['apps_results'] = []
-            conv['plugins_results'] = []
-            conv['suggested_summarization_apps'] = []
-            conv['transcript_segments'] = []
+    redact_conversations_for_list(conversations)
     return conversations
 
 
@@ -131,6 +124,8 @@ def move_conversation_to_folder(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     if request.folder_id:
         folder = folders_db.get_folder(uid, request.folder_id)
@@ -149,6 +144,14 @@ def bulk_move_conversations(
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
+
+    # Validate none of the conversations are locked
+    for conv_id in request.conversation_ids:
+        conv = conversations_db.get_conversation(uid, conv_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
+        if conv.get('is_locked', False):
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     moved = folders_db.bulk_move_conversations_to_folder(uid, request.conversation_ids, folder_id)
     return {"status": "ok", "moved_count": moved}

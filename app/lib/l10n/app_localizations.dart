@@ -1401,12 +1401,6 @@ abstract class AppLocalizations {
   /// **'Saving...'**
   String get saving;
 
-  /// Persona configuration subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get personaConfig;
-
   /// Beta label for experimental features
   ///
   /// In en, this message translates to:
@@ -4689,18 +4683,6 @@ abstract class AppLocalizations {
   /// **'Create a key to get started'**
   String get createKeyToGetStarted;
 
-  /// Persona feature name
-  ///
-  /// In en, this message translates to:
-  /// **'Persona'**
-  String get persona;
-
-  /// Description for persona settings
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configureYourAiPersona;
-
   /// Description for transcription settings
   ///
   /// In en, this message translates to:
@@ -5696,12 +5678,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'About the App'**
   String get aboutTheApp;
-
-  /// Section title for persona description
-  ///
-  /// In en, this message translates to:
-  /// **'About the Persona'**
-  String get aboutThePersona;
 
   /// Title for chat personality section
   ///
@@ -6729,12 +6705,6 @@ abstract class AppLocalizations {
   /// **'Change Your Name'**
   String get changeYourName;
 
-  /// No description provided for @manageYourOmiPersona.
-  ///
-  /// In en, this message translates to:
-  /// **'Manage your Omi persona'**
-  String get manageYourOmiPersona;
-
   /// Voice and people section title
   ///
   /// In en, this message translates to:
@@ -7503,12 +7473,6 @@ abstract class AppLocalizations {
   /// **'Click on a shortcut to change it. Press Escape to cancel.'**
   String get shortcutChangeInstruction;
 
-  /// No description provided for @configurePersonaDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configurePersonaDescription;
-
   /// No description provided for @configureSTTProvider.
   ///
   /// In en, this message translates to:
@@ -8151,29 +8115,11 @@ abstract class AppLocalizations {
   /// **'Create and share your app'**
   String get createAndShareYourApp;
 
-  /// Option to create digital clone
-  ///
-  /// In en, this message translates to:
-  /// **'Create my Clone'**
-  String get createMyClone;
-
-  /// Subtitle for create clone option
-  ///
-  /// In en, this message translates to:
-  /// **'Create your digital clone'**
-  String get createYourDigitalClone;
-
   /// The word 'App' used as parameter in other strings
   ///
   /// In en, this message translates to:
   /// **'App'**
   String get itemApp;
-
-  /// The word 'Persona' used as parameter in other strings
-  ///
-  /// In en, this message translates to:
-  /// **'Persona'**
-  String get itemPersona;
 
   /// Toggle label to keep app or persona public
   ///
@@ -8210,12 +8156,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage App'**
   String get manageApp;
-
-  /// Menu item to update persona details
-  ///
-  /// In en, this message translates to:
-  /// **'Update Persona Details'**
-  String get updatePersonaDetails;
 
   /// Menu item to delete app or persona
   ///
@@ -11037,12 +10977,6 @@ abstract class AppLocalizations {
   /// **'Choose File'**
   String get chooseFile;
 
-  /// Description for persona settings
-  ///
-  /// In en, this message translates to:
-  /// **'Configure your AI persona'**
-  String get configureAiPersona;
-
   /// Description for MCP server feature
   ///
   /// In en, this message translates to:
@@ -12345,12 +12279,6 @@ abstract class AppLocalizations {
   /// **'Share Public Link'**
   String get sharePublicLink;
 
-  /// No description provided for @makePersonaPublic.
-  ///
-  /// In en, this message translates to:
-  /// **'Make Persona Public'**
-  String get makePersonaPublic;
-
   /// No description provided for @connectedKnowledgeData.
   ///
   /// In en, this message translates to:
@@ -12362,36 +12290,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter name'**
   String get enterName;
-
-  /// No description provided for @disconnectTwitter.
-  ///
-  /// In en, this message translates to:
-  /// **'Disconnect Twitter'**
-  String get disconnectTwitter;
-
-  /// No description provided for @disconnectTwitterConfirmation.
-  ///
-  /// In en, this message translates to:
-  /// **'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.'**
-  String get disconnectTwitterConfirmation;
-
-  /// No description provided for @getOmiDeviceDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Create a more accurate clone with your personal conversations'**
-  String get getOmiDeviceDescription;
-
-  /// No description provided for @getOmi.
-  ///
-  /// In en, this message translates to:
-  /// **'Get Omi'**
-  String get getOmi;
-
-  /// No description provided for @iHaveOmiDevice.
-  ///
-  /// In en, this message translates to:
-  /// **'I have Omi device'**
-  String get iHaveOmiDevice;
 
   /// No description provided for @goal.
   ///
@@ -13377,84 +13275,6 @@ abstract class AppLocalizations {
   /// **'Persona cannot be selected with other capabilities'**
   String get addAppPersonaConflictWithCapabilities;
 
-  /// Error shown when Twitter handle is not found
-  ///
-  /// In en, this message translates to:
-  /// **'Twitter handle not found'**
-  String get personaTwitterHandleNotFound;
-
-  /// Error shown when Twitter handle is suspended
-  ///
-  /// In en, this message translates to:
-  /// **'Twitter handle is suspended'**
-  String get personaTwitterHandleSuspended;
-
-  /// Error shown when Twitter handle verification fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to verify Twitter handle'**
-  String get personaFailedToVerifyTwitter;
-
-  /// Error shown when fetching persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to fetch your persona'**
-  String get personaFailedToFetch;
-
-  /// Error shown when creating persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create your persona'**
-  String get personaFailedToCreate;
-
-  /// Error shown when no knowledge source is connected
-  ///
-  /// In en, this message translates to:
-  /// **'Please connect at least one knowledge data source (Omi or Twitter)'**
-  String get personaConnectKnowledgeSource;
-
-  /// Success message when persona is updated
-  ///
-  /// In en, this message translates to:
-  /// **'Persona updated successfully'**
-  String get personaUpdatedSuccessfully;
-
-  /// Error shown when updating persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to update persona'**
-  String get personaFailedToUpdate;
-
-  /// Error shown when no image is selected for persona
-  ///
-  /// In en, this message translates to:
-  /// **'Please select an image'**
-  String get personaPleaseSelectImage;
-
-  /// Error shown when creating persona fails with retry suggestion
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create your persona. Please try again later.'**
-  String get personaFailedToCreateTryLater;
-
-  /// Error shown when creating persona fails with error details
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to create persona: {error}'**
-  String personaFailedToCreateWithError(String error);
-
-  /// Error shown when enabling persona fails
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable persona'**
-  String get personaFailedToEnable;
-
-  /// Error shown when enabling persona fails with error details
-  ///
-  /// In en, this message translates to:
-  /// **'Error enabling persona: {error}'**
-  String personaErrorEnablingWithError(String error);
-
   /// Error message when fetching supported countries fails
   ///
   /// In en, this message translates to:
@@ -13598,36 +13418,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please generate an app first'**
   String get aiGenPleaseGenerateAppFirst;
-
-  /// Title asking user for their X (Twitter) handle
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s your X handle?'**
-  String get xHandleTitle;
-
-  /// Description explaining why X handle is needed
-  ///
-  /// In en, this message translates to:
-  /// **'We will pre-train your Omi clone\nbased on your account\'s activity'**
-  String get xHandleDescription;
-
-  /// Placeholder hint for X handle input field
-  ///
-  /// In en, this message translates to:
-  /// **'@nikshevchenko'**
-  String get xHandleHint;
-
-  /// Validation error when X handle is empty
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter your X handle'**
-  String get xHandlePleaseEnter;
-
-  /// Validation error when X handle is invalid
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter a valid X handle'**
-  String get xHandlePleaseEnterValid;
 
   /// Button text to proceed to next step
   ///
@@ -14655,12 +14445,6 @@ abstract class AppLocalizations {
   /// **'Conversation Analysis'**
   String get categoryConversationAnalysis;
 
-  /// No description provided for @categoryPersonalityClone.
-  ///
-  /// In en, this message translates to:
-  /// **'Personality Clone'**
-  String get categoryPersonalityClone;
-
   /// No description provided for @categoryHealth.
   ///
   /// In en, this message translates to:
@@ -14864,12 +14648,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Integrations'**
   String get capabilityIntegrations;
-
-  /// No description provided for @categoryPersonalityClones.
-  ///
-  /// In en, this message translates to:
-  /// **'Personality Clones'**
-  String get categoryPersonalityClones;
 
   /// No description provided for @categoryProductivityLifestyle.
   ///
@@ -16856,6 +16634,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueAnyway;
+
+  /// No description provided for @tasksClearCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Completed'**
+  String get tasksClearCompleted;
+
+  /// No description provided for @tasksSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get tasksSelectAll;
+
+  /// No description provided for @tasksDeleteSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {count} task(s)'**
+  String tasksDeleteSelected(int count);
+
+  /// No description provided for @tasksMarkComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked as complete'**
+  String get tasksMarkComplete;
+
+  /// No description provided for @appleHealthManageNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.'**
+  String get appleHealthManageNote;
+
+  /// No description provided for @appleHealthConnectCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to Apple Health'**
+  String get appleHealthConnectCta;
+
+  /// No description provided for @appleHealthDisconnectCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect Apple Health'**
+  String get appleHealthDisconnectCta;
+
+  /// No description provided for @appleHealthConnectedBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get appleHealthConnectedBadge;
+
+  /// No description provided for @appleHealthFeatureChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat about your health'**
+  String get appleHealthFeatureChatTitle;
+
+  /// No description provided for @appleHealthFeatureChatDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi about your steps, sleep, heart rate, and workouts.'**
+  String get appleHealthFeatureChatDesc;
+
+  /// No description provided for @appleHealthFeatureReadOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only access'**
+  String get appleHealthFeatureReadOnlyTitle;
+
+  /// No description provided for @appleHealthFeatureReadOnlyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi never writes to Apple Health or modifies your data.'**
+  String get appleHealthFeatureReadOnlyDesc;
+
+  /// No description provided for @appleHealthFeatureSecureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure sync'**
+  String get appleHealthFeatureSecureTitle;
+
+  /// No description provided for @appleHealthFeatureSecureDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Apple Health data syncs privately to your Omi account.'**
+  String get appleHealthFeatureSecureDesc;
+
+  /// No description provided for @appleHealthDeniedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Health access denied'**
+  String get appleHealthDeniedTitle;
+
+  /// No description provided for @appleHealthDeniedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.'**
+  String get appleHealthDeniedBody;
+
+  /// Title on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Why are you leaving?'**
+  String get deleteFlowReasonTitle;
+
+  /// Subtitle on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Your feedback helps us improve Omi for everyone.'**
+  String get deleteFlowReasonSubtitle;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy concerns'**
+  String get deleteReasonPrivacy;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Not using it enough'**
+  String get deleteReasonNotUsing;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Missing features I need'**
+  String get deleteReasonMissingFeatures;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Too many technical issues'**
+  String get deleteReasonTechnicalIssues;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Using something else'**
+  String get deleteReasonFoundAlternative;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Just taking a break'**
+  String get deleteReasonTakingBreak;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get deleteReasonOther;
+
+  /// Title on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more'**
+  String get deleteFlowFeedbackTitle;
+
+  /// Subtitle on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'What would have made Omi work for you?'**
+  String get deleteFlowFeedbackSubtitle;
+
+  /// TextField hint on delete feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — your thoughts help us build a better product.'**
+  String get deleteFlowFeedbackHint;
+
+  /// Title on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'This is permanent'**
+  String get deleteFlowConfirmTitle;
+
+  /// Subtitle on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'Once you delete your account, there is no way to recover it.'**
+  String get deleteFlowConfirmSubtitle;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Any active subscription will be cancelled.'**
+  String get deleteConsequenceSubscription;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Your account cannot be restored — not even by support.'**
+  String get deleteConsequenceNoRecovery;
+
+  /// Instruction to type DELETE to confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Type DELETE to confirm'**
+  String get deleteTypeToConfirm;
+
+  /// The literal word users type to confirm deletion. Keep uppercase.
+  ///
+  /// In en, this message translates to:
+  /// **'DELETE'**
+  String get deleteConfirmationWord;
+
+  /// Primary destructive action label
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account permanently'**
+  String get deleteAccountPermanently;
+
+  /// Secondary action to back out of deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my account'**
+  String get keepMyAccount;
+
+  /// Error shown when deletion API fails
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete your account. Please try again.'**
+  String get deleteAccountFailed;
+
+  /// Header for plan deprecation notice
+  ///
+  /// In en, this message translates to:
+  /// **'Plan Update'**
+  String get planUpdate;
+
+  /// Deprecation notice for legacy Unlimited subscribers
+  ///
+  /// In en, this message translates to:
+  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
+  String get planDeprecationMessage;
+
+  /// Header for plan upgrade screen for non-paid users
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Your Plan'**
+  String get upgradeYourPlan;
+
+  /// Subtitle for paid plan users on plans sheet
+  ///
+  /// In en, this message translates to:
+  /// **'You are on a paid plan.'**
+  String get youAreOnAPaidPlan;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

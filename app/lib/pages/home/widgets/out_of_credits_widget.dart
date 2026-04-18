@@ -18,6 +18,9 @@ class OutOfCreditsWidget extends StatelessWidget {
         if (!usageProvider.isOutOfCredits) {
           return const SizedBox.shrink();
         }
+        if (!usageProvider.showSubscriptionUI) {
+          return const SizedBox.shrink();
+        }
 
         return Container(
           color: const Color(0xFF1F1F25),

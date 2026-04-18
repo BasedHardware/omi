@@ -624,9 +624,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saving => '保存中...';
 
   @override
-  String get personaConfig => 'AIペルソナを設定';
-
-  @override
   String get beta => 'ベータ';
 
   @override
@@ -2384,12 +2381,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createKeyToGetStarted => '開始するにはキーを作成してください';
 
   @override
-  String get persona => 'ペルソナ';
-
-  @override
-  String get configureYourAiPersona => 'AIペルソナを設定する';
-
-  @override
   String get configureSttProvider => 'STTプロバイダーを設定';
 
   @override
@@ -2892,9 +2883,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'アプリについて';
-
-  @override
-  String get aboutThePersona => 'ペルソナについて';
 
   @override
   String get chatPersonality => 'チャットパーソナリティ';
@@ -3424,9 +3412,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get changeYourName => '名前を変更';
 
   @override
-  String get manageYourOmiPersona => 'Omiペルソナを管理';
-
-  @override
   String get voiceAndPeople => '音声と人物';
 
   @override
@@ -3831,9 +3816,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shortcutChangeInstruction => 'ショートカットをクリックして変更します。Escapeキーでキャンセル。';
 
   @override
-  String get configurePersonaDescription => 'AIペルソナを設定';
-
-  @override
   String get configureSTTProvider => 'STTプロバイダーを設定';
 
   @override
@@ -4177,16 +4159,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createAndShareYourApp => 'アプリを作成して共有';
 
   @override
-  String get createMyClone => 'クローンを作成';
-
-  @override
-  String get createYourDigitalClone => 'デジタルクローンを作成';
-
-  @override
   String get itemApp => 'アプリ';
-
-  @override
-  String get itemPersona => 'ペルソナ';
 
   @override
   String keepItemPublic(String item) {
@@ -4215,9 +4188,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get manageApp => 'アプリを管理';
-
-  @override
-  String get updatePersonaDetails => 'ペルソナの詳細を更新';
 
   @override
   String deleteItemTitle(String item) {
@@ -5710,9 +5680,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chooseFile => 'ファイルを選択';
 
   @override
-  String get configureAiPersona => 'AIペルソナを設定';
-
-  @override
   String get connectAiAssistantsToYourData => 'AIアシスタントをデータに接続';
 
   @override
@@ -6414,28 +6381,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sharePublicLink => '公開リンクを共有';
 
   @override
-  String get makePersonaPublic => 'ペルソナを公開';
-
-  @override
   String get connectedKnowledgeData => '接続されたナレッジデータ';
 
   @override
   String get enterName => '名前を入力';
-
-  @override
-  String get disconnectTwitter => 'Twitterを切断';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Twitterアカウントを切断してもよろしいですか？ペルソナはTwitterデータにアクセスできなくなります。';
-
-  @override
-  String get getOmiDeviceDescription => '個人の会話でより正確なクローンを作成';
-
-  @override
-  String get getOmi => 'Omiを入手';
-
-  @override
-  String get iHaveOmiDevice => 'Omiデバイスを持っています';
 
   @override
   String get goal => '目標';
@@ -6978,49 +6927,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'ペルソナは他の機能と同時に選択できません';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitterハンドルが見つかりません';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitterハンドルは停止されています';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitterハンドルの確認に失敗しました';
-
-  @override
-  String get personaFailedToFetch => 'ペルソナの取得に失敗しました';
-
-  @override
-  String get personaFailedToCreate => 'ペルソナの作成に失敗しました';
-
-  @override
-  String get personaConnectKnowledgeSource => '少なくとも1つのデータソース（OmiまたはTwitter）を接続してください';
-
-  @override
-  String get personaUpdatedSuccessfully => 'ペルソナが正常に更新されました';
-
-  @override
-  String get personaFailedToUpdate => 'ペルソナの更新に失敗しました';
-
-  @override
-  String get personaPleaseSelectImage => '画像を選択してください';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ペルソナの作成に失敗しました。後でもう一度お試しください。';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'ペルソナの作成に失敗: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'ペルソナの有効化に失敗しました';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'ペルソナの有効化エラー: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => '対応国の取得に失敗しました。後でもう一度お試しください。';
 
   @override
@@ -7093,21 +6999,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '先にアプリを生成してください';
-
-  @override
-  String get xHandleTitle => 'Xのユーザー名は？';
-
-  @override
-  String get xHandleDescription => 'アカウントのアクティビティに基づいて\nOmiクローンを事前トレーニングします';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Xのユーザー名を入力してください';
-
-  @override
-  String get xHandlePleaseEnterValid => '有効なXのユーザー名を入力してください';
 
   @override
   String get nextButton => '次へ';
@@ -7709,9 +7600,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get categoryConversationAnalysis => '会話分析';
 
   @override
-  String get categoryPersonalityClone => 'パーソナリティクローン';
-
-  @override
   String get categoryHealth => '健康';
 
   @override
@@ -7812,9 +7700,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '連携';
-
-  @override
-  String get categoryPersonalityClones => 'パーソナリティクローン';
 
   @override
   String get categoryProductivityLifestyle => '生産性とライフスタイル';
@@ -8865,4 +8750,132 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get continueAnyway => '続行';
+
+  @override
+  String get tasksClearCompleted => '完了済みをクリア';
+
+  @override
+  String get tasksSelectAll => 'すべて選択';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count件のタスクを削除';
+  }
+
+  @override
+  String get tasksMarkComplete => '完了としてマーク';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health に接続';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health の接続を解除';
+
+  @override
+  String get appleHealthConnectedBadge => '接続済み';
+
+  @override
+  String get appleHealthFeatureChatTitle => '健康についてチャット';
+
+  @override
+  String get appleHealthFeatureChatDesc => '歩数、睡眠、心拍数、ワークアウトについて Omi に質問できます。';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '読み取り専用アクセス';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi は Apple Health に書き込みや変更を行いません。';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '安全な同期';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health のデータは Omi アカウントに安全に同期されます。';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health へのアクセスが拒否されました';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
+
+  @override
+  String get deleteFlowReasonTitle => 'どうして離れるのですか?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'あなたのフィードバックは、みんなのためにOmiを改善するのに役立ちます。';
+
+  @override
+  String get deleteReasonPrivacy => 'プライバシーへの懸念';
+
+  @override
+  String get deleteReasonNotUsing => 'あまり使っていない';
+
+  @override
+  String get deleteReasonMissingFeatures => '必要な機能が足りない';
+
+  @override
+  String get deleteReasonTechnicalIssues => '技術的な問題が多すぎる';
+
+  @override
+  String get deleteReasonFoundAlternative => '他のものを使っている';
+
+  @override
+  String get deleteReasonTakingBreak => '少し休みたいだけ';
+
+  @override
+  String get deleteReasonOther => 'その他';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'もう少し聞かせてください';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '何があればOmiはあなたに合っていましたか?';
+
+  @override
+  String get deleteFlowFeedbackHint => '任意 — あなたの声がより良い製品づくりに役立ちます。';
+
+  @override
+  String get deleteFlowConfirmTitle => 'この操作は取り消せません';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'アカウントを削除すると、復元することはできません。';
+
+  @override
+  String get deleteConsequenceSubscription => '有効なサブスクリプションはキャンセルされます。';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'アカウントは復元できません — サポートでも対応できません。';
+
+  @override
+  String get deleteTypeToConfirm => '確認のためにDELETEと入力してください';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'アカウントを完全に削除';
+
+  @override
+  String get keepMyAccount => 'アカウントを残す';
+
+  @override
+  String get deleteAccountFailed => 'アカウントを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get planUpdate => 'プラン更新';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
+
+  @override
+  String get upgradeYourPlan => 'プランをアップグレード';
+
+  @override
+  String get youAreOnAPaidPlan => '有料プランをご利用中です。';
 }

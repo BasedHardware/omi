@@ -94,12 +94,14 @@ substep() {
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
+IS_NAMED_BUNDLE=false
+[ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
 
 slugify_identifier() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
 }
 
-if [ "$APP_NAME" = "Omi Dev" ]; then
+if [ "$IS_NAMED_BUNDLE" = false ]; then
     EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
     EXPECTED_URL_SCHEME="omi-computer-dev"
 else
@@ -552,14 +554,19 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null ||
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
-# Embed provisioning profile (required for Sign In with Apple entitlement)
-# Use dev profile for dev builds, production profile for release builds
-if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
-    substep "Copying dev provisioning profile"
-    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
-elif [ -f "Desktop/embedded.provisionprofile" ]; then
-    substep "Copying provisioning profile"
-    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+# Embed provisioning profile (required for Sign In with Apple entitlement).
+# Named bundles skip this — the profile is bundle-specific to com.omi.desktop-dev,
+# embedding it in a different bundle ID causes RBSRequestErrorDomain Code=5.
+if [ "$IS_NAMED_BUNDLE" = false ]; then
+    if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+        substep "Embedding dev provisioning profile"
+        cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    elif [ -f "Desktop/embedded.provisionprofile" ]; then
+        substep "Embedding provisioning profile"
+        cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    fi
+else
+    substep "Named bundle ($BUNDLE_ID) — skipping provisioning profile"
 fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
@@ -605,16 +612,31 @@ if [ -n "$SIGN_IDENTITY" ]; then
     # If local signing identity doesn't match embedded profile team, macOS rejects
     # restricted entitlements (notably com.apple.developer.applesignin) and launch
     # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
+    #
+    # Named bundles always use fallback — they have no provisioning profile, so
+    # com.apple.developer.applesignin would cause launchd to reject the launch.
     EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
     PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
-    IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
-    PROFILE_TEAM_ID=""
-    if [ -f "$PROFILE_PATH" ]; then
+    USE_FALLBACK_ENTITLEMENTS=false
+
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        substep "Named bundle — stripping applesignin entitlement"
+        USE_FALLBACK_ENTITLEMENTS=true
+    elif [ -f "$PROFILE_PATH" ]; then
+        IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+        PROFILE_TEAM_ID=""
         PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
             /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
+        if [ -z "$PROFILE_TEAM_ID" ]; then
+            substep "Could not extract profile team ID (security cms failed); using local entitlements fallback"
+            USE_FALLBACK_ENTITLEMENTS=true
+        elif [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
+            substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
+            USE_FALLBACK_ENTITLEMENTS=true
+        fi
     fi
-    if [ -n "$PROFILE_TEAM_ID" ] && [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
-        substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
+
+    if [ "$USE_FALLBACK_ENTITLEMENTS" = true ]; then
         cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
         /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
         rm -f "$PROFILE_PATH"

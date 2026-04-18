@@ -636,9 +636,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get saving => 'Menyimpan...';
 
   @override
-  String get personaConfig => 'Konfigurasi persona AI Anda';
-
-  @override
   String get beta => 'BETA';
 
   @override
@@ -2432,12 +2429,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get createKeyToGetStarted => 'Buat kunci untuk memulai';
 
   @override
-  String get persona => 'Persona';
-
-  @override
-  String get configureYourAiPersona => 'Konfigurasikan persona AI Anda';
-
-  @override
   String get configureSttProvider => 'Konfigurasikan penyedia STT';
 
   @override
@@ -2954,9 +2945,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'Tentang Aplikasi';
-
-  @override
-  String get aboutThePersona => 'Tentang Persona';
 
   @override
   String get chatPersonality => 'Kepribadian Chat';
@@ -3494,9 +3482,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get changeYourName => 'Ubah Nama Anda';
 
   @override
-  String get manageYourOmiPersona => 'Kelola persona Omi Anda';
-
-  @override
   String get voiceAndPeople => 'Suara & Orang';
 
   @override
@@ -3906,9 +3891,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klik pintasan untuk mengubahnya. Tekan Escape untuk membatalkan.';
 
   @override
-  String get configurePersonaDescription => 'Konfigurasi persona AI Anda';
-
-  @override
   String get configureSTTProvider => 'Konfigurasi penyedia STT';
 
   @override
@@ -4261,16 +4243,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get createAndShareYourApp => 'Buat dan bagikan aplikasi Anda';
 
   @override
-  String get createMyClone => 'Buat Klon Saya';
-
-  @override
-  String get createYourDigitalClone => 'Buat klon digital Anda';
-
-  @override
   String get itemApp => 'Aplikasi';
-
-  @override
-  String get itemPersona => 'Persona';
 
   @override
   String keepItemPublic(String item) {
@@ -4299,9 +4272,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get manageApp => 'Kelola Aplikasi';
-
-  @override
-  String get updatePersonaDetails => 'Perbarui Detail Persona';
 
   @override
   String deleteItemTitle(String item) {
@@ -5832,9 +5802,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get chooseFile => 'Pilih File';
 
   @override
-  String get configureAiPersona => 'Konfigurasikan persona AI Anda';
-
-  @override
   String get connectAiAssistantsToYourData => 'Hubungkan asisten AI ke data Anda';
 
   @override
@@ -6547,29 +6514,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get sharePublicLink => 'Bagikan tautan publik';
 
   @override
-  String get makePersonaPublic => 'Jadikan Persona Publik';
-
-  @override
   String get connectedKnowledgeData => 'Data pengetahuan terhubung';
 
   @override
   String get enterName => 'Masukkan nama';
-
-  @override
-  String get disconnectTwitter => 'Putuskan Twitter';
-
-  @override
-  String get disconnectTwitterConfirmation =>
-      'Apakah Anda yakin ingin memutuskan akun Twitter Anda? Persona Anda tidak akan lagi memiliki akses ke data Twitter Anda.';
-
-  @override
-  String get getOmiDeviceDescription => 'Dapatkan perangkat Omi untuk pengalaman penuh';
-
-  @override
-  String get getOmi => 'Dapatkan Omi';
-
-  @override
-  String get iHaveOmiDevice => 'Saya punya perangkat Omi';
 
   @override
   String get goal => 'TUJUAN';
@@ -7119,49 +7067,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'Persona berkonflik dengan kemampuan yang dipilih';
 
   @override
-  String get personaTwitterHandleNotFound => 'Username Twitter tidak ditemukan';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Username Twitter ditangguhkan';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Gagal memverifikasi Twitter';
-
-  @override
-  String get personaFailedToFetch => 'Gagal mengambil persona';
-
-  @override
-  String get personaFailedToCreate => 'Gagal membuat persona';
-
-  @override
-  String get personaConnectKnowledgeSource => 'Hubungkan sumber pengetahuan';
-
-  @override
-  String get personaUpdatedSuccessfully => 'Persona berhasil diperbarui';
-
-  @override
-  String get personaFailedToUpdate => 'Gagal memperbarui persona';
-
-  @override
-  String get personaPleaseSelectImage => 'Silakan pilih gambar';
-
-  @override
-  String get personaFailedToCreateTryLater => 'Gagal membuat persona. Silakan coba lagi nanti.';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'Gagal membuat persona: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'Gagal mengaktifkan persona';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'Kesalahan mengaktifkan persona: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => 'Gagal mengambil daftar negara';
 
   @override
@@ -7234,21 +7139,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Silakan buat aplikasi terlebih dahulu';
-
-  @override
-  String get xHandleTitle => 'Apa username X Anda?';
-
-  @override
-  String get xHandleDescription => 'Masukkan username X (Twitter) Anda untuk menghubungkan profil sosial Anda';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Silakan masukkan username X Anda';
-
-  @override
-  String get xHandlePleaseEnterValid => 'Silakan masukkan username X yang valid';
 
   @override
   String get nextButton => 'Selanjutnya';
@@ -7854,9 +7744,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get categoryConversationAnalysis => 'Analisis Percakapan';
 
   @override
-  String get categoryPersonalityClone => 'Klon Kepribadian';
-
-  @override
   String get categoryHealth => 'Kesehatan';
 
   @override
@@ -7957,9 +7844,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => 'Integrasi';
-
-  @override
-  String get categoryPersonalityClones => 'Klon Kepribadian';
 
   @override
   String get categoryProductivityLifestyle => 'Produktivitas & Gaya Hidup';
@@ -9025,4 +8909,132 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get continueAnyway => 'Lanjutkan';
+
+  @override
+  String get tasksClearCompleted => 'Hapus yang selesai';
+
+  @override
+  String get tasksSelectAll => 'Pilih semua';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return 'Hapus $count tugas';
+  }
+
+  @override
+  String get tasksMarkComplete => 'Ditandai selesai';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi mengakses Apple Health melalui framework HealthKit dari Apple. Anda dapat mencabut akses kapan saja di Pengaturan iOS.';
+
+  @override
+  String get appleHealthConnectCta => 'Hubungkan ke Apple Health';
+
+  @override
+  String get appleHealthDisconnectCta => 'Putuskan Apple Health';
+
+  @override
+  String get appleHealthConnectedBadge => 'Terhubung';
+
+  @override
+  String get appleHealthFeatureChatTitle => 'Bicarakan kesehatan Anda';
+
+  @override
+  String get appleHealthFeatureChatDesc => 'Tanyakan pada Omi tentang langkah, tidur, detak jantung, dan latihan Anda.';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => 'Akses hanya-baca';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi tidak pernah menulis ke Apple Health atau mengubah data Anda.';
+
+  @override
+  String get appleHealthFeatureSecureTitle => 'Sinkronisasi aman';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.';
+
+  @override
+  String get appleHealthDeniedTitle => 'Akses Apple Health ditolak';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Mengapa Anda pergi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Masukan Anda membantu kami meningkatkan Omi untuk semua orang.';
+
+  @override
+  String get deleteReasonPrivacy => 'Kekhawatiran privasi';
+
+  @override
+  String get deleteReasonNotUsing => 'Tidak cukup sering menggunakannya';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Fitur yang saya butuhkan tidak ada';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Terlalu banyak masalah teknis';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Menggunakan sesuatu yang lain';
+
+  @override
+  String get deleteReasonTakingBreak => 'Hanya sedang istirahat';
+
+  @override
+  String get deleteReasonOther => 'Lainnya';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Beri tahu kami lebih banyak';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Apa yang akan membuat Omi cocok untuk Anda?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opsional — pendapat Anda membantu kami membuat produk yang lebih baik.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ini bersifat permanen';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Setelah Anda menghapus akun, tidak ada cara untuk memulihkannya.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Langganan aktif apa pun akan dibatalkan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.';
+
+  @override
+  String get deleteTypeToConfirm => 'Ketik DELETE untuk konfirmasi';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Hapus akun secara permanen';
+
+  @override
+  String get keepMyAccount => 'Pertahankan akun saya';
+
+  @override
+  String get deleteAccountFailed => 'Tidak dapat menghapus akun Anda. Silakan coba lagi.';
+
+  @override
+  String get planUpdate => 'Pembaruan Paket';
+
+  @override
+  String get planDeprecationMessage =>
+      'Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga \$49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.';
+
+  @override
+  String get upgradeYourPlan => 'Tingkatkan Paket Anda';
+
+  @override
+  String get youAreOnAPaidPlan => 'Anda menggunakan paket berbayar.';
 }

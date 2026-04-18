@@ -2,6 +2,12 @@ import Cocoa
 import Combine
 import SwiftUI
 
+private final class FloatingBarHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 /// NSPanel subclass for the floating control bar.
 ///
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
@@ -107,7 +113,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func handleEscapeKey() {
-        FloatingBarVoicePlaybackService.shared.stop()
+        if FloatingBarVoicePlaybackService.shared.isSpeaking {
+            FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+            return
+        }
 
         guard state.showingAIConversation else { return }
 
@@ -132,7 +141,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
-        hostingView = NSHostingView(rootView: AnyView(
+        hostingView = FloatingBarHostingView(rootView: AnyView(
             swiftUIView
                 .withFontScaling()
                 .preferredColorScheme(.dark)
@@ -782,8 +791,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        NSSize(
-            width: max(frameSize.width, FloatingControlBarWindow.minBarSize.width),
+        let minimumWidth: CGFloat
+        if state.showingAIConversation {
+            minimumWidth = FloatingControlBarWindow.expandedWidth
+        } else if state.currentNotification != nil {
+            minimumWidth = FloatingControlBarWindow.notificationWidth
+        } else if state.isVoiceListening {
+            minimumWidth = FloatingControlBarWindow.expandedWidth
+        } else if state.isHoveringBar {
+            minimumWidth = FloatingControlBarWindow.expandedBarSize.width
+        } else {
+            minimumWidth = FloatingControlBarWindow.minBarSize.width
+        }
+
+        return NSSize(
+            width: max(frameSize.width, minimumWidth),
             height: max(frameSize.height, FloatingControlBarWindow.minBarSize.height)
         )
     }
@@ -807,9 +829,20 @@ class FloatingControlBarManager {
     private static let kAskOmiEnabled = "askOmiBarEnabled"
     private static let recentNotificationReuseInterval: TimeInterval = 60
 
+    private struct PendingFollowUpQuery {
+        let text: String
+        let fromVoice: Bool
+    }
+
     private struct StoredNotificationMessage {
-        var message: ChatMessage
+        let notification: FloatingBarNotification
+        let context: FloatingBarNotificationContext?
         let createdAt: Date
+    }
+
+    private struct PendingNotificationContext {
+        let message: ChatMessage
+        let context: FloatingBarNotificationContext?
     }
 
     private var window: FloatingControlBarWindow?
@@ -823,8 +856,10 @@ class FloatingControlBarManager {
     private var notificationWasTemporarilyShown = false
     private var storedNotificationMessages: [UUID: StoredNotificationMessage] = [:]
     private var mostRecentNotificationID: UUID?
-    private var pendingNotificationContextMessage: ChatMessage?
+    private var pendingNotificationContext: PendingNotificationContext?
     private var floatingSessionKey = "floating"
+    private var activeQueryGeneration: Int = 0
+    private var pendingFollowUpQuery: PendingFollowUpQuery?
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
@@ -992,8 +1027,21 @@ class FloatingControlBarManager {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func showNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
-        let notification = FloatingBarNotification(title: title, message: message, assistantId: assistantId)
+    func showNotification(
+        title: String,
+        message: String,
+        assistantId: String,
+        sound: NotificationSound,
+        context: FloatingBarNotificationContext? = nil,
+        screenshotData: Data? = nil
+    ) {
+        let notification = FloatingBarNotification(
+            title: title,
+            message: message,
+            assistantId: assistantId,
+            context: context,
+            screenshotData: screenshotData
+        )
         guard let window else {
             log("FloatingControlBarManager: dropping notification because window is not set up")
             return
@@ -1033,8 +1081,11 @@ class FloatingControlBarManager {
 
     /// Cancel any in-flight chat streaming.
     func cancelChat() {
+        activeQueryGeneration += 1
+        pendingFollowUpQuery = nil
         chatCancellable?.cancel()
         chatCancellable = nil
+        activeFloatingProvider()?.stopAgent()
         FloatingBarVoicePlaybackService.shared.stop()
     }
 
@@ -1107,7 +1158,7 @@ class FloatingControlBarManager {
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation()
         window.state.currentQueryFromVoice = fromVoice
-        pendingNotificationContextMessage = nil
+        pendingNotificationContext = nil
         floatingSessionKey = "floating"
 
         guard let provider = activeFloatingProvider() else { return }
@@ -1136,15 +1187,8 @@ class FloatingControlBarManager {
         // center instead of where it was before the chat opened.
         window.savePreChatCenterIfNeeded()
 
-        // Set up state — go straight to response view (skip input view to avoid resize flicker)
-        window.state.showingAIConversation = true
-        window.state.showingAIResponse = true
-        window.state.isAILoading = true
-        window.state.aiInputText = query
-        window.state.displayedQuery = query
-        window.state.markConversationActivity()
-        window.state.currentAIMessage = nil
-        window.resizeToResponseHeightPublic(animated: true)
+        // Mark the query source before sending so playback behavior is correct.
+        window.state.currentQueryFromVoice = fromVoice
         window.orderFrontRegardless()
 
         // Auto-send the query
@@ -1160,7 +1204,7 @@ class FloatingControlBarManager {
             openAIInputWithQuery(query, fromVoice: fromVoice)
             return
         }
-        window.state.currentQueryFromVoice = fromVoice
+        guard let provider = activeFloatingProvider() else { return }
 
         // Archive current exchange
         if let currentMessage = window.state.currentAIMessage,
@@ -1175,18 +1219,17 @@ class FloatingControlBarManager {
             )
         }
 
-        // Cancel existing streaming response if still in progress
-        chatCancellable?.cancel()
-        chatCancellable = nil
+        if provider.isSending {
+            pendingFollowUpQuery = PendingFollowUpQuery(text: query, fromVoice: fromVoice)
+            prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
+            provider.stopAgent()
+            return
+        }
 
-        // Set up new query
-        window.state.displayedQuery = query
-        window.state.markConversationActivity()
-        window.state.currentQuestionMessageId = nil
-        window.state.currentAIMessage = nil
-        window.state.isAILoading = true
-
-        window.onSendQuery?(query)
+        window.state.currentQueryFromVoice = fromVoice
+        Task { @MainActor in
+            await self.sendAIQuery(query, barWindow: window, provider: provider)
+        }
     }
 
     func openNotificationAsChat(_ notification: FloatingBarNotification) {
@@ -1258,15 +1301,22 @@ class FloatingControlBarManager {
     }
 
     private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
-        guard storedNotificationMessages[notification.id] == nil,
-              let provider = historyChatProvider else { return }
+        guard storedNotificationMessages[notification.id] == nil else { return }
 
-        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        let messageText = bodyText.isEmpty ? notification.title : bodyText
-        guard let message = provider.appendAssistantMessage(messageText) else { return }
+        // Also append the notification as an assistant message in the main chat
+        // history provider so it is visible on the home-page chat and synced to
+        // the backend. The floating bar still uses its own provider for follow-up
+        // questions (see openNotificationConversation), so this append does not
+        // affect the floating-bar session in any way.
+        if let historyProvider = historyChatProvider {
+            let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            let messageText = bodyText.isEmpty ? notification.title : bodyText
+            _ = historyProvider.appendAssistantMessage(messageText)
+        }
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
-            message: message,
+            notification: notification,
+            context: notification.context,
             createdAt: Date()
         )
         mostRecentNotificationID = notification.id
@@ -1285,8 +1335,7 @@ class FloatingControlBarManager {
               Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval else {
             return false
         }
-
-        let resolvedMessage = resolveStoredNotificationMessage(stored)
+        guard let provider = activeFloatingProvider() else { return false }
 
         notificationDismissWorkItem?.cancel()
         notificationDismissWorkItem = nil
@@ -1298,21 +1347,40 @@ class FloatingControlBarManager {
         window.cancelPendingDismiss()
         window.savePreChatCenterIfNeeded()
         window.cancelInputHeightObserver()
-        window.state.clearVisibleConversation()
+        let shouldRestoreVisibleConversation = window.state.canRestoreVisibleConversation
+        if shouldRestoreVisibleConversation {
+            archiveVisibleConversationIfNeeded(in: window)
+        } else if window.state.hasVisibleConversation {
+            window.state.clearVisibleConversation()
+        }
+
+        let bodyText = stored.notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? stored.notification.title : bodyText
+        let notificationMessage = provider.appendAssistantMessage(messageText) ?? ChatMessage(text: messageText, sender: .ai)
 
         window.state.showingAIConversation = true
         window.state.showingAIResponse = true
         window.state.isAILoading = false
         window.state.aiInputText = ""
-        window.state.displayedQuery = ""
-        window.state.currentAIMessage = resolvedMessage
+        if !shouldRestoreVisibleConversation {
+            window.state.chatHistory = []
+            window.state.displayedQuery = ""
+            window.state.currentQuestionMessageId = nil
+        }
+        window.state.currentAIMessage = notificationMessage
         window.state.markConversationActivity()
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
         window.focusInputField()
 
-        pendingNotificationContextMessage = resolvedMessage
-        floatingSessionKey = "floating-notification-\(notificationID.uuidString)"
+        pendingNotificationContext = PendingNotificationContext(
+            message: notificationMessage,
+            context: stored.context
+        )
+        floatingSessionKey = "floating"
+        Task {
+            await provider.invalidateAgentSession(sessionKey: "floating")
+        }
         storedNotificationMessages.removeValue(forKey: notificationID)
         if mostRecentNotificationID == notificationID {
             mostRecentNotificationID = nil
@@ -1320,17 +1388,20 @@ class FloatingControlBarManager {
         return true
     }
 
-    private func resolveStoredNotificationMessage(_ stored: StoredNotificationMessage) -> ChatMessage {
-        guard let provider = historyChatProvider else { return stored.message }
+    private func archiveVisibleConversationIfNeeded(in window: FloatingControlBarWindow) {
+        guard let currentMessage = window.state.currentAIMessage else { return }
+        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
 
-        if let synced = provider.messages.first(where: { $0.id == stored.message.id }) {
-            return synced
-        }
-
-        return provider.messages.last(where: {
-            $0.sender == .ai &&
-            $0.text == stored.message.text
-        }) ?? stored.message
+        let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        window.state.chatHistory.append(
+            FloatingChatExchange(
+                question: currentQuery.isEmpty ? nil : currentQuery,
+                questionMessageId: window.state.currentQuestionMessageId,
+                aiMessage: currentMessage
+            )
+        )
+        window.state.displayedQuery = ""
+        window.state.currentQuestionMessageId = nil
     }
 
     private func purgeExpiredNotificationMessages() {
@@ -1365,22 +1436,57 @@ class FloatingControlBarManager {
 
     // MARK: - AI Query
 
+    private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+        activeQueryGeneration += 1
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+        barWindow.cancelInputHeightObserver()
+        barWindow.state.currentQueryFromVoice = fromVoice
+        barWindow.state.showingAIConversation = true
+        barWindow.state.showingAIResponse = true
+        barWindow.state.isAILoading = true
+        barWindow.state.aiInputText = message
+        barWindow.state.displayedQuery = message
+        barWindow.state.markConversationActivity()
+        barWindow.state.currentQuestionMessageId = nil
+        barWindow.state.currentAIMessage = nil
+        barWindow.state.isVoiceFollowUp = false
+        barWindow.state.voiceFollowUpTranscript = ""
+        barWindow.state.responseContentHeight = 0
+        barWindow.resizeToResponseHeightPublic(animated: true)
+    }
+
+    private func isActiveQueryGeneration(_ generation: Int) -> Bool {
+        generation == activeQueryGeneration
+    }
+
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        // Check weekly usage limit for free users
+        let queryFromVoice = barWindow.state.currentQueryFromVoice
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
+        let generation = activeQueryGeneration
+
+        // Check monthly usage limit for free users (shared with main chat page).
         let limiter = FloatingBarUsageLimiter.shared
         if limiter.isLimitReached {
+            guard isActiveQueryGeneration(generation) else { return }
             barWindow.state.isAILoading = false
             barWindow.state.showingAIResponse = true
             barWindow.state.currentAIMessage = ChatMessage(
-                text: "You've used all \(FloatingBarUsageLimiter.weeklyFreeLimit) free queries this week. Upgrade to Pro for unlimited access, or wait for your weekly reset.",
+                text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
                 sender: .ai
             )
             barWindow.resizeToResponseHeightPublic(animated: true)
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "floating_bar"]
+            )
             return
         }
 
         limiter.recordQuery()
-        FloatingBarVoicePlaybackService.shared.stop()
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
@@ -1411,7 +1517,8 @@ class FloatingControlBarManager {
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] messages in
+            .sink { [weak self, weak barWindow] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
                 // Find the AI response message added after our query
                 guard messages.count > messageCountBefore,
                       let aiMessage = messages.last,
@@ -1455,6 +1562,14 @@ class FloatingControlBarManager {
             imageData: screenshotData
         )
 
+        if let followUp = pendingFollowUpQuery {
+            pendingFollowUpQuery = nil
+            barWindow.state.currentQueryFromVoice = followUp.fromVoice
+            await sendAIQuery(followUp.text, barWindow: barWindow, provider: provider)
+            return
+        }
+
+        guard isActiveQueryGeneration(generation) else { return }
         let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
         if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
             barWindow.state.currentQuestionMessageId = syncedUserMessage.id
@@ -1462,7 +1577,6 @@ class FloatingControlBarManager {
         if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
             barWindow.state.currentAIMessage = finalAIMessage
         }
-
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
         chatCancellable?.cancel()
@@ -1502,10 +1616,39 @@ class FloatingControlBarManager {
     }
 
     private func notificationContextSuffixIfNeeded(for message: String) -> String? {
-        guard let pendingNotificationContextMessage else { return nil }
+        guard let pendingNotificationContext else { return nil }
 
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else { return nil }
+
+        var provenanceLines: [String] = []
+        if let context = pendingNotificationContext.context {
+            provenanceLines.append(
+                "If the user asks why they received the notification or what it was based on, start from this exact notification provenance instead of guessing:"
+            )
+            provenanceLines.append("notification_title: \(context.sourceTitle)")
+            provenanceLines.append("assistant_id: \(context.assistantId)")
+            if let sourceApp = context.sourceApp, !sourceApp.isEmpty {
+                provenanceLines.append("source_app: \(sourceApp)")
+            }
+            if let windowTitle = context.windowTitle, !windowTitle.isEmpty {
+                provenanceLines.append("window_title: \(windowTitle)")
+            }
+            if let contextSummary = context.contextSummary, !contextSummary.isEmpty {
+                provenanceLines.append("context_summary: \(contextSummary)")
+            }
+            if let currentActivity = context.currentActivity, !currentActivity.isEmpty {
+                provenanceLines.append("current_activity: \(currentActivity)")
+            }
+            if let reasoning = context.reasoning, !reasoning.isEmpty {
+                provenanceLines.append("reasoning: \(reasoning)")
+            }
+            if let detail = context.detail, !detail.isEmpty {
+                provenanceLines.append("detail: \(detail)")
+            }
+        }
+
+        let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
 
         return """
 <floating_bar_notification_context>
@@ -1513,13 +1656,13 @@ Before the user's latest message, you proactively sent this assistant message in
 Treat it as your immediately previous turn in the same conversation and answer as a continuation.
 
 Assistant message:
-\(pendingNotificationContextMessage.text)
+\(pendingNotificationContext.message.text)\(provenanceBlock)
 </floating_bar_notification_context>
 """
     }
 
     func clearPendingNotificationContext() {
-        pendingNotificationContextMessage = nil
+        pendingNotificationContext = nil
         floatingSessionKey = "floating"
     }
 }

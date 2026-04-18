@@ -2,6 +2,304 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.330",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.329",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.328",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.326",
+      "date": "2026-04-17",
+      "changes": [
+        "Chat limits now use server-side quota instead of local counter",
+        "Added deprecation notice for Unlimited plan subscribers with Operator upgrade option"
+      ]
+    },
+    {
+      "version": "0.11.324",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.323",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.322",
+      "date": "2026-04-16",
+      "changes": [
+        "Fixed Rewind screen capture contending with other screenshot apps (e.g. CleanShot) and causing brief UI stalls"
+      ]
+    },
+    {
+      "version": "0.11.321",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.320",
+      "date": "2026-04-16",
+      "changes": [
+        "Floating bar voice picker now plays a short sample when you switch voices"
+      ]
+    },
+    {
+      "version": "0.11.319",
+      "date": "2026-04-16",
+      "changes": [
+        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+      ]
+    },
+    {
+      "version": "0.11.318",
+      "date": "2026-04-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.316",
+      "date": "2026-04-15",
+      "changes": [
+        "Restored crash reporting and error telemetry (Sentry DSN was pointing at an inaccessible org since 2026-03-22, silently dropping every event)"
+      ]
+    },
+    {
+      "version": "0.11.314",
+      "date": "2026-04-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.313",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed floating bar Copy button copying the wrong message when multiple responses are visible"
+      ]
+    },
+    {
+      "version": "0.11.312",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed silent recordings when Bluetooth headphones are connected while another app plays audio, and included system audio in the conversation transcript"
+      ]
+    },
+    {
+      "version": "0.11.311",
+      "date": "2026-04-14",
+      "changes": [
+        "Added usage-limit popup when free-tier transcription or chat quota is hit, with one-click upgrade to Plan & Usage",
+        "Lowered free-tier chat limit to 30 messages/month shared between main chat and the floating bar"
+      ]
+    },
+    {
+      "version": "0.11.310",
+      "date": "2026-04-14",
+      "changes": [
+        "Fixed screen recording randomly stopping with a false Permission Required notification after closing a tab or dismissing a popup"
+      ]
+    },
+    {
+      "version": "0.11.309",
+      "date": "2026-04-14",
+      "changes": [
+        "Tightened Gemini proxy security with model allowlist, request body size limit, and input validation"
+      ]
+    },
+    {
+      "version": "0.11.308",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.307",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.305",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.304",
+      "date": "2026-04-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.303",
+      "date": "2026-04-14",
+      "changes": [
+        "Task, memory, and focus notifications now open the floating bar with full provenance and sync into home chat history, so follow-up questions can reference the source app, window, and context"
+      ]
+    },
+    {
+      "version": "0.11.302",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.301",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.300",
+      "date": "2026-04-13",
+      "changes": [
+        "Added a Cancel link on the sign-in screen so a failed web OAuth attempt no longer leaves the sign-in buttons permanently disabled"
+      ]
+    },
+    {
+      "version": "0.11.299",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.298",
+      "date": "2026-04-13",
+      "changes": [
+        "Minimized pauses when Omi reads long voice responses out loud",
+        "Fixed duplicate Screen Recording permission warnings flooding the floating bar after auto-update",
+        "Improved chat tool discoverability: richer database schema with column descriptions, table relationships, FTS search patterns, new search_tasks tool, and enriched daily recap with focus sessions, memories, and observations"
+      ]
+    },
+    {
+      "version": "0.11.296",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.295",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.294",
+      "date": "2026-04-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.293",
+      "date": "2026-04-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.291",
+      "date": "2026-04-11",
+      "changes": [
+        "Fixed floating bar close button requiring multiple clicks by enlarging the hit area"
+      ]
+    },
+    {
+      "version": "0.11.289",
+      "date": "2026-04-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.287",
+      "date": "2026-04-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.286",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.285",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.284",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.282",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.281",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.279",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.277",
+      "date": "2026-04-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.276",
       "date": "2026-04-09",
       "changes": [

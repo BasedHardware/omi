@@ -17,7 +17,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
@@ -443,85 +442,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Persona Section
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const PersonaProfilePage(),
-                          settings: const RouteSettings(arguments: 'from_settings'),
-                        ),
-                      );
-                      MixpanelManager().pageOpened('Developer Persona Settings');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: FaIcon(FontAwesomeIcons.solidCircleUser, color: Colors.grey.shade400, size: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      context.l10n.persona,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        context.l10n.beta,
-                                        style: const TextStyle(
-                                          color: Colors.orange,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.configureAiPersona,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
                   // Transcription Section
                   GestureDetector(
                     onTap: () async {
@@ -1878,21 +1798,23 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ],
 
                   // Manual Firmware Flash (only when device connected)
-                  Builder(builder: (context) {
-                    final deviceProvider = context.watch<DeviceProvider>();
-                    if (deviceProvider.isConnected && deviceProvider.pairedDevice != null) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 24),
-                          _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
-                          const SizedBox(height: 8),
-                          _buildManualFirmwareFlash(deviceProvider),
-                        ],
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }),
+                  Builder(
+                    builder: (context) {
+                      final deviceProvider = context.watch<DeviceProvider>();
+                      if (deviceProvider.isConnected && deviceProvider.pairedDevice != null) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
+                            const SizedBox(height: 8),
+                            _buildManualFirmwareFlash(deviceProvider),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
 
                   const SizedBox(height: 48),
                 ],
@@ -1914,11 +1836,7 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
   final String fileName;
   final BtDevice device;
 
-  const _ManualFirmwareFlashPage({
-    required this.zipFilePath,
-    required this.fileName,
-    required this.device,
-  });
+  const _ManualFirmwareFlashPage({required this.zipFilePath, required this.fileName, required this.device});
 
   @override
   State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
@@ -1973,10 +1891,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
             // File info
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
                   const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
@@ -1985,11 +1900,15 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.fileName,
-                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                        Text(
+                          widget.fileName,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 4),
-                        Text('Target: ${widget.device.name}',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                        Text(
+                          'Target: ${widget.device.name}',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                        ),
                       ],
                     ),
                   ),
@@ -2030,8 +1949,10 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Flash Firmware',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Flash Firmware',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -2063,8 +1984,10 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                   children: [
                     Icon(Icons.check_circle, color: Colors.green, size: 64),
                     SizedBox(height: 16),
-                    Text('Firmware flashed successfully!',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    Text(
+                      'Firmware flashed successfully!',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
                     SizedBox(height: 8),
                     Text('Your device will restart.', style: TextStyle(color: Colors.grey, fontSize: 14)),
                   ],

@@ -487,6 +487,8 @@ class TestWebhookLockEnforcement:
 
     def test_external_integrations_skips_locked(self):
         """trigger_external_integrations must return [] for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -494,11 +496,13 @@ class TestWebhookLockEnforcement:
 
         from utils.app_integrations import trigger_external_integrations
 
-        result = trigger_external_integrations('test-uid', conv)
+        result = asyncio.run(trigger_external_integrations('test-uid', conv))
         assert result == []
 
     def test_external_integrations_does_not_skip_unlocked(self):
         """trigger_external_integrations must call get_available_apps for unlocked."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -508,13 +512,15 @@ class TestWebhookLockEnforcement:
         with patch('utils.app_integrations.get_available_apps', mock_get_apps):
             from utils.app_integrations import trigger_external_integrations
 
-            result = trigger_external_integrations('test-uid', conv)
+            result = asyncio.run(trigger_external_integrations('test-uid', conv))
         # Verify downstream work was attempted (not short-circuited by lock check)
         mock_get_apps.assert_called_once()
         assert result == []
 
     def test_developer_webhook_skips_locked(self):
         """conversation_created_webhook must return early for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -524,12 +530,14 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # If lock check works, user_webhook_status_db is never called
         mock_status.assert_not_called()
 
     def test_developer_webhook_proceeds_for_unlocked(self):
         """conversation_created_webhook must proceed for unlocked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -539,7 +547,7 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # For unlocked, user_webhook_status_db IS called
         mock_status.assert_called_once()
 
@@ -920,8 +928,8 @@ class TestMentorProactiveLockFilter:
                                             )
                                             conversations_db.get_conversations = MagicMock(return_value=[])
 
-                                            with patch('utils.app_integrations.Conversation') as mock_conv_cls:
-                                                mock_conv_cls.conversations_to_string = MagicMock(return_value='')
+                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
+                                                mock_render.return_value = ''
 
                                                 draft = MagicMock()
                                                 draft.notification_text = ''
@@ -938,10 +946,14 @@ class TestMentorProactiveLockFilter:
                                                     )
 
                                             # conversations_to_string called with only unlocked
-                                            mock_conv_cls.conversations_to_string.assert_called_once()
-                                            convos_passed = mock_conv_cls.conversations_to_string.call_args[0][0]
+                                            mock_render.assert_called_once()
+                                            convos_passed = mock_render.call_args[0][0]
                                             assert len(convos_passed) == 1
-                                            assert convos_passed[0].get('is_locked') is not True
+                                            conv = convos_passed[0]
+                                            is_locked = (
+                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
+                                            )
+                                            assert is_locked is not True
 
 
 # =============================================================================
@@ -1286,3 +1298,225 @@ class TestSuggestGoalLockFilter:
         prompt_text = str(call_args)
         assert 'LOCKED_SECRET' not in prompt_text
         assert 'visible goal-related memory' in prompt_text
+
+
+# =============================================================================
+# Test MCP memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpMemoryLockEnforcement:
+    """Gaps 6-7: MCP REST delete/edit must reject locked memories."""
+
+    def test_mcp_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='mem-1', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp import delete_memory
+
+        result = delete_memory(memory_id='mem-1', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='nonexistent', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 404
+
+    def test_mcp_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import edit_memory
+
+        try:
+            edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp import edit_memory
+
+        result = edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new content')
+
+
+# =============================================================================
+# Test MCP SSE memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpSseMemoryLockEnforcement:
+    """Gaps 8-9: MCP SSE delete/edit must reject locked memories."""
+
+    def test_mcp_sse_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+            assert 'paid plan' in e.message.lower()
+
+    def test_mcp_sse_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+        assert result == {"success": True}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_sse_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'nonexistent'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32001
+
+    def test_mcp_sse_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+
+    def test_mcp_sse_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+        assert result == {"success": True}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new')
+
+
+# =============================================================================
+# Test folder move — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestFolderMoveLockEnforcement:
+    """Gap 10 + bonus: Folder move must reject locked conversations."""
+
+    def test_move_conversation_rejects_locked(self):
+        import database.conversations as conversations_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        try:
+            move_conversation_to_folder('conv-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_move_conversation_allows_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.move_conversation_to_folder = MagicMock()
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        result = move_conversation_to_folder('conv-1', request, uid='test-uid')
+        assert result == {"status": "ok"}
+
+    def test_bulk_move_rejects_if_any_locked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=True, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        try:
+            bulk_move_conversations('folder-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_bulk_move_allows_all_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=False, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.bulk_move_conversations_to_folder = MagicMock(return_value=2)
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        result = bulk_move_conversations('folder-1', request, uid='test-uid')
+        assert result == {"status": "ok", "moved_count": 2}

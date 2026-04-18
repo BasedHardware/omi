@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "اپنے AI شخصیت کو ترتیب دیں",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "شخصیت",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "اپنی AI شخصیت کنفیگر کریں",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT فراہم کنندہ کنفیگر کریں",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "شخصیت کے بارے میں",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "چیٹ کی شخصیت",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "آپ کی معلومات",
     "setYourName": "اپنا نام سیٹ کریں",
     "changeYourName": "اپنا نام تبدیل کریں",
-    "manageYourOmiPersona": "اپنے Omi شخصیت کا انتظام کریں",
     "voiceAndPeople": "آواز اور لوگ",
     "teachOmiYourVoice": "Omi کو اپنی آواز سکھائیں",
     "tellOmiWhoSaidIt": "Omi کو بتائیں کہ کس نے کہا ہے 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "اگلے 7 دن کی جانچ کی جا رہی ہے",
     "shortcuts": "شارٹ کٹس",
     "shortcutChangeInstruction": "شارٹ کٹ کو تبدیل کرنے کے لیے اس پر کلک کریں۔ منسوخ کرنے کے لیے Escape دبائیں۔",
-    "configurePersonaDescription": "اپنی AI شخصیت کو ترتیب دیں",
     "configureSTTProvider": "STT فراہم کنندہ کو ترتیب دیں",
     "setConversationEndDescription": "سیٹ کریں کہ بات چیت کب خود ختم ہو",
     "importDataDescription": "دوسری جگہوں سے ڈیٹا درآمد کریں",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "اپنا ڈپلیکیٹ بنائیں",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "اپنا ڈیجیٹل ڈپلیکیٹ بنائیں",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "ایپ",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "شخصیت",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} کو عوامی رکھیں",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "ایپ کا انتظام کریں",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "شخصیت کی تفصیلات اپ ڈیٹ کریں",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} حذف کریں",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "اپنے AI پرسونا کو ترتیب دیں",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI معاونین کو اپنے ڈیٹا سے منسلک کریں",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "عوامی لنک شیئر کریں",
-    "makePersonaPublic": "پرسونا کو عوامی بنائیں",
     "connectedKnowledgeData": "منسلک Knowledge ڈیٹا",
     "enterName": "نام درج کریں",
-    "disconnectTwitter": "Twitter سے سوکھائیں",
-    "disconnectTwitterConfirmation": "کیا آپ اپنے Twitter اکاؤنٹ کو سوکھانا چاہتے ہیں؟ آپ کا پرسونا اب آپ کے Twitter ڈیٹا تک رسائی حاصل نہیں کر سکے گا۔",
-    "getOmiDeviceDescription": "اپنی ذاتی بات چیت کے ساتھ زیادہ درست کلون بنائیں",
-    "getOmi": "Omi حاصل کریں",
-    "iHaveOmiDevice": "میرے پاس Omi ڈیوائس ہے",
     "goal": "مقصد",
     "tapToTrackThisGoal": "اس مقصد کو ٹریک کرنے کے لیے ٹیپ کریں",
     "tapToSetAGoal": "مقصد سیٹ کرنے کے لیے ٹیپ کریں",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "X ہینڈل نہیں ملا",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "X ہینڈل معطل ہے",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "X ہینڈل کی تصدیق میں ناکام",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "آپ کے persona کو حاصل کرنے میں ناکام",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Persona بنانے میں ناکام",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "براہ کرم کم از کم ایک علم کے ڈیٹا کے ذریعہ سے منسلک کریں (Omi یا X)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona کامیابی سے اپڈیٹ کیا گیا",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Persona اپڈیٹ کرنے میں ناکام",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "براہ کرم ایک تصویر منتخب کریں",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "آپ کا Persona بنانے میں ناکام۔ براہ کرم بعد میں دوبارہ کوشش کریں۔",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Persona بنانے میں ناکام: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Persona فعال کرنے میں ناکام",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Persona فعال کرنے میں خرابی: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "معاون ممالک حاصل کرنے میں ناکام۔ براہ کرم بعد میں دوبارہ کوشش کریں۔",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "براہ کرم پہلے ایک ایپ تیار کریں",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "آپ کا X ہینڈل کیا ہے؟",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "ہم آپ کے اکاؤنٹ کی سرگرمی کی بنیاد پر آپ کے Omi کلون کو پہلے سے تربیت دیں گے",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "براہ کرم اپنا X ہینڈل درج کریں",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "براہ کرم ایک درست X ہینڈل درج کریں",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "اگلا",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "روزانہ خلاصے",
     "removeFilter": "فلٹر ہٹائیں",
     "categoryConversationAnalysis": "بات چیت کا تجزیہ",
-    "categoryPersonalityClone": "شخصیت کا کلون",
     "categoryHealth": "صحت",
     "categoryEducation": "تعلیم",
     "categoryCommunication": "رابطہ",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "خصوصی",
     "capabilityTasks": "کام",
     "capabilityIntegrations": "انضمامات",
-    "categoryPersonalityClones": "شخصیت کے کلون",
     "categoryProductivityLifestyle": "پروڈکٹیویٹی اور طرز زندگی",
     "categorySocialEntertainment": "سوشل اور تفریح",
     "categoryProductivityTools": "پروڈکٹیویٹی اور ٹولز",
@@ -10749,5 +10621,58 @@
     },
     "firmwareWarningTitle": "اہم: اپ ڈیٹ سے پہلے پڑھیں",
     "firmwareFormatWarning": "یہ فرم ویئر SD کارڈ کو فارمیٹ کرے گا۔ براہ کرم اپ گریڈ کرنے سے پہلے یقینی بنائیں کہ تمام آف لائن ڈیٹا مطابقت پذیر ہو چکا ہے۔\n\nاگر اس ورژن کو انسٹال کرنے کے بعد سرخ روشنی چمکتی نظر آئے تو پریشان نہ ہوں۔ بس آلے کو ایپ سے جوڑیں اور یہ نیلا ہو جانا چاہیے۔ سرخ روشنی کا مطلب ہے کہ آلے کی گھڑی ابھی تک مطابقت پذیر نہیں ہوئی۔",
-    "continueAnyway": "جاری رکھیں"
+    "continueAnyway": "جاری رکھیں",
+    "tasksClearCompleted": "مکمل کو صاف کریں",
+    "tasksSelectAll": "سب منتخب کریں",
+    "tasksDeleteSelected": "{count} کام حذف کریں",
+    "tasksMarkComplete": "مکمل کے طور پر نشان زد",
+    "appleHealthManageNote": "Omi، Apple کے HealthKit فریم ورک کے ذریعے Apple Health تک رسائی حاصل کرتا ہے۔ آپ کسی بھی وقت iOS کی ترتیبات سے رسائی منسوخ کر سکتے ہیں۔",
+    "appleHealthConnectCta": "Apple Health سے منسلک کریں",
+    "appleHealthDisconnectCta": "Apple Health منقطع کریں",
+    "appleHealthConnectedBadge": "منسلک",
+    "appleHealthFeatureChatTitle": "اپنی صحت کے بارے میں گفتگو کریں",
+    "appleHealthFeatureChatDesc": "Omi سے اپنے قدم، نیند، دل کی دھڑکن اور ورزشوں کے بارے میں پوچھیں۔",
+    "appleHealthFeatureReadOnlyTitle": "صرف پڑھنے کی رسائی",
+    "appleHealthFeatureReadOnlyDesc": "Omi کبھی Apple Health میں نہیں لکھتا اور نہ ہی آپ کا ڈیٹا تبدیل کرتا ہے۔",
+    "appleHealthFeatureSecureTitle": "محفوظ ہم وقت سازی",
+    "appleHealthFeatureSecureDesc": "آپ کا Apple Health ڈیٹا نجی طور پر آپ کے Omi اکاؤنٹ کے ساتھ ہم وقت ہوتا ہے۔",
+    "appleHealthDeniedTitle": "Apple Health تک رسائی مسترد",
+    "appleHealthDeniedBody": "Omi کو آپ کا Apple Health ڈیٹا پڑھنے کی اجازت نہیں ہے۔ اسے iOS ترتیبات ← پرائیویسی اور سیکیورٹی ← Health ← Omi میں فعال کریں۔",
+    "deleteFlowReasonTitle": "آپ کیوں جا رہے ہیں؟",
+    "deleteFlowReasonSubtitle": "آپ کا فیڈ بیک ہمیں Omi کو سب کے لیے بہتر بنانے میں مدد کرتا ہے۔",
+    "deleteReasonPrivacy": "رازداری کے خدشات",
+    "deleteReasonNotUsing": "اتنا زیادہ استعمال نہیں کرتا",
+    "deleteReasonMissingFeatures": "جن فیچرز کی ضرورت ہے وہ موجود نہیں",
+    "deleteReasonTechnicalIssues": "بہت زیادہ تکنیکی مسائل",
+    "deleteReasonFoundAlternative": "کچھ اور استعمال کر رہا ہوں",
+    "deleteReasonTakingBreak": "بس تھوڑا وقفہ لے رہا ہوں",
+    "deleteReasonOther": "دیگر",
+    "deleteFlowFeedbackTitle": "مزید بتائیں",
+    "deleteFlowFeedbackSubtitle": "کس چیز سے Omi آپ کے لیے کام کرتا؟",
+    "deleteFlowFeedbackHint": "اختیاری — آپ کے خیالات ہمیں بہتر پروڈکٹ بنانے میں مدد دیتے ہیں۔",
+    "deleteFlowConfirmTitle": "یہ مستقل ہے",
+    "deleteFlowConfirmSubtitle": "ایک بار اکاؤنٹ حذف ہونے کے بعد اسے بحال نہیں کیا جا سکتا۔",
+    "deleteConsequenceSubscription": "کوئی بھی فعال سبسکرپشن منسوخ کر دی جائے گی۔",
+    "deleteConsequenceNoRecovery": "آپ کا اکاؤنٹ بحال نہیں ہو سکتا — سپورٹ بھی نہیں کر سکتی۔",
+    "deleteTypeToConfirm": "تصدیق کے لیے DELETE ٹائپ کریں",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "اکاؤنٹ مستقل طور پر حذف کریں",
+    "keepMyAccount": "میرا اکاؤنٹ برقرار رکھیں",
+    "deleteAccountFailed": "آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "planUpdate": "پلان اپ ڈیٹ",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز $49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "اپنا پلان اپ گریڈ کریں",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "آپ ایک ادا شدہ پلان پر ہیں۔",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

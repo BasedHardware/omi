@@ -66,7 +66,6 @@ void main() {
       testWidgets('localizes all known category IDs', (tester) async {
         final knownCategoryIds = [
           'conversation-analysis',
-          'personality-emulation',
           'health-and-wellness',
           'education-and-learning',
           'communication-improvement',

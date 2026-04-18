@@ -6,6 +6,7 @@ import database.users as users_db
 from models.conversation import Conversation
 from models.structured import Structured
 from models.other import Person
+from utils.conversations.render import conversations_to_string
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
@@ -15,11 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_message_structure(
-    text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None
+    text: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    text_source_spec: str = None,
+    output_language_code: str = None,
 ) -> Structured:
+    response_language = output_language_code or language_code
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
-    The message language is {language_code}. Use the same language {language_code} for your response.
+    The message language is {language_code}. You MUST respond entirely in {response_language}.
 
     For the title, create a concise title that captures the main topic of the message.
     For the overview, summarize the message with the main points discussed, make sure to capture the key information and important details.
@@ -38,6 +45,7 @@ def get_message_structure(
     response = chain.invoke(
         {
             'language_code': language_code,
+            'response_language': response_language,
             'started_at': started_at.isoformat(),
             'tz': tz,
             'text': text,
@@ -94,7 +102,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    conversation_history = Conversation.conversations_to_string(memories, people=people)
+    conversation_history = conversations_to_string(memories, people=people)
 
     language_instruction = ''
     if user_language and user_language != 'en':
@@ -157,7 +165,7 @@ def generate_comprehensive_daily_summary(
         people = [Person(**p) for p in people_data]
         people_names = [p.name for p in people if p.name]
 
-    conversation_history = Conversation.conversations_to_string(conversations, people=people)
+    conversation_history = conversations_to_string(conversations, people=people)
 
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]

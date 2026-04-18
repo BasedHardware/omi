@@ -4,9 +4,10 @@ from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import firebase_admin.auth
-import requests
+import httpx
 
 from database.apps import get_app_by_id_db
+from utils.http_client import get_auth_client
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
@@ -139,14 +140,15 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         # Check Setup completes
         if app.works_externally() and app.external_integration.setup_completed_url:
             try:
-                res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                client = get_auth_client()
+                res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
                 res.raise_for_status()
                 if not res.json().get('is_setup_completed', False):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',
                     )
-            except requests.RequestException as e:
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise HTTPException(
                     status_code=503,
                     detail=f'Failed to verify app setup completion. Please try again later or contact support.',

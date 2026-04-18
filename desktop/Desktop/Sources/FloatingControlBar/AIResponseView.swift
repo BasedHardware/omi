@@ -158,7 +158,7 @@ struct AIResponseView: View {
     @ViewBuilder
     private func contentBlocksView(for message: ChatMessage) -> some View {
         if !message.contentBlocks.isEmpty {
-            let grouped = ContentBlockGroup.group(message.contentBlocks)
+            let grouped = groupedContentBlocks(for: message)
             ForEach(grouped) { group in
                 switch group {
                 case .text(_, let text):
@@ -185,19 +185,38 @@ struct AIResponseView: View {
         }
     }
 
+    private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
+        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        guard !message.isStreaming else { return grouped }
+
+        return grouped.filter { group in
+            switch group {
+            case .text, .discoveryCard:
+                return true
+            case .toolCalls, .thinking:
+                return false
+            }
+        }
+    }
+
     // MARK: - Per-Message Hover Action Overlay
 
-    /// Wraps an AI message's content with a hover-triggered action bar
+    /// Wraps an AI message's content with a hover-triggered action bar.
+    /// The `.id(message.id)` is load-bearing: without it SwiftUI can reuse an
+    /// overlay view instance (and its Button action closures) across different
+    /// messages in the same structural slot, which caused clicking Copy on an
+    /// older message to read the current message's text.
     private func messageWithHoverActions(message: ChatMessage) -> some View {
         MessageHoverOverlay(
             message: message,
-            onRate: { rating in
-                onRate?(message.id, rating)
+            onRate: { [id = message.id] rating in
+                onRate?(id, rating)
             }
         )
         {
             contentBlocksView(for: message)
         }
+        .id(message.id)
     }
 
     // MARK: - Chat History
@@ -477,6 +496,8 @@ struct MessageHoverOverlay<Content: View>: View {
     @State private var showCopied = false
     @State private var showInfoPopover = false
     @State private var hideWorkItem: DispatchWorkItem?
+    @State private var showRatingFeedback = false
+    @State private var lastSubmittedRating: Int?
 
     private var shouldShowBar: Bool {
         (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
@@ -488,8 +509,10 @@ struct MessageHoverOverlay<Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            content()
-                .padding(.trailing, actionBarWidth)
+            VStack(alignment: .leading, spacing: 8) {
+                content()
+            }
+            .padding(.trailing, actionBarWidth)
 
             actionBar
         }
@@ -517,54 +540,77 @@ struct MessageHoverOverlay<Content: View>: View {
     }
 
     private var actionBar: some View {
-        HStack(spacing: 6) {
-            // Thumbs up
-            Button(action: {
-                let newRating = message.rating == 1 ? nil : 1
-                onRate(newRating)
-            }) {
-                Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .scaledFont(size: 11)
-                    .foregroundColor(message.rating == 1 ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Helpful response")
-
-            // Thumbs down
-            Button(action: {
-                let newRating = message.rating == -1 ? nil : -1
-                onRate(newRating)
-            }) {
-                Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .scaledFont(size: 11)
-                    .foregroundColor(message.rating == -1 ? .red : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Not helpful")
-
-            // Copy
-            Button(action: { copyMessageText() }) {
-                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                    .scaledFont(size: 11)
-                    .foregroundColor(showCopied ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Copy response")
-
-            // Info (developer context)
-            if message.metadata != nil {
-                Button(action: { showInfoPopover.toggle() }) {
-                    Image(systemName: "info.circle")
+        // Capture the message's value-type fields once per body evaluation so every
+        // button action operates on the exact message the user sees — not whatever
+        // `self.message` happens to point to when the click is dispatched.
+        let messageText = message.text
+        let currentRating = message.rating
+        return VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 6) {
+                // Thumbs up
+                Button(action: { [currentRating] in
+                    let newRating = currentRating == 1 ? nil : 1
+                    guard newRating != lastSubmittedRating else { return }
+                    lastSubmittedRating = newRating
+                    onRate(newRating)
+                    if newRating != nil { showRatingFeedbackBriefly() }
+                }) {
+                    Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                         .scaledFont(size: 11)
-                        .foregroundColor(showInfoPopover ? .white : .secondary)
+                        .foregroundColor(currentRating == 1 ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help("View response context")
-                .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                    MessageMetadataPopover(metadata: message.metadata!)
+                .help("Helpful response")
+
+                // Thumbs down
+                Button(action: { [currentRating] in
+                    let newRating = currentRating == -1 ? nil : -1
+                    guard newRating != lastSubmittedRating else { return }
+                    lastSubmittedRating = newRating
+                    onRate(newRating)
+                    if newRating != nil { showRatingFeedbackBriefly() }
+                }) {
+                    Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        .scaledFont(size: 11)
+                        .foregroundColor(currentRating == -1 ? .red : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Not helpful")
+
+                // Copy — captures `messageText` explicitly so we always copy the
+                // message this button was drawn for, even if SwiftUI reuses the
+                // overlay view across re-renders.
+                Button(action: { [messageText] in copyText(messageText) }) {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 11)
+                        .foregroundColor(showCopied ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy response")
+
+                // Info (developer context)
+                if message.metadata != nil {
+                    Button(action: { showInfoPopover.toggle() }) {
+                        Image(systemName: "info.circle")
+                            .scaledFont(size: 11)
+                            .foregroundColor(showInfoPopover ? .white : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("View response context")
+                    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                        MessageMetadataPopover(metadata: message.metadata!)
+                    }
                 }
             }
+
+            if showRatingFeedback {
+                Text("Thank you!")
+                    .scaledFont(size: 9)
+                    .foregroundColor(.secondary)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
         .frame(width: actionBarWidth, alignment: .trailing)
         .padding(.top, 1)
         .opacity(shouldShowBar ? 1 : 0)
@@ -580,10 +626,21 @@ struct MessageHoverOverlay<Content: View>: View {
         }
     }
 
-    private func copyMessageText() {
-        guard !message.text.isEmpty else { return }
+    private func showRatingFeedbackBriefly() {
+        showRatingFeedback = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            showRatingFeedback = false
+        }
+    }
+
+    /// Copy the exact text passed in — *not* `self.message.text`.
+    /// Callers must pass the captured text from the closure's capture list so
+    /// clicking Copy on a historical message writes the correct content to the
+    /// pasteboard even when SwiftUI has reused the overlay view across renders.
+    private func copyText(_ text: String) {
+        guard !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(message.text, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
         AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
         withAnimation { showCopied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -620,23 +677,15 @@ struct MessageMetadataPopover: View {
 
                 Divider()
 
-                // Context fed into the prompt — dynamically discovered sections
+                // Context fed into the prompt
                 Text("Context in Prompt")
                     .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(.primary)
-                let sections = metadata.promptSections
-                if sections.isEmpty {
-                    Text("No tagged sections found")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(sections, id: \.tag) { section in
-                        metadataRow(
-                            label: section.label,
-                            value: "\(section.itemCount) items (\(section.charCount) chars)"
-                        )
-                    }
-                }
+                metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
+                metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
+                metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
+                metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
+                metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
 
                 // Tool calls
                 if !metadata.toolNames.isEmpty {

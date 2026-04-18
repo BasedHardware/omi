@@ -831,10 +831,6 @@
     "@saving": {
         "description": "Text shown while saving settings"
     },
-    "personaConfig": "ನಿಮ್ಮ AI ಪರಿಚಯ ಕಾನ್ಫಿಗರ್",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
-    },
     "beta": "BETA",
     "@beta": {
         "description": "Beta label for experimental features"
@@ -2592,14 +2588,6 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "persona": "ವ್ಯಕ್ತಿತ್ವ",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವ ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
-    },
     "configureSttProvider": "STT ಪ್ರದಾನಕಾರಿ ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "@configureSttProvider": {
         "description": "Description for transcription settings"
@@ -3381,10 +3369,6 @@
     "@aboutTheApp": {
         "description": "Section title for app description"
     },
-    "aboutThePersona": "ವ್ಯಕ್ತಿತ್ವ ಬಗ್ಗೆ",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
-    },
     "chatPersonality": "ಚ್ಯಾಟ್ ವ್ಯಕ್ತಿತ್ವ",
     "@chatPersonality": {
         "description": "Title for chat personality section"
@@ -4037,7 +4021,6 @@
     "yourInformation": "ನಿಮ್ಮ ಮಾಹಿತಿ",
     "setYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ಹೊಂದಿಸಿ",
     "changeYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ಬದಲಿಸಿ",
-    "manageYourOmiPersona": "ನಿಮ್ಮ Omi ವ್ಯಕ್ತಿತ್ವವನ್ನು ನಿರ್ವಹಿಸಿ",
     "voiceAndPeople": "ಧ್ವನಿ ಮತ್ತು ಜನರು",
     "teachOmiYourVoice": "Omi ಗೆ ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಕಲಿಸಿ",
     "tellOmiWhoSaidIt": "Omi ಗೆ ಅದನ್ನು ಯಾರು ಹೇಳಿದ್ದಾರೆ ಎಂದು ಹೇಳಿ 🗣️",
@@ -4426,7 +4409,6 @@
     "checkingNext7Days": "ಮುಂದಿನ 7 ದಿನಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದೆ",
     "shortcuts": "ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು",
     "shortcutChangeInstruction": "ಅದನ್ನು ಬದಲಾಯಿಸಲು ಶಾರ್ಟ್‌ಕಟ್‌ನಲ್ಲಿ ಕ್ಲಿಕ್ ಮಾಡಿ. ರದ್ದು ಮಾಡಲು Escape ಒತ್ತಿರಿ.",
-    "configurePersonaDescription": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವವನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "configureSTTProvider": "STT ಪೂರೈಕೆದಾರವನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "setConversationEndDescription": "ಸಂವಾದಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಕೊನೆಗೊಳ್ಳುವ ಸಮಯ ಹೊಂದಿಸಿ",
     "importDataDescription": "ಇತರ ಮೂಲಗಳು ಪೈಶನ್ ಆಮದು",
@@ -4856,21 +4838,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "ನನ್ನ ಕ್ಲೋನ್ ರಚಿಸಿ",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "ನಿಮ್ಮ ಡಿಜಿಟಲ್ ಕ್ಲೋನ್ ರಚಿಸಿ",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "ಅಪ್ಲಿಕೇಶನ",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "ವ್ಯಕ್ತಿತ್ವ",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "{item} ಸಾರ್ವಜನಿಕ ಇಟ್ಟುಕೊಳ್ಳಿ",
     "@keepItemPublic": {
@@ -4920,10 +4890,6 @@
     "manageApp": "ಅಪ್ಲಿಕೇಶನ ನಿರ್ವಹಿಸಿ",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "ವ್ಯಕ್ತಿತ್ವ ವಿವರಗಳನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಿ",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "{item} ಅಳಿಸಿ",
     "@deleteItemTitle": {
@@ -7021,10 +6987,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "ನಿಮ್ಮ AI ವ್ಯಕ್ತಿತ್ವ ಸಂರಚನೆ ಮಾಡಿ",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "AI ಸಹಾಯಕಗಳನ್ನು ನಿಮ್ಮ ಡೇಟಾಕ್ಕೆ ಸಂಪರ್ಕಿಸಿ",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -8031,14 +7993,8 @@
         }
     },
     "sharePublicLink": "ಸಾರ್ವಜನಿಕ ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ",
-    "makePersonaPublic": "ವ್ಯಕ್ತಿತ್ವ ಸಾರ್ವಜನಿಕ ಮಾಡಿ",
     "connectedKnowledgeData": "ಸಂಪರ್ಕಿತ ಜ್ಞಾನ ಡೇಟಾ",
     "enterName": "ಹೆಸರು ನೆರವಿಸಿ",
-    "disconnectTwitter": "Twitter ನೊಂದಿಂದ ಸಂಪರ್ಕ ಕಟ್ಟುವುದು",
-    "disconnectTwitterConfirmation": "ನಿಮ್ಮ Twitter ಖಾತೆ ಸಂಪರ್ಕ ಕಟ್ಟುವುದನ್ನು ಖಾತ್ರಿ ಮಾಡುತ್ತೀರಾ? ನಿಮ್ಮ ವ್ಯಕ್ತಿತ್ವವು ಈಗಾಗಲೇ ನಿಮ್ಮ Twitter ಡೇಟಾಗೆ ಪ್ರವೇಶವನ್ನು ಹೊಂದುವುದಿಲ್ಲ.",
-    "getOmiDeviceDescription": "ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಸಂಭಾಷಣೆಗಳು ಹೊಂದಿದ ನಿಖರ ಕ್ಲೋನ್ ರಚಿಸಿ",
-    "getOmi": "Omi ಪಡೆಯಿರಿ",
-    "iHaveOmiDevice": "ನನ್ನ Omi ಸಾಧನ ಇದೆ",
     "goal": "ಗುರಿ",
     "tapToTrackThisGoal": "ಈ ಗುರಿ ಟ್ರ್ಯಾಕ್ ಮಾಡಲು ತಾಪಿಸಿ",
     "tapToSetAGoal": "ಗುರಿ ಹೊಂದಿಸಲು ತಾಪಿಸಿ",
@@ -8754,68 +8710,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಕಂಡುಬಂದಿಲ್ಲ",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಸ್ಥಗಿತಗೊಂಡಿದೆ",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "ಟ್ವಿಟರ್ ಹ್ಯಾಂಡಲ್ ಪರಿಶೀಲಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "ನಿಮ್ಮ Persona ಪಡೆಯಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "ನಿಮ್ಮ Persona ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "ದಯವಿಟ್ಟು ಕನಿಷ್ಠ ಒಂದು ಜ್ಞಾನ ಡೇಟಾ ಮೂಲ (Omi ಅಥವಾ Twitter) ಸಂಪರ್ಕಿಸಿ",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಿತ",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Persona ನವೀಕರಣ ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "ದಯವಿಟ್ಟು ಚಿತ್ರ ಆಯ್ಕೆ ಮಾಡಿ",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "ನಿಮ್ಮ Persona ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Persona ರಚಿಸುವಲ್ಲಿ ವಿಫಲ: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Persona ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Persona ಸಕ್ರಿಯಗೊಳಿಸುವಲ್ಲಿ ದೋಷ: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "ಬೆಂಬಲಿತ ದೇಶಗಳನ್ನು ಪಡೆಯಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8917,26 +8811,6 @@
     "aiGenPleaseGenerateAppFirst": "ದಯವಿಟ್ಟು ಮೊದಲು ಒಂದು ಅ್ಯಪ್ ಉತ್ಪನ್ನ ಮಾಡಿ",
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
-    },
-    "xHandleTitle": "ನಿಮ್ಮ X ಹ್ಯಾಂಡಲ್ ಎನ್ನುವುದು ಏನು?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "ನಾವು ನಿಮ್ಮ Omi ಕ್ಲೋನ್ ಪ್ರಾಥಮಿಕವಾಗಿ ತರಿಸುತ್ತೇವೆ\nನಿಮ್ಮ ಖಾತೆಯ ಚಟುವಟಿಕೆ ಭಿತ್ತಿಯ ಆಧಾರದ ಮೇಲೆ",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "ದಯವಿಟ್ಟು ನಿಮ್ಮ X ಹ್ಯಾಂಡಲ್ ನಮೂದಿಸಿ",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "ದಯವಿಟ್ಟು ಮಾನ್ಯ X ಹ್ಯಾಂಡಲ್ ನಮೂದಿಸಿ",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
     },
     "nextButton": "ಮುಂದೆ",
     "@nextButton": {
@@ -9784,7 +9658,6 @@
     "dailyRecaps": "ದೈನಿಕ ಸಾರಾಂಶಗಳು",
     "removeFilter": "ಫಿಲ್ಟರ್ ತೆಗೆದುಹಾಕಿ",
     "categoryConversationAnalysis": "ಸಂಭಾಷಣೆ ವಿಶ್ಲೇಷಣೆ",
-    "categoryPersonalityClone": "ವ್ಯಕ್ತಿತ್ವ ಕ್ಲೋನ್",
     "categoryHealth": "ಸ್ವಾಸ್ಥ್ಯ",
     "categoryEducation": "ಶಿಕ್ಷಣ",
     "categoryCommunication": "ಸಂವಾದ",
@@ -9819,7 +9692,6 @@
     "capabilityFeatured": "ವೈಶಿಷ್ಟ್ಯ",
     "capabilityTasks": "ಕಾರ್ಯಗಳು",
     "capabilityIntegrations": "ಏಕೀಕರಣಗಳು",
-    "categoryPersonalityClones": "ವ್ಯಕ್ತಿತ್ವ ಕ್ಲೋನ್ಗಳು",
     "categoryProductivityLifestyle": "ಉತ್ಪಾದನೆ ಮತ್ತು ಜೀವನಧರೆ",
     "categorySocialEntertainment": "ಸಾಮಾಜಿಕ ಮತ್ತು ಮನೋರಂಜನೆ",
     "categoryProductivityTools": "ಉತ್ಪಾದನೆ ಮತ್ತು ಸಾಧನಗಳು",
@@ -10749,5 +10621,58 @@
     },
     "firmwareWarningTitle": "ಮುಖ್ಯ: ನವೀಕರಿಸುವ ಮೊದಲು ಓದಿ",
     "firmwareFormatWarning": "ಈ ಫರ್ಮ್‌ವೇರ್ SD ಕಾರ್ಡ್ ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡುತ್ತದೆ. ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೊದಲು ಎಲ್ಲಾ ಆಫ್‌ಲೈನ್ ಡೇಟಾ ಸಿಂಕ್ ಆಗಿದೆ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.\n\nಈ ಆವೃತ್ತಿಯನ್ನು ಸ್ಥಾಪಿಸಿದ ನಂತರ ಕೆಂಪು ಬೆಳಕು ಮಿನುಗುತ್ತಿದ್ದರೆ ಚಿಂತಿಸಬೇಡಿ. ಸಾಧನವನ್ನು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಸಂಪರ್ಕಿಸಿ ಮತ್ತು ಅದು ನೀಲಿ ಬಣ್ಣಕ್ಕೆ ಬದಲಾಗಬೇಕು.",
-    "continueAnyway": "ಮುಂದುವರಿಸಿ"
+    "continueAnyway": "ಮುಂದುವರಿಸಿ",
+    "tasksClearCompleted": "ಪೂರ್ಣಗೊಂಡವನ್ನು ತೆರವು ಮಾಡಿ",
+    "tasksSelectAll": "ಎಲ್ಲ ಆಯ್ಕೆ ಮಾಡಿ",
+    "tasksDeleteSelected": "{count} ಕಾರ್ಯ(ಗಳನ್ನು) ಅಳಿಸಿ",
+    "tasksMarkComplete": "ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ",
+    "appleHealthManageNote": "Omi Apple ನ HealthKit ಫ್ರೇಮ್‌ವರ್ಕ್ ಮೂಲಕ Apple Health ಅನ್ನು ಪ್ರವೇಶಿಸುತ್ತದೆ. ನೀವು iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ಪ್ರವೇಶವನ್ನು ಹಿಂಪಡೆಯಬಹುದು.",
+    "appleHealthConnectCta": "Apple Health ಗೆ ಸಂಪರ್ಕಿಸಿ",
+    "appleHealthDisconnectCta": "Apple Health ಸಂಪರ್ಕ ಕಡಿತಗೊಳಿಸಿ",
+    "appleHealthConnectedBadge": "ಸಂಪರ್ಕಿಸಲಾಗಿದೆ",
+    "appleHealthFeatureChatTitle": "ನಿಮ್ಮ ಆರೋಗ್ಯದ ಬಗ್ಗೆ ಮಾತನಾಡಿ",
+    "appleHealthFeatureChatDesc": "Omi ಯೊಂದಿಗೆ ಹೆಜ್ಜೆಗಳು, ನಿದ್ರೆ, ಹೃದಯ ಬಡಿತ ಮತ್ತು ವ್ಯಾಯಾಮಗಳ ಬಗ್ಗೆ ಕೇಳಿ.",
+    "appleHealthFeatureReadOnlyTitle": "ಕೇವಲ ಓದುವ ಪ್ರವೇಶ",
+    "appleHealthFeatureReadOnlyDesc": "Omi ಎಂದಿಗೂ Apple Health ಗೆ ಬರೆಯುವುದಿಲ್ಲ ಅಥವಾ ಡೇಟಾವನ್ನು ಬದಲಾಯಿಸುವುದಿಲ್ಲ.",
+    "appleHealthFeatureSecureTitle": "ಸುರಕ್ಷಿತ ಸಿಂಕ್",
+    "appleHealthFeatureSecureDesc": "ನಿಮ್ಮ Apple Health ಡೇಟಾ ಖಾಸಗಿಯಾಗಿ ನಿಮ್ಮ Omi ಖಾತೆಗೆ ಸಿಂಕ್ ಆಗುತ್ತದೆ.",
+    "appleHealthDeniedTitle": "Apple Health ಪ್ರವೇಶ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "appleHealthDeniedBody": "Omi ಗೆ ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು ಓದುವ ಅನುಮತಿ ಇಲ್ಲ. iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳು → ಗೌಪ್ಯತೆ ಮತ್ತು ಭದ್ರತೆ → Health → Omi ನಲ್ಲಿ ಇದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ.",
+    "deleteFlowReasonTitle": "ನೀವೇಕೆ ಹೋಗುತ್ತಿದ್ದೀರಿ?",
+    "deleteFlowReasonSubtitle": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ಎಲ್ಲರಿಗೂ Omi ಅನ್ನು ಸುಧಾರಿಸಲು ನಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
+    "deleteReasonPrivacy": "ಗೌಪ್ಯತೆ ಕಾಳಜಿಗಳು",
+    "deleteReasonNotUsing": "ಸಾಕಷ್ಟು ಬಳಸುತ್ತಿಲ್ಲ",
+    "deleteReasonMissingFeatures": "ನನಗೆ ಬೇಕಾದ ವೈಶಿಷ್ಟ್ಯಗಳಿಲ್ಲ",
+    "deleteReasonTechnicalIssues": "ಅನೇಕ ತಾಂತ್ರಿಕ ಸಮಸ್ಯೆಗಳು",
+    "deleteReasonFoundAlternative": "ಬೇರೆ ಯಾವುದನ್ನೋ ಬಳಸುತ್ತಿದ್ದೇನೆ",
+    "deleteReasonTakingBreak": "ಕೇವಲ ವಿರಾಮ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದ್ದೇನೆ",
+    "deleteReasonOther": "ಇತರೆ",
+    "deleteFlowFeedbackTitle": "ಹೆಚ್ಚು ಹೇಳಿ",
+    "deleteFlowFeedbackSubtitle": "Omi ನಿಮಗೆ ಹೇಗೆ ಉಪಯುಕ್ತವಾಗುತ್ತಿತ್ತು?",
+    "deleteFlowFeedbackHint": "ಐಚ್ಛಿಕ — ನಿಮ್ಮ ಆಲೋಚನೆಗಳು ಉತ್ತಮ ಉತ್ಪನ್ನವನ್ನು ನಿರ್ಮಿಸಲು ನಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತವೆ.",
+    "deleteFlowConfirmTitle": "ಇದು ಶಾಶ್ವತ",
+    "deleteFlowConfirmSubtitle": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಿದ ನಂತರ, ಅದನ್ನು ಮರುಪಡೆಯಲು ಯಾವುದೇ ಮಾರ್ಗವಿಲ್ಲ.",
+    "deleteConsequenceSubscription": "ಯಾವುದೇ ಸಕ್ರಿಯ ಚಂದಾದಾರಿಕೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುತ್ತದೆ.",
+    "deleteConsequenceNoRecovery": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ — ಬೆಂಬಲದಿಂದಲೂ ಸಾಧ್ಯವಿಲ್ಲ.",
+    "deleteTypeToConfirm": "ದೃಢೀಕರಿಸಲು DELETE ಟೈಪ್ ಮಾಡಿ",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "ಖಾತೆಯನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಿ",
+    "keepMyAccount": "ನನ್ನ ಖಾತೆಯನ್ನು ಇರಿಸಿ",
+    "deleteAccountFailed": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "planUpdate": "ಯೋಜನೆ ನವೀಕರಣ",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ. Operator ಯೋಜನೆಗೆ ಬದಲಾಯಿಸಿ — ಅದೇ ಅದ್ಭುತ ವೈಶಿಷ್ಟ್ಯಗಳು $49/ತಿಂಗಳಿಗೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆ ಈ ಮಧ್ಯೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "ನೀವು ಪಾವತಿಸಿದ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }
