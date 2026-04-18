@@ -211,7 +211,8 @@ export class PiMonoAdapter implements HarnessAdapter {
       "omi",
       "--model",
       "omi-sonnet",
-      "--no-extensions", // disable auto-discovered extensions
+      // Auto-discover extensions and MCP servers from the user's machine
+      // to maximize pi-mono's capabilities (e.g. Playwright, filesystem tools).
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -598,6 +599,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
 
+    // Log key events for diagnostic visibility
+    if (event.type === 'turn_end') {
+      const msg = (event as any).message;
+      const errMsg = msg?.errorMessage;
+      if (errMsg) {
+        process.stderr.write(`[pi-mono] turn_end ERROR: ${errMsg}\n`);
+      }
+    }
+
     switch (event.type) {
       case "message_update":
         this.handleMessageUpdate(event);
@@ -771,6 +781,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         .map((b) => b.text || "")
         .join("");
     }
+    // (diagnostic logging removed)
 
     // Extract usage
     const usage = message?.usage;
