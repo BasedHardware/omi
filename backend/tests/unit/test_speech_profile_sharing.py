@@ -571,7 +571,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     """
     import io
     import wave
-    import requests as req_module
+    import utils.stt.speaker_embedding as speaker_embedding_module
     from utils.stt.speaker_embedding import (
         extract_embedding_from_bytes,
         compare_embeddings,
@@ -588,7 +588,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     mock_response = MagicMock()
     mock_response.json.return_value = alice_embedding_raw
     mock_response.raise_for_status = MagicMock()
-    monkeypatch.setattr(req_module, "post", MagicMock(return_value=mock_response))
+    monkeypatch.setattr(speaker_embedding_module.httpx, "post", MagicMock(return_value=mock_response))
 
     # Generate a 1-second WAV (passes duration check)
     buf = io.BytesIO()

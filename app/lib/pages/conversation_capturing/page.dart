@@ -198,20 +198,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         ? "📸"
                         : _isMuted
                             ? "🔇"
-                            : provider.transcriptServiceReady
-                                ? "🎙️"
-                                : "🎙️⚡",
+                            : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted
-                              ? context.l10n.muted
-                              : provider.transcriptServiceReady
-                                  ? context.l10n.listening
-                                  : context.l10n.transcriptionPaused),
+                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
