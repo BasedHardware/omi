@@ -1,0 +1,7 @@
+# Never commit private signing / encryption keys.
+# Public halves (enc-rsa2048-pub.pem) are OK.
+root-rsa-2048.pem
+enc-rsa2048-priv.pem
+*.key
+*.p12
+*.pfx

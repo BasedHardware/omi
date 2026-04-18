@@ -826,7 +826,11 @@ def upload_file_chat(
     thumbs_name = []
     files_chat = []
     for file in files:
-        temp_file = Path(f"{file.filename}")
+        # Strip directory parts from client-supplied filename; prefix with uuid
+        # to prevent path traversal and concurrent-upload collisions.
+        import os as _os
+        safe_name = _os.path.basename(file.filename or 'upload') or 'upload'
+        temp_file = Path(f"{uuid.uuid4().hex}_{safe_name}")
         with temp_file.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -882,7 +886,11 @@ def upload_file_chat(
     thumbs_name = []
     files_chat = []
     for file in files:
-        temp_file = Path(f"{file.filename}")
+        # Strip directory parts from client-supplied filename; prefix with uuid
+        # to prevent path traversal and concurrent-upload collisions.
+        import os as _os
+        safe_name = _os.path.basename(file.filename or 'upload') or 'upload'
+        temp_file = Path(f"{uuid.uuid4().hex}_{safe_name}")
         with temp_file.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 

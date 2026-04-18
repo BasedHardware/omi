@@ -39,6 +39,20 @@ def get_generic_cache(path: str):
 
 
 @try_catch_decorator
+def mark_event_processed_once(namespace: str, event_id: str, ttl_seconds: int = 7 * 86400) -> bool:
+    """Atomically record that we've processed `event_id` under `namespace`.
+
+    Returns True on the first call (caller should process the event),
+    False on every subsequent call (caller should no-op).
+
+    Used to deduplicate webhook events (Stripe, etc.) — a replayed payload
+    with a valid signature would otherwise re-credit the user or re-fire
+    side effects. TTL is long enough to cover webhook retry windows.
+    """
+    # SET NX EX — single round-trip, race-free idempotency check.
+    return bool(r.set(f'processed:{namespace}:{event_id}', '1', ex=ttl_seconds, nx=True))
+
+
 def set_generic_cache(path: str, data: Union[dict, list], ttl: int = None):
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')

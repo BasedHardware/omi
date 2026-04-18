@@ -61,7 +61,15 @@ if [ "$1" = "--yolo" ]; then
     export OMI_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
     export OMI_PYTHON_API_URL="https://api.omi.me"
     export OMI_AUTH_URL="https://omi-desktop-auth-208440318997.us-central1.run.app/"
-    export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    # FIREBASE_API_KEY must be supplied by the shell environment (see
+    # desktop/README.md). It is not committed so the value cannot be leaked
+    # via this repo or forks. Firebase client API keys are only safe when
+    # paired with App Check + strict Security Rules.
+    if [ -z "${FIREBASE_API_KEY:-}" ]; then
+        echo "ERROR: FIREBASE_API_KEY must be set in your environment." >&2
+        echo "       export FIREBASE_API_KEY=... (do NOT commit)" >&2
+        exit 1
+    fi
 fi
 
 # Clear system OPENAI_API_KEY so .env takes precedence

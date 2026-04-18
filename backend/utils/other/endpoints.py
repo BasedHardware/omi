@@ -20,30 +20,47 @@ def get_user(uid: str):
     return user
 
 
+def _is_dev_environment() -> bool:
+    """Dev bypasses only fire when LOCAL_DEVELOPMENT=true AND env is not prod.
+
+    Two gates so a single misconfigured env var can't nuke auth in production.
+    """
+    if os.getenv('LOCAL_DEVELOPMENT') != 'true':
+        return False
+    env = (os.getenv('ENV') or os.getenv('ENVIRONMENT') or '').lower()
+    if env in ('prod', 'production', 'live'):
+        return False
+    return True
+
+
 def verify_token(token: str) -> str:
     """
-    Verify a Firebase token or ADMIN_KEY and return the uid.
+    Verify a Firebase token and return the uid.
 
-    Args:
-        token: The token to verify (Firebase ID token or ADMIN_KEY format)
-
-    Returns:
-        The user's uid
+    ADMIN_KEY impersonation is ONLY honored in dev environments (see
+    _is_dev_environment). In production, ADMIN_KEY is strictly a shared
+    secret for server-to-server admin endpoints (routers/apps.py,
+    fair_use_admin.py, etc.) — it MUST NOT grant the ability to act as
+    arbitrary users. If it ever leaks from CI/Helm/etc., the blast radius
+    is limited to those endpoints.
 
     Raises:
-        InvalidIdTokenError: If the token is invalid
+        InvalidIdTokenError: If the token is invalid.
     """
-    # Check for ADMIN_KEY format
-    admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and token.startswith(admin_key):
-        return token[len(admin_key) :]
+    # Dev-only: ADMIN_KEY can mint an arbitrary uid for integration tests.
+    # Production path skips this entirely.
+    if _is_dev_environment():
+        admin_key = os.getenv('ADMIN_KEY')
+        if admin_key and token.startswith(admin_key):
+            impersonated = token[len(admin_key):]
+            logger.warning(f"[dev] ADMIN_KEY impersonation uid={impersonated}")
+            return impersonated
 
-    # Verify Firebase token
     try:
         decoded_token = auth.verify_id_token(token)
         return decoded_token['uid']
     except InvalidIdTokenError:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+        if _is_dev_environment():
             return '123'
         raise
 

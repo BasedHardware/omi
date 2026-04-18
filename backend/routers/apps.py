@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from utils.apps import fetch_app_chat_tools_from_manifest
 from utils.executors import storage_executor
 from utils.http_client import get_webhook_client
+from utils.other.ssrf_guard import SSRFError, safe_get_json
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -507,7 +508,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
     os.makedirs(f'_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    # Defend against path traversal: ignore any directory parts from the client
+    # and prefix with a ULID so two uploads can't collide / overwrite each other.
+    safe_name = os.path.basename(file.filename or 'upload') or 'upload'
+    file_path = os.path.join('_temp/apps', f"{ULID()}_{safe_name}")
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
     img_url = upload_app_logo(file_path, data['id'])
@@ -565,7 +569,8 @@ async def create_persona(
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = generate_persona_desc(uid, data['name'])
     os.makedirs(f'_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    safe_name = os.path.basename(file.filename or 'upload') or 'upload'
+    file_path = os.path.join('_temp/apps', f"{ULID()}_{safe_name}")
     contents = await file.read()
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
@@ -606,7 +611,8 @@ async def update_persona(
         ):
             delete_app_logo(persona['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        safe_name = os.path.basename(file.filename or 'upload') or 'upload'
+        file_path = os.path.join('_temp/apps', f"{ULID()}_{safe_name}")
         contents = await file.read()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
@@ -719,7 +725,8 @@ def update_app(
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        safe_name = os.path.basename(file.filename or 'upload') or 'upload'
+        file_path = os.path.join('_temp/apps', f"{ULID()}_{safe_name}")
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
@@ -1740,7 +1747,12 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        try:
+            res = await safe_get_json(
+                client, app.external_integration.setup_completed_url, params={'uid': uid}
+            )
+        except SSRFError:
+            raise HTTPException(status_code=400, detail='App setup URL is not allowed')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')

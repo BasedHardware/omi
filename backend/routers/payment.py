@@ -14,7 +14,7 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
-from database.redis_db import set_credits_invalidation_signal
+from database.redis_db import set_credits_invalidation_signal, mark_event_processed_once
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -524,6 +524,14 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Idempotency: Stripe retries on non-2xx and an attacker with a captured
+    # signed payload could replay it indefinitely. Bail on any event we've
+    # already processed within the 7-day replay window.
+    event_id = event.get('id') if isinstance(event, dict) else None
+    if event_id and not mark_event_processed_once('stripe', event_id):
+        logger.info(f"[webhook] dropping duplicate stripe event {event_id}")
+        return {"status": "ok", "deduplicated": True}
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
