@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Pause Rewind screen capture while screenshot apps (CleanShot, Shottr, macOS screenshot, Loom, OBS, etc.) are frontmost so their capture no longer stalls on WindowServer contention"
+  ],
   "releases": [
     {
       "version": "0.11.329",
