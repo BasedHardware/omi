@@ -1489,8 +1489,7 @@ class FloatingControlBarManager {
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
         let screenshotData = await Task.detached { () -> Data? in
-            guard let url = ScreenCaptureManager.captureScreen() else { return nil }
-            return try? Data(contentsOf: url)
+            return ScreenCaptureManager.captureScreenData()
         }.value
         barWindow.orderFrontRegardless()
 
