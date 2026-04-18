@@ -23,6 +23,7 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -231,77 +232,86 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  void _showDeprecationDialog() {
+  Future<void> _checkDeprecation() async {
     if (!Platform.isMacOS) return;
+    if (!context.read<AuthenticationProvider>().isSignedIn()) return;
+
+    try {
+      final sub = await getUserSubscription();
+      if (sub == null || sub.showSubscriptionUi) return;
+      if (!mounted) return;
+      _showDeprecationDialog();
+    } catch (_) {}
+  }
+
+  void _showDeprecationDialog() {
     const downloadUrl = 'https://macos.omi.me';
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          var showUrl = false;
-          return StatefulBuilder(
-            builder: (context, setState) => PopScope(
-              canPop: false,
-              child: AlertDialog(
-                backgroundColor: const Color(0xFF1A1A2E),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: const Text(
-                  'App No Longer Maintained',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'This version is no longer maintained. Please uninstall this app and download the latest version directly from our website.',
-                      style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        var showUrl = false;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF1A1A2E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text(
+                'App No Longer Maintained',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'This version is no longer maintained. Please uninstall this app and download the latest version directly from our website.',
+                    style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (showUrl) ...[
+                    const SizedBox(height: 16),
+                    SelectableText(
+                      downloadUrl,
+                      style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
-                    if (showUrl) ...[
-                      const SizedBox(height: 16),
-                      SelectableText(
-                        downloadUrl,
-                        style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 14),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
                   ],
-                ),
-                actionsAlignment: MainAxisAlignment.center,
-                actions: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () async {
-                        final ok = await launchUrl(Uri.parse(downloadUrl));
-                        if (!ok) setState(() => showUrl = true);
-                      },
-                      child: const Text('Download', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    ),
-                  ),
                 ],
               ),
+              actionsAlignment: MainAxisAlignment.center,
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () async {
+                      final ok = await launchUrl(Uri.parse(downloadUrl));
+                      if (!ok) setState(() => showUrl = true);
+                    },
+                    child: const Text('Download', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
             ),
-          );
-        },
-      );
-    });
+          ),
+        );
+      },
+    );
   }
 
   @override
   void initState() {
     initDeepLinks();
-    _showDeprecationDialog();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _checkDeprecation();
       if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
