@@ -13,6 +13,11 @@ actor RewindDatabase {
     /// Track initialization state to prevent concurrent init attempts
     private var initializationTask: Task<Void, Error>?
 
+    /// Number of consecutive initialization failures (for retry backoff, #6271)
+    private var consecutiveInitFailures = 0
+    private let maxInitRetries = 3
+    private let baseRetryDelay: UInt64 = 500_000_000  // 0.5s in nanoseconds
+
     /// Path to the running flag file (used to detect unclean shutdown)
     private var runningFlagPath: String?
 
@@ -45,8 +50,17 @@ actor RewindDatabase {
     /// Whether the database has been successfully initialized
     var isInitialized: Bool { dbQueue != nil }
 
-    /// Get the database pool for other storage actors
+    /// Get the database pool for other storage actors.
+    /// If the database is not yet initialized and no init is in progress,
+    /// attempts initialization automatically to recover from transient failures (#6271).
     func getDatabaseQueue() -> DatabasePool? {
+        if dbQueue == nil && initializationTask == nil && consecutiveInitFailures < maxInitRetries {
+            // Fire-and-forget retry — callers get nil this time but subsequent calls will succeed
+            // once init completes. This prevents the app from staying permanently broken.
+            Task {
+                try? await self.initialize()
+            }
+        }
         return dbQueue
     }
 
@@ -187,10 +201,10 @@ actor RewindDatabase {
             }
         }
 
-        // Start initialization
+        // Start initialization with retry logic (#6271)
         let myGeneration = initGeneration
         let task = Task {
-            try await performInitialization()
+            try await performInitializationWithRetry()
         }
         initializationTask = task
 
@@ -200,12 +214,38 @@ actor RewindDatabase {
             if initGeneration == myGeneration {
                 initializationTask = nil
             }
+            consecutiveInitFailures = 0
         } catch {
             if initGeneration == myGeneration {
                 initializationTask = nil
             }
+            consecutiveInitFailures += 1
             throw error
         }
+    }
+
+    /// Retry wrapper around performInitialization (#6271).
+    /// Retries up to maxInitRetries times with exponential backoff when the
+    /// initial attempt fails due to transient I/O errors (WAL lock, disk busy).
+    private func performInitializationWithRetry() async throws {
+        var lastError: Error?
+        for attempt in 0..<maxInitRetries {
+            do {
+                try await performInitialization()
+                if attempt > 0 {
+                    log("RewindDatabase: Initialization succeeded on retry \(attempt)")
+                }
+                return  // Success
+            } catch {
+                lastError = error
+                let delay = baseRetryDelay * UInt64(1 << attempt)  // 0.5s, 1s, 2s
+                logError("RewindDatabase: Init attempt \(attempt + 1)/\(maxInitRetries) failed, retrying in \(delay / 1_000_000)ms: \(error.localizedDescription)")
+                try? await Task.sleep(nanoseconds: delay)
+                // Close before retry so performInitialization starts fresh
+                if dbQueue != nil { close() }
+            }
+        }
+        throw lastError ?? RewindError.databaseNotInitialized
     }
 
     /// Actual initialization logic (called only once at a time)
