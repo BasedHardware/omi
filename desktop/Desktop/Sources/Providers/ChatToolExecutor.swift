@@ -131,6 +131,9 @@ class ChatToolExecutor {
         ])
       return result
 
+    case "capture_screen":
+      return await executeCaptureScreen()
+
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
     case "get_conversations":
       return await executeBackendTool(toolCall)
@@ -161,6 +164,19 @@ class ChatToolExecutor {
     }
 
     return results
+  }
+
+  // MARK: - Screen Capture
+
+  /// Capture the current screen and return the file path
+  private static func executeCaptureScreen() async -> String {
+    guard CGPreflightScreenCaptureAccess() else {
+      return "Error: Screen recording permission not granted. Ask the user to enable it in System Settings > Privacy & Security > Screen & System Audio Recording."
+    }
+    guard let fileURL = ScreenCaptureManager.captureScreen() else {
+      return "Error: Failed to capture screen"
+    }
+    return fileURL.path
   }
 
   // MARK: - SQL Execution
