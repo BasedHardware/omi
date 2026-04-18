@@ -38,7 +38,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-import database.users as users_db
 from database.memories import get_memories, get_user_public_memories
 from database.redis_db import (
     get_enabled_apps,
@@ -71,7 +70,6 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
-from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
