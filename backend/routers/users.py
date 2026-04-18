@@ -87,7 +87,6 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from database.action_items import get_action_items as get_standalone_action_items
-from google.cloud import firestore as cloud_firestore
 import logging
 
 logger = logging.getLogger(__name__)

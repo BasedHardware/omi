@@ -12,7 +12,6 @@ from utils.executors import storage_executor
 import opuslib
 from google.cloud import storage
 from google.oauth2 import service_account
-from google.cloud.storage import transfer_manager
 from google.cloud.exceptions import NotFound as BlobNotFound
 from google.cloud.exceptions import NotFound
 
@@ -92,13 +91,6 @@ def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
     return None
 
 
-def upload_additional_profile_audio(file_path: str, uid: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/additional_profile_recordings/{file_path.split("/")[-1]}'
-    blob = bucket.blob(path)
-    blob.upload_from_filename(file_path)
-
-
 def delete_additional_profile_audio(uid: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
@@ -126,27 +118,11 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
 # ********************************************
 
 
-def upload_user_person_speech_sample(file_path: str, uid: str, person_id: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/people_profiles/{person_id}/{file_path.split("/")[-1]}'
-    blob = bucket.blob(path)
-    blob.upload_from_filename(file_path)
-
-
 def delete_user_person_speech_sample(uid: str, person_id: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/people_profiles/{person_id}/{file_name}')
     if blob.exists():
         blob.delete()
-
-
-def delete_speech_sample_for_people(uid: str, file_name: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
-    for blob in blobs:
-        if file_name in blob.name:
-            logger.info(f'delete_speech_sample_for_people deleting {blob.name}')
-            blob.delete()
 
 
 def delete_user_person_speech_samples(uid: str, person_id: str) -> None:
