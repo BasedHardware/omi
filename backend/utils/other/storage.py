@@ -12,7 +12,6 @@ from utils.executors import storage_executor
 import opuslib
 from google.cloud import storage
 from google.oauth2 import service_account
-from google.cloud.storage import transfer_manager
 from google.cloud.exceptions import NotFound as BlobNotFound
 from google.cloud.exceptions import NotFound
 

@@ -1028,22 +1028,6 @@ def delete_integration(uid: str, app_key: str) -> bool:
     return True
 
 
-# Legacy function names for backward compatibility
-def get_calendar_integration(uid: str, app_key: str) -> Optional[dict]:
-    """Legacy function name - use get_integration instead."""
-    return get_integration(uid, app_key)
-
-
-def set_calendar_integration(uid: str, app_key: str, data: dict) -> None:
-    """Legacy function name - use set_integration instead."""
-    return set_integration(uid, app_key, data)
-
-
-def delete_calendar_integration(uid: str, app_key: str) -> bool:
-    """Legacy function name - use delete_integration instead."""
-    return delete_integration(uid, app_key)
-
-
 # **************************************
 # ***** Transcription Preferences ******
 # **************************************

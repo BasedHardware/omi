@@ -25,10 +25,8 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from models.conversation import Conversation as ConversationModel
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
-    get_uid_from_dev_api_key,
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,

@@ -978,28 +978,6 @@ def get_capabilities_list() -> List[dict]:
     ]
 
 
-def get_categories_list() -> List[dict]:
-    """Get the list of app categories for grouping."""
-    return [
-        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-        {'title': 'Personality Clone', 'id': 'personality-emulation'},
-        {'title': 'Health', 'id': 'health-and-wellness'},
-        {'title': 'Education', 'id': 'education-and-learning'},
-        {'title': 'Communication', 'id': 'communication-improvement'},
-        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
-        {'title': 'Productivity', 'id': 'productivity-and-organization'},
-        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
-        {'title': 'Financial', 'id': 'financial'},
-        {'title': 'Travel', 'id': 'travel-and-exploration'},
-        {'title': 'Safety', 'id': 'safety-and-security'},
-        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
-        {'title': 'Social', 'id': 'social-and-relationships'},
-        {'title': 'News', 'id': 'news-and-information'},
-        {'title': 'Utilities', 'id': 'utilities-and-tools'},
-        {'title': 'Other', 'id': 'other'},
-    ]
-
-
 def _app_has_auth_steps(app: App) -> bool:
     """Check if app has external_integration with auth_steps."""
     has_external_integration = 'external_integration' in (app.capabilities or set())
