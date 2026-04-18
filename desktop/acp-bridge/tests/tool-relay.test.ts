@@ -188,7 +188,7 @@ describe("Tool relay: Unix socket end-to-end", () => {
     });
   }
 
-  // Test all 13 Omi tools through the relay
+  // Test all 14 Omi tools through the relay
   const OMI_TOOLS = [
     { name: "execute_sql", input: { query: "SELECT COUNT(*) FROM screenshots" } },
     { name: "semantic_search", input: { query: "terminal", days: 7 } },
@@ -203,6 +203,7 @@ describe("Tool relay: Unix socket end-to-end", () => {
     { name: "get_action_items", input: { limit: 5 } },
     { name: "create_action_item", input: { description: "Test item" } },
     { name: "update_action_item", input: { action_item_id: "test-id", completed: true } },
+    { name: "capture_screen", input: {} },
   ];
 
   for (const tool of OMI_TOOLS) {
