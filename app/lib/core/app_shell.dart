@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/backend/preferences.dart';
@@ -229,9 +231,53 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  void _showDeprecationDialog() {
+    if (!Platform.isMacOS) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1A1A2E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'App No Longer Maintained',
+              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            content: const Text(
+              'This version is no longer maintained. Please uninstall this app and download the latest version directly from our website.',
+              style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => launchUrl(Uri.parse('https://macos.omi.me')),
+                  child: const Text('Download', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
   @override
   void initState() {
     initDeepLinks();
+    _showDeprecationDialog();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<AuthenticationProvider>().isSignedIn()) {
