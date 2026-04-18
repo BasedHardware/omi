@@ -45,7 +45,7 @@ final class ScreenCaptureService: Sendable {
   private static let sharedContentLock = NSLock()
   nonisolated(unsafe) private static var cachedSharedContent: Any?  // SCShareableContent, typed Any so this decl predates macOS 14 gate
   nonisolated(unsafe) private static var sharedContentCachedAt: Date?
-  private static let sharedContentTTL: TimeInterval = 2.0
+  private static let sharedContentTTL: TimeInterval = 5.0
 
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
