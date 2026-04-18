@@ -548,7 +548,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var streamingThinkingBuffer: String = ""
     private var streamingBufferMessageId: String?
     private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.1
+    private let streamingFlushInterval: TimeInterval = 0.035
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
