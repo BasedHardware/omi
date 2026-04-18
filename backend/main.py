@@ -56,6 +56,7 @@ from routers import (
 )
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.other.request_size_limit import RequestSizeLimitMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
@@ -133,6 +134,7 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+app.add_middleware(RequestSizeLimitMiddleware)
 
 
 @app.on_event("shutdown")

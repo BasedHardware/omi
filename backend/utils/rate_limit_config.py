@@ -55,9 +55,18 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "mcp:sse": (200, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
+    # Memory reads, deletes, edits over MCP were previously unlimited. Cost of
+    # one call is small but batch abuse can wipe a user's memories or blow up
+    # vector-DB retrieval budget.
+    "memories:read": (300, 3600),
+    "memories:delete": (120, 3600),
+    "memories:edit": (120, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the
     # per-request cap is intentionally tighter than memories:create.
     "memories:batch": (30, 3600),
+    # MCP conversation reads (list + detail). Detail can pull multi-MB
+    # transcripts; limit prevents costly-fetch loops.
+    "mcp:conversations_read": (300, 3600),
     # Goals — single LLM call
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),

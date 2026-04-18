@@ -213,6 +213,16 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         content = arguments.get("content")
         if not content:
             raise ToolExecutionError("Content is required")
+        # Cap individual memory size. Without this an LLM tool call can create
+        # multi-megabyte memories that later blow context limits when retrieved
+        # and burn token budget on every search.
+        _MAX_MEMORY_CONTENT = 10_000  # 10 KB
+        if not isinstance(content, str):
+            raise ToolExecutionError("Content must be a string")
+        if len(content) > _MAX_MEMORY_CONTENT:
+            raise ToolExecutionError(
+                f"Content exceeds {_MAX_MEMORY_CONTENT} characters",
+            )
 
         # Auto-categorize memories from MCP clients
         category = identify_category_for_memory(content)
@@ -241,6 +251,9 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+        _MAX_MEMORY_CONTENT = 10_000
+        if not isinstance(content, str) or len(content) > _MAX_MEMORY_CONTENT:
+            raise ToolExecutionError(f"Content exceeds {_MAX_MEMORY_CONTENT} characters")
 
         memory = memories_db.get_memory(user_id, memory_id)
         if not memory:
@@ -572,8 +585,16 @@ async def mcp_streamable_http(
         if session.user_id != user_id:
             raise HTTPException(status_code=403, detail="Session does not belong to this user")
 
-    # Handle batch requests (array of messages)
+    # Handle batch requests (array of messages). Cap to prevent a single POST
+    # from issuing thousands of tools/call entries and burning LLM / vector DB
+    # quota in one go — the rate limit above applies per-POST, not per-message.
+    _MAX_BATCH_MESSAGES = 50
     messages = body if isinstance(body, list) else [body]
+    if len(messages) > _MAX_BATCH_MESSAGES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Batch too large ({len(messages)} > {_MAX_BATCH_MESSAGES} messages)",
+        )
 
     # Check if all messages are notifications/responses (no id)
     all_notifications = all(msg.get("id") is None for msg in messages)
