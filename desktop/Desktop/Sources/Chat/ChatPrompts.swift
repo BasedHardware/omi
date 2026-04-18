@@ -947,6 +947,7 @@ struct ChatPrompts {
             "ocrText": "Full OCR-extracted text from the screen",
             "focusStatus": "Whether user was focused or distracted (focused/distracted)",
             "skippedForBattery": "OCR was skipped on battery; text may be missing",
+            "deviceName": "Computer/device name that captured this screenshot (for multi-device queries)",
         ],
         "action_items": [
             "description": "The task text shown to the user",

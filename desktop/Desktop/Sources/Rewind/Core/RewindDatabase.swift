@@ -2156,6 +2156,14 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addDeviceName") { db in
+            try db.alter(table: "screenshots") { t in
+                t.add(column: "deviceName", .text)
+            }
+        }
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
