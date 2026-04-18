@@ -42,6 +42,7 @@ class UsageProvider with ChangeNotifier {
   bool _isSubscriptionLoading = false;
   bool _isPaymentLoading = false;
   bool get isLoading => _isUsageLoading || _isSubscriptionLoading || _isPaymentLoading;
+  bool get isSubscriptionLoading => _isSubscriptionLoading;
 
   String? _error;
   String? get error => _error;
