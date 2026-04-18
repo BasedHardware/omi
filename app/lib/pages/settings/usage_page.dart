@@ -325,6 +325,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (provider.error != null && !hasAnyData) {
             return Column(
               children: [
+                _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 Expanded(
                   child: Center(
@@ -345,6 +346,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (!provider.isLoading && !hasAnyData && provider.error == null) {
             return Column(
               children: [
+                _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 Expanded(child: _buildEmptyState()),
               ],
