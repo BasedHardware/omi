@@ -231,13 +231,27 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
   });
 });
 
-describe("tool_use event filtering (behavioral)", () => {
-  // Behavioral test: reproduce the exact callback from runPiMonoMode()
-  // and verify it filters tool_use events while forwarding everything else.
-  // This catches regressions even if the code is refactored, since the
-  // test exercises the actual filtering logic, not source text patterns.
+describe("tool_use event filtering", () => {
+  // Two-layer defense:
+  // 1. Source-level assertion verifies the filter EXISTS in the real code
+  // 2. Behavioral test verifies the filtering LOGIC is correct
+  // Together they catch both: (a) accidental removal/refactoring of the
+  // filter, and (b) logical errors in the filtering pattern.
+  const indexSrc = readFileSync(
+    fileURLToPath(new URL("../src/index.ts", import.meta.url)),
+    "utf8"
+  );
 
-  it("suppresses tool_use events and forwards all other types", () => {
+  it("source: runPiMonoMode event callback checks type === 'tool_use'", () => {
+    // Guard against accidental removal of the filter in index.ts
+    expect(indexSrc).toMatch(/\.type\s*===\s*["']tool_use["']\)\s*return/);
+  });
+
+  it("source: non-tool_use events are forwarded via send()", () => {
+    expect(indexSrc).toMatch(/send\(event\s+as\s+OutboundMessage\)/);
+  });
+
+  it("behavioral: suppresses tool_use events and forwards all other types", () => {
     const forwarded: any[] = [];
 
     // Exact callback from runPiMonoMode() line ~1273
