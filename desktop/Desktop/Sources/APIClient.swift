@@ -1497,15 +1497,6 @@ struct MemoryStatusResponse: Codable {
   let status: String
 }
 
-// MARK: - Common API Models
-
-struct UserProfile: Codable {
-  let id: String
-  let email: String?
-  let name: String?
-  let createdAt: Date?
-}
-
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
@@ -2626,10 +2617,6 @@ struct Goal: Codable, Identifiable {
   }
 }
 
-/// Response wrapper for goals list
-struct GoalsListResponse: Codable {
-  let goals: [Goal]
-}
 /// Daily score calculation result
 struct DailyScore: Codable {
   let score: Double

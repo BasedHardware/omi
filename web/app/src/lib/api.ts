@@ -1906,20 +1906,6 @@ export async function getIntegrationOAuthUrl(
 }
 
 /**
- * Connect an integration (alternative method)
- */
-export async function connectIntegration(
-  integrationId: string,
-): Promise<{ redirect_url: string }> {
-  return fetchWithAuth<{ redirect_url: string }>(
-    `/v1/integrations/${integrationId}/connect`,
-    {
-      method: "POST",
-    },
-  );
-}
-
-/**
  * Disconnect an integration
  */
 export async function disconnectIntegration(
